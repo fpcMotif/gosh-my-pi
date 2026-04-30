@@ -43,7 +43,7 @@ export interface DiscoverableMCPSearchIndex {
 	/** Reused by postings-based search to avoid per-query score array allocation. */
 	scoreScratch?: Float64Array;
 	/** Reused by postings-based search to avoid per-query touched-index array allocation. */
-	touchedScratch?: number[];
+	touchedScratch?: Int32Array;
 }
 
 export interface DiscoverableMCPSearchResult {
@@ -294,8 +294,8 @@ export function searchDiscoverableMCPTools(
 
 	if (index.postings) {
 		const scores = index.scoreScratch ?? (index.scoreScratch = new Float64Array(index.documents.length));
-		const touchedDocumentIndices = index.touchedScratch ?? (index.touchedScratch = []);
-		touchedDocumentIndices.length = 0;
+		const touchedDocumentIndices = index.touchedScratch ?? (index.touchedScratch = new Int32Array(index.documents.length));
+		let touchedCount = 0;
 		if (excludedToolNames) {
 			for (const { queryTermCount, idf, postings } of weightedQueryTerms) {
 				if (!postings) continue;
@@ -306,7 +306,8 @@ export function searchDiscoverableMCPTools(
 					const score = queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
 					const previousScore = scores[documentIndex]!;
 					if (previousScore === 0) {
-						touchedDocumentIndices.push(documentIndex);
+						touchedDocumentIndices[touchedCount] = documentIndex;
+						touchedCount += 1;
 					}
 					scores[documentIndex] = previousScore + score;
 				}
@@ -320,13 +321,15 @@ export function searchDiscoverableMCPTools(
 					const score = queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
 					const previousScore = scores[documentIndex]!;
 					if (previousScore === 0) {
-						touchedDocumentIndices.push(documentIndex);
+						touchedDocumentIndices[touchedCount] = documentIndex;
+						touchedCount += 1;
 					}
 					scores[documentIndex] = previousScore + score;
 				}
 			}
 		}
-		for (const documentIndex of touchedDocumentIndices) {
+		for (let touchedIndex = 0; touchedIndex < touchedCount; touchedIndex += 1) {
+			const documentIndex = touchedDocumentIndices[touchedIndex]!;
 			const score = scores[documentIndex]!;
 			if (score > 0) {
 				pushResult(index.documents[documentIndex]!.tool, score);
