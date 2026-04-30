@@ -296,18 +296,34 @@ export function searchDiscoverableMCPTools(
 		const scores = index.scoreScratch ?? (index.scoreScratch = new Float64Array(index.documents.length));
 		const touchedDocumentIndices = index.touchedScratch ?? (index.touchedScratch = []);
 		touchedDocumentIndices.length = 0;
-		for (const { queryTermCount, idf, postings } of weightedQueryTerms) {
-			if (!postings) continue;
-			for (const { documentIndex, termFrequency } of postings) {
-				const document = index.documents[documentIndex]!;
-				if (excludedToolNames?.has(document.tool.name)) continue;
-				const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
-				const score = queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
-				const previousScore = scores[documentIndex]!;
-				if (previousScore === 0) {
-					touchedDocumentIndices.push(documentIndex);
+		if (excludedToolNames) {
+			for (const { queryTermCount, idf, postings } of weightedQueryTerms) {
+				if (!postings) continue;
+				for (const { documentIndex, termFrequency } of postings) {
+					const document = index.documents[documentIndex]!;
+					if (excludedToolNames.has(document.tool.name)) continue;
+					const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
+					const score = queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
+					const previousScore = scores[documentIndex]!;
+					if (previousScore === 0) {
+						touchedDocumentIndices.push(documentIndex);
+					}
+					scores[documentIndex] = previousScore + score;
 				}
-				scores[documentIndex] = previousScore + score;
+			}
+		} else {
+			for (const { queryTermCount, idf, postings } of weightedQueryTerms) {
+				if (!postings) continue;
+				for (const { documentIndex, termFrequency } of postings) {
+					const document = index.documents[documentIndex]!;
+					const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
+					const score = queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
+					const previousScore = scores[documentIndex]!;
+					if (previousScore === 0) {
+						touchedDocumentIndices.push(documentIndex);
+					}
+					scores[documentIndex] = previousScore + score;
+				}
 			}
 		}
 		for (const documentIndex of touchedDocumentIndices) {
