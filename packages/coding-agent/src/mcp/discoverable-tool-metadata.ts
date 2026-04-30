@@ -30,10 +30,16 @@ export interface DiscoverableMCPSearchDocument {
 	length: number;
 }
 
+export interface DiscoverableMCPSearchPosting {
+	document: DiscoverableMCPSearchDocument;
+	termFrequency: number;
+}
+
 export interface DiscoverableMCPSearchIndex {
 	documents: DiscoverableMCPSearchDocument[];
 	averageLength: number;
 	documentFrequencies: Map<string, number>;
+	postings?: Map<string, DiscoverableMCPSearchPosting[]>;
 }
 
 export interface DiscoverableMCPSearchResult {
@@ -160,15 +166,23 @@ export function buildDiscoverableMCPSearchIndex(tools: Iterable<DiscoverableMCPT
 	const documents = Array.from(tools, buildSearchDocument);
 	const averageLength = documents.reduce((sum, document) => sum + document.length, 0) / documents.length || 1;
 	const documentFrequencies = new Map<string, number>();
+	const postings = new Map<string, DiscoverableMCPSearchPosting[]>();
 	for (const document of documents) {
-		for (const token of new Set(document.termFrequencies.keys())) {
+		for (const [token, termFrequency] of document.termFrequencies) {
 			documentFrequencies.set(token, (documentFrequencies.get(token) ?? 0) + 1);
+			let tokenPostings = postings.get(token);
+			if (!tokenPostings) {
+				tokenPostings = [];
+				postings.set(token, tokenPostings);
+			}
+			tokenPostings.push({ document, termFrequency });
 		}
 	}
 	return {
 		documents,
 		averageLength,
 		documentFrequencies,
+		postings,
 	};
 }
 
@@ -209,7 +223,12 @@ export function searchDiscoverableMCPTools(
 	for (const token of queryTokens) {
 		queryTermCounts.set(token, (queryTermCounts.get(token) ?? 0) + 1);
 	}
-	const weightedQueryTerms: Array<{ token: string; queryTermCount: number; idf: number }> = [];
+	const weightedQueryTerms: Array<{
+		token: string;
+		queryTermCount: number;
+		idf: number;
+		postings?: DiscoverableMCPSearchPosting[];
+	}> = [];
 	for (const [token, queryTermCount] of queryTermCounts) {
 		const documentFrequency = index.documentFrequencies.get(token) ?? 0;
 		if (documentFrequency === 0) continue;
@@ -217,6 +236,7 @@ export function searchDiscoverableMCPTools(
 			token,
 			queryTermCount,
 			idf: Math.log(1 + (index.documents.length - documentFrequency + 0.5) / (documentFrequency + 0.5)),
+			postings: index.postings?.get(token),
 		});
 	}
 	if (weightedQueryTerms.length === 0) {
@@ -226,6 +246,40 @@ export function searchDiscoverableMCPTools(
 	const results: DiscoverableMCPSearchResult[] = [];
 	const bounded = normalizedLimit < index.documents.length;
 	let worstIndex = -1;
+	const pushResult = (result: DiscoverableMCPSearchResult) => {
+		if (!bounded || results.length < normalizedLimit) {
+			results.push(result);
+			worstIndex = -1;
+			return;
+		}
+		if (worstIndex === -1) {
+			worstIndex = findWorstSearchResultIndex(results);
+		}
+		if (isSearchResultWorse(results[worstIndex]!, result)) {
+			results[worstIndex] = result;
+			worstIndex = -1;
+		}
+	};
+
+	if (index.postings) {
+		const scores = new Map<DiscoverableMCPSearchDocument, number>();
+		for (const { queryTermCount, idf, postings } of weightedQueryTerms) {
+			if (!postings) continue;
+			for (const { document, termFrequency } of postings) {
+				if (options?.excludedToolNames?.has(document.tool.name)) continue;
+				const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
+				const score = queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
+				scores.set(document, (scores.get(document) ?? 0) + score);
+			}
+		}
+		for (const [document, score] of scores) {
+			if (score > 0) {
+				pushResult({ tool: document.tool, score });
+			}
+		}
+		return results.sort(compareSearchResults).slice(0, normalizedLimit);
+	}
+
 	for (const document of index.documents) {
 		if (options?.excludedToolNames?.has(document.tool.name)) continue;
 		let score = 0;
@@ -235,19 +289,8 @@ export function searchDiscoverableMCPTools(
 			const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
 			score += queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
 		}
-		if (score <= 0) continue;
-		const result = { tool: document.tool, score };
-		if (!bounded || results.length < normalizedLimit) {
-			results.push(result);
-			worstIndex = -1;
-			continue;
-		}
-		if (worstIndex === -1) {
-			worstIndex = findWorstSearchResultIndex(results);
-		}
-		if (isSearchResultWorse(results[worstIndex]!, result)) {
-			results[worstIndex] = result;
-			worstIndex = -1;
+		if (score > 0) {
+			pushResult({ tool: document.tool, score });
 		}
 	}
 
