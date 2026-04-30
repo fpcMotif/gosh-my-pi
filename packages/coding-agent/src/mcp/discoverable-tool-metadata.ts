@@ -211,6 +211,14 @@ function isSearchResultWorse(left: DiscoverableMCPSearchResult, right: Discovera
 	return compareSearchResults(left, right) > 0;
 }
 
+function isSearchResultWorseThanCandidate(
+	result: DiscoverableMCPSearchResult,
+	candidateTool: DiscoverableMCPTool,
+	candidateScore: number,
+): boolean {
+	return candidateScore > result.score || (candidateScore === result.score && result.tool.name > candidateTool.name);
+}
+
 function findWorstSearchResultIndex(results: DiscoverableMCPSearchResult[]): number {
 	let worstIndex = 0;
 	for (let index = 1; index < results.length; index += 1) {
@@ -265,17 +273,17 @@ export function searchDiscoverableMCPTools(
 	const bounded = normalizedLimit < index.documents.length;
 	const excludedToolNames = options?.excludedToolNames;
 	let worstIndex = -1;
-	const pushResult = (result: DiscoverableMCPSearchResult) => {
+	const pushResult = (tool: DiscoverableMCPTool, score: number) => {
 		if (!bounded || results.length < normalizedLimit) {
-			results.push(result);
+			results.push({ tool, score });
 			worstIndex = -1;
 			return;
 		}
 		if (worstIndex === -1) {
 			worstIndex = findWorstSearchResultIndex(results);
 		}
-		if (isSearchResultWorse(results[worstIndex]!, result)) {
-			results[worstIndex] = result;
+		if (isSearchResultWorseThanCandidate(results[worstIndex]!, tool, score)) {
+			results[worstIndex] = { tool, score };
 			worstIndex = -1;
 		}
 	};
@@ -302,7 +310,7 @@ export function searchDiscoverableMCPTools(
 		for (const documentIndex of touchedDocumentIndices) {
 			const score = scores[documentIndex] ?? 0;
 			if (score > 0) {
-				pushResult({ tool: index.documents[documentIndex]!.tool, score });
+				pushResult(index.documents[documentIndex]!.tool, score);
 			}
 		}
 		return results.sort(compareSearchResults).slice(0, normalizedLimit);
@@ -318,7 +326,7 @@ export function searchDiscoverableMCPTools(
 			score += queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
 		}
 		if (score > 0) {
-			pushResult({ tool: document.tool, score });
+			pushResult(document.tool, score);
 		}
 	}
 
