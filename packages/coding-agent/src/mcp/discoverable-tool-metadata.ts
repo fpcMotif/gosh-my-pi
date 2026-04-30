@@ -31,7 +31,7 @@ export interface DiscoverableMCPSearchDocument {
 }
 
 export interface DiscoverableMCPSearchPosting {
-	document: DiscoverableMCPSearchDocument;
+	documentIndex: number;
 	termFrequency: number;
 }
 
@@ -167,7 +167,8 @@ export function buildDiscoverableMCPSearchIndex(tools: Iterable<DiscoverableMCPT
 	const averageLength = documents.reduce((sum, document) => sum + document.length, 0) / documents.length || 1;
 	const documentFrequencies = new Map<string, number>();
 	const postings = new Map<string, DiscoverableMCPSearchPosting[]>();
-	for (const document of documents) {
+	for (let documentIndex = 0; documentIndex < documents.length; documentIndex += 1) {
+		const document = documents[documentIndex]!;
 		for (const [token, termFrequency] of document.termFrequencies) {
 			documentFrequencies.set(token, (documentFrequencies.get(token) ?? 0) + 1);
 			let tokenPostings = postings.get(token);
@@ -175,7 +176,7 @@ export function buildDiscoverableMCPSearchIndex(tools: Iterable<DiscoverableMCPT
 				tokenPostings = [];
 				postings.set(token, tokenPostings);
 			}
-			tokenPostings.push({ document, termFrequency });
+			tokenPostings.push({ documentIndex, termFrequency });
 		}
 	}
 	return {
@@ -262,19 +263,28 @@ export function searchDiscoverableMCPTools(
 	};
 
 	if (index.postings) {
-		const scores = new Map<DiscoverableMCPSearchDocument, number>();
+		const scores: Array<number | undefined> = [];
+		const touchedDocumentIndices: number[] = [];
 		for (const { queryTermCount, idf, postings } of weightedQueryTerms) {
 			if (!postings) continue;
-			for (const { document, termFrequency } of postings) {
+			for (const { documentIndex, termFrequency } of postings) {
+				const document = index.documents[documentIndex]!;
 				if (options?.excludedToolNames?.has(document.tool.name)) continue;
 				const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
 				const score = queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
-				scores.set(document, (scores.get(document) ?? 0) + score);
+				const previousScore = scores[documentIndex];
+				if (previousScore === undefined) {
+					scores[documentIndex] = score;
+					touchedDocumentIndices.push(documentIndex);
+				} else {
+					scores[documentIndex] = previousScore + score;
+				}
 			}
 		}
-		for (const [document, score] of scores) {
+		for (const documentIndex of touchedDocumentIndices) {
+			const score = scores[documentIndex] ?? 0;
 			if (score > 0) {
-				pushResult({ tool: document.tool, score });
+				pushResult({ tool: index.documents[documentIndex]!.tool, score });
 			}
 		}
 		return results.sort(compareSearchResults).slice(0, normalizedLimit);
