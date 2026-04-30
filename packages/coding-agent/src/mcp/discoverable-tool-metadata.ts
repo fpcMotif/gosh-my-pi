@@ -40,6 +40,10 @@ export interface DiscoverableMCPSearchIndex {
 	averageLength: number;
 	documentFrequencies: Map<string, number>;
 	postings?: Map<string, DiscoverableMCPSearchPosting[]>;
+	/** Reused by postings-based search to avoid per-query score array allocation. */
+	scoreScratch?: Float64Array;
+	/** Reused by postings-based search to avoid per-query touched-index array allocation. */
+	touchedScratch?: number[];
 }
 
 export interface DiscoverableMCPSearchResult {
@@ -289,8 +293,9 @@ export function searchDiscoverableMCPTools(
 	};
 
 	if (index.postings) {
-		const scores: Array<number | undefined> = [];
-		const touchedDocumentIndices: number[] = [];
+		const scores = index.scoreScratch ?? (index.scoreScratch = new Float64Array(index.documents.length));
+		const touchedDocumentIndices = index.touchedScratch ?? (index.touchedScratch = []);
+		touchedDocumentIndices.length = 0;
 		for (const { queryTermCount, idf, postings } of weightedQueryTerms) {
 			if (!postings) continue;
 			for (const { documentIndex, termFrequency } of postings) {
@@ -298,19 +303,18 @@ export function searchDiscoverableMCPTools(
 				if (excludedToolNames?.has(document.tool.name)) continue;
 				const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
 				const score = queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
-				const previousScore = scores[documentIndex];
-				if (previousScore === undefined) {
-					scores[documentIndex] = score;
+				const previousScore = scores[documentIndex]!;
+				if (previousScore === 0) {
 					touchedDocumentIndices.push(documentIndex);
-				} else {
-					scores[documentIndex] = previousScore + score;
 				}
+				scores[documentIndex] = previousScore + score;
 			}
 		}
 		for (const documentIndex of touchedDocumentIndices) {
-			const score = scores[documentIndex] ?? 0;
+			const score = scores[documentIndex]!;
 			if (score > 0) {
 				pushResult(index.documents[documentIndex]!.tool, score);
+				scores[documentIndex] = 0;
 			}
 		}
 		return results.sort(compareSearchResults).slice(0, normalizedLimit);
