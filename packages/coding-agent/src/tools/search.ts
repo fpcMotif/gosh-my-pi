@@ -205,7 +205,7 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 							multiline: effectiveMultiline,
 							hidden: true,
 							gitignore: useGitignore,
-							cache: false,
+							cache: true,
 							maxCount: internalLimit,
 							offset: normalizedSkip > 0 ? normalizedSkip : undefined,
 							contextBefore: normalizedContextBefore,

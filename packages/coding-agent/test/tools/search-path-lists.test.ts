@@ -166,6 +166,67 @@ describe("search tool path lists", () => {
 		expect(await Bun.file(absoluteTarget).text()).toBe("written\n");
 	});
 
+	it("find sees files created through write after warming the scan cache", async () => {
+		const tools = await createTools(createTestSession(tempDir));
+		const findTool = tools.find(entry => entry.name === "find");
+		const writeTool = tools.find(entry => entry.name === "write");
+		expect(findTool).toBeDefined();
+		expect(writeTool).toBeDefined();
+		if (!findTool) throw new Error("Missing find tool");
+		if (!writeTool) throw new Error("Missing write tool");
+
+		const warmup = await findTool.execute("find-cache-warm", {
+			pattern: "apps/**/*.cache-created",
+		});
+		expect(getText(warmup)).toContain("No files found");
+
+		await writeTool.execute("write-cache-created", {
+			path: "apps/generated.cache-created",
+			content: "created through write\n",
+		});
+
+		const result = await findTool.execute("find-cache-after-write", {
+			pattern: "apps/**/*.cache-created",
+		});
+		const text = getText(result);
+		const details = result.details as { fileCount?: number } | undefined;
+
+		expect(text).toContain("apps/generated.cache-created");
+		expect(details?.fileCount).toBe(1);
+	});
+
+	it("search sees files created through write after warming the scan cache", async () => {
+		const tools = await createTools(createTestSession(tempDir));
+		const searchTool = tools.find(entry => entry.name === "search");
+		const writeTool = tools.find(entry => entry.name === "write");
+		expect(searchTool).toBeDefined();
+		expect(writeTool).toBeDefined();
+		if (!searchTool) throw new Error("Missing search tool");
+		if (!writeTool) throw new Error("Missing write tool");
+
+		const warmup = await searchTool.execute("search-cache-warm", {
+			pattern: "cache-needle",
+			path: "apps/",
+		});
+		expect(getText(warmup)).toContain("No matches found");
+
+		await writeTool.execute("write-cache-search", {
+			path: "apps/cache-search.txt",
+			content: "cache-needle from write\n",
+		});
+
+		const result = await searchTool.execute("search-cache-after-write", {
+			pattern: "cache-needle",
+			path: "apps/",
+		});
+		const text = getText(result);
+		const details = result.details as { fileCount?: number } | undefined;
+
+		expect(text).toContain("cache-search.txt");
+		expect(text).toContain("cache-needle from write");
+		expect(details?.fileCount).toBe(1);
+	});
+
 	it("ast_grep accepts quoted path and glob filters", async () => {
 		const tools = await createTools(createTestSession(tempDir));
 		const tool = tools.find(entry => entry.name === "ast_grep");

@@ -177,9 +177,7 @@ export class SearchToolBm25Tool implements AgentTool<typeof searchToolBm25Schema
 		const selectedToolNames = new Set(this.session.getSelectedMCPToolNames());
 		let ranked: Array<{ tool: DiscoverableMCPTool; score: number }> = [];
 		try {
-			ranked = searchDiscoverableMCPTools(searchIndex, query, searchIndex.documents.length)
-				.filter(result => !selectedToolNames.has(result.tool.name))
-				.slice(0, limit);
+			ranked = searchDiscoverableMCPTools(searchIndex, query, limit, { excludedToolNames: selectedToolNames });
 		} catch (error) {
 			if (error instanceof Error) {
 				throw new ToolError(error.message);
