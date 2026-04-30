@@ -53,6 +53,8 @@ export interface DiscoverableMCPSearchOptions {
 
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
+const QUERY_TOKEN_CACHE_LIMIT = 128;
+const queryTokenCache = new Map<string, string[]>();
 const FIELD_WEIGHTS = {
 	name: 6,
 	label: 4,
@@ -81,6 +83,20 @@ function tokenize(value: string): string[] {
 		.trim()
 		.split(/\s+/)
 		.filter(token => token.length > 0);
+}
+
+function tokenizeQuery(query: string): string[] {
+	const cached = queryTokenCache.get(query);
+	if (cached) return cached;
+	const tokens = tokenize(query);
+	if (queryTokenCache.size >= QUERY_TOKEN_CACHE_LIMIT) {
+		const oldest = queryTokenCache.keys().next().value;
+		if (oldest !== undefined) {
+			queryTokenCache.delete(oldest);
+		}
+	}
+	queryTokenCache.set(query, tokens);
+	return tokens;
 }
 
 function addWeightedTokens(termFrequencies: Map<string, number>, value: string | undefined, weight: number): number {
@@ -211,7 +227,7 @@ export function searchDiscoverableMCPTools(
 	limit: number,
 	options?: DiscoverableMCPSearchOptions,
 ): DiscoverableMCPSearchResult[] {
-	const queryTokens = tokenize(query);
+	const queryTokens = tokenizeQuery(query);
 	if (queryTokens.length === 0) {
 		throw new Error("Query must contain at least one letter or number.");
 	}
