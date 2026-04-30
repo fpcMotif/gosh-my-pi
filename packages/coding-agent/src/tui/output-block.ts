@@ -1,7 +1,7 @@
 /**
  * Bordered output container with optional header and sections.
  */
-import { ImageProtocol, padding, TERMINAL, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
+import { ImageProtocol, padding, replaceTabs, TERMINAL, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
 import type { Theme } from "../modes/theme/theme";
 import { getSixelLineMask } from "../utils/sixel";
 import type { State } from "./types";
@@ -19,9 +19,9 @@ export interface OutputBlockOptions {
 
 export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): string[] {
 	const { header, headerMeta, state, sections = [], width, applyBg = true } = options;
-	const h = theme.boxSharp.horizontal;
-	const v = theme.boxSharp.vertical;
-	const cap = h.repeat(3);
+	const h = theme.boxRound.horizontal;
+	const v = theme.boxRound.vertical;
+	const cap = h.repeat(2);
 	const lineWidth = Math.max(0, width);
 	// Border colors: running/pending use accent, success uses dim (gray), error/warning keep their colors
 	const borderColor: "error" | "warning" | "accent" | "dim" =
@@ -67,7 +67,7 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 	const lines: string[] = [];
 
 	lines.push(
-		padToWidth(buildBarLine(theme.boxSharp.topLeft, theme.boxSharp.topRight, header, headerMeta), lineWidth, bgFn),
+		padToWidth(buildBarLine(theme.boxRound.topLeft, theme.boxRound.topRight, header, headerMeta), lineWidth, bgFn),
 	);
 
 	const hasSections = sections.length > 0;
@@ -88,7 +88,7 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 				lines.push(line);
 				continue;
 			}
-			const wrappedLines = wrapTextWithAnsi(line.trimEnd(), contentWidth);
+			const wrappedLines = wrapTextWithAnsi(replaceTabs(line).trimEnd(), contentWidth);
 			for (const wrappedLine of wrappedLines) {
 				const innerPadding = padding(Math.max(0, contentWidth - visibleWidth(wrappedLine)));
 				const fullLine = `${contentPrefix}${wrappedLine}${innerPadding}${contentSuffix}`;
@@ -97,8 +97,8 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 		}
 	}
 
-	const bottomLeft = border(`${theme.boxSharp.bottomLeft}${cap}`);
-	const bottomRight = border(theme.boxSharp.bottomRight);
+	const bottomLeft = border(`${theme.boxRound.bottomLeft}${cap}`);
+	const bottomRight = border(theme.boxRound.bottomRight);
 	const bottomFillCount = Math.max(0, lineWidth - visibleWidth(bottomLeft) - visibleWidth(bottomRight));
 	const bottomLine = `${bottomLeft}${border(h.repeat(bottomFillCount))}${bottomRight}`;
 	lines.push(padToWidth(bottomLine, lineWidth, bgFn));

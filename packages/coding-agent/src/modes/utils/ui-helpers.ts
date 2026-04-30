@@ -219,6 +219,9 @@ export class UiHelpers {
 					const isSynthetic = message.role === "developer" ? true : (message.synthetic ?? false);
 					const userComponent = new UserMessageComponent(textContent, isSynthetic);
 					this.ctx.chatContainer.addChild(userComponent);
+					if (!isSynthetic) {
+						this.ctx.notifyHasMessages?.();
+					}
 					if (options?.populateHistory && message.role === "user" && !isSynthetic) {
 						this.ctx.editor.addToHistory(textContent);
 					}

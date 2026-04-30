@@ -1,6 +1,7 @@
 import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { APP_NAME } from "@oh-my-pi/pi-utils";
 import { theme } from "../../modes/theme/theme";
+import { HeaderBar } from "./header-bar";
 
 export interface RecentSession {
 	name: string;
@@ -14,16 +15,32 @@ export interface LspServerInfo {
 }
 
 /**
- * Premium welcome screen with block-based OMP logo and two-column layout.
+ * Compact welcome surface with a gradient identity rail and session context.
+ *
+ * Two render modes:
+ *   - Expanded (default): full bordered box on welcome / empty session.
+ *   - Minimized (vivid layout, after first message): single-line gradient
+ *     wordmark bar that stays at the top during the conversation.
+ *
+ * Toggle via setMinimized().
  */
 export class WelcomeComponent implements Component {
+	#minimized = false;
+	#cwd: string = "";
+
 	constructor(
 		private readonly version: string,
 		private modelName: string,
 		private providerName: string,
 		private recentSessions: RecentSession[] = [],
 		private lspServers: LspServerInfo[] = [],
-	) {}
+	) {
+		try {
+			this.#cwd = process.cwd();
+		} catch {
+			this.#cwd = "";
+		}
+	}
 
 	invalidate(): void {}
 
@@ -40,20 +57,42 @@ export class WelcomeComponent implements Component {
 		this.lspServers = servers;
 	}
 
+	/**
+	 * Switch between the full bordered welcome (false) and the thin gradient bar (true).
+	 * Only takes effect under vivid layout — classic stays as a one-shot welcome.
+	 */
+	setMinimized(minimized: boolean): void {
+		this.#minimized = minimized;
+	}
+
 	render(termWidth: number): string[] {
+		if (this.#minimized && theme.layout === "vivid") {
+			return this.#renderMinimized(termWidth);
+		}
+		return this.#renderExpanded(termWidth);
+	}
+
+	#renderMinimized(termWidth: number): string[] {
+		return new HeaderBar({
+			cwd: this.#cwd,
+			hints: [`v${this.version}`, "? help"],
+		}).render(termWidth);
+	}
+
+	#renderExpanded(termWidth: number): string[] {
 		// Box dimensions - responsive with max width and small-terminal support
-		const maxWidth = 100;
+		const maxWidth = 120;
 		const boxWidth = Math.min(maxWidth, Math.max(0, termWidth - 2));
 		if (boxWidth < 4) {
 			return [];
 		}
 		const dualContentWidth = boxWidth - 3; // 3 = │ + │ + │
-		const preferredLeftCol = 26;
-		const minLeftCol = 14; // logo width
-		const minRightCol = 20;
+		const preferredLeftCol = 34;
+		const minLeftCol = 20; // wordmark width
+		const minRightCol = 28;
 		const leftMinContentWidth = Math.max(
 			minLeftCol,
-			visibleWidth("Welcome back!"),
+			visibleWidth("OH MY PI"),
 			visibleWidth(this.modelName),
 			visibleWidth(this.providerName),
 		);
@@ -67,22 +106,20 @@ export class WelcomeComponent implements Component {
 		const leftCol = showRightColumn ? dualLeftCol : boxWidth - 2;
 		const rightCol = showRightColumn ? dualRightCol : 0;
 
-		// Block-based OMP logo (gradient: magenta → cyan)
-		// biome-ignore format: preserve ASCII art layout
-		const piLogo = ["▀████████████▀", " ╘███    ███  ", "  ███    ███  ", "  ███    ███  ", " ▄███▄  ▄███▄ "];
+		// Compact wordmark (gradient: violet → cyan)
+		const wordmark = this.#gradientLine("OH MY PI");
+		const brandLine = `${theme.fg("dim", "coding harness")}${theme.fg("accent", " // ")}${theme.fg("muted", APP_NAME)}`;
 
-		// Apply gradient to logo
-		const logoColored = piLogo.map(line => this.#gradientLine(line));
-
-		// Left column - centered content
+		// Left column - centered identity and active model context
 		const leftLines = [
 			"",
-			this.#centerText(theme.bold("Welcome back!"), leftCol),
+			this.#centerText(wordmark, leftCol),
+			this.#centerText(brandLine, leftCol),
 			"",
-			...logoColored.map(l => this.#centerText(l, leftCol)),
+			this.#centerText(theme.fg("statusLineModel", this.modelName), leftCol),
+			this.#centerText(theme.fg("dim", this.providerName), leftCol),
 			"",
-			this.#centerText(theme.fg("muted", this.modelName), leftCol),
-			this.#centerText(theme.fg("borderMuted", this.providerName), leftCol),
+			this.#centerText(theme.fg("muted", "ready for local changes"), leftCol),
 		];
 
 		// Right column separator
@@ -120,17 +157,16 @@ export class WelcomeComponent implements Component {
 
 		// Right column
 		const rightLines = [
-			` ${theme.bold(theme.fg("accent", "Tips"))}`,
-			` ${theme.fg("dim", "?")}${theme.fg("muted", " for keyboard shortcuts")}`,
-			` ${theme.fg("dim", "#")}${theme.fg("muted", " for prompt actions")}`,
-			` ${theme.fg("dim", "/")}${theme.fg("muted", " for commands")}`,
-			` ${theme.fg("dim", "!")}${theme.fg("muted", " to run bash")}`,
-			` ${theme.fg("dim", "$")}${theme.fg("muted", " to run python")}`,
+			` ${theme.bold(theme.fg("accent", "Shortcuts"))}`,
+			` ${theme.fg("dim", "?")}${theme.fg("muted", " keyboard map")}`,
+			` ${theme.fg("dim", "/")}${theme.fg("muted", " command palette")}`,
+			` ${theme.fg("dim", "#")}${theme.fg("muted", " prompt actions")}`,
+			` ${theme.fg("dim", "!")}${theme.fg("muted", " bash")}${theme.fg("dim", "   $")}${theme.fg("muted", " python")}`,
 			separator,
-			` ${theme.bold(theme.fg("accent", "LSP Servers"))}`,
+			` ${theme.bold(theme.fg("accent", "Language servers"))}`,
 			...lspLines,
 			separator,
-			` ${theme.bold(theme.fg("accent", "Recent sessions"))}`,
+			` ${theme.bold(theme.fg("accent", "Recent work"))}`,
 			...sessionLines,
 			"",
 		];
@@ -147,7 +183,7 @@ export class WelcomeComponent implements Component {
 		const lines: string[] = [];
 
 		// Top border with embedded title
-		const title = ` ${APP_NAME} v${this.version} `;
+		const title = ` ${APP_NAME} ${theme.sep.dot} vivid ui ${theme.sep.dot} v${this.version} `;
 		const titlePrefixRaw = hChar.repeat(3);
 		const titleStyled = theme.fg("dim", titlePrefixRaw) + theme.fg("muted", title);
 		const titleVisLen = visibleWidth(titlePrefixRaw) + visibleWidth(title);
@@ -191,15 +227,15 @@ export class WelcomeComponent implements Component {
 		return padding(leftPad) + text + padding(rightPad);
 	}
 
-	/** Apply magenta→cyan gradient to a string */
+	/** Apply violet→cyan gradient to a string */
 	#gradientLine(line: string): string {
 		const colors = [
-			"\x1b[38;5;199m", // bright magenta
-			"\x1b[38;5;171m", // magenta-purple
+			"\x1b[38;5;141m", // violet
 			"\x1b[38;5;135m", // purple
-			"\x1b[38;5;99m", // purple-blue
-			"\x1b[38;5;75m", // cyan-blue
-			"\x1b[38;5;51m", // bright cyan
+			"\x1b[38;5;99m", // blue-violet
+			"\x1b[38;5;75m", // blue
+			"\x1b[38;5;81m", // cyan-blue
+			"\x1b[38;5;51m", // cyan
 		];
 		const reset = "\x1b[0m";
 

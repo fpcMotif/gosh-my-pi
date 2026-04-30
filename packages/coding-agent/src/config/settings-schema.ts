@@ -11,7 +11,7 @@ import { EDIT_MODES } from "../utils/edit-mode";
  *
  * The Settings singleton provides type-safe path-based access:
  *   settings.get("compaction.enabled")  // => boolean
- *   settings.set("theme.dark", "titanium")  // sync, saves in background
+ *   settings.set("theme.dark", "pi-vivid")  // sync, saves in background
  */
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -243,7 +243,7 @@ export const SETTINGS_SCHEMA = {
 	// Theme
 	"theme.dark": {
 		type: "string",
-		default: "titanium",
+		default: "pi-vivid",
 		ui: {
 			tab: "appearance",
 			label: "Dark Theme",
@@ -254,7 +254,7 @@ export const SETTINGS_SCHEMA = {
 
 	"theme.light": {
 		type: "string",
-		default: "light",
+		default: "pi-vivid-light",
 		ui: {
 			tab: "appearance",
 			label: "Light Theme",
@@ -283,8 +283,8 @@ export const SETTINGS_SCHEMA = {
 	// Status line
 	"statusLine.preset": {
 		type: "enum",
-		values: ["default", "minimal", "compact", "full", "nerd", "ascii", "custom"] as const,
-		default: "default",
+		values: ["pi-vivid", "default", "minimal", "compact", "full", "nerd", "ascii", "custom"] as const,
+		default: "pi-vivid",
 		ui: {
 			tab: "appearance",
 			label: "Status Line Preset",
@@ -296,7 +296,7 @@ export const SETTINGS_SCHEMA = {
 	"statusLine.separator": {
 		type: "enum",
 		values: ["powerline", "powerline-thin", "slash", "pipe", "block", "none", "ascii"] as const,
-		default: "powerline-thin",
+		default: "slash",
 		ui: {
 			tab: "appearance",
 			label: "Status Line Separator",

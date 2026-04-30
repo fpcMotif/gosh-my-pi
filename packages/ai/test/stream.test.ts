@@ -29,7 +29,7 @@ function hasBedrockCredentials(): boolean {
 	// (There are other ways to authenticate, but we avoid running E2E tests accidentally.)
 	return Boolean(
 		(Bun.env.AWS_ACCESS_KEY_ID && Bun.env.AWS_SECRET_ACCESS_KEY) ||
-			(Bun.env.AWS_PROFILE && Bun.env.AWS_PROFILE.length > 0),
+		(Bun.env.AWS_PROFILE && Bun.env.AWS_PROFILE.length > 0),
 	);
 }
 

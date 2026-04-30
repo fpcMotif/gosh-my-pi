@@ -92,6 +92,8 @@ import marble from "./marble.json" with { type: "json" };
 import obsidian from "./obsidian.json" with { type: "json" };
 import onyx from "./onyx.json" with { type: "json" };
 import pearl from "./pearl.json" with { type: "json" };
+import pi_vivid from "./pi-vivid.json" with { type: "json" };
+import pi_vivid_light from "./pi-vivid-light.json" with { type: "json" };
 import porcelain from "./porcelain.json" with { type: "json" };
 import quartz from "./quartz.json" with { type: "json" };
 import sandstone from "./sandstone.json" with { type: "json" };
@@ -192,6 +194,8 @@ export const defaultThemes = {
 	obsidian: obsidian,
 	onyx: onyx,
 	pearl: pearl,
+	"pi-vivid": pi_vivid,
+	"pi-vivid-light": pi_vivid_light,
 	porcelain: porcelain,
 	quartz: quartz,
 	sandstone: sandstone,

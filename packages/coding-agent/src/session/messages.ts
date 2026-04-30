@@ -363,10 +363,10 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 						content: getPrunedToolResultContent(m as ToolResultMessage),
 						attribution: m.attribution ?? "agent",
 					};
-				default:
-					// biome-ignore lint/correctness/noSwitchDeclarations: fine
+				default: {
 					const _exhaustiveCheck: never = m;
 					return undefined;
+				}
 			}
 		})
 		.filter(m => m !== undefined);

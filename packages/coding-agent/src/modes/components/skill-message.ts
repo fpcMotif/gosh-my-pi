@@ -1,19 +1,23 @@
 import type { TextContent } from "@oh-my-pi/pi-ai";
-import type { Component } from "@oh-my-pi/pi-tui";
-import { Box, Container, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
+import { Container, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
 import type { CustomMessage, SkillPromptDetails } from "../../session/messages";
+import { MessageFrame } from "./message-frame";
 
 export class SkillMessageComponent extends Container {
-	#box: Box;
-	#contentComponent?: Component;
+	#frame: MessageFrame;
 	#expanded = false;
 
 	constructor(private readonly message: CustomMessage<SkillPromptDetails>) {
 		super();
 		this.addChild(new Spacer(1));
 
-		this.#box = new Box(1, 1, t => theme.bg("customMessageBg", t));
+		this.#frame = new MessageFrame({
+			railColor: "customMessageLabel",
+			label: "skill",
+			labelColor: "customMessageLabel",
+		});
+		this.addChild(this.#frame);
 		this.#rebuild();
 	}
 
@@ -30,18 +34,7 @@ export class SkillMessageComponent extends Container {
 	}
 
 	#rebuild(): void {
-		if (this.#contentComponent) {
-			this.removeChild(this.#contentComponent);
-			this.#contentComponent = undefined;
-		}
-
-		this.removeChild(this.#box);
-		this.addChild(this.#box);
-		this.#box.clear();
-
-		const label = theme.fg("customMessageLabel", theme.bold("[skill]"));
-		this.#box.addChild(new Text(label, 0, 0));
-		this.#box.addChild(new Spacer(1));
+		this.#frame.clear();
 
 		const details = this.message.details;
 		const args = details?.args?.trim();
@@ -52,7 +45,7 @@ export class SkillMessageComponent extends Container {
 			typeof details?.lineCount === "number" ? `Prompt: ${details.lineCount} lines` : undefined,
 		].filter((line): line is string => Boolean(line));
 
-		this.#box.addChild(
+		this.#frame.addChild(
 			new Markdown(infoLines.join("\n"), 0, 0, getMarkdownTheme(), {
 				color: (value: string) => theme.fg("customMessageText", value),
 			}),
@@ -67,15 +60,16 @@ export class SkillMessageComponent extends Container {
 			return;
 		}
 
-		this.#box.addChild(new Spacer(1));
+		this.#frame.addChild(new Spacer(1));
 		const promptHeader = theme.fg("customMessageLabel", theme.bold("Prompt"));
-		this.#box.addChild(new Text(promptHeader, 0, 0));
-		this.#box.addChild(new Spacer(1));
+		this.#frame.addChild(new Text(promptHeader, 0, 0));
+		this.#frame.addChild(new Spacer(1));
 
-		this.#contentComponent = new Markdown(text, 0, 0, getMarkdownTheme(), {
-			color: (value: string) => theme.fg("customMessageText", value),
-		});
-		this.#box.addChild(this.#contentComponent);
+		this.#frame.addChild(
+			new Markdown(text, 0, 0, getMarkdownTheme(), {
+				color: (value: string) => theme.fg("customMessageText", value),
+			}),
+		);
 	}
 
 	#extractText(): string {

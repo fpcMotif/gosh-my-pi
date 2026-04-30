@@ -66,18 +66,16 @@ function bench(name: string, fn: () => void): number {
 console.log(`Text layout benchmark (${ITERATIONS} iterations)\n`);
 
 for (const [name, text] of Object.entries(samples)) {
-   const jsResult = jsSanitizeText(text);
-   const nativeResult = nativeSanitizeText(text);
-   if (jsResult !== nativeResult) {
-      console.log(`MISMATCH ${name}: js="${jsResult}" native="${nativeResult}"`);
-   }
+	const jsResult = jsSanitizeText(text);
+	const nativeResult = nativeSanitizeText(text);
+	if (jsResult !== nativeResult) {
+		console.log(`MISMATCH ${name}: js="${jsResult}" native="${nativeResult}"`);
+	}
 
-   bench(`jsSanitizeText/${name}`, () => {
-      jsSanitizeText(text);
-   });
-   bench(`nativeSanitizeText/${name}`, () => {
-      nativeSanitizeText(text);
-   });
+	bench(`jsSanitizeText/${name}`, () => {
+		jsSanitizeText(text);
+	});
+	bench(`nativeSanitizeText/${name}`, () => {
+		nativeSanitizeText(text);
+	});
 }
-
-

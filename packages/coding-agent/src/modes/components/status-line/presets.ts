@@ -1,6 +1,17 @@
 import type { PresetDef, StatusLinePreset } from "./types";
 
 export const STATUS_LINE_PRESETS: Record<StatusLinePreset, PresetDef> = {
+	"pi-vivid": {
+		leftSegments: ["pi", "model", "mode", "path", "git", "pr"],
+		rightSegments: ["session_name", "context_pct", "cost"],
+		separator: "slash",
+		segmentOptions: {
+			model: { showThinkingLevel: true },
+			path: { abbreviate: true, maxLength: 48, stripWorkPrefix: true },
+			git: { showBranch: true, showStaged: true, showUnstaged: true, showUntracked: false },
+		},
+	},
+
 	default: {
 		leftSegments: ["pi", "model", "mode", "path", "git", "pr", "context_pct", "token_total", "cost"],
 		rightSegments: ["session_name"],

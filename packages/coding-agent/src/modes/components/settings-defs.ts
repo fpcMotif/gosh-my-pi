@@ -432,6 +432,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 	],
 	// Status line preset
 	"statusLine.preset": [
+		{ value: "pi-vivid", label: "Pi Vivid", description: "Polished compact default" },
 		{ value: "default", label: "Default", description: "Model, path, git, context, tokens, cost" },
 		{ value: "minimal", label: "Minimal", description: "Path and git only" },
 		{ value: "compact", label: "Compact", description: "Model, git, cost, context" },

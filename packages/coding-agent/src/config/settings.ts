@@ -5,7 +5,7 @@
  *   import { settings } from "./settings";
  *
  *   const enabled = settings.get("compaction.enabled");  // sync read
- *   settings.set("theme.dark", "titanium");               // sync write, saves in background
+ *   settings.set("theme.dark", "pi-vivid");              // sync write, saves in background
  *
  * For tests:
  *   const isolated = Settings.isolated({ "compaction.enabled": false });
@@ -520,6 +520,18 @@ export class Settings {
 				const slot = isLightTheme(oldTheme) ? "light" : "dark";
 				raw.theme = { [slot]: oldTheme };
 			}
+		}
+
+		// Migrate "crush" -> "pi-vivid" for theme slots and status-line preset.
+		// The "crush" name is dropped to avoid trademark conflict; the look is unchanged.
+		const themeObj = raw.theme as Record<string, unknown> | undefined;
+		if (themeObj) {
+			if (themeObj.dark === "crush") themeObj.dark = "pi-vivid";
+			if (themeObj.light === "crush") themeObj.light = "pi-vivid";
+		}
+		const statusLineObjForPreset = raw.statusLine as Record<string, unknown> | undefined;
+		if (statusLineObjForPreset?.preset === "crush") {
+			statusLineObjForPreset.preset = "pi-vivid";
 		}
 
 		// task.isolation.enabled (boolean) -> task.isolation.mode (enum)

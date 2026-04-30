@@ -113,6 +113,8 @@ export interface InteractiveModeContext {
 	hookSelector: HookSelectorComponent | undefined;
 	hookInput: HookInputComponent | undefined;
 	hookEditor: HookEditorComponent | undefined;
+	/** Called once the chat has at least one user message — used to minimize the welcome bar in vivid layout. */
+	notifyHasMessages?: () => void;
 	lastStatusSpacer: Spacer | undefined;
 	lastStatusText: Text | undefined;
 	fileSlashCommands: Set<string>;

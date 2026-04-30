@@ -43,7 +43,7 @@ for (const c of cases) {
 	};
 
 	const countMatches = (result: string): number => {
-		const lines = result.split("\n").filter((l) => l.trim());
+		const lines = result.split("\n").filter(l => l.trim());
 		let matches = 0;
 		for (const line of lines) {
 			try {

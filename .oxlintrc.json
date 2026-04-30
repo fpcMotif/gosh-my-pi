@@ -1,0 +1,34 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"plugins": ["typescript", "oxc"],
+	"categories": {
+		"correctness": "error"
+	},
+	"rules": {
+		"no-control-regex": "off",
+		"no-unreachable": "off",
+		"no-unused-expressions": "warn",
+		"no-unused-private-class-members": "warn",
+		"no-unused-vars": "warn",
+		"no-useless-escape": "warn",
+		"no-constant-binary-expression": "warn",
+		"no-unsafe-optional-chaining": "warn",
+		"no-this-alias": "warn"
+	},
+	"ignorePatterns": [
+		"packages/natives/native/index.d.ts",
+		"**/vendor/**/*",
+		"**/node_modules/**/*",
+		"**/test-sessions.ts",
+		"**/template.generated.ts",
+		"**/docs-index.generated.ts",
+		"**/gen/agent_pb.ts",
+		".worktrees/**/*",
+		".wt/**/*"
+	],
+	"env": {
+		"builtin": true,
+		"browser": true,
+		"node": true
+	}
+}

@@ -423,9 +423,9 @@ interface InputHandler {
 export class PluginSettingsComponent extends Container {
 	#manager: PluginManager;
 	#viewComponent: (Container & InputHandler) | null = null;
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: state tracking for view management
+	// oxlint-disable-next-line no-unused-private-class-members -- state tracking for view management
 	#currentView: "list" | "detail" = "list";
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: state tracking for view management
+	// oxlint-disable-next-line no-unused-private-class-members -- state tracking for view management
 	#currentPlugin: InstalledPlugin | null = null;
 
 	constructor(

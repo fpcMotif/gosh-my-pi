@@ -32,12 +32,12 @@
 		"pi-ai": "./src/cli.ts"
 	},
 	"scripts": {
-		"check": "biome check . && bun run check:types",
+		"check": "oxfmt --check --no-error-on-unmatched-pattern \"src/**/*.ts\" \"src/**/*.tsx\" \"test/**/*.ts\" \"examples/**/*.ts\" \"scripts/**/*.ts\" \"*.ts\" && oxlint --quiet --no-error-on-unmatched-pattern . && bun run check:types",
 		"check:types": "tsgo -p tsconfig.json --noEmit",
-		"lint": "biome lint .",
+		"lint": "oxlint --no-error-on-unmatched-pattern .",
 		"test": "bun test",
-		"fix": "biome check --write --unsafe .",
-		"fmt": "biome format --write .",
+		"fix": "oxfmt --write --no-error-on-unmatched-pattern \"src/**/*.ts\" \"src/**/*.tsx\" \"test/**/*.ts\" \"examples/**/*.ts\" \"scripts/**/*.ts\" \"*.ts\" && oxlint --fix-dangerously --no-error-on-unmatched-pattern .",
+		"fmt": "oxfmt --write --no-error-on-unmatched-pattern \"src/**/*.ts\" \"src/**/*.tsx\" \"test/**/*.ts\" \"examples/**/*.ts\" \"scripts/**/*.ts\" \"*.ts\"",
 		"generate-models": "bun scripts/generate-models.ts"
 	},
 	"dependencies": {

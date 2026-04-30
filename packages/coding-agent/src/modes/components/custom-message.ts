@@ -1,16 +1,17 @@
 import type { TextContent } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Box, Container, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
+import { Container, Markdown, Spacer } from "@oh-my-pi/pi-tui";
 import type { MessageRenderer } from "../../extensibility/extensions/types";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
 import type { CustomMessage } from "../../session/messages";
+import { MessageFrame } from "./message-frame";
 
 /**
  * Component that renders a custom message entry from extensions.
  * Uses distinct styling to differentiate from user messages.
  */
 export class CustomMessageComponent extends Container {
-	#box: Box;
+	#frame: MessageFrame;
 	#customComponent?: Component;
 	#expanded = false;
 
@@ -22,8 +23,12 @@ export class CustomMessageComponent extends Container {
 
 		this.addChild(new Spacer(1));
 
-		// Create box with custom background (used for default rendering)
-		this.#box = new Box(1, 1, t => theme.bg("customMessageBg", t));
+		// Create the default lightweight message frame (custom renderers keep their own styling)
+		this.#frame = new MessageFrame({
+			railColor: "customMessageLabel",
+			label: `custom ${this.message.customType}`,
+			labelColor: "customMessageLabel",
+		});
 
 		this.#rebuild();
 	}
@@ -46,7 +51,7 @@ export class CustomMessageComponent extends Container {
 			this.removeChild(this.#customComponent);
 			this.#customComponent = undefined;
 		}
-		this.removeChild(this.#box);
+		this.removeChild(this.#frame);
 
 		// Try custom renderer first - it handles its own styling
 		if (this.customRenderer) {
@@ -62,14 +67,9 @@ export class CustomMessageComponent extends Container {
 			}
 		}
 
-		// Default rendering uses our box
-		this.addChild(this.#box);
-		this.#box.clear();
-
-		// Default rendering: label + content
-		const label = theme.fg("customMessageLabel", theme.bold(`[${this.message.customType}]`));
-		this.#box.addChild(new Text(label, 0, 0));
-		this.#box.addChild(new Spacer(1));
+		// Default rendering uses our shared conversation frame
+		this.addChild(this.#frame);
+		this.#frame.clear();
 
 		// Extract text content
 		let text: string;
@@ -82,7 +82,7 @@ export class CustomMessageComponent extends Container {
 				.join("\n");
 		}
 
-		this.#box.addChild(
+		this.#frame.addChild(
 			new Markdown(text, 0, 0, getMarkdownTheme(), {
 				color: (value: string) => theme.fg("customMessageText", value),
 			}),

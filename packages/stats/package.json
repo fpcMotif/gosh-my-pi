@@ -30,11 +30,11 @@
 	"scripts": {
 		"build": "bun run build.ts",
 		"dev": "bun run src/index.ts",
-		"check": "biome check . && bun run check:types",
+		"check": "oxfmt --check --no-error-on-unmatched-pattern \"src/**/*.ts\" \"src/**/*.tsx\" \"test/**/*.ts\" \"examples/**/*.ts\" \"scripts/**/*.ts\" \"*.ts\" && oxlint --quiet --no-error-on-unmatched-pattern . && bun run check:types",
 		"check:types": "tsgo -p tsconfig.json --noEmit && tsgo -p tsconfig.client.json --noEmit",
-		"lint": "biome lint .",
-		"fix": "biome check --write --unsafe .",
-		"fmt": "biome format --write ."
+		"lint": "oxlint --no-error-on-unmatched-pattern .",
+		"fix": "oxfmt --write --no-error-on-unmatched-pattern \"src/**/*.ts\" \"src/**/*.tsx\" \"test/**/*.ts\" \"examples/**/*.ts\" \"scripts/**/*.ts\" \"*.ts\" && oxlint --fix-dangerously --no-error-on-unmatched-pattern .",
+		"fmt": "oxfmt --write --no-error-on-unmatched-pattern \"src/**/*.ts\" \"src/**/*.tsx\" \"test/**/*.ts\" \"examples/**/*.ts\" \"scripts/**/*.ts\" \"*.ts\""
 	},
 	"dependencies": {
 		"@oh-my-pi/pi-ai": "catalog:",

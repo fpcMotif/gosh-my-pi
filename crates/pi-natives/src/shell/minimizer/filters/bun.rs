@@ -9,8 +9,10 @@ const BUN_PACKAGE_SUBCOMMANDS: &[&str] = &[
 ];
 const BUN_TEST_SUBCOMMANDS: &[&str] = &["test"];
 const BUN_BUILD_SUBCOMMANDS: &[&str] = &["build"];
-const BUN_TOOL_SUBCOMMANDS: &[&str] =
-	&["tsc", "eslint", "biome", "next", "prettier", "prisma", "jest", "vitest", "playwright"];
+const BUN_TOOL_SUBCOMMANDS: &[&str] = &[
+	"tsc", "tsgo", "eslint", "biome", "oxlint", "oxfmt", "next", "prettier", "prisma", "jest",
+	"vitest", "playwright",
+];
 const BUN_CPP_TOOL_SUBCOMMANDS: &[&str] = &["cmake", "ctest", "ninja", "gtest", "gtest-parallel"];
 
 pub fn supports(program: &str, subcommand: Option<&str>) -> bool {
@@ -74,9 +76,11 @@ fn is_exec_package_subcommand(program: &str, subcommand: Option<&str>) -> bool {
 }
 
 fn is_lint_invocation(program: &str, subcommand: Option<&str>, command: &str) -> bool {
-	matches!((program, subcommand), ("bun" | "bunx", Some("tsc" | "eslint" | "biome")))
-		|| is_exec_package_subcommand(program, subcommand)
-			&& command_contains_tool(command, &["tsc", "eslint", "biome"])
+	matches!(
+		(program, subcommand),
+		("bun" | "bunx", Some("tsc" | "tsgo" | "eslint" | "biome" | "oxlint" | "oxfmt"))
+	) || is_exec_package_subcommand(program, subcommand)
+		&& command_contains_tool(command, &["tsc", "tsgo", "eslint", "biome", "oxlint", "oxfmt"])
 }
 
 fn is_js_tool_invocation(program: &str, subcommand: Option<&str>, command: &str) -> bool {

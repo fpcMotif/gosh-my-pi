@@ -1,5 +1,6 @@
 import { Container, Markdown, Spacer } from "@oh-my-pi/pi-tui";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
+import { MessageFrame } from "./message-frame";
 
 // OSC 133 shell integration: marks prompt zones for terminal multiplexers
 const OSC133_ZONE_START = "\x1b]133;A\x07";
@@ -12,17 +13,21 @@ const OSC133_ZONE_FINAL = "\x1b]133;C\x07";
 export class UserMessageComponent extends Container {
 	constructor(text: string, synthetic = false) {
 		super();
-		const bgColor = (value: string) => theme.bg("userMessageBg", value);
 		const color = synthetic
 			? (value: string) => theme.fg("dim", value)
 			: (value: string) => theme.fg("userMessageText", value);
-		this.addChild(new Spacer(1));
-		this.addChild(
-			new Markdown(text, 1, 1, getMarkdownTheme(), {
-				bgColor,
+		const frame = new MessageFrame({
+			railColor: synthetic ? "dim" : "borderRailUser",
+			label: synthetic ? "developer" : "you",
+			labelColor: synthetic ? "dim" : "customMessageLabel",
+		});
+		frame.addChild(
+			new Markdown(text, 0, 0, getMarkdownTheme(), {
 				color,
 			}),
 		);
+		this.addChild(new Spacer(1));
+		this.addChild(frame);
 	}
 
 	override render(width: number): string[] {

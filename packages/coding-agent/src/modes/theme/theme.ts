@@ -187,7 +187,15 @@ export type SymbolKey =
 	| "tab.editing"
 	| "tab.tools"
 	| "tab.tasks"
-	| "tab.providers";
+	| "tab.providers"
+	// Vivid layout glyphs
+	| "rail.thin"
+	| "rail.thick"
+	| "prompt.sigil"
+	| "badge.sep"
+	| "tool.statusOk"
+	| "tool.statusErr"
+	| "tool.statusRun";
 
 type SymbolMap = Record<SymbolKey, string>;
 
@@ -348,6 +356,14 @@ const UNICODE_SYMBOLS: SymbolMap = {
 	"tab.tools": "🔧",
 	"tab.tasks": "📦",
 	"tab.providers": "🌐",
+	// Vivid layout
+	"rail.thin": "│",
+	"rail.thick": "▌",
+	"prompt.sigil": ":::",
+	"badge.sep": "╱╱╱",
+	"tool.statusOk": "✓",
+	"tool.statusErr": "×",
+	"tool.statusRun": "●",
 };
 
 const NERD_SYMBOLS: SymbolMap = {
@@ -601,6 +617,14 @@ const NERD_SYMBOLS: SymbolMap = {
 	"tab.tools": "󰠭",
 	"tab.tasks": "󰐱",
 	"tab.providers": "󰖟",
+	// Vivid layout (nerd-font glyphs unchanged from Unicode for these — same look)
+	"rail.thin": "│",
+	"rail.thick": "▌",
+	"prompt.sigil": ":::",
+	"badge.sep": "╱╱╱",
+	"tool.statusOk": "",
+	"tool.statusErr": "",
+	"tool.statusRun": "",
 };
 
 const ASCII_SYMBOLS: SymbolMap = {
@@ -759,6 +783,14 @@ const ASCII_SYMBOLS: SymbolMap = {
 	"tab.tools": "[T]",
 	"tab.tasks": "[K]",
 	"tab.providers": "[P]",
+	// Vivid layout (ASCII fallbacks)
+	"rail.thin": "|",
+	"rail.thick": "|",
+	"prompt.sigil": ">>>",
+	"badge.sep": "///",
+	"tool.statusOk": "[ok]",
+	"tool.statusErr": "[x]",
+	"tool.statusRun": "[*]",
 };
 
 const SYMBOL_PRESETS: Record<SymbolPreset, SymbolMap> = {
@@ -808,6 +840,7 @@ const SymbolsSchema = Type.Optional(
 const ThemeJsonSchema = Type.Object({
 	$schema: Type.Optional(Type.String()),
 	name: Type.String(),
+	layout: Type.Optional(Type.Union([Type.Literal("classic"), Type.Literal("vivid")])),
 	vars: Type.Optional(Type.Record(Type.String(), ColorValueSchema)),
 	colors: Type.Object({
 		// Core UI (10 colors)
@@ -885,6 +918,28 @@ const ThemeJsonSchema = Type.Object({
 		statusLineOutput: ColorValueSchema,
 		statusLineCost: ColorValueSchema,
 		statusLineSubagents: ColorValueSchema,
+		// Vivid layout tokens (optional — used only when theme.layout === "vivid")
+		borderRailUser: Type.Optional(ColorValueSchema),
+		borderRailAssistant: Type.Optional(ColorValueSchema),
+		borderRailTool: Type.Optional(ColorValueSchema),
+		borderRailFocused: Type.Optional(ColorValueSchema),
+		promptSigil: Type.Optional(ColorValueSchema),
+		gradFrom: Type.Optional(ColorValueSchema),
+		gradTo: Type.Optional(ColorValueSchema),
+		badgeOkFg: Type.Optional(ColorValueSchema),
+		badgeOkBg: Type.Optional(ColorValueSchema),
+		badgeErrFg: Type.Optional(ColorValueSchema),
+		badgeErrBg: Type.Optional(ColorValueSchema),
+		badgeWarnFg: Type.Optional(ColorValueSchema),
+		badgeWarnBg: Type.Optional(ColorValueSchema),
+		badgeInfoFg: Type.Optional(ColorValueSchema),
+		badgeInfoBg: Type.Optional(ColorValueSchema),
+		badgeHeyFg: Type.Optional(ColorValueSchema),
+		badgeHeyBg: Type.Optional(ColorValueSchema),
+		diffInsertFg: Type.Optional(ColorValueSchema),
+		diffInsertBg: Type.Optional(ColorValueSchema),
+		diffDeleteFg: Type.Optional(ColorValueSchema),
+		diffDeleteBg: Type.Optional(ColorValueSchema),
 	}),
 	export: Type.Optional(
 		Type.Object({
@@ -960,7 +1015,22 @@ export type ThemeColor =
 	| "statusLineUntracked"
 	| "statusLineOutput"
 	| "statusLineCost"
-	| "statusLineSubagents";
+	| "statusLineSubagents"
+	// Vivid layout fg tokens (resolved with fallbacks if theme.layout !== "vivid")
+	| "borderRailUser"
+	| "borderRailAssistant"
+	| "borderRailTool"
+	| "borderRailFocused"
+	| "promptSigil"
+	| "gradFrom"
+	| "gradTo"
+	| "badgeOkFg"
+	| "badgeErrFg"
+	| "badgeWarnFg"
+	| "badgeInfoFg"
+	| "badgeHeyFg"
+	| "diffInsertFg"
+	| "diffDeleteFg";
 
 /** Set of all valid ThemeColor string values for runtime validation */
 const THEME_COLOR_RECORD = {
@@ -1023,6 +1093,20 @@ const THEME_COLOR_RECORD = {
 	statusLineOutput: true,
 	statusLineCost: true,
 	statusLineSubagents: true,
+	borderRailUser: true,
+	borderRailAssistant: true,
+	borderRailTool: true,
+	borderRailFocused: true,
+	promptSigil: true,
+	gradFrom: true,
+	gradTo: true,
+	badgeOkFg: true,
+	badgeErrFg: true,
+	badgeWarnFg: true,
+	badgeInfoFg: true,
+	badgeHeyFg: true,
+	diffInsertFg: true,
+	diffDeleteFg: true,
 } satisfies Record<ThemeColor, true>;
 
 const VALID_THEME_COLORS: ReadonlySet<string> = new Set(Object.keys(THEME_COLOR_RECORD));
@@ -1039,7 +1123,15 @@ export type ThemeBg =
 	| "toolPendingBg"
 	| "toolSuccessBg"
 	| "toolErrorBg"
-	| "statusLineBg";
+	| "statusLineBg"
+	// Vivid layout bg tokens (optional; fallbacks resolve in createTheme)
+	| "badgeOkBg"
+	| "badgeErrBg"
+	| "badgeWarnBg"
+	| "badgeInfoBg"
+	| "badgeHeyBg"
+	| "diffInsertBg"
+	| "diffDeleteBg";
 
 type ColorMode = "truecolor" | "256color";
 
@@ -1218,6 +1310,8 @@ const langMap: Record<string, SymbolKey> = {
 	bin: "lang.binary",
 };
 
+export type ThemeLayout = "classic" | "vivid";
+
 export class Theme {
 	#fgColors: Record<ThemeColor, string>;
 	#bgColors: Record<ThemeBg, string>;
@@ -1229,6 +1323,7 @@ export class Theme {
 		private readonly mode: ColorMode,
 		private readonly symbolPreset: SymbolPreset,
 		symbolOverrides: Partial<Record<SymbolKey, string>>,
+		public readonly layout: ThemeLayout = "classic",
 	) {
 		this.#fgColors = {} as Record<ThemeColor, string>;
 		for (const [key, value] of Object.entries(fgColors) as [ThemeColor, string | number][]) {
@@ -1678,6 +1773,13 @@ function createTheme(themeJson: ThemeJson, options: CreateThemeOptions = {}): Th
 		"toolSuccessBg",
 		"toolErrorBg",
 		"statusLineBg",
+		"badgeOkBg",
+		"badgeErrBg",
+		"badgeWarnBg",
+		"badgeInfoBg",
+		"badgeHeyBg",
+		"diffInsertBg",
+		"diffDeleteBg",
 	]);
 	for (const [key, value] of Object.entries(resolvedColors)) {
 		if (bgColorKeys.has(key)) {
@@ -1686,10 +1788,51 @@ function createTheme(themeJson: ThemeJson, options: CreateThemeOptions = {}): Th
 			fgColors[key as ThemeColor] = value;
 		}
 	}
+
+	// Apply fallbacks for vivid-layout tokens missing from non-vivid themes.
+	// This keeps the system robust: any theme can still be queried for these
+	// keys, and components branching on theme.layout never see undefined.
+	const VIVID_FG_FALLBACKS: Record<string, ThemeColor> = {
+		borderRailUser: "customMessageLabel",
+		borderRailAssistant: "accent",
+		borderRailTool: "borderAccent",
+		borderRailFocused: "accent",
+		promptSigil: "success",
+		gradFrom: "accent",
+		gradTo: "borderAccent",
+		badgeOkFg: "success",
+		badgeErrFg: "error",
+		badgeWarnFg: "warning",
+		badgeInfoFg: "accent",
+		badgeHeyFg: "customMessageLabel",
+		diffInsertFg: "toolDiffAdded",
+		diffDeleteFg: "toolDiffRemoved",
+	};
+	const VIVID_BG_FALLBACKS: Record<string, ThemeBg> = {
+		badgeOkBg: "toolSuccessBg",
+		badgeErrBg: "toolErrorBg",
+		badgeWarnBg: "toolPendingBg",
+		badgeInfoBg: "toolPendingBg",
+		badgeHeyBg: "selectedBg",
+		diffInsertBg: "toolSuccessBg",
+		diffDeleteBg: "toolErrorBg",
+	};
+	for (const [tokenKey, fallbackKey] of Object.entries(VIVID_FG_FALLBACKS)) {
+		if (fgColors[tokenKey as ThemeColor] === undefined) {
+			fgColors[tokenKey as ThemeColor] = fgColors[fallbackKey];
+		}
+	}
+	for (const [tokenKey, fallbackKey] of Object.entries(VIVID_BG_FALLBACKS)) {
+		if (bgColors[tokenKey as ThemeBg] === undefined) {
+			bgColors[tokenKey as ThemeBg] = bgColors[fallbackKey];
+		}
+	}
+
 	// Extract symbol configuration - settings override takes precedence over theme
 	const symbolPreset: SymbolPreset = symbolPresetOverride ?? themeJson.symbols?.preset ?? "unicode";
 	const symbolOverrides = themeJson.symbols?.overrides ?? {};
-	return new Theme(fgColors, bgColors, colorMode, symbolPreset, symbolOverrides);
+	const layout: ThemeLayout = themeJson.layout ?? "classic";
+	return new Theme(fgColors, bgColors, colorMode, symbolPreset, symbolOverrides, layout);
 }
 
 async function loadTheme(name: string, options: CreateThemeOptions = {}): Promise<Theme> {

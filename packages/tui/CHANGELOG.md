@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
+
 ## [14.5.7] - 2026-04-29
 
 ### Fixed

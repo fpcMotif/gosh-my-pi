@@ -439,20 +439,20 @@ For the bash tool specifically:
 
 ## Commands
 
-| Command        | Description                      |
-| -------------- | -------------------------------- |
-| `bun check`    | Check all (TypeScript + Rust)    |
-| `bun check:ts` | Biome check + tsgo type checking |
-| `bun check:rs` | Cargo fmt --check + clippy       |
-| `bun lint`     | Lint all                         |
-| `bun lint:ts`  | Biome lint                       |
-| `bun lint:rs`  | Cargo clippy                     |
-| `bun fmt`      | Format all                       |
-| `bun fmt:ts`   | Biome format                     |
-| `bun fmt:rs`   | Cargo fmt                        |
-| `bun fix`      | Fix all (unsafe fixes + format)  |
-| `bun fix:ts`   | Biome --unsafe + format-prompts  |
-| `bun fix:rs`   | Clippy --fix + cargo fmt         |
+| Command        | Description                                           |
+| -------------- | ----------------------------------------------------- |
+| `bun check`    | Check all (TypeScript + Rust)                         |
+| `bun check:ts` | oxfmt check + oxlint + tsgo type checking             |
+| `bun check:rs` | Cargo fmt --check + clippy                            |
+| `bun lint`     | Lint all                                              |
+| `bun lint:ts`  | oxlint                                                |
+| `bun lint:rs`  | Cargo clippy                                          |
+| `bun fmt`      | Format all                                            |
+| `bun fmt:ts`   | oxfmt                                                 |
+| `bun fmt:rs`   | Cargo fmt                                             |
+| `bun fix`      | Fix all (unsafe fixes + format)                       |
+| `bun fix:ts`   | oxfmt + oxlint --fix-dangerously + format-prompts     |
+| `bun fix:rs`   | Clippy --fix + cargo fmt                              |
 
 - NEVER run: `bun run dev`, `bun test` unless user instructs
 - Only run specific tests if user instructs: `bun test test/specific.test.ts`

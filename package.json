@@ -16,7 +16,6 @@
 			"@babel/parser": "^7.29.2",
 			"@babel/traverse": "^7.29.0",
 			"@babel/types": "^7.29.0",
-			"@biomejs/biome": "^2.4.13",
 			"@bufbuild/protobuf": "^2.12.0",
 			"@bufbuild/protoc-gen-es": "^2.12.0",
 			"@google/genai": "^1.50.1",
@@ -39,7 +38,7 @@
 			"@types/react": "^19.2.14",
 			"@types/react-dom": "^19.2.3",
 			"@types/turndown": "5.0.6",
-			"@typescript/native-preview": "7.0.0-dev.20260425.1",
+			"@typescript/native-preview": "7.0.0-dev.20260429.1",
 			"@xterm/headless": "^6.0.0",
 			"ajv": "^8.20.0",
 			"ajv-formats": "^3.0.1",
@@ -57,6 +56,8 @@
 			"marked": "^18.0.2",
 			"markit-ai": "0.5.3",
 			"openai": "^6.34.0",
+			"oxfmt": "^0.47.0",
+			"oxlint": "^1.62.0",
 			"partial-json": "^0.1.7",
 			"postcss": "^8.5.10",
 			"prettier": "^3.8.3",
@@ -89,22 +90,22 @@
 		"test:rs": "bun scripts/run-rs-task.ts test:rs",
 		"check": "bun run --parallel check:ts check:rs",
 		"check:ts": "bun run check:tools && bun run --workspaces --if-present check",
-		"check:tools": "biome check . --no-errors-on-unmatched",
+		"check:tools": "oxfmt --check --no-error-on-unmatched-pattern \"packages/*/src/**/*.ts\" \"packages/*/src/**/*.tsx\" \"packages/*/test/**/*.ts\" \"packages/*/examples/**/*.ts\" \"packages/*/scripts/**/*.ts\" \"packages/*/*.ts\" && oxlint --quiet --no-error-on-unmatched-pattern packages",
 		"check:rs": "bun scripts/run-rs-task.ts check:rs",
 		"lint": "bun run --parallel lint:ts lint:rs",
 		"lint:ts": "bun run --parallel lint:tools && bun run --workspaces --if-present lint",
-		"lint:tools": "biome lint . --no-errors-on-unmatched",
+		"lint:tools": "oxlint --no-error-on-unmatched-pattern packages",
 		"lint:rs": "bun scripts/run-rs-task.ts lint:rs",
 		"fmt": "bun run --parallel fmt:ts fmt:rs",
 		"fmt:ts": "bun run fmt:tools && bun run --workspaces --if-present fmt",
-		"fmt:tools": "biome format --write . --no-errors-on-unmatched",
+		"fmt:tools": "oxfmt --write --no-error-on-unmatched-pattern \"packages/*/src/**/*.ts\" \"packages/*/src/**/*.tsx\" \"packages/*/test/**/*.ts\" \"packages/*/examples/**/*.ts\" \"packages/*/scripts/**/*.ts\" \"packages/*/*.ts\"",
 		"fmt:rs": "bun scripts/run-rs-task.ts fmt:rs",
 		"fix": "bun run --parallel fix:ts fix:rs",
 		"fix:all": "bun run --parallel fix:ts:all fix:rs",
 		"fix:ts": "bun run fix:tools && bun run --workspaces --if-present fix",
 		"fix:ts:all": "bun run fix:tools:all && bun run --workspaces --if-present fix",
-		"fix:tools": "biome check --write --unsafe --changed --no-errors-on-unmatched .",
-		"fix:tools:all": "biome check --write --unsafe --no-errors-on-unmatched .",
+		"fix:tools": "oxfmt --write --no-error-on-unmatched-pattern \"packages/*/src/**/*.ts\" \"packages/*/src/**/*.tsx\" \"packages/*/test/**/*.ts\" \"packages/*/examples/**/*.ts\" \"packages/*/scripts/**/*.ts\" \"packages/*/*.ts\" && oxlint --fix-dangerously --no-error-on-unmatched-pattern packages",
+		"fix:tools:all": "oxfmt --write --no-error-on-unmatched-pattern \"packages/*/src/**/*.ts\" \"packages/*/src/**/*.tsx\" \"packages/*/test/**/*.ts\" \"packages/*/examples/**/*.ts\" \"packages/*/scripts/**/*.ts\" \"packages/*/*.ts\" && oxlint --fix-dangerously --no-error-on-unmatched-pattern packages",
 		"fix:rs": "bun scripts/run-rs-task.ts fix:rs",
 		"ci:check:full": "bun run check:ts",
 		"ci:build:native": "bun scripts/ci-build-native.ts",
@@ -131,15 +132,19 @@
 		"check-spoofed-versions": "bun scripts/check-spoofed-versions.ts"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "catalog:",
 		"@bufbuild/protoc-gen-es": "catalog:",
 		"@types/bun": "catalog:",
 		"@typescript/native-preview": "catalog:",
-		"typescript": "catalog:",
 		"lint-staged": "catalog:",
-		"prettier": "catalog:"
+		"oxfmt": "catalog:",
+		"oxlint": "catalog:",
+		"prettier": "catalog:",
+		"typescript": "catalog:"
 	},
 	"lint-staged": {
-		"*.{js,ts,jsx,tsx,json,jsonc,css}": "biome check --write --no-errors-on-unmatched"
+		"*.{js,jsx,ts,tsx}": [
+			"oxfmt --write --no-error-on-unmatched-pattern",
+			"oxlint --fix --no-error-on-unmatched-pattern"
+		]
 	}
 }

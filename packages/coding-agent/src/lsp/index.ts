@@ -414,7 +414,11 @@ function detectProjectType(cwd: string): ProjectType {
 
 	// Check for TypeScript (tsconfig.json)
 	if (fs.existsSync(path.join(cwd, "tsconfig.json"))) {
-		return { type: "typescript", command: ["npx", "tsc", "--noEmit"], description: "TypeScript (tsc --noEmit)" };
+		return {
+			type: "typescript",
+			command: ["npx", "--yes", "@typescript/native-preview", "--noEmit"],
+			description: "TypeScript (tsgo --noEmit)",
+		};
 	}
 
 	// Check for Go (go.mod)

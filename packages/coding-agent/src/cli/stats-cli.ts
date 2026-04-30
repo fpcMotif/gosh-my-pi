@@ -69,9 +69,8 @@ function normalizePremiumRequests(n: number): number {
 
 export async function runStatsCommand(cmd: StatsCommandArgs): Promise<void> {
 	// Lazy import to avoid loading stats module when not needed
-	const { getDashboardStats, syncAllSessions, getTotalMessageCount, startServer, closeDb } = await import(
-		"@oh-my-pi/omp-stats"
-	);
+	const { getDashboardStats, syncAllSessions, getTotalMessageCount, startServer, closeDb } =
+		await import("@oh-my-pi/omp-stats");
 
 	// Sync session files first
 	console.log("Syncing session files...");

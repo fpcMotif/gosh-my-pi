@@ -52,15 +52,20 @@ pub fn supports(program: &str, subcommand: Option<&str>) -> bool {
 			python::supports(program, subcommand)
 		},
 		"rspec" | "rake" | "rails" | "rubocop" => ruby::supports(program, subcommand),
-		"tsc" | "eslint" | "biome" | "shellcheck" | "markdownlint" | "hadolint" | "yamllint"
-		| "oxlint" | "pyright" | "basedpyright" => {
+		"tsc" | "tsgo" | "eslint" | "biome" | "shellcheck" | "markdownlint" | "hadolint"
+		| "yamllint" | "oxlint" | "oxfmt" | "pyright" | "basedpyright" => {
 			lint::supports(subcommand) || lint::supports_program(program, subcommand)
 		},
 		"jest" | "vitest" | "playwright" => true,
 		"next" | "prettier" | "prisma" => js_tools::supports(program, subcommand),
 		"npx" => {
-			matches!(subcommand, Some("tsc" | "eslint" | "biome" | "jest" | "vitest" | "playwright"))
-				|| js_tools::supports(program, subcommand)
+			matches!(
+				subcommand,
+				Some(
+					"tsc" | "tsgo" | "eslint" | "biome" | "oxlint" | "oxfmt" | "jest" | "vitest"
+						| "playwright",
+				),
+			) || js_tools::supports(program, subcommand)
 		},
 		"pnpm" if matches!(subcommand, Some("dlx")) => true,
 		"npm" | "pnpm" | "yarn" | "pip" | "pip3" | "bundle" | "brew" | "composer" | "uv"
@@ -95,8 +100,10 @@ pub fn filter(ctx: &MinimizerCtx<'_>, input: &str, exit_code: i32) -> MinimizerO
 			python::filter(ctx, input, exit_code)
 		},
 		"rspec" | "rake" | "rails" | "rubocop" => ruby::filter(ctx, input, exit_code),
-		"tsc" | "eslint" | "biome" | "shellcheck" | "markdownlint" | "hadolint" | "yamllint"
-		| "oxlint" | "pyright" | "basedpyright" => lint::filter(ctx, input, exit_code),
+		"tsc" | "tsgo" | "eslint" | "biome" | "shellcheck" | "markdownlint" | "hadolint"
+		| "yamllint" | "oxlint" | "oxfmt" | "pyright" | "basedpyright" => {
+			lint::filter(ctx, input, exit_code)
+		},
 		"jest" | "vitest" | "playwright" => node_tests::filter(ctx, input, exit_code),
 		"next" | "prettier" | "prisma" => js_tools::filter(ctx, input, exit_code),
 		"npx" => filter_js_wrapper(ctx, input, exit_code),
@@ -110,7 +117,7 @@ pub fn filter(ctx: &MinimizerCtx<'_>, input: &str, exit_code: i32) -> MinimizerO
 }
 
 fn filter_js_wrapper(ctx: &MinimizerCtx<'_>, input: &str, exit_code: i32) -> MinimizerOutput {
-	if wrapper_invokes(ctx, &["tsc", "eslint", "biome"]) {
+	if wrapper_invokes(ctx, &["tsc", "tsgo", "eslint", "biome", "oxlint", "oxfmt"]) {
 		lint::filter(ctx, input, exit_code)
 	} else if wrapper_invokes(ctx, &["jest", "vitest", "playwright"]) {
 		node_tests::filter(ctx, input, exit_code)

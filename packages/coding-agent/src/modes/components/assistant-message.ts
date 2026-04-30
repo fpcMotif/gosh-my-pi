@@ -4,12 +4,13 @@ import { formatNumber } from "@oh-my-pi/pi-utils";
 import { settings } from "../../config/settings";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
 import { resolveImageOptions } from "../../tools/render-utils";
+import { MessageFrame } from "./message-frame";
 
 /**
  * Component that renders a complete assistant message
  */
 export class AssistantMessageComponent extends Container {
-	#contentContainer: Container;
+	#contentContainer: MessageFrame;
 	#lastMessage?: AssistantMessage;
 	#toolImagesByCallId = new Map<string, ImageContent[]>();
 	#usageInfo?: Usage;
@@ -21,8 +22,11 @@ export class AssistantMessageComponent extends Container {
 		super();
 
 		// Container for text/thinking content
-		this.#contentContainer = new Container();
-		this.addChild(this.#contentContainer);
+		this.#contentContainer = new MessageFrame({
+			railColor: "borderRailAssistant",
+			label: "assistant",
+			labelColor: "accent",
+		});
 
 		if (message) {
 			this.updateContent(message);
@@ -87,16 +91,13 @@ export class AssistantMessageComponent extends Container {
 	updateContent(message: AssistantMessage): void {
 		this.#lastMessage = message;
 
-		// Clear content container
+		// Clear current frame and rebuild the component tree from message state
+		this.clear();
 		this.#contentContainer.clear();
 
 		const hasVisibleContent = message.content.some(
 			c => (c.type === "text" && c.text.trim()) || (c.type === "thinking" && c.thinking.trim()),
 		);
-
-		if (hasVisibleContent) {
-			this.#contentContainer.addChild(new Spacer(1));
-		}
 
 		// Render content in order
 		for (let i = 0; i < message.content.length; i++) {
@@ -172,6 +173,10 @@ export class AssistantMessageComponent extends Container {
 			}
 			this.#contentContainer.addChild(new Spacer(1));
 			this.#contentContainer.addChild(new Text(theme.fg("dim", parts.join("  ")), 1, 0));
+		}
+		if (this.#contentContainer.children.length > 0) {
+			this.addChild(new Spacer(1));
+			this.addChild(this.#contentContainer);
 		}
 	}
 }

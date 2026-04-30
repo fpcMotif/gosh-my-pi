@@ -128,9 +128,7 @@ import handoffDocumentPrompt from "../prompts/system/handoff-document.md" with {
 import ircIncomingTemplate from "../prompts/system/irc-incoming.md" with { type: "text" };
 import planModeActivePrompt from "../prompts/system/plan-mode-active.md" with { type: "text" };
 import planModeReferencePrompt from "../prompts/system/plan-mode-reference.md" with { type: "text" };
-import planModeToolDecisionReminderPrompt from "../prompts/system/plan-mode-tool-decision-reminder.md" with {
-	type: "text",
-};
+import planModeToolDecisionReminderPrompt from "../prompts/system/plan-mode-tool-decision-reminder.md" with { type: "text" };
 import ttsrInterruptTemplate from "../prompts/system/ttsr-interrupt.md" with { type: "text" };
 import { type AgentRegistry, MAIN_AGENT_ID } from "../registry/agent-registry";
 import { deobfuscateSessionContext, type SecretObfuscator } from "../secrets/obfuscator";

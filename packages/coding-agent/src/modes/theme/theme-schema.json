@@ -13,6 +13,11 @@
 			"type": "string",
 			"description": "Theme name"
 		},
+		"layout": {
+			"type": "string",
+			"enum": ["classic", "vivid"],
+			"description": "Layout style. 'classic' = single-column with full borders (default). 'vivid' = left-rail messages, ::: sigil, badge pills, gradient chrome."
+		},
 		"vars": {
 			"type": "object",
 			"description": "Reusable color variables",
@@ -366,7 +371,49 @@
 				"statusLineSubagents": {
 					"$ref": "#/$defs/colorValue",
 					"description": "Status line subagents segment"
-				}
+				},
+				"borderRailUser": {
+					"$ref": "#/$defs/colorValue",
+					"description": "[vivid layout] Left rail color on user messages"
+				},
+				"borderRailAssistant": {
+					"$ref": "#/$defs/colorValue",
+					"description": "[vivid layout] Left rail color on assistant messages"
+				},
+				"borderRailTool": {
+					"$ref": "#/$defs/colorValue",
+					"description": "[vivid layout] Left rail color on tool execution blocks"
+				},
+				"borderRailFocused": {
+					"$ref": "#/$defs/colorValue",
+					"description": "[vivid layout] Left rail color when message is focused (thick rail)"
+				},
+				"promptSigil": {
+					"$ref": "#/$defs/colorValue",
+					"description": "[vivid layout] Color of the ::: input prompt sigil"
+				},
+				"gradFrom": {
+					"$ref": "#/$defs/colorValue",
+					"description": "[vivid layout] Gradient start color (wordmark, spinner, dialog titles)"
+				},
+				"gradTo": {
+					"$ref": "#/$defs/colorValue",
+					"description": "[vivid layout] Gradient end color"
+				},
+				"badgeOkFg": { "$ref": "#/$defs/colorValue", "description": "[vivid] OKAY! badge foreground" },
+				"badgeOkBg": { "$ref": "#/$defs/colorValue", "description": "[vivid] OKAY! badge background" },
+				"badgeErrFg": { "$ref": "#/$defs/colorValue", "description": "[vivid] ERROR badge foreground" },
+				"badgeErrBg": { "$ref": "#/$defs/colorValue", "description": "[vivid] ERROR badge background" },
+				"badgeWarnFg": { "$ref": "#/$defs/colorValue", "description": "[vivid] WARNING badge foreground" },
+				"badgeWarnBg": { "$ref": "#/$defs/colorValue", "description": "[vivid] WARNING badge background" },
+				"badgeInfoFg": { "$ref": "#/$defs/colorValue", "description": "[vivid] INFO badge foreground" },
+				"badgeInfoBg": { "$ref": "#/$defs/colorValue", "description": "[vivid] INFO badge background" },
+				"badgeHeyFg": { "$ref": "#/$defs/colorValue", "description": "[vivid] HEY! badge foreground" },
+				"badgeHeyBg": { "$ref": "#/$defs/colorValue", "description": "[vivid] HEY! badge background" },
+				"diffInsertFg": { "$ref": "#/$defs/colorValue", "description": "[vivid] Diff insert text fg" },
+				"diffInsertBg": { "$ref": "#/$defs/colorValue", "description": "[vivid] Diff insert text bg" },
+				"diffDeleteFg": { "$ref": "#/$defs/colorValue", "description": "[vivid] Diff delete text fg" },
+				"diffDeleteBg": { "$ref": "#/$defs/colorValue", "description": "[vivid] Diff delete text bg" }
 			},
 			"additionalProperties": false
 		},

@@ -937,8 +937,7 @@ export interface RegisteredCommand {
 // Extension API
 // ============================================================================
 
-/** Handler function type for events */
-// biome-ignore lint/suspicious/noConfusingVoidType: void allows bare return statements
+/** Handler function type for events. `void` allows bare return statements. */
 export type ExtensionHandler<E, R = undefined> = (event: E, ctx: ExtensionContext) => Promise<R | void> | R | void;
 
 /**

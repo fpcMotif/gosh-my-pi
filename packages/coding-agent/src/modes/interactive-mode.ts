@@ -72,6 +72,8 @@ import { InputController } from "./controllers/input-controller";
 import { MCPCommandController } from "./controllers/mcp-command-controller";
 import { SelectorController } from "./controllers/selector-controller";
 import { SSHCommandController } from "./controllers/ssh-command-controller";
+import { RowSplit } from "./components/row-split";
+import { Sidebar, type SidebarMcpServer } from "./components/sidebar";
 import { TodoCommandController } from "./controllers/todo-command-controller";
 import { OAuthManualInputManager } from "./oauth-manual-input";
 import { SessionObserverRegistry } from "./session-observer-registry";
@@ -227,6 +229,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	#eventBus?: EventBus;
 	#eventBusUnsubscribers: Array<() => void> = [];
 	#welcomeComponent?: WelcomeComponent;
+	#sidebar?: Sidebar;
 
 	constructor(
 		session: AgentSession,
@@ -264,6 +267,10 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.todoContainer = new Container();
 		this.btwContainer = new Container();
 		this.editor = new CustomEditor(getEditorTheme());
+		this.editor.setPaddingX(1);
+		if (theme.layout === "vivid") {
+			this.editor.setPromptGutter(`${theme.fg("promptSigil", theme.symbol("prompt.sigil"))} `);
+		}
 		this.editor.setUseTerminalCursor(this.ui.getShowHardwareCursor());
 		this.editor.setAutocompleteMaxVisible(settings.get("autocompleteMaxVisible"));
 		this.editor.onAutocompleteCancel = () => {
@@ -402,15 +409,39 @@ export class InteractiveMode implements InteractiveModeContext {
 			}
 		}
 
-		this.ui.addChild(this.chatContainer);
-		this.ui.addChild(this.pendingMessagesContainer);
-		this.ui.addChild(this.statusContainer);
-		this.ui.addChild(this.todoContainer);
-		this.ui.addChild(this.btwContainer);
-		this.ui.addChild(this.statusLine); // Only renders hook statuses (main status in editor border)
-		this.ui.addChild(this.hookWidgetContainerAbove);
-		this.ui.addChild(this.editorContainer);
-		this.ui.addChild(this.hookWidgetContainerBelow);
+		if (theme.layout === "vivid") {
+			// Vivid layout: a sidebar (session/cwd/MCP/model) sits to the left of
+			// the main column. Existing container refs are unchanged — they're just
+			// re-parented under a single main Container, which then sits inside RowSplit.
+			this.#sidebar = new Sidebar({
+				sessionTitle: this.sessionManager.getSessionName() ?? "",
+				cwd: process.cwd(),
+				mcpServers: this.#computeSidebarMcpServers(),
+				model: { name: modelName, provider: providerName },
+			});
+			const mainColumn = new Container();
+			mainColumn.addChild(this.chatContainer);
+			mainColumn.addChild(this.pendingMessagesContainer);
+			mainColumn.addChild(this.statusContainer);
+			mainColumn.addChild(this.todoContainer);
+			mainColumn.addChild(this.btwContainer);
+			mainColumn.addChild(this.statusLine);
+			mainColumn.addChild(this.hookWidgetContainerAbove);
+			mainColumn.addChild(this.editorContainer);
+			mainColumn.addChild(this.hookWidgetContainerBelow);
+			this.ui.addChild(new RowSplit(this.#sidebar, mainColumn, { leftWidth: 30 }));
+			this.#updateSidebar();
+		} else {
+			this.ui.addChild(this.chatContainer);
+			this.ui.addChild(this.pendingMessagesContainer);
+			this.ui.addChild(this.statusContainer);
+			this.ui.addChild(this.todoContainer);
+			this.ui.addChild(this.btwContainer);
+			this.ui.addChild(this.statusLine); // Only renders hook statuses (main status in editor border)
+			this.ui.addChild(this.hookWidgetContainerAbove);
+			this.ui.addChild(this.editorContainer);
+			this.ui.addChild(this.hookWidgetContainerBelow);
+		}
 		this.ui.setFocus(this.editor);
 
 		this.#inputController.setupKeyHandlers();
@@ -1269,6 +1300,32 @@ export class InteractiveMode implements InteractiveModeContext {
 				fileTypes: server.fileTypes,
 			})) ?? []
 		);
+	}
+
+	notifyHasMessages = (): void => {
+		if (this.#welcomeComponent) {
+			this.#welcomeComponent.setMinimized(true);
+			this.ui.requestRender();
+		}
+	};
+
+	#computeSidebarMcpServers(): SidebarMcpServer[] {
+		if (!this.mcpManager) return [];
+		const servers: SidebarMcpServer[] = [];
+		for (const name of this.mcpManager.getAllServerNames()) {
+			const status = this.mcpManager.getConnectionStatus(name);
+			servers.push({
+				name,
+				status: status === "connected" ? "ready" : status === "connecting" ? "connecting" : "error",
+			});
+		}
+		return servers;
+	}
+
+	#updateSidebar(): void {
+		if (!this.#sidebar) return;
+		this.#sidebar.setSessionTitle(this.sessionManager.getSessionName() ?? "");
+		this.#sidebar.setMcpServers(this.#computeSidebarMcpServers());
 	}
 
 	#updateWelcomeLspServers(): void {

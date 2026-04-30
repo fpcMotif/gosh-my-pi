@@ -32,16 +32,16 @@ export class InputController {
 		this.ctx.editor.shouldBypassAutocompleteOnEscape = () =>
 			Boolean(
 				this.ctx.loadingAnimation ||
-					this.ctx.hasActiveBtw() ||
-					this.ctx.session.isStreaming ||
-					this.ctx.session.isCompacting ||
-					this.ctx.session.isGeneratingHandoff ||
-					this.ctx.session.isBashRunning ||
-					this.ctx.session.isPythonRunning ||
-					this.ctx.autoCompactionLoader ||
-					this.ctx.retryLoader ||
-					this.ctx.autoCompactionEscapeHandler ||
-					this.ctx.retryEscapeHandler,
+				this.ctx.hasActiveBtw() ||
+				this.ctx.session.isStreaming ||
+				this.ctx.session.isCompacting ||
+				this.ctx.session.isGeneratingHandoff ||
+				this.ctx.session.isBashRunning ||
+				this.ctx.session.isPythonRunning ||
+				this.ctx.autoCompactionLoader ||
+				this.ctx.retryLoader ||
+				this.ctx.autoCompactionEscapeHandler ||
+				this.ctx.retryEscapeHandler,
 			);
 		this.ctx.editor.onEscape = () => {
 			if (this.ctx.loopModeEnabled) {

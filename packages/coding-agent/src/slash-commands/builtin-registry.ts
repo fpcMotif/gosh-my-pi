@@ -60,10 +60,10 @@ interface BuiltinSlashCommandSpec extends BuiltinSlashCommand {
 	 * Handle the command. Return a string to pass remaining text through as prompt input.
 	 * Return void/undefined to consume the input entirely.
 	 */
+	// `void` is needed so handlers returning nothing are assignable.
 	handle: (
 		command: ParsedBuiltinSlashCommand,
 		runtime: BuiltinSlashCommandRuntime,
-		// biome-ignore lint/suspicious/noConfusingVoidType: void needed so handlers returning nothing are assignable
 	) => Promise<string | undefined> | string | void;
 }
 

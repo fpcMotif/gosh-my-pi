@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
+- Recognized tsgo and oxfmt as shell minimizer lint/check tools.
+
 ## [14.5.9] - 2026-04-30
 ### Fixed
 
