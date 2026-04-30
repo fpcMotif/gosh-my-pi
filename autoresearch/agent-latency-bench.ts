@@ -1,35 +1,25 @@
-import { theme } from "../packages/coding-agent/src/modes/theme/theme";
 import {
 	buildDiscoverableMCPSearchIndex,
+	formatDiscoverableMCPToolServerSummary,
 	searchDiscoverableMCPTools,
+	summarizeDiscoverableMCPTools,
 	type DiscoverableMCPTool,
 	type DiscoverableMCPSearchIndex,
 } from "../packages/coding-agent/src/mcp/discoverable-tool-metadata";
-import { bashToolRenderer, type BashRenderArgs } from "../packages/coding-agent/src/tools/bash";
-import { SearchTool, type SearchToolDetails } from "../packages/coding-agent/src/tools/search";
-import { searchToolBm25Renderer, type SearchToolBm25Details } from "../packages/coding-agent/src/tools/search-tool-bm25";
-import type { ToolSession } from "../packages/coding-agent/src/tools";
 
 interface RoundMetrics {
 	bm25_index_ms: number;
 	bm25_query_ms: number;
-	file_search_ms: number;
-	bash_render_ms: number;
-	tool_discovery_render_ms: number;
+	result_format_ms: number;
+	summary_ms: number;
 	total_ms: number;
 	checksum: number;
 }
 
-interface RenderableComponent {
-	render(width: number): string[];
-	invalidate?: () => void;
-}
-
-const ROOT = process.cwd();
-const ROUND_COUNT = 5;
-const QUERY_REPEAT_COUNT = 14;
-const TOOL_COUNT = 6_000;
-const WIDTH = 112;
+const ROUND_COUNT = 7;
+const QUERY_REPEAT_COUNT = 18;
+const TOOL_COUNT = 12_000;
+const RESULT_LIMIT = 8;
 
 const queryTerms = [
 	"calendar schedule meeting attendee",
@@ -40,14 +30,19 @@ const queryTerms = [
 	"search document vector embedding",
 	"kubernetes pod deployment logs",
 	"file upload download image",
+	"approval task workflow status",
+	"email draft inbox attachment",
 ];
 
-const searchPatterns = [
-	"renderStatusLine",
-	"ToolExecutionComponent",
-	"truncateToWidth",
-	"SearchTool",
-] as const;
+interface FormattedSearchResult {
+	name: string;
+	label: string;
+	description: string;
+	server_name?: string;
+	mcp_tool_name?: string;
+	schema_keys: string[];
+	score: number;
+}
 
 function nowMs(): number {
 	return performance.now();
@@ -66,17 +61,8 @@ function emitMetric(name: string, value: number): void {
 	process.stdout.write(`METRIC ${name}=${roundMetric(value)}\n`);
 }
 
-function renderAndMeasure(component: RenderableComponent): number {
-	const lines = component.render(WIDTH);
-	let checksum = lines.length;
-	for (const line of lines) {
-		checksum += line.length;
-	}
-	return checksum;
-}
-
 function buildSyntheticTools(): DiscoverableMCPTool[] {
-	const verbs = ["create", "update", "delete", "list", "search", "sync", "export", "import"];
+	const verbs = ["create", "update", "delete", "list", "search", "sync", "export", "import", "review", "summarize"];
 	const domains = [
 		"calendar",
 		"github",
@@ -86,53 +72,50 @@ function buildSyntheticTools(): DiscoverableMCPTool[] {
 		"document",
 		"kubernetes",
 		"storage",
+		"approval",
+		"email",
 	];
-	const nouns = ["meeting", "issue", "schema", "form", "thread", "embedding", "deployment", "artifact"];
+	const nouns = [
+		"meeting",
+		"issue",
+		"schema",
+		"form",
+		"thread",
+		"embedding",
+		"deployment",
+		"artifact",
+		"workflow",
+		"attachment",
+	];
 	const tools: DiscoverableMCPTool[] = [];
 	for (let index = 0; index < TOOL_COUNT; index += 1) {
 		const verb = verbs[index % verbs.length]!;
 		const domain = domains[Math.floor(index / verbs.length) % domains.length]!;
 		const noun = nouns[Math.floor(index / (verbs.length * domains.length)) % nouns.length]!;
-		const serverName = `${domain}-server-${index % 25}`;
-		const uniqueTerm = `feature${index % 257}`;
+		const serverName = `${domain}-server-${index % 40}`;
+		const uniqueTerm = `feature${index % 509}`;
 		tools.push({
 			name: `mcp__${serverName}__${verb}_${domain}_${noun}_${index}`,
 			label: `${verb} ${domain} ${noun}`,
 			description: `${verb} ${domain} ${noun} records with ${uniqueTerm} filtering, pagination, audit logs, batch mode, and user scoped permissions`,
 			serverName,
 			mcpToolName: `${verb}_${noun}`,
-			schemaKeys: ["id", "query", "limit", "cursor", domain, noun, uniqueTerm],
+			schemaKeys: ["id", "query", "limit", "cursor", "actor", "workspace", domain, noun, uniqueTerm],
 		});
 	}
 	return tools;
 }
 
-function makeSearchSession(): ToolSession {
-	const settings = {
-		get(key: string): unknown {
-			switch (key) {
-				case "search.contextBefore":
-				case "search.contextAfter":
-					return 1;
-				case "readLineNumbers":
-					return true;
-				case "readHashLines":
-					return false;
-				case "edit.mode":
-					return "whole";
-				default:
-					return undefined;
-			}
-		},
-	};
+function formatResult(tool: DiscoverableMCPTool, score: number): FormattedSearchResult {
 	return {
-		cwd: ROOT,
-		hasUI: false,
-		hasEditTool: true,
-		settings,
-		getSessionFile: () => null,
-		getSessionSpawns: () => null,
-	} as ToolSession;
+		name: tool.name,
+		label: tool.label,
+		description: tool.description,
+		server_name: tool.serverName,
+		mcp_tool_name: tool.mcpToolName,
+		schema_keys: tool.schemaKeys,
+		score: Number(score.toFixed(6)),
+	};
 }
 
 function measureBm25(tools: DiscoverableMCPTool[]): {
@@ -148,7 +131,7 @@ function measureBm25(tools: DiscoverableMCPTool[]): {
 	const queryStart = nowMs();
 	for (let repeat = 0; repeat < QUERY_REPEAT_COUNT; repeat += 1) {
 		for (const query of queryTerms) {
-			const results = searchDiscoverableMCPTools(index, query, 8);
+			const results = searchDiscoverableMCPTools(index, query, RESULT_LIMIT);
 			checksum += results.length;
 			checksum += Math.round((results[0]?.score ?? 0) * 1000);
 		}
@@ -156,126 +139,56 @@ function measureBm25(tools: DiscoverableMCPTool[]): {
 	return { index, indexMs, queryMs: nowMs() - queryStart, checksum };
 }
 
-async function measureFileSearch(searchTool: SearchTool): Promise<{ elapsedMs: number; checksum: number }> {
+function measureResultFormatting(index: DiscoverableMCPSearchIndex): { elapsedMs: number; checksum: number } {
 	let checksum = 0;
 	const start = nowMs();
-	for (const pattern of searchPatterns) {
-		const result = await searchTool.execute("bench", {
-			pattern,
-			path: "packages/coding-agent/src",
-			i: false,
-			gitignore: true,
-			skip: 0,
-		});
-		const details = result.details as SearchToolDetails | undefined;
-		checksum += details?.matchCount ?? 0;
-		checksum += details?.fileCount ?? 0;
+	for (let repeat = 0; repeat < QUERY_REPEAT_COUNT * 8; repeat += 1) {
+		const query = queryTerms[repeat % queryTerms.length]!;
+		const ranked = searchDiscoverableMCPTools(index, query, 24);
+		const formatted = ranked.map(result => formatResult(result.tool, result.score));
+		checksum += formatted.length;
+		checksum += formatted[0]?.name.length ?? 0;
+		checksum += formatted[0]?.schema_keys.length ?? 0;
 	}
 	return { elapsedMs: nowMs() - start, checksum };
 }
 
-function measureBashRenderer(): { elapsedMs: number; checksum: number } {
-	const output = Array.from(
-		{ length: 900 },
-		(_, index) =>
-			`line ${index.toString().padStart(4, "0")} tool output with tabs\tpaths/packages/coding-agent/src/tools/bash.ts and enough text to wrap`,
-	).join("\n");
-	const args: BashRenderArgs = {
-		command: "bun check:ts --filter coding-agent",
-		cwd: "packages/coding-agent",
-		env: { NODE_ENV: "test", PI_BENCH: "1" },
-		timeout: 120,
-	};
+function measureSummary(tools: DiscoverableMCPTool[]): { elapsedMs: number; checksum: number } {
 	let checksum = 0;
 	const start = nowMs();
-	for (let iteration = 0; iteration < 90; iteration += 1) {
-		const component = bashToolRenderer.renderResult(
-			{
-				content: [{ type: "text", text: output }],
-				details: { timeoutSeconds: 120 },
-				isError: false,
-			},
-			{
-				expanded: false,
-				isPartial: false,
-				renderContext: { output, expanded: false, previewLines: 10, timeout: 120 },
-			},
-			theme,
-			args,
-		) as RenderableComponent;
-		checksum += renderAndMeasure(component);
+	for (let repeat = 0; repeat < 120; repeat += 1) {
+		const summary = summarizeDiscoverableMCPTools(tools);
+		const lines = summary.servers.map(formatDiscoverableMCPToolServerSummary);
+		checksum += summary.toolCount;
+		checksum += lines.length;
+		checksum += lines[0]?.length ?? 0;
 	}
 	return { elapsedMs: nowMs() - start, checksum };
 }
 
-function measureToolDiscoveryRenderer(index: DiscoverableMCPSearchIndex): { elapsedMs: number; checksum: number } {
-	const ranked = searchDiscoverableMCPTools(index, "calendar meeting attendee schedule", 24);
-	const details: SearchToolBm25Details = {
-		query: "calendar meeting attendee schedule",
-		limit: 24,
-		total_tools: index.documents.length,
-		activated_tools: ranked.slice(0, 8).map(result => result.tool.name),
-		active_selected_tools: ranked.slice(0, 12).map(result => result.tool.name),
-		tools: ranked.map(result => ({
-			name: result.tool.name,
-			label: result.tool.label,
-			description: result.tool.description,
-			server_name: result.tool.serverName,
-			mcp_tool_name: result.tool.mcpToolName,
-			schema_keys: result.tool.schemaKeys,
-			score: result.score,
-		})),
-	};
-	let checksum = 0;
-	const start = nowMs();
-	for (let iteration = 0; iteration < 160; iteration += 1) {
-		const component = searchToolBm25Renderer.renderResult(
-			{
-				content: [{ type: "text", text: "{}" }],
-				details,
-				isError: false,
-			},
-			{ expanded: false, isPartial: false },
-			theme,
-		) as RenderableComponent;
-		checksum += renderAndMeasure(component);
-	}
-	return { elapsedMs: nowMs() - start, checksum };
-}
-
-async function runRound(tools: DiscoverableMCPTool[], searchTool: SearchTool): Promise<RoundMetrics> {
+async function runRound(tools: DiscoverableMCPTool[]): Promise<RoundMetrics> {
 	const bm25 = measureBm25(tools);
-	const fileSearch = await measureFileSearch(searchTool);
-	const bashRender = measureBashRenderer();
-	const discoveryRender = measureToolDiscoveryRenderer(bm25.index);
-	const totalMs = bm25.queryMs + bm25.indexMs + fileSearch.elapsedMs + bashRender.elapsedMs + discoveryRender.elapsedMs;
+	const formatting = measureResultFormatting(bm25.index);
+	const summary = measureSummary(tools);
+	const totalMs = bm25.queryMs + bm25.indexMs + formatting.elapsedMs + summary.elapsedMs;
 	return {
 		bm25_index_ms: bm25.indexMs,
 		bm25_query_ms: bm25.queryMs,
-		file_search_ms: fileSearch.elapsedMs,
-		bash_render_ms: bashRender.elapsedMs,
-		tool_discovery_render_ms: discoveryRender.elapsedMs,
+		result_format_ms: formatting.elapsedMs,
+		summary_ms: summary.elapsedMs,
 		total_ms: totalMs,
-		checksum: bm25.checksum + fileSearch.checksum + bashRender.checksum + discoveryRender.checksum,
+		checksum: bm25.checksum + formatting.checksum + summary.checksum,
 	};
 }
 
 async function main(): Promise<void> {
 	const tools = buildSyntheticTools();
-	const searchTool = new SearchTool(makeSearchSession());
-	await runRound(tools, searchTool);
+	await runRound(tools);
 	const rounds: RoundMetrics[] = [];
 	for (let iteration = 0; iteration < ROUND_COUNT; iteration += 1) {
-		rounds.push(await runRound(tools, searchTool));
+		rounds.push(await runRound(tools));
 	}
-	const names = [
-		"total_ms",
-		"bm25_query_ms",
-		"bm25_index_ms",
-		"file_search_ms",
-		"bash_render_ms",
-		"tool_discovery_render_ms",
-	] as const;
+	const names = ["total_ms", "bm25_query_ms", "bm25_index_ms", "result_format_ms", "summary_ms"] as const;
 	for (const name of names) {
 		emitMetric(name, median(rounds.map(round => round[name])));
 	}
