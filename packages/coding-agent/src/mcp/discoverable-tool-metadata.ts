@@ -212,6 +212,7 @@ export function searchDiscoverableMCPTools(
 
 	const results: DiscoverableMCPSearchResult[] = [];
 	const bounded = normalizedLimit < index.documents.length;
+	let worstIndex = -1;
 	for (const document of index.documents) {
 		if (options?.excludedToolNames?.has(document.tool.name)) continue;
 		let score = 0;
@@ -227,11 +228,15 @@ export function searchDiscoverableMCPTools(
 		const result = { tool: document.tool, score };
 		if (!bounded || results.length < normalizedLimit) {
 			results.push(result);
+			worstIndex = -1;
 			continue;
 		}
-		const worstIndex = findWorstSearchResultIndex(results);
+		if (worstIndex === -1) {
+			worstIndex = findWorstSearchResultIndex(results);
+		}
 		if (isSearchResultWorse(results[worstIndex]!, result)) {
 			results[worstIndex] = result;
+			worstIndex = -1;
 		}
 	}
 

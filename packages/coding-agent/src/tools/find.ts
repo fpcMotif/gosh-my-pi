@@ -249,6 +249,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 							maxResults: effectiveLimit,
 							sortByMtime: true,
 							gitignore: useGitignore,
+							cache: true,
 							signal: combinedSignal,
 						},
 						onMatch,

@@ -5,6 +5,7 @@
 
 - Refreshed the default coding-agent TUI with the pi-vivid theme, compact status/tool chrome, conversation rails, and a lower-noise welcome surface.
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt and updated TypeScript project diagnostics to use tsgo.
+- Enabled the native filesystem scan cache for `find` and directory `search` tool calls to improve repeated search latency while preserving edit/write invalidation.
 
 
 ## [14.5.11] - 2026-04-30
