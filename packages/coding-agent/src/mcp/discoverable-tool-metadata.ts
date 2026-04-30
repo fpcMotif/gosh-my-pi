@@ -77,24 +77,27 @@ function tokenize(value: string): string[] {
 		.filter(token => token.length > 0);
 }
 
-function addWeightedTokens(termFrequencies: Map<string, number>, value: string | undefined, weight: number): void {
-	if (!value) return;
+function addWeightedTokens(termFrequencies: Map<string, number>, value: string | undefined, weight: number): number {
+	if (!value) return 0;
+	let addedLength = 0;
 	for (const token of tokenize(value)) {
 		termFrequencies.set(token, (termFrequencies.get(token) ?? 0) + weight);
+		addedLength += weight;
 	}
+	return addedLength;
 }
 
 function buildSearchDocument(tool: DiscoverableMCPTool): DiscoverableMCPSearchDocument {
 	const termFrequencies = new Map<string, number>();
-	addWeightedTokens(termFrequencies, tool.name, FIELD_WEIGHTS.name);
-	addWeightedTokens(termFrequencies, tool.label, FIELD_WEIGHTS.label);
-	addWeightedTokens(termFrequencies, tool.serverName, FIELD_WEIGHTS.serverName);
-	addWeightedTokens(termFrequencies, tool.mcpToolName, FIELD_WEIGHTS.mcpToolName);
-	addWeightedTokens(termFrequencies, tool.description, FIELD_WEIGHTS.description);
+	let length = 0;
+	length += addWeightedTokens(termFrequencies, tool.name, FIELD_WEIGHTS.name);
+	length += addWeightedTokens(termFrequencies, tool.label, FIELD_WEIGHTS.label);
+	length += addWeightedTokens(termFrequencies, tool.serverName, FIELD_WEIGHTS.serverName);
+	length += addWeightedTokens(termFrequencies, tool.mcpToolName, FIELD_WEIGHTS.mcpToolName);
+	length += addWeightedTokens(termFrequencies, tool.description, FIELD_WEIGHTS.description);
 	for (const schemaKey of tool.schemaKeys) {
-		addWeightedTokens(termFrequencies, schemaKey, FIELD_WEIGHTS.schemaKey);
+		length += addWeightedTokens(termFrequencies, schemaKey, FIELD_WEIGHTS.schemaKey);
 	}
-	const length = Array.from(termFrequencies.values()).reduce((sum, value) => sum + value, 0);
 	return { tool, termFrequencies, length };
 }
 
