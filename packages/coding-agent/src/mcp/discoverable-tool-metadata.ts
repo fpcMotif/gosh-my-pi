@@ -246,6 +246,7 @@ export function searchDiscoverableMCPTools(
 
 	const results: DiscoverableMCPSearchResult[] = [];
 	const bounded = normalizedLimit < index.documents.length;
+	const excludedToolNames = options?.excludedToolNames;
 	let worstIndex = -1;
 	const pushResult = (result: DiscoverableMCPSearchResult) => {
 		if (!bounded || results.length < normalizedLimit) {
@@ -269,7 +270,7 @@ export function searchDiscoverableMCPTools(
 			if (!postings) continue;
 			for (const { documentIndex, termFrequency } of postings) {
 				const document = index.documents[documentIndex]!;
-				if (options?.excludedToolNames?.has(document.tool.name)) continue;
+				if (excludedToolNames?.has(document.tool.name)) continue;
 				const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
 				const score = queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
 				const previousScore = scores[documentIndex];
@@ -291,7 +292,7 @@ export function searchDiscoverableMCPTools(
 	}
 
 	for (const document of index.documents) {
-		if (options?.excludedToolNames?.has(document.tool.name)) continue;
+		if (excludedToolNames?.has(document.tool.name)) continue;
 		let score = 0;
 		for (const { token, queryTermCount, idf } of weightedQueryTerms) {
 			const termFrequency = document.termFrequencies.get(token) ?? 0;
