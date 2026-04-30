@@ -46,4 +46,16 @@ Native grep and TUI renderer phases were intentionally left out of this first se
 ## What's Been Tried
 - Initial `./autoresearch.sh` run failed because the autoresearch tool could not find `bash`; a local bash shim was added outside the repo in the user agent bin path.
 - A benchmark including `SearchTool`/renderer imports failed because `@oh-my-pi/pi-natives` is missing locally and native build currently fails at `cargo metadata`; the current segment avoids native-dependent imports and focuses on pure MCP/tool-discovery search latency.
-- Baseline pending for the native-independent segment.
+- Native-independent baseline: `total_ms=5038.424`.
+- Kept: bounded top-k ranking plus selected-tool exclusion in `searchDiscoverableMCPTools` / `SearchToolBm25Tool.execute`, dropping total to ~3592ms.
+- Kept: track document length while tokenizing, avoiding a per-document `Array.from(...).reduce`, dropping total to ~3291ms.
+- Discarded: manual ASCII tokenizer, document normalization precompute on document objects, direct document-frequency key iteration, lazy normalization branch, final slice removal, manual document build loop, weighted-query cache. These either regressed primary or were noise-prone.
+- Kept: cache current worst top-k result until replacement, dropping total to ~2345ms.
+- Kept: precompute query IDF values once per search, dropping total to ~1372ms.
+- Kept: postings lists in the BM25 index, so search scores only documents containing query terms, dropping total to ~751ms.
+- Kept: store posting document indices and accumulate scores in sparse arrays, dropping total to ~714ms.
+- Kept: hoist excluded-tool set lookup outside scoring loops, dropping total to ~615ms.
+- Kept: build weighted query terms with a small linear duplicate check instead of an intermediate Map, dropping total to ~523ms.
+- Kept: cache tokenized query strings, dropping total to ~463ms.
+- Kept: avoid allocating result objects for candidates rejected by top-k, best observed total ~421ms.
+- Noise calibration: no-op rerun measured ~449ms, so further micro-optimizations need a clear >30ms win or a new workload.
