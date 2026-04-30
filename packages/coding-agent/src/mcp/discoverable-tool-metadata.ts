@@ -168,14 +168,17 @@ export function selectDiscoverableMCPToolNamesByServer(
 }
 
 export function summarizeDiscoverableMCPTools(tools: DiscoverableMCPTool[]): DiscoverableMCPToolSummary {
-	const serverToolCounts = new Map<string, number>();
+	const serverToolCounts = Object.create(null) as Record<string, number>;
 	for (const tool of tools) {
 		if (!tool.serverName) continue;
-		serverToolCounts.set(tool.serverName, (serverToolCounts.get(tool.serverName) ?? 0) + 1);
+		serverToolCounts[tool.serverName] = (serverToolCounts[tool.serverName] ?? 0) + 1;
 	}
-	const servers = Array.from(serverToolCounts.entries())
-		.sort(([left], [right]) => left.localeCompare(right))
-		.map(([name, toolCount]) => ({ name, toolCount }));
+	const serverNames = Object.keys(serverToolCounts).sort((left, right) => left.localeCompare(right));
+	const servers: DiscoverableMCPToolServerSummary[] = new Array(serverNames.length);
+	for (let index = 0; index < serverNames.length; index += 1) {
+		const name = serverNames[index]!;
+		servers[index] = { name, toolCount: serverToolCounts[name] ?? 0 };
+	}
 	return {
 		servers,
 		toolCount: tools.length,
