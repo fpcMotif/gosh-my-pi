@@ -209,6 +209,19 @@ export function searchDiscoverableMCPTools(
 	for (const token of queryTokens) {
 		queryTermCounts.set(token, (queryTermCounts.get(token) ?? 0) + 1);
 	}
+	const weightedQueryTerms: Array<{ token: string; queryTermCount: number; idf: number }> = [];
+	for (const [token, queryTermCount] of queryTermCounts) {
+		const documentFrequency = index.documentFrequencies.get(token) ?? 0;
+		if (documentFrequency === 0) continue;
+		weightedQueryTerms.push({
+			token,
+			queryTermCount,
+			idf: Math.log(1 + (index.documents.length - documentFrequency + 0.5) / (documentFrequency + 0.5)),
+		});
+	}
+	if (weightedQueryTerms.length === 0) {
+		return [];
+	}
 
 	const results: DiscoverableMCPSearchResult[] = [];
 	const bounded = normalizedLimit < index.documents.length;
@@ -216,11 +229,9 @@ export function searchDiscoverableMCPTools(
 	for (const document of index.documents) {
 		if (options?.excludedToolNames?.has(document.tool.name)) continue;
 		let score = 0;
-		for (const [token, queryTermCount] of queryTermCounts) {
+		for (const { token, queryTermCount, idf } of weightedQueryTerms) {
 			const termFrequency = document.termFrequencies.get(token) ?? 0;
 			if (termFrequency === 0) continue;
-			const documentFrequency = index.documentFrequencies.get(token) ?? 0;
-			const idf = Math.log(1 + (index.documents.length - documentFrequency + 0.5) / (documentFrequency + 0.5));
 			const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
 			score += queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
 		}
