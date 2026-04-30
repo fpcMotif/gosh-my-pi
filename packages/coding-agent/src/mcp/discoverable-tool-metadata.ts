@@ -41,6 +41,10 @@ export interface DiscoverableMCPSearchResult {
 	score: number;
 }
 
+export interface DiscoverableMCPSearchOptions {
+	excludedToolNames?: ReadonlySet<string>;
+}
+
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 const FIELD_WEIGHTS = {
@@ -165,16 +169,36 @@ export function buildDiscoverableMCPSearchIndex(tools: Iterable<DiscoverableMCPT
 	};
 }
 
+function compareSearchResults(left: DiscoverableMCPSearchResult, right: DiscoverableMCPSearchResult): number {
+	return right.score - left.score || left.tool.name.localeCompare(right.tool.name);
+}
+
+function isSearchResultWorse(left: DiscoverableMCPSearchResult, right: DiscoverableMCPSearchResult): boolean {
+	return compareSearchResults(left, right) > 0;
+}
+
+function findWorstSearchResultIndex(results: DiscoverableMCPSearchResult[]): number {
+	let worstIndex = 0;
+	for (let index = 1; index < results.length; index += 1) {
+		if (isSearchResultWorse(results[index]!, results[worstIndex]!)) {
+			worstIndex = index;
+		}
+	}
+	return worstIndex;
+}
+
 export function searchDiscoverableMCPTools(
 	index: DiscoverableMCPSearchIndex,
 	query: string,
 	limit: number,
+	options?: DiscoverableMCPSearchOptions,
 ): DiscoverableMCPSearchResult[] {
 	const queryTokens = tokenize(query);
 	if (queryTokens.length === 0) {
 		throw new Error("Query must contain at least one letter or number.");
 	}
-	if (index.documents.length === 0) {
+	const normalizedLimit = Math.max(0, Math.floor(limit));
+	if (index.documents.length === 0 || normalizedLimit === 0) {
 		return [];
 	}
 
@@ -183,20 +207,30 @@ export function searchDiscoverableMCPTools(
 		queryTermCounts.set(token, (queryTermCounts.get(token) ?? 0) + 1);
 	}
 
-	return index.documents
-		.map(document => {
-			let score = 0;
-			for (const [token, queryTermCount] of queryTermCounts) {
-				const termFrequency = document.termFrequencies.get(token) ?? 0;
-				if (termFrequency === 0) continue;
-				const documentFrequency = index.documentFrequencies.get(token) ?? 0;
-				const idf = Math.log(1 + (index.documents.length - documentFrequency + 0.5) / (documentFrequency + 0.5));
-				const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
-				score += queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
-			}
-			return { tool: document.tool, score };
-		})
-		.filter(result => result.score > 0)
-		.sort((left, right) => right.score - left.score || left.tool.name.localeCompare(right.tool.name))
-		.slice(0, limit);
+	const results: DiscoverableMCPSearchResult[] = [];
+	const bounded = normalizedLimit < index.documents.length;
+	for (const document of index.documents) {
+		if (options?.excludedToolNames?.has(document.tool.name)) continue;
+		let score = 0;
+		for (const [token, queryTermCount] of queryTermCounts) {
+			const termFrequency = document.termFrequencies.get(token) ?? 0;
+			if (termFrequency === 0) continue;
+			const documentFrequency = index.documentFrequencies.get(token) ?? 0;
+			const idf = Math.log(1 + (index.documents.length - documentFrequency + 0.5) / (documentFrequency + 0.5));
+			const normalization = BM25_K1 * (1 - BM25_B + BM25_B * (document.length / index.averageLength));
+			score += queryTermCount * idf * ((termFrequency * (BM25_K1 + 1)) / (termFrequency + normalization));
+		}
+		if (score <= 0) continue;
+		const result = { tool: document.tool, score };
+		if (!bounded || results.length < normalizedLimit) {
+			results.push(result);
+			continue;
+		}
+		const worstIndex = findWorstSearchResultIndex(results);
+		if (isSearchResultWorse(results[worstIndex]!, result)) {
+			results[worstIndex] = result;
+		}
+	}
+
+	return results.sort(compareSearchResults).slice(0, normalizedLimit);
 }
