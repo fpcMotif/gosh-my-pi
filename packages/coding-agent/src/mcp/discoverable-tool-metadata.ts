@@ -220,22 +220,23 @@ export function searchDiscoverableMCPTools(
 		return [];
 	}
 
-	const queryTermCounts = new Map<string, number>();
-	for (const token of queryTokens) {
-		queryTermCounts.set(token, (queryTermCounts.get(token) ?? 0) + 1);
-	}
 	const weightedQueryTerms: Array<{
 		token: string;
 		queryTermCount: number;
 		idf: number;
 		postings?: DiscoverableMCPSearchPosting[];
 	}> = [];
-	for (const [token, queryTermCount] of queryTermCounts) {
+	for (const token of queryTokens) {
+		const existing = weightedQueryTerms.find(term => term.token === token);
+		if (existing) {
+			existing.queryTermCount += 1;
+			continue;
+		}
 		const documentFrequency = index.documentFrequencies.get(token) ?? 0;
 		if (documentFrequency === 0) continue;
 		weightedQueryTerms.push({
 			token,
-			queryTermCount,
+			queryTermCount: 1,
 			idf: Math.log(1 + (index.documents.length - documentFrequency + 0.5) / (documentFrequency + 0.5)),
 			postings: index.postings?.get(token),
 		});
