@@ -19,6 +19,19 @@ export function RequestDetail({ id, onClose }: RequestDetailProps) {
 			.finally(() => setLoading(false));
 	}, [id]);
 
+	useEffect(() => {
+		function handleKeyDown(e: KeyboardEvent) {
+			if (e.key === "Escape") {
+				onClose();
+			}
+		}
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown);
+		};
+	}, [onClose]);
+
 	if (!details && loading) {
 		return (
 			<div className="fixed inset-0 bg-[var(--bg-overlay)] flex justify-center items-center z-[100]">
@@ -59,6 +72,8 @@ export function RequestDetail({ id, onClose }: RequestDetailProps) {
 					<button
 						type="button"
 						onClick={onClose}
+						aria-label="Close request details"
+						title="Close (Esc)"
 						className="p-2 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
 					>
 						<X size={20} />
