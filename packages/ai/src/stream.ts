@@ -57,6 +57,17 @@ function mapStringOpenAiToolChoice(choice: string): OpenAICompletionsOptions["to
 }
 
 /**
+ * Simple stream function that only takes model and context.
+ */
+export function streamSimple<TApi extends Api>(
+	model: Model<TApi>,
+	context: Context,
+	options?: SimpleStreamOptions,
+): AssistantMessageEventStream {
+	return stream(model, context, options);
+}
+
+/**
  * Higher-level stream function that handles common options and routing.
  */
 export function stream<TApi extends Api>(

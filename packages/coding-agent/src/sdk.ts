@@ -1275,9 +1275,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				sessionManager,
 				modelRegistry,
 				model: agent?.state.model,
-				isIdle: () => !session?.isStreaming,
+				isIdle: () => session === null || session === undefined || session.isStreaming === false,
 				hasQueuedMessages: () => (session?.queuedMessageCount ?? 0) > 0,
-				abort: () => session?.abort(),
+				abort: () => { void session?.abort(); },
 				settings,
 			});
 			wrappedExtensionTools = (options.customTools ?? [])
@@ -1581,7 +1581,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				}
 				return result;
 			},
-			intentTracing: !!intentField,
+			intentTracing: intentField !== undefined && intentField !== null && intentField !== "",
 			getToolChoice: () => session?.nextToolChoice(),
 		});
 
