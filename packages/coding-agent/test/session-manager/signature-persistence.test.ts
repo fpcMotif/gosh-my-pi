@@ -176,7 +176,8 @@ describe("SessionManager signature persistence", () => {
 		await session.flush();
 
 		const sessionFile = session.getSessionFile();
-		if (!sessionFile) throw new Error("Expected persisted session file");
+		if (sessionFile === null || sessionFile === undefined || sessionFile === "")
+			throw new Error("Expected persisted session file");
 		const persistedBefore = await fs.readFile(sessionFile, "utf8");
 		const initialMtimeMs = (await fs.stat(sessionFile)).mtimeMs;
 		await session.close();

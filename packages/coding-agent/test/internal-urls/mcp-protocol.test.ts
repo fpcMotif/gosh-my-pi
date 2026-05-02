@@ -32,13 +32,13 @@ function createRouter(manager?: MCPManager): InternalUrlRouter {
 describe("McpProtocolHandler", () => {
 	it("returns error when no MCP manager is available", async () => {
 		const router = createRouter();
-		await expect(router.resolve("mcp://test://resource")).rejects.toThrow("No MCP manager");
+		expect(router.resolve("mcp://test://resource")).rejects.toThrow("No MCP manager");
 	});
 
 	it("requires resource URI in mcp URL", async () => {
 		const manager = createMockManager({ servers: ["server-a"] });
 		const router = createRouter(manager);
-		await expect(router.resolve("mcp://")).rejects.toThrow("mcp:// URL requires a resource URI");
+		expect(router.resolve("mcp://")).rejects.toThrow("mcp:// URL requires a resource URI");
 	});
 
 	it("returns error listing available resources when no server matches", async () => {
@@ -50,9 +50,9 @@ describe("McpProtocolHandler", () => {
 		const manager = createMockManager({ servers: ["server-a"], resources });
 		const router = createRouter(manager);
 
-		await expect(router.resolve("mcp://test://missing")).rejects.toThrow("No MCP server has resource");
-		await expect(router.resolve("mcp://test://missing")).rejects.toThrow("file://known");
-		await expect(router.resolve("mcp://test://missing")).rejects.toThrow("server-a");
+		expect(router.resolve("mcp://test://missing")).rejects.toThrow("No MCP server has resource");
+		expect(router.resolve("mcp://test://missing")).rejects.toThrow("file://known");
+		expect(router.resolve("mcp://test://missing")).rejects.toThrow("server-a");
 	});
 
 	it("reads resource by exact URI match", async () => {
@@ -175,7 +175,7 @@ describe("McpProtocolHandler", () => {
 		const manager = createMockManager({ servers: ["tmpl-server"], resources });
 		const router = createRouter(manager);
 
-		await expect(router.resolve("mcp://test://foo")).rejects.toThrow("No MCP server has resource");
+		expect(router.resolve("mcp://test://foo")).rejects.toThrow("No MCP server has resource");
 	});
 
 	it("returns error when readServerResource returns undefined", async () => {
@@ -191,8 +191,8 @@ describe("McpProtocolHandler", () => {
 		});
 		const router = createRouter(manager);
 
-		await expect(router.resolve("mcp://test://empty")).rejects.toThrow("returned no content");
-		await expect(router.resolve("mcp://test://empty")).rejects.toThrow("null-server");
+		expect(router.resolve("mcp://test://empty")).rejects.toThrow("returned no content");
+		expect(router.resolve("mcp://test://empty")).rejects.toThrow("null-server");
 	});
 
 	it("formats binary content with mime type and base64 length", async () => {
@@ -273,8 +273,8 @@ describe("McpProtocolHandler", () => {
 		});
 		const router = createRouter(manager);
 
-		await expect(router.resolve("mcp://test://fail")).rejects.toThrow("MCP resource read error:");
-		await expect(router.resolve("mcp://test://fail")).rejects.toThrow("connection refused");
+		expect(router.resolve("mcp://test://fail")).rejects.toThrow("MCP resource read error:");
+		expect(router.resolve("mcp://test://fail")).rejects.toThrow("connection refused");
 	});
 
 	it("picks the first server with a matching resource", async () => {
@@ -302,7 +302,7 @@ describe("McpProtocolHandler", () => {
 		const manager = createMockManager({ servers: ["lonely-server"] });
 		const router = createRouter(manager);
 
-		await expect(router.resolve("mcp://test://anything")).rejects.toThrow("(none)");
+		expect(router.resolve("mcp://test://anything")).rejects.toThrow("(none)");
 	});
 
 	it("uses unknown for binary content without mimeType", async () => {

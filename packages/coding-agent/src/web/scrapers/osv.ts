@@ -80,22 +80,22 @@ export const handleOsv: SpecialHandler = async (
 		let md = `# ${vuln.id}\n\n`;
 
 		// Summary
-		if (vuln.summary) {
+		if (vuln.summary !== null && vuln.summary !== undefined && vuln.summary !== "") {
 			md += `${vuln.summary}\n\n`;
 		}
 
 		// Metadata section
 		md += "## Metadata\n\n";
-		if (vuln.aliases?.length) {
+		if (vuln.aliases?.length !== null && vuln.aliases?.length !== undefined && vuln.aliases?.length !== 0) {
 			md += `**Aliases:** ${vuln.aliases.join(", ")}\n`;
 		}
-		if (vuln.published) {
+		if (vuln.published !== null && vuln.published !== undefined && vuln.published !== "") {
 			md += `**Published:** ${formatIsoDate(vuln.published)}\n`;
 		}
-		if (vuln.modified) {
+		if (vuln.modified !== null && vuln.modified !== undefined && vuln.modified !== "") {
 			md += `**Modified:** ${formatIsoDate(vuln.modified)}\n`;
 		}
-		if (vuln.withdrawn) {
+		if (vuln.withdrawn !== null && vuln.withdrawn !== undefined && vuln.withdrawn !== "") {
 			md += `**Withdrawn:** ${formatIsoDate(vuln.withdrawn)}\n`;
 		}
 
@@ -108,12 +108,12 @@ export const handleOsv: SpecialHandler = async (
 		md += "\n";
 
 		// Details
-		if (vuln.details) {
+		if (vuln.details !== null && vuln.details !== undefined && vuln.details !== "") {
 			md += `## Details\n\n${vuln.details}\n\n`;
 		}
 
 		// Affected packages
-		if (vuln.affected?.length) {
+		if (vuln.affected?.length !== null && vuln.affected?.length !== undefined && vuln.affected?.length !== 0) {
 			md += "## Affected Packages\n\n";
 			for (const affected of vuln.affected) {
 				const pkg = affected.package;
@@ -122,15 +122,28 @@ export const handleOsv: SpecialHandler = async (
 				md += `### ${pkg.ecosystem}: ${pkg.name}\n\n`;
 
 				// Version ranges
-				if (affected.ranges?.length) {
+				if (
+					affected.ranges?.length !== null &&
+					affected.ranges?.length !== undefined &&
+					affected.ranges?.length !== 0
+				) {
 					for (const range of affected.ranges) {
-						if (!range.events?.length) continue;
+						if (range.events?.length === null || range.events?.length === undefined || range.events?.length === 0)
+							continue;
 						const parts: string[] = [];
 						for (const event of range.events) {
-							if (event.introduced) parts.push(`introduced: ${event.introduced}`);
-							if (event.fixed) parts.push(`fixed: ${event.fixed}`);
-							if (event.last_affected) parts.push(`last_affected: ${event.last_affected}`);
-							if (event.limit) parts.push(`limit: ${event.limit}`);
+							if (event.introduced !== null && event.introduced !== undefined && event.introduced !== "")
+								parts.push(`introduced: ${event.introduced}`);
+							if (event.fixed !== null && event.fixed !== undefined && event.fixed !== "")
+								parts.push(`fixed: ${event.fixed}`);
+							if (
+								event.last_affected !== null &&
+								event.last_affected !== undefined &&
+								event.last_affected !== ""
+							)
+								parts.push(`last_affected: ${event.last_affected}`);
+							if (event.limit !== null && event.limit !== undefined && event.limit !== "")
+								parts.push(`limit: ${event.limit}`);
 						}
 						if (parts.length) {
 							md += `- **${range.type}:** ${parts.join(" → ")}\n`;
@@ -139,7 +152,11 @@ export const handleOsv: SpecialHandler = async (
 				}
 
 				// Specific versions
-				if (affected.versions?.length) {
+				if (
+					affected.versions?.length !== null &&
+					affected.versions?.length !== undefined &&
+					affected.versions?.length !== 0
+				) {
 					const versions =
 						affected.versions.length > 10
 							? `${affected.versions.slice(0, 10).join(", ")}… (${affected.versions.length} total)`
@@ -152,7 +169,7 @@ export const handleOsv: SpecialHandler = async (
 		}
 
 		// References
-		if (vuln.references?.length) {
+		if (vuln.references?.length !== null && vuln.references?.length !== undefined && vuln.references?.length !== 0) {
 			md += "## References\n\n";
 			for (const ref of vuln.references) {
 				md += `- [${ref.type}](${ref.url})\n`;
@@ -161,10 +178,11 @@ export const handleOsv: SpecialHandler = async (
 		}
 
 		// Credits
-		if (vuln.credits?.length) {
+		if (vuln.credits?.length !== null && vuln.credits?.length !== undefined && vuln.credits?.length !== 0) {
 			md += "## Credits\n\n";
 			for (const credit of vuln.credits) {
-				const type = credit.type ? ` (${credit.type})` : "";
+				const type =
+					credit.type !== null && credit.type !== undefined && credit.type !== "" ? ` (${credit.type})` : "";
 				md += `- ${credit.name}${type}\n`;
 			}
 		}

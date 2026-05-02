@@ -293,7 +293,7 @@ describe("Editor component", () => {
 
 			editor.handleInput("/");
 
-			await expect(promise).resolves.toBe("/");
+			expect(promise).resolves.toBe("/");
 		});
 
 		it("triggers file-reference autocomplete when typing at-sign", async () => {
@@ -313,7 +313,7 @@ describe("Editor component", () => {
 
 			editor.handleInput("@");
 
-			await expect(promise).resolves.toBe("@");
+			expect(promise).resolves.toBe("@");
 		});
 
 		it("chains into argument completions after tab-completing slash command names", async () => {

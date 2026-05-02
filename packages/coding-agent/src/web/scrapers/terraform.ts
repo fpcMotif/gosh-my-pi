@@ -119,17 +119,18 @@ async function handleModuleUrl(
 
 	let md = `# ${mod.namespace}/${mod.name}/${mod.provider}\n\n`;
 
-	if (mod.description) md += `${mod.description}\n\n`;
+	if (mod.description !== null && mod.description !== undefined && mod.description !== "")
+		md += `${mod.description}\n\n`;
 
 	// Metadata line
 	md += `**Version:** ${mod.version}`;
-	if (mod.verified) md += " ✓ Verified";
+	if (mod.verified === true) md += " ✓ Verified";
 	md += `\n`;
 	md += `**Downloads:** ${formatNumber(mod.downloads)}\n`;
-	if (mod.published_at) {
+	if (mod.published_at !== null && mod.published_at !== undefined && mod.published_at !== "") {
 		md += `**Published:** ${new Date(mod.published_at).toLocaleDateString()}\n`;
 	}
-	if (mod.source) {
+	if (mod.source !== null && mod.source !== undefined && mod.source !== "") {
 		md += `**Source:** ${mod.source}\n`;
 	}
 	md += "\n";
@@ -161,7 +162,8 @@ async function handleModuleUrl(
 		md += `## Outputs (${outputs.length})\n\n`;
 		for (const output of outputs.slice(0, 20)) {
 			md += `- **${output.name}**`;
-			if (output.description) md += `: ${output.description.replace(/\n/g, " ").slice(0, 100)}`;
+			if (output.description !== null && output.description !== undefined && output.description !== "")
+				md += `: ${output.description.replace(/\n/g, " ").slice(0, 100)}`;
 			md += "\n";
 		}
 		if (outputs.length > 20) {
@@ -176,7 +178,7 @@ async function handleModuleUrl(
 		md += `## Dependencies (${deps.length})\n\n`;
 		for (const dep of deps.slice(0, 15)) {
 			md += `- **${dep.name}**: ${dep.source}`;
-			if (dep.version) md += ` (${dep.version})`;
+			if (dep.version !== null && dep.version !== undefined && dep.version !== "") md += ` (${dep.version})`;
 			md += "\n";
 		}
 		if (deps.length > 15) {
@@ -234,16 +236,18 @@ async function handleProviderUrl(
 
 	let md = `# ${provider.namespace}/${provider.name}\n\n`;
 
-	if (provider.description) md += `${provider.description}\n\n`;
+	if (provider.description !== null && provider.description !== undefined && provider.description !== "")
+		md += `${provider.description}\n\n`;
 
 	// Metadata
 	md += `**Version:** ${provider.version}\n`;
-	if (provider.tier) md += `**Tier:** ${provider.tier}\n`;
+	if (provider.tier !== null && provider.tier !== undefined && provider.tier !== "")
+		md += `**Tier:** ${provider.tier}\n`;
 	md += `**Downloads:** ${formatNumber(provider.downloads)}\n`;
-	if (provider.published_at) {
+	if (provider.published_at !== null && provider.published_at !== undefined && provider.published_at !== "") {
 		md += `**Published:** ${new Date(provider.published_at).toLocaleDateString()}\n`;
 	}
-	if (provider.source) {
+	if (provider.source !== null && provider.source !== undefined && provider.source !== "") {
 		md += `**Source:** ${provider.source}\n`;
 	}
 	md += "\n";

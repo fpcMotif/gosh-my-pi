@@ -124,7 +124,7 @@ export function createDashboardController(): DashboardController {
 
 function renderRunningOnly(runtime: AutoresearchRuntime, state: ExperimentState, theme: Theme): string {
 	const parts = [theme.fg("accent", "autoresearch"), theme.fg("warning", " running...")];
-	if (state.name) {
+	if (state.name !== null && state.name !== undefined && state.name !== "") {
 		parts.push(theme.fg("dim", ` | ${replaceTabs(state.name)}`));
 	}
 	if (runtime.runningExperiment) {
@@ -145,7 +145,10 @@ function shouldShowDashboard(runtime: AutoresearchRuntime, state: ExperimentStat
 function renderExpandedHeader(runtime: AutoresearchRuntime, width: number, theme: Theme): string {
 	const state = runtime.state;
 	const status = renderModeStatus(runtime, state);
-	const label = state.name ? ` autoresearch: ${replaceTabs(state.name)} ` : " autoresearch ";
+	const label =
+		state.name !== null && state.name !== undefined && state.name !== ""
+			? ` autoresearch: ${replaceTabs(state.name)} `
+			: " autoresearch ";
 	const hint = theme.fg("dim", ` ctrl+x collapse  ctrl+shift+x overlay${status ? `  ${status}` : ""} `);
 	const fillWidth = Math.max(0, width - visibleWidth(label) - visibleWidth(hint));
 	return truncateToWidth(theme.fg("accent", label) + theme.fg("borderMuted", "-".repeat(fillWidth)) + hint, width);
@@ -175,7 +178,7 @@ function renderCollapsedLine(runtime: AutoresearchRuntime, state: ExperimentStat
 	if (state.results.length === 0) {
 		const modeStatus = runtime.autoresearchMode ? "baseline pending" : "mode off";
 		const parts = [theme.fg("accent", "autoresearch"), theme.fg("warning", ` ${modeStatus}`)];
-		if (state.name) {
+		if (state.name !== null && state.name !== undefined && state.name !== "") {
 			parts.push(theme.fg("dim", ` | ${replaceTabs(state.name)}`));
 		}
 		if (runtime.autoresearchMode) {
@@ -207,7 +210,7 @@ function renderCollapsedLine(runtime: AutoresearchRuntime, state: ExperimentStat
 		parts.push(theme.fg("warning", `no kept runs yet`));
 	}
 	if (state.confidence !== null) {
-		const confidenceColor = state.confidence >= 2 ? "success" : state.confidence >= 1 ? "warning" : "error";
+		const confidenceColor = state.confidence >= 2 ? "success" : (state.confidence >= 1 ? "warning" : "error");
 		parts.push(theme.fg("dim", " | "));
 		parts.push(theme.fg(confidenceColor, `conf ${state.confidence.toFixed(1)}x`));
 	}
@@ -267,7 +270,7 @@ export function renderDashboardLines(
 			width,
 		),
 		truncateToWidth(
-			`Baseline: ${formatNum(baseline, state.metricUnit)}${baselineRunNumber ? ` (#${baselineRunNumber})` : ""}`,
+			`Baseline: ${formatNum(baseline, state.metricUnit)}${baselineRunNumber !== null && baselineRunNumber !== undefined && baselineRunNumber !== 0 ? ` (#${baselineRunNumber})` : ""}`,
 			width,
 		),
 	];
@@ -353,7 +356,7 @@ function renderResultRow(
 			).padEnd(11),
 		)
 		.join("");
-	const statusColor = result.status === "keep" ? "success" : result.status === "discard" ? "warning" : "error";
+	const statusColor = result.status === "keep" ? "success" : (result.status === "discard" ? "warning" : "error");
 	const line =
 		`${theme.fg("dim", String(runNumber).padEnd(4))}` +
 		`${theme.fg("accent", (result.commit || "-").padEnd(10))}` +

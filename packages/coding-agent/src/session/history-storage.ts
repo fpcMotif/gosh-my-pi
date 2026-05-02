@@ -98,7 +98,7 @@ CREATE TRIGGER IF NOT EXISTS history_ai AFTER INSERT ON history BEGIN
 			this.#migrateHistorySchema();
 		}
 
-		if (!hasFts) {
+		if (hasFts === null || hasFts === undefined) {
 			try {
 				this.#db.run("INSERT INTO history_fts(history_fts) VALUES('rebuild')");
 			} catch (error) {
@@ -168,7 +168,7 @@ CREATE TRIGGER IF NOT EXISTS history_ai AFTER INSERT ON history BEGIN
 		if (safeLimit === 0) return [];
 
 		const ftsQuery = this.#buildFtsQuery(query);
-		if (!ftsQuery) return [];
+		if (ftsQuery === null || ftsQuery === undefined || ftsQuery === "") return [];
 
 		try {
 			const rows = this.#searchStmt.all(ftsQuery, safeLimit) as HistoryRow[];

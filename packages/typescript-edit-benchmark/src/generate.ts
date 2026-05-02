@@ -100,7 +100,10 @@ function parseArguments(): Args {
 		seed: parseInt(values.seed ?? "42", 10),
 		categories: values.categories ?? null,
 		difficulty: values.difficulty ?? "easy,medium,hard,nightmare",
-		minScore: values["min-score"] ? parseInt(values["min-score"], 10) : null,
+		minScore:
+			values["min-score"] !== null && values["min-score"] !== undefined && values["min-score"] !== ""
+				? parseInt(values["min-score"], 10)
+				: null,
 		dryRun: values["dry-run"] ?? false,
 	};
 }
@@ -225,7 +228,7 @@ function findFunctionRanges(content: string): Array<[string, number, number]> {
 		const line = lines[i];
 		const match = funcPattern.exec(line);
 		if (match && braceDepth === 0) {
-			if (currentFunc) {
+			if (currentFunc !== null && currentFunc !== undefined && currentFunc !== "") {
 				ranges.push([currentFunc, funcStart, i]);
 			}
 			currentFunc = match[1] ?? match[2];
@@ -234,13 +237,19 @@ function findFunctionRanges(content: string): Array<[string, number, number]> {
 
 		braceDepth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
 
-		if (currentFunc && braceDepth === 0 && line.includes("}")) {
+		if (
+			currentFunc !== null &&
+			currentFunc !== undefined &&
+			currentFunc !== "" &&
+			braceDepth === 0 &&
+			line.includes("}")
+		) {
 			ranges.push([currentFunc, funcStart, i + 1]);
 			currentFunc = null;
 		}
 	}
 
-	if (currentFunc) {
+	if (currentFunc !== null && currentFunc !== undefined && currentFunc !== "") {
 		ranges.push([currentFunc, funcStart, lines.length]);
 	}
 
@@ -322,7 +331,7 @@ function scoreDifficulty(entry: FileEntry, lineNumber: number): number {
 
 	// Similar variable names nearby
 	const funcName = findContainingFunction(entry, lineNumber);
-	if (funcName) {
+	if (funcName !== null && funcName !== undefined && funcName !== "") {
 		for (const [name, start, end] of entry.functionRanges) {
 			if (name === funcName) {
 				const funcLines = lines.slice(start - 1, end);
@@ -402,7 +411,7 @@ function buildPrompt(
 		const detail = mutation.describe(info);
 		const funcName = findContainingFunction(entry, info.lineNumber);
 		let location: string;
-		if (funcName) {
+		if (funcName !== null && funcName !== undefined && funcName !== "") {
 			location = `The issue is in the \`${funcName}\` function.`;
 		} else {
 			const ratio = entry.lineCount ? info.lineNumber / entry.lineCount : 0;
@@ -835,7 +844,7 @@ async function main(): Promise<number> {
 	}
 
 	let mutations = ALL_MUTATIONS;
-	if (args.categories) {
+	if (args.categories !== null && args.categories !== undefined && args.categories !== "") {
 		const categories = new Set(
 			args.categories
 				.split(",")

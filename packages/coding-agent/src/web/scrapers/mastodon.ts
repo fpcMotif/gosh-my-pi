@@ -62,7 +62,7 @@ async function isMastodonInstance(hostname: string, timeout: number, signal?: Ab
 		if (!result.ok) return false;
 		const data = JSON.parse(result.content);
 		// Mastodon instances return uri/domain field
-		return !!(data.uri || data.domain || data.title);
+		return !!(data.uri ?? data.domain ?? (data.title !== null && data.title !== undefined));
 	} catch {
 		return false;
 	}
@@ -111,7 +111,7 @@ function formatStatus(status: MastodonStatus, isReblog = false): string {
 	md += "\n\n";
 
 	// Content warning / spoiler
-	if (status.spoiler_text) {
+	if (status.spoiler_text !== null && status.spoiler_text !== undefined && status.spoiler_text !== "") {
 		md += `> ⚠️ **CW:** ${status.spoiler_text}\n\n`;
 	}
 
@@ -134,7 +134,10 @@ function formatStatus(status: MastodonStatus, isReblog = false): string {
 	if (status.media_attachments.length > 0) {
 		md += "**Attachments:**\n";
 		for (const media of status.media_attachments) {
-			const desc = media.description ? ` - ${media.description}` : "";
+			const desc =
+				media.description !== null && media.description !== undefined && media.description !== ""
+					? ` - ${media.description}`
+					: "";
 			md += `- [${media.type}](${media.url})${desc}\n`;
 		}
 		md += "\n";

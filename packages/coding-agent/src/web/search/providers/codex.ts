@@ -38,7 +38,7 @@ function getModel(): string {
 	const bundledModels = getBundledModels("openai-codex");
 	const bundledIds = new Set(bundledModels.map(model => model.id));
 	const preferred = DEFAULT_MODEL_PREFERENCES.find(modelId => bundledIds.has(modelId));
-	if (preferred) return preferred;
+	if (preferred !== null && preferred !== undefined && preferred !== "") return preferred;
 	const nonMini = bundledModels.find(model => !model.id.includes("mini") && !model.id.includes("spark"));
 	return nonMini?.id ?? bundledModels[0]?.id ?? FALLBACK_MODEL;
 }
@@ -131,7 +131,7 @@ function normalizeExtractedUrl(candidate: string): string | null {
 
 	while (url.length > 0) {
 		const lastCharacter = url.at(-1);
-		if (!lastCharacter) break;
+		if (lastCharacter === null || lastCharacter === undefined || lastCharacter === "") break;
 		if (/[.,!?;:'"]/u.test(lastCharacter)) {
 			url = url.slice(0, -1);
 			continue;
@@ -210,7 +210,7 @@ function extractTextSources(text: string): SearchSource[] {
 		}
 		const title = text.slice(index + 1, titleEnd).trim();
 		const url = normalizeExtractedUrl(text.slice(titleEnd + 2, urlEnd));
-		if (url) {
+		if (url !== null && url !== undefined && url !== "") {
 			addSource(sources, { title: title || url, url });
 		}
 		index = urlEnd;
@@ -218,7 +218,7 @@ function extractTextSources(text: string): SearchSource[] {
 
 	for (const match of text.matchAll(/https?:\/\/\S+/g)) {
 		const url = normalizeExtractedUrl(match[0] ?? "");
-		if (!url) continue;
+		if (url === null || url === undefined || url === "") continue;
 		addSource(sources, { title: url, url });
 	}
 
@@ -259,7 +259,7 @@ async function findCodexAuth(): Promise<{ accessToken: string; accountId: string
 			if (oauthCred.expires <= now + expiryBuffer) continue;
 
 			const accountId = oauthCred.accountId ?? getAccountId(oauthCred.access);
-			if (!accountId) continue;
+			if (accountId === null || accountId === undefined || accountId === "") continue;
 
 			return { accessToken: oauthCred.access, accountId };
 		}
@@ -374,13 +374,18 @@ async function callCodexSearch(
 			// Handle text message content and extract sources from annotations
 			if (item.type === "message" && item.content) {
 				for (const part of item.content) {
-					if (part.type === "output_text" && part.text) {
+					if (part.type === "output_text" && part.text !== null && part.text !== undefined && part.text !== "") {
 						answerParts.push(part.text);
 
 						// Extract sources from url_citation annotations
 						if (part.annotations) {
 							for (const annotation of part.annotations) {
-								if (annotation.type === "url_citation" && annotation.url) {
+								if (
+									annotation.type === "url_citation" &&
+									annotation.url !== null &&
+									annotation.url !== undefined &&
+									annotation.url !== ""
+								) {
 									// Deduplicate by URL
 									addSource(sources, { title: annotation.title ?? annotation.url, url: annotation.url });
 								}
@@ -401,8 +406,8 @@ async function callCodexSearch(
 		} else if (eventType === "response.completed" || eventType === "response.done") {
 			const resp = (rawEvent as { response?: CodexResponse }).response;
 			if (resp) {
-				if (resp.model) model = resp.model;
-				if (resp.id) requestId = resp.id;
+				if (resp.model !== null && resp.model !== undefined && resp.model !== "") model = resp.model;
+				if (resp.id !== null && resp.id !== undefined && resp.id !== "") requestId = resp.id;
 				if (resp.usage) {
 					const cachedTokens = resp.usage.input_tokens_details?.cached_tokens ?? 0;
 					usage = {
@@ -428,9 +433,9 @@ async function callCodexSearch(
 	const answer =
 		finalAnswer.length > 0 && !isImagePlaceholderAnswer(finalAnswer)
 			? finalAnswer
-			: streamedAnswer.length > 0
+			: (streamedAnswer.length > 0
 				? streamedAnswer
-				: finalAnswer;
+				: finalAnswer);
 
 	// Fallback: when Codex omits url_citation annotations, scrape markdown links
 	// and bare URLs from the synthesized answer so callers still receive sources.
@@ -472,7 +477,12 @@ export async function searchCodex(params: CodexSearchParams): Promise<SearchResp
 	let sources = result.sources;
 
 	// Apply num_results limit if specified
-	if (params.num_results && sources.length > params.num_results) {
+	if (
+		params.num_results !== null &&
+		params.num_results !== undefined &&
+		params.num_results !== 0 &&
+		sources.length > params.num_results
+	) {
 		sources = sources.slice(0, params.num_results);
 	}
 

@@ -60,23 +60,29 @@ export const handleRubyGems: SpecialHandler = async (
 		if (!gem) return null;
 
 		let md = `# ${gem.name}\n\n`;
-		if (gem.info) md += `${gem.info}\n\n`;
+		if (gem.info !== null && gem.info !== undefined && gem.info !== "") md += `${gem.info}\n\n`;
 
 		// Version and license
 		md += `**Version:** ${gem.version}`;
-		if (gem.licenses?.length) md += ` · **License:** ${gem.licenses.join(", ")}`;
+		if (gem.licenses?.length !== null && gem.licenses?.length !== undefined && gem.licenses?.length !== 0)
+			md += ` · **License:** ${gem.licenses.join(", ")}`;
 		md += "\n";
 
 		// Downloads
 		md += `**Total Downloads:** ${formatNumber(gem.downloads)}`;
-		if (gem.version_downloads) md += ` · **Version Downloads:** ${formatNumber(gem.version_downloads)}`;
+		if (gem.version_downloads !== null && gem.version_downloads !== undefined && gem.version_downloads !== 0)
+			md += ` · **Version Downloads:** ${formatNumber(gem.version_downloads)}`;
 		md += "\n\n";
 
 		// Links
-		if (gem.homepage_uri) md += `**Homepage:** ${gem.homepage_uri}\n`;
-		if (gem.source_code_uri) md += `**Source Code:** ${gem.source_code_uri}\n`;
-		if (gem.documentation_uri) md += `**Documentation:** ${gem.documentation_uri}\n`;
-		if (gem.authors) md += `**Authors:** ${gem.authors}\n`;
+		if (gem.homepage_uri !== null && gem.homepage_uri !== undefined && gem.homepage_uri !== "")
+			md += `**Homepage:** ${gem.homepage_uri}\n`;
+		if (gem.source_code_uri !== null && gem.source_code_uri !== undefined && gem.source_code_uri !== "")
+			md += `**Source Code:** ${gem.source_code_uri}\n`;
+		if (gem.documentation_uri !== null && gem.documentation_uri !== undefined && gem.documentation_uri !== "")
+			md += `**Documentation:** ${gem.documentation_uri}\n`;
+		if (gem.authors !== null && gem.authors !== undefined && gem.authors !== "")
+			md += `**Authors:** ${gem.authors}\n`;
 
 		// Runtime dependencies
 		const runtimeDeps = gem.dependencies?.runtime;

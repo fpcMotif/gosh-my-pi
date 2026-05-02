@@ -6,6 +6,11 @@
 - Refreshed the default coding-agent TUI with the pi-vivid theme, compact status/tool chrome, conversation rails, and a lower-noise welcome surface.
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt and updated TypeScript project diagnostics to use tsgo.
 
+### Fixed
+
+- Fixed vivid `RowSplit` layouts so an explicit empty separator omits the default vertical rule.
+- Kept vivid sidebar and minimized welcome chrome in sync after session, cwd, model, and thinking-level changes.
+
 
 ## [14.5.11] - 2026-04-30
 ### Breaking Changes

@@ -33,7 +33,7 @@ export const inspectImageToolRenderer = {
 		const pathDisplay = rawPath ? shortenPath(rawPath) : "…";
 		const header = renderStatusLine({ icon: "pending", title: "Inspect Image", description: pathDisplay }, uiTheme);
 		const question = args.question?.trim();
-		if (!question) {
+		if (question === null || question === undefined || question === "") {
 			return new Text(header, 0, 0);
 		}
 		const questionLine = ` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("dim", "Question:")} ${uiTheme.fg("accent", truncateToWidth(replaceTabs(question), INSPECT_QUESTION_PREVIEW_WIDTH))}`;
@@ -50,11 +50,13 @@ export const inspectImageToolRenderer = {
 		const rawPath = details?.imagePath ?? args?.path ?? "";
 		const pathDisplay = rawPath ? shortenPath(rawPath) : "image";
 		const metaParts: string[] = [];
-		if (details?.model) metaParts.push(details.model);
-		if (details?.mimeType) metaParts.push(details.mimeType);
+		if (details?.model !== null && details?.model !== undefined && details?.model !== "")
+			metaParts.push(details.model);
+		if (details?.mimeType !== null && details?.mimeType !== undefined && details?.mimeType !== "")
+			metaParts.push(details.mimeType);
 		const header = renderStatusLine(
 			{
-				icon: result.isError ? "error" : "success",
+				icon: result.isError === true ? "error" : "success",
 				title: "Inspect Image",
 				description: pathDisplay,
 			},
@@ -63,7 +65,7 @@ export const inspectImageToolRenderer = {
 
 		const lines: string[] = [header];
 		const question = args?.question?.trim();
-		if (question) {
+		if (question !== null && question !== undefined && question !== "") {
 			lines.push(
 				` ${uiTheme.fg("dim", uiTheme.tree.branch)} ${uiTheme.fg("dim", "Question:")} ${uiTheme.fg("accent", truncateToWidth(replaceTabs(question), INSPECT_QUESTION_PREVIEW_WIDTH))}`,
 			);

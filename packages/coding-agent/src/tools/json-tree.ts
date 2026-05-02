@@ -21,7 +21,7 @@ const ARGS_INLINE_MORE = "…";
 const ARGS_INLINE_MORE_WIDTH = Bun.stringWidth(ARGS_INLINE_MORE);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return !!value && typeof value === "object" && !Array.isArray(value);
+	return !(value === null || value === undefined) && typeof value === "object" && !Array.isArray(value);
 }
 
 /**
@@ -120,7 +120,8 @@ export function renderJsonTreeLines(
 		try {
 			// Handle scalars
 			if (val === null || val === undefined || typeof val !== "object") {
-				const label = key ? theme.fg("muted", key) : theme.fg("muted", "value");
+				const label =
+					key !== null && key !== undefined && key !== "" ? theme.fg("muted", key) : theme.fg("muted", "value");
 
 				// Special handling for multiline strings
 				if (typeof val === "string" && val.includes("\n")) {
@@ -163,7 +164,8 @@ export function renderJsonTreeLines(
 
 			// Handle arrays
 			if (Array.isArray(val)) {
-				const header = key ? theme.fg("muted", key) : theme.fg("muted", "array");
+				const header =
+					key !== null && key !== undefined && key !== "" ? theme.fg("muted", key) : theme.fg("muted", "array");
 				pushLine(`${prefix}${iconArray} ${header}`);
 				if (val.length === 0) {
 					pushLine(
@@ -190,7 +192,8 @@ export function renderJsonTreeLines(
 			// Handle objects
 			if (!isRecord(val)) return;
 
-			const header = key ? theme.fg("muted", key) : theme.fg("muted", "object");
+			const header =
+				key !== null && key !== undefined && key !== "" ? theme.fg("muted", key) : theme.fg("muted", "object");
 			pushLine(`${prefix}${iconObject} ${header}`);
 			if (depth >= maxDepth) {
 				pushLine(`${buildTreePrefix(theme, ancestors)}${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", "…")}`);

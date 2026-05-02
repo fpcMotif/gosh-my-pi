@@ -202,7 +202,7 @@ export function deobfuscateSessionContext(
 	sessionContext: SessionContext,
 	obfuscator: SecretObfuscator | undefined,
 ): SessionContext {
-	if (!obfuscator?.hasSecrets()) return sessionContext;
+	if (obfuscator?.hasSecrets() !== true) return sessionContext;
 	const messages = obfuscator.deobfuscateObject(sessionContext.messages);
 	return messages === sessionContext.messages ? sessionContext : { ...sessionContext, messages };
 }

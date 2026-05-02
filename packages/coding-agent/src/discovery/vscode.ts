@@ -30,7 +30,7 @@ registerProvider<MCPServer>(mcpCapability.id, {
 
 		// Project-only (VS Code doesn't support user-level MCP config)
 		const projectPath = getProjectPath(ctx, "vscode", "mcp.json");
-		if (projectPath) {
+		if (projectPath !== null && projectPath !== undefined && projectPath !== "") {
 			const result = await loadMCPConfig(ctx, projectPath, "project");
 			items.push(...result.items);
 			if (result.warnings) warnings.push(...result.warnings);
@@ -53,7 +53,7 @@ async function loadMCPConfig(
 	const warnings: string[] = [];
 
 	const content = await readFile(path);
-	if (!content) {
+	if (content === null || content === undefined || content === "") {
 		warnings.push(`Failed to read ${path}`);
 		return { items, warnings };
 	}
@@ -71,7 +71,7 @@ async function loadMCPConfig(
 	}
 
 	for (const [name, config] of Object.entries(servers)) {
-		if (!config || typeof config !== "object") {
+		if (config === null || config === undefined || typeof config !== "object") {
 			warnings.push(`Invalid config for server "${name}" in ${path}`);
 			continue;
 		}
@@ -85,10 +85,13 @@ async function loadMCPConfig(
 			name,
 			command: typeof expanded.command === "string" ? expanded.command : undefined,
 			args: Array.isArray(expanded.args) ? (expanded.args as string[]) : undefined,
-			env: expanded.env && typeof expanded.env === "object" ? (expanded.env as Record<string, string>) : undefined,
+			env:
+				expanded.env !== null && expanded.env !== undefined && typeof expanded.env === "object"
+					? (expanded.env as Record<string, string>)
+					: undefined,
 			url: typeof expanded.url === "string" ? expanded.url : undefined,
 			headers:
-				expanded.headers && typeof expanded.headers === "object"
+				expanded.headers !== null && expanded.headers !== undefined && typeof expanded.headers === "object"
 					? (expanded.headers as Record<string, string>)
 					: undefined,
 			transport: ["stdio", "sse", "http"].includes(expanded.transport as string)

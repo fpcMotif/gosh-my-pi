@@ -70,9 +70,7 @@ describe("AgentSession compaction Copilot initiator attribution", () => {
 	});
 
 	afterEach(async () => {
-		for (const session of sessions.splice(0)) {
-			await session.dispose();
-		}
+		await Promise.all(sessions.splice(0).map(s => s.dispose()));
 		for (const authStorage of authStorages.splice(0)) {
 			authStorage.close();
 		}

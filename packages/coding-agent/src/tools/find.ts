@@ -158,13 +158,13 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 					files: limited,
 					truncated: Boolean(limitMeta.resultLimit || truncation.truncated),
 					resultLimitReached: limitMeta.resultLimit?.reached,
-					truncation: truncation.truncated ? truncation : undefined,
+					truncation: truncation.truncated === true ? truncation : undefined,
 				};
 
 				const resultBuilder = toolResult(details)
 					.text(truncation.content)
 					.limits({ resultLimit: limitMeta.resultLimit?.reached });
-				if (truncation.truncated) {
+				if (truncation.truncated === true) {
 					resultBuilder.truncation(truncation, { direction: "head" });
 				}
 
@@ -195,11 +195,11 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			let searchStat: fs.Stats;
 			try {
 				searchStat = await fs.promises.stat(searchPath);
-			} catch (err) {
-				if (isEnoent(err)) {
+			} catch (error) {
+				if (isEnoent(error)) {
 					throw new ToolError(`Path not found: ${scopePath}`);
 				}
-				throw err;
+				throw error;
 			}
 
 			if (!hasGlob && searchStat.isFile()) {
@@ -263,7 +263,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				matches = result.matches;
 			} catch (error) {
 				if (error instanceof Error && error.name === "AbortError") {
-					if (timeoutSignal.aborted && !signal?.aborted) {
+					if (timeoutSignal.aborted && signal?.aborted !== true) {
 						const timeoutSeconds = Math.max(1, Math.round(GLOB_TIMEOUT_MS / 1000));
 						throw new ToolError(`find timed out after ${timeoutSeconds}s`);
 					}
@@ -329,7 +329,9 @@ export const findToolRenderer = {
 
 		if (!hasDetailedData) {
 			if (
-				!textContent ||
+				textContent === null ||
+				textContent === undefined ||
+				textContent === "" ||
 				textContent.includes("No files matching") ||
 				textContent.includes("No files found") ||
 				textContent.trim() === ""
@@ -387,7 +389,8 @@ export const findToolRenderer = {
 			return new Text([header, formatEmptyMessage("No files found", uiTheme)].join("\n"), 0, 0);
 		}
 		const meta: string[] = [formatCount("file", fileCount)];
-		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
+		if (details?.scopePath !== null && details?.scopePath !== undefined && details?.scopePath !== "")
+			meta.push(`in ${details.scopePath}`);
 		if (truncated) meta.push(uiTheme.fg("warning", "truncated"));
 		const header = renderStatusLine(
 			{ icon: truncated ? "warning" : "success", title: "Find", description: args?.pattern, meta },
@@ -395,11 +398,17 @@ export const findToolRenderer = {
 		);
 
 		const truncationReasons: string[] = [];
-		if (details?.resultLimitReached) truncationReasons.push(`limit ${details.resultLimitReached} results`);
+		if (
+			details?.resultLimitReached !== null &&
+			details?.resultLimitReached !== undefined &&
+			details?.resultLimitReached !== 0
+		)
+			truncationReasons.push(`limit ${details.resultLimitReached} results`);
 		if (limits?.resultLimit) truncationReasons.push(`limit ${limits.resultLimit.reached} results`);
 		if (truncation) truncationReasons.push(truncation.truncatedBy === "lines" ? "line limit" : "size limit");
 		const artifactId = truncation && "artifactId" in truncation ? truncation.artifactId : undefined;
-		if (artifactId) truncationReasons.push(formatFullOutputReference(artifactId));
+		if (artifactId !== null && artifactId !== undefined && artifactId !== "")
+			truncationReasons.push(formatFullOutputReference(artifactId));
 
 		const extraLines: string[] = [];
 		if (truncationReasons.length > 0) {

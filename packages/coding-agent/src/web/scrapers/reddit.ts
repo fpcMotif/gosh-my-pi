@@ -45,7 +45,7 @@ export const handleReddit: SpecialHandler = async (
 		if (!result.ok) return null;
 
 		const data = tryParseJson<any>(result.content);
-		if (!data) return null;
+		if (data === null || data === undefined) return null;
 		let md = "";
 
 		// Handle different Reddit URL types
@@ -74,7 +74,7 @@ export const handleReddit: SpecialHandler = async (
 					}
 				}
 			}
-		} else if (data?.data?.children) {
+		} else if (data?.data?.children !== null && data?.data?.children !== undefined) {
 			// Subreddit or listing page
 			const posts = data.data.children.slice(0, 20) as Array<{ data: RedditPost }>;
 			const subreddit = posts[0]?.data?.subreddit;

@@ -20,8 +20,8 @@ async function hasTaskfile(cwd: string): Promise<boolean> {
 		try {
 			const stat = await fs.stat(path.join(cwd, name));
 			if (stat.isFile()) return true;
-		} catch (err) {
-			if (!isEnoent(err)) throw err;
+		} catch (error) {
+			if (!isEnoent(error)) throw error;
 		}
 	}
 	return false;
@@ -48,8 +48,8 @@ async function listTaskfileTasks(cwd: string): Promise<RunnerTask[] | null> {
 				return { name: task.name, doc: desc ?? summary, parameters: [] };
 			});
 		return tasks.length > 0 ? tasks : null;
-	} catch (err) {
-		logger.debug("task runner list failed", { error: err instanceof Error ? err.message : String(err) });
+	} catch (error) {
+		logger.debug("task runner list failed", { error: error instanceof Error ? error.message : String(error) });
 		return null;
 	}
 }
@@ -59,13 +59,13 @@ export const taskRunner: TaskRunner = {
 	label: "Task",
 	async detect(cwd: string): Promise<DetectedRunner | null> {
 		try {
-			if (!$which("task")) return null;
+			if ($which("task") === undefined || $which("task") === "") return null;
 			if (!(await hasTaskfile(cwd))) return null;
 			const tasks = await listTaskfileTasks(cwd);
 			if (!tasks || tasks.length === 0) return null;
 			return { id: "task", label: "Task", commandPrefix: "task", tasks };
-		} catch (err) {
-			logger.debug("task runner probe failed", { error: err instanceof Error ? err.message : String(err) });
+		} catch (error) {
+			logger.debug("task runner probe failed", { error: error instanceof Error ? error.message : String(error) });
 			return null;
 		}
 	},

@@ -15,11 +15,11 @@ function formatLicenses(licenses: unknown): string[] {
 		if (isRecord(license)) {
 			const name = asString(license.name);
 			const url = asString(license.url);
-			if (name && url) {
+			if (name !== null && name !== undefined && name !== "" && url !== null && url !== undefined && url !== "") {
 				output.push(`${name} (${url})`);
-			} else if (name) {
+			} else if (name !== null && name !== undefined && name !== "") {
 				output.push(name);
-			} else if (url) {
+			} else if (url !== null && url !== undefined && url !== "") {
 				output.push(url);
 			}
 		}
@@ -39,9 +39,16 @@ function formatDependencies(deps: unknown): string[] {
 			if (Array.isArray(dep)) {
 				const name = asString(dep[0]);
 				const version = asString(dep[1]);
-				if (name && version) {
+				if (
+					name !== null &&
+					name !== undefined &&
+					name !== "" &&
+					version !== null &&
+					version !== undefined &&
+					version !== ""
+				) {
 					output.push(`${name}: ${version}`);
-				} else if (name) {
+				} else if (name !== null && name !== undefined && name !== "") {
 					output.push(name);
 				}
 				continue;
@@ -49,9 +56,16 @@ function formatDependencies(deps: unknown): string[] {
 			if (isRecord(dep)) {
 				const name = asString(dep.name) ?? asString(dep.artifact) ?? asString(dep.jar_name);
 				const version = asString(dep.version);
-				if (name && version) {
+				if (
+					name !== null &&
+					name !== undefined &&
+					name !== "" &&
+					version !== null &&
+					version !== undefined &&
+					version !== ""
+				) {
 					output.push(`${name}: ${version}`);
-				} else if (name) {
+				} else if (name !== null && name !== undefined && name !== "") {
 					output.push(name);
 				}
 			}
@@ -62,7 +76,7 @@ function formatDependencies(deps: unknown): string[] {
 	if (isRecord(deps)) {
 		for (const [name, version] of Object.entries(deps)) {
 			const versionText = asString(version);
-			if (versionText) {
+			if (versionText !== null && versionText !== undefined && versionText !== "") {
 				output.push(`${name}: ${versionText}`);
 			} else if (name.trim()) {
 				output.push(name);
@@ -110,7 +124,7 @@ export const handleClojars: SpecialHandler = async (
 		if (!result.ok) return null;
 
 		const payload = tryParseJson(result.content);
-		if (!payload) return null;
+		if (payload === null || payload === undefined) return null;
 
 		const data = Array.isArray(payload) ? payload[0] : payload;
 		if (!isRecord(data)) return null;
@@ -126,18 +140,18 @@ export const handleClojars: SpecialHandler = async (
 		const dependencies = formatDependencies(data.dependencies ?? data.deps);
 
 		const displayName =
-			groupName && artifactName && groupName !== artifactName
+			groupName !== null && groupName !== undefined && groupName !== "" && artifactName && groupName !== artifactName
 				? `${groupName}/${artifactName}`
 				: (artifactName ?? groupName ?? "Clojars artifact");
 
 		let md = `# ${displayName}\n\n`;
-		if (description) md += `${description}\n\n`;
+		if (description !== null && description !== undefined && description !== "") md += `${description}\n\n`;
 
-		if (groupName) md += `**Group:** ${groupName}\n`;
+		if (groupName !== null && groupName !== undefined && groupName !== "") md += `**Group:** ${groupName}\n`;
 		if (artifactName) md += `**Artifact:** ${artifactName}\n`;
-		if (version) md += `**Latest:** ${version}\n`;
+		if (version !== null && version !== undefined && version !== "") md += `**Latest:** ${version}\n`;
 		if (downloads !== null) md += `**Downloads:** ${formatNumber(downloads)}\n`;
-		if (homepage) md += `**Homepage:** ${homepage}\n`;
+		if (homepage !== null && homepage !== undefined && homepage !== "") md += `**Homepage:** ${homepage}\n`;
 		if (licenses.length > 0) md += `**Licenses:** ${licenses.join(", ")}\n`;
 
 		if (dependencies.length > 0) {

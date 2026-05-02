@@ -182,7 +182,7 @@ export class ModelSelectorComponent extends Container {
 
 		// Create search input
 		this.#searchInput = new Input();
-		if (initialSearchInput) {
+		if (initialSearchInput !== null && initialSearchInput !== undefined && initialSearchInput !== "") {
 			this.#searchInput.setValue(initialSearchInput);
 		}
 		this.#searchInput.onSubmit = () => {
@@ -209,7 +209,7 @@ export class ModelSelectorComponent extends Container {
 		this.addChild(new DynamicBorder());
 
 		// Load models and do initial render
-		this.#loadModels().then(() => {
+		void this.#loadModels().then(() => {
 			this.#buildProviderTabs();
 			this.#updateTabBar();
 			// Always apply the current search query — the user may have typed
@@ -228,7 +228,10 @@ export class ModelSelectorComponent extends Container {
 	#buildMenuRoleActions(): void {
 		this.#menuRoleActions = getKnownRoleIds(this.#settings).map(role => {
 			const roleInfo = getRoleInfo(role, this.#settings);
-			const roleLabel = roleInfo.tag ? `${roleInfo.tag} (${roleInfo.name})` : roleInfo.name;
+			const roleLabel =
+				roleInfo.tag !== null && roleInfo.tag !== undefined && roleInfo.tag !== ""
+					? `${roleInfo.tag} (${roleInfo.name})`
+					: roleInfo.name;
 			return {
 				label: `Set as ${roleLabel}`,
 				role,
@@ -241,7 +244,7 @@ export class ModelSelectorComponent extends Container {
 		const matchPreferences = { usageOrder: this.#settings.getStorage()?.getModelUsageOrder() };
 		for (const role of getKnownRoleIds(this.#settings)) {
 			const roleValue = this.#settings.getModelRole(role);
-			if (!roleValue) continue;
+			if (roleValue === null || roleValue === undefined || roleValue === "") continue;
 
 			const resolved = resolveModelRoleValue(roleValue, allModels, {
 				settings: this.#settings,
@@ -319,7 +322,7 @@ export class ModelSelectorComponent extends Container {
 			if (aDate && bDate) return bDate.localeCompare(aDate);
 
 			// One has date, other is latest — latest first
-			return aIsLatest ? -1 : bIsLatest ? 1 : a.id.localeCompare(b.id);
+			return aIsLatest ? -1 : (bIsLatest ? 1 : a.id.localeCompare(b.id));
 		});
 	}
 
@@ -523,9 +526,9 @@ export class ModelSelectorComponent extends Container {
 				const fuzzySource =
 					substringFiltered.length > 0
 						? substringFiltered
-						: alphaFiltered.length > 0
+						: (alphaFiltered.length > 0
 							? alphaFiltered
-							: baseCanonicalModels;
+							: baseCanonicalModels);
 				const fuzzyMatches = fuzzyFilter(fuzzySource, query, ({ searchText }) => searchText);
 				this.#sortCanonicalModels(fuzzyMatches);
 				this.#filteredCanonicalModels = fuzzyMatches;
@@ -550,7 +553,7 @@ export class ModelSelectorComponent extends Container {
 	}
 
 	#formatDiscoveryAge(fetchedAt: number | undefined): string | undefined {
-		if (!fetchedAt) {
+		if (fetchedAt === null || fetchedAt === undefined || fetchedAt === 0) {
 			return undefined;
 		}
 		const ageMs = Math.max(0, Date.now() - fetchedAt);
@@ -573,11 +576,13 @@ export class ModelSelectorComponent extends Container {
 		const age = this.#formatDiscoveryAge(state.fetchedAt);
 		switch (state.status) {
 			case "cached":
-				return age
+				return age !== null && age !== undefined && age !== ""
 					? `  Using cached model list from ${age}. Live refresh is still pending.`
 					: "  Using cached model list. Live refresh is still pending.";
 			case "unavailable":
-				return age ? `  Provider unavailable. Using cached model list from ${age}.` : "  Provider unavailable.";
+				return age !== null && age !== undefined && age !== ""
+					? `  Provider unavailable. Using cached model list from ${age}.`
+					: "  Provider unavailable.";
 			case "unauthenticated":
 				return "  Provider requires authentication before models can be discovered.";
 			case "idle":
@@ -616,7 +621,14 @@ export class ModelSelectorComponent extends Container {
 			for (const role of MODEL_ROLE_IDS) {
 				const { tag, color } = getRoleInfo(role, this.#settings);
 				const assigned = this.#roles[role];
-				if (!tag || !assigned || !modelsAreEqual(assigned.model, item.model)) continue;
+				if (
+					tag === null ||
+					tag === undefined ||
+					tag === "" ||
+					!assigned ||
+					!modelsAreEqual(assigned.model, item.model)
+				)
+					continue;
 
 				const badge = makeInvertedBadge(tag, color ?? "success");
 				const thinkingLabel = getThinkingLevelMetadata(assigned.thinkingLevel).label;
@@ -670,7 +682,7 @@ export class ModelSelectorComponent extends Container {
 		}
 
 		// Show error message or "no results" if empty
-		if (this.#errorMessage) {
+		if (this.#errorMessage !== null && this.#errorMessage !== undefined) {
 			const errorLines = String(this.#errorMessage).split("\n");
 			for (const line of errorLines) {
 				this.#listContainer.addChild(new Text(theme.fg("error", line), 0, 0));
@@ -749,7 +761,10 @@ export class ModelSelectorComponent extends Container {
 					return `${prefix}${action.label}`;
 				});
 
-		const selectedRoleName = this.#menuSelectedRole ? getRoleInfo(this.#menuSelectedRole, this.#settings).name : "";
+		const selectedRoleName =
+			this.#menuSelectedRole !== null && this.#menuSelectedRole !== undefined && this.#menuSelectedRole !== ""
+				? getRoleInfo(this.#menuSelectedRole, this.#settings).name
+				: "";
 		const headerText =
 			showingThinking && this.#menuSelectedRole
 				? `  Thinking for: ${selectedRoleName} (${selectedItem.id})`
@@ -796,7 +811,7 @@ export class ModelSelectorComponent extends Container {
 		}
 
 		// Tab bar navigation
-		if (this.#tabBar?.handleInput(keyData)) {
+		if (this.#tabBar?.handleInput(keyData) === true) {
 			return;
 		}
 
@@ -875,7 +890,8 @@ export class ModelSelectorComponent extends Container {
 				return;
 			}
 
-			if (!this.#menuSelectedRole) return;
+			if (this.#menuSelectedRole === null || this.#menuSelectedRole === undefined || this.#menuSelectedRole === "")
+				return;
 			const thinkingOptions = this.#getThinkingLevelsForModel(selectedItem.model);
 			const thinkingLevel = thinkingOptions[this.#menuSelectedIndex];
 			if (!thinkingLevel) return;
@@ -894,7 +910,6 @@ export class ModelSelectorComponent extends Container {
 				return;
 			}
 			this.#closeMenu();
-			return;
 		}
 	}
 

@@ -355,7 +355,11 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 			const trimmedContent = content.trim();
 			let resultText: string;
 			if (trimmedContent.length === 0) {
-				if (!resolvedSqlitePath.key) {
+				if (
+					resolvedSqlitePath.key === null ||
+					resolvedSqlitePath.key === undefined ||
+					resolvedSqlitePath.key === ""
+				) {
 					throw new ToolError("SQLite deletes require a row key in the path");
 				}
 
@@ -382,7 +386,11 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 					throw new ToolError("SQLite write content must be a JSON object");
 				}
 
-				if (resolvedSqlitePath.key) {
+				if (
+					resolvedSqlitePath.key !== null &&
+					resolvedSqlitePath.key !== undefined &&
+					resolvedSqlitePath.key !== ""
+				) {
 					const lookup = resolveTableRowLookup(db, resolvedSqlitePath.table);
 					const updated =
 						lookup.kind === "pk"
@@ -564,7 +572,7 @@ function renderContentPreview(content: string, expanded: boolean, uiTheme: Theme
 
 export const writeToolRenderer = {
 	renderCall(args: WriteRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
-		const rawPath = args.file_path || args.path || "";
+		const rawPath = args.file_path ?? args.path ?? "";
 		const filePath = shortenPath(rawPath);
 		const lang = getLanguageFromPath(rawPath) ?? "text";
 		const langIcon = uiTheme.fg("muted", uiTheme.getLangIcon(lang));
@@ -574,7 +582,7 @@ export const writeToolRenderer = {
 
 		let text = `${formatTitle("Write", uiTheme)} ${spinner ? `${spinner} ` : ""}${langIcon} ${pathDisplay}`;
 
-		if (!args.content) {
+		if (args.content === null || args.content === undefined || args.content === "") {
 			return new Text(text, 0, 0);
 		}
 
@@ -590,9 +598,9 @@ export const writeToolRenderer = {
 		uiTheme: Theme,
 		args?: WriteRenderArgs,
 	): Component {
-		const rawPath = args?.file_path || args?.path || "";
+		const rawPath = args?.file_path ?? args?.path ?? "";
 		const filePath = shortenPath(rawPath);
-		const fileContent = args?.content || "";
+		const fileContent = args?.content ?? "";
 		const lang = getLanguageFromPath(rawPath);
 		const langIcon = uiTheme.fg("muted", uiTheme.getLangIcon(lang));
 		const pathDisplay = filePath ? uiTheme.fg("accent", filePath) : uiTheme.fg("toolOutput", "…");

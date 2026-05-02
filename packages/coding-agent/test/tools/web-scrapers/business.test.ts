@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { handleOpenCorporates } from "@oh-my-pi/pi-coding-agent/web/scrapers/opencorporates";
 import { handleSecEdgar } from "@oh-my-pi/pi-coding-agent/web/scrapers/sec-edgar";
 
-const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
+const SKIP =
+	Bun.env.WEB_FETCH_INTEGRATION === null ||
+	Bun.env.WEB_FETCH_INTEGRATION === undefined ||
+	Bun.env.WEB_FETCH_INTEGRATION === "";
 
 describe.skipIf(SKIP)("handleSecEdgar", () => {
 	it("returns null for non-matching URLs", async () => {

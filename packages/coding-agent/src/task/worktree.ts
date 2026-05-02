@@ -29,7 +29,7 @@ export function getEncodedProjectName(cwd: string): string {
 
 export async function getRepoRoot(cwd: string): Promise<string> {
 	const repoRoot = await git.repo.root(cwd);
-	if (!repoRoot) {
+	if (repoRoot === null || repoRoot === undefined || repoRoot === "") {
 		throw new Error("Git repository not found for isolated task execution.");
 	}
 
@@ -126,9 +126,9 @@ async function applyRepoBaseline(worktreeDir: string, rb: RepoBaseline, sourceRo
 		try {
 			await fs.mkdir(path.dirname(destination), { recursive: true });
 			await fs.cp(source, destination, { recursive: true });
-		} catch (err) {
-			if (isEnoent(err)) continue;
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) continue;
+			throw error;
 		}
 	}
 }
@@ -143,9 +143,9 @@ export async function applyBaseline(worktreeDir: string, baseline: WorktreeBasel
 		const sourceDir = path.join(baseline.root.repoRoot, entry.relativePath);
 		try {
 			await fs.cp(sourceDir, nestedDir, { recursive: true });
-		} catch (err) {
-			if (isEnoent(err)) continue;
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) continue;
+			throw error;
 		}
 		// Apply any uncommitted changes from the nested baseline
 		await applyRepoBaseline(nestedDir, entry.baseline, entry.baseline.repoRoot);
@@ -349,7 +349,7 @@ export async function ensureFuseOverlay(baseCwd: string, id: string): Promise<st
 
 	// Clean up any stale mount at this path (linux only)
 	const fusermount = $which("fusermount3") ?? $which("fusermount");
-	if (fusermount) {
+	if (fusermount !== null && fusermount !== undefined && fusermount !== "") {
 		await $`${fusermount} -u ${mergedDir}`.quiet().nothrow();
 	}
 
@@ -359,7 +359,7 @@ export async function ensureFuseOverlay(baseCwd: string, id: string): Promise<st
 	await fs.mkdir(mergedDir, { recursive: true });
 
 	const binary = $which("fuse-overlayfs");
-	if (!binary) {
+	if (binary === null || binary === undefined || binary === "") {
 		await fs.rm(baseDir, { recursive: true, force: true });
 		throw new Error(
 			"fuse-overlayfs not found. Install it (e.g. `apt install fuse-overlayfs` or `pacman -S fuse-overlayfs`) to use fuse-overlay isolation.",
@@ -381,7 +381,7 @@ export async function ensureFuseOverlay(baseCwd: string, id: string): Promise<st
 export async function cleanupFuseOverlay(mergedDir: string): Promise<void> {
 	try {
 		const fusermount = $which("fusermount3") ?? $which("fusermount");
-		if (fusermount) {
+		if (fusermount !== null && fusermount !== undefined && fusermount !== "") {
 			await $`${fusermount} -u ${mergedDir}`.quiet().nothrow();
 		}
 	} finally {
@@ -410,9 +410,9 @@ export async function ensureProjfsOverlay(baseCwd: string, id: string): Promise<
 	try {
 		projfsOverlayStart(repoRoot, mergedDir);
 		return mergedDir;
-	} catch (err) {
+	} catch (error) {
 		await fs.rm(baseDir, { recursive: true, force: true });
-		throw err;
+		throw error;
 	}
 }
 
@@ -421,10 +421,10 @@ export async function cleanupProjfsOverlay(mergedDir: string): Promise<void> {
 		if (process.platform === "win32") {
 			try {
 				projfsOverlayStop(mergedDir);
-			} catch (err) {
+			} catch (error) {
 				logger.warn("ProjFS overlay stop failed during cleanup", {
 					mergedDir,
-					error: err instanceof Error ? err.message : String(err),
+					error: error instanceof Error ? error.message : String(error),
 				});
 			}
 		}
@@ -461,7 +461,7 @@ export async function commitToBranch(
 
 	const repoRoot = baseline.root.repoRoot;
 	const branchName = `omp/task/${taskId}`;
-	const fallbackMessage = description || taskId;
+	const fallbackMessage = description ?? taskId;
 
 	// Only create a branch if the root repo has changes
 	if (rootPatch.trim()) {
@@ -471,19 +471,19 @@ export async function commitToBranch(
 			await git.worktree.add(repoRoot, tmpDir, branchName);
 			try {
 				await git.patch.applyText(tmpDir, rootPatch);
-			} catch (err) {
-				if (err instanceof git.GitCommandError) {
-					const stderr = err.result.stderr.slice(0, 2000);
+			} catch (error) {
+				if (error instanceof git.GitCommandError) {
+					const stderr = error.result.stderr.slice(0, 2000);
 					logger.error("commitToBranch: git apply failed", {
 						taskId,
-						exitCode: err.result.exitCode,
+						exitCode: error.result.exitCode,
 						stderr,
 						patchSize: rootPatch.length,
 						patchHead: rootPatch.slice(0, 500),
 					});
 					throw new Error(`git apply failed for task ${taskId}: ${stderr}`);
 				}
-				throw err;
+				throw error;
 			}
 			await git.stage.files(tmpDir);
 			const msg = (commitMessage && (await commitMessage(rootPatch))) || fallbackMessage;
@@ -525,18 +525,18 @@ export async function mergeTaskBranches(
 		for (const { branchName } of branches) {
 			try {
 				await git.cherryPick(repoRoot, branchName);
-			} catch (err) {
+			} catch (error) {
 				try {
 					await git.cherryPick.abort(repoRoot);
 				} catch {
 					/* no state to abort */
 				}
 				const stderr =
-					err instanceof git.GitCommandError
-						? err.result.stderr.trim()
-						: err instanceof Error
-							? err.message
-							: String(err);
+					error instanceof git.GitCommandError
+						? error.result.stderr.trim()
+						: (error instanceof Error
+							? error.message
+							: String(error));
 				failed.push(branchName);
 				conflictResult = {
 					merged,

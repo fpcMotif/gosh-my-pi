@@ -132,9 +132,9 @@ export class BashExecutionComponent extends Container {
 		this.#exitCode = exitCode;
 		this.#status = cancelled
 			? "cancelled"
-			: exitCode !== 0 && exitCode !== undefined && exitCode !== null
+			: (exitCode !== 0 && exitCode !== undefined && exitCode !== null
 				? "error"
-				: "complete";
+				: "complete");
 		this.#truncation = options?.truncation;
 		if (options?.output !== undefined) {
 			this.#setOutput(options.output);
@@ -176,7 +176,7 @@ export class BashExecutionComponent extends Container {
 		if (availableLines.length > 0) {
 			if (this.#expanded || hasSixelOutput) {
 				const displayText = availableLines
-					.map((line, index) => (sixelLineMask?.[index] ? line : theme.fg("muted", line)))
+					.map((line, index) => (sixelLineMask?.[index] === true ? line : theme.fg("muted", line)))
 					.join("\n");
 				this.#contentContainer.addChild(new Text(`\n${displayText}`, 1, 0));
 			} else {

@@ -98,7 +98,7 @@ async function checkPythonSetup(): Promise<PythonCheckResult> {
 	result.pipPath = $which("pip3") ?? $which("pip") ?? undefined;
 
 	const candidates = [systemPythonPath, hasManagedEnv ? managedPath : undefined].filter(
-		(candidate): candidate is string => !!candidate,
+		(candidate): candidate is string => !(candidate === null || candidate === undefined || candidate === ""),
 	);
 	if (candidates.length === 0) {
 		return result;
@@ -161,7 +161,7 @@ async function installPythonPackages(
 	uvPath?: string,
 	pipPath?: string,
 ): Promise<{ success: boolean; usedManagedEnv: boolean }> {
-	if (uvPath) {
+	if (uvPath !== null && uvPath !== undefined && uvPath !== "") {
 		console.log(chalk.dim(`Installing via uv: ${packages.join(" ")}`));
 		const result = await $`${uvPath} pip install ${packages}`.nothrow();
 		if (result.exitCode === 0) {
@@ -169,7 +169,7 @@ async function installPythonPackages(
 		}
 	}
 
-	if (pipPath) {
+	if (pipPath !== null && pipPath !== undefined && pipPath !== "") {
 		console.log(chalk.dim(`Installing via pip: ${packages.join(" ")}`));
 		const result = await $`${pipPath} install ${packages}`.nothrow();
 		if (result.exitCode === 0) {
@@ -179,7 +179,7 @@ async function installPythonPackages(
 
 	console.log(chalk.dim(`Falling back to managed virtual environment: ${MANAGED_PYTHON_ENV}`));
 
-	if (uvPath) {
+	if (uvPath !== null && uvPath !== undefined && uvPath !== "") {
 		const createEnv = await $`${uvPath} venv ${MANAGED_PYTHON_ENV}`.quiet().nothrow();
 		if (createEnv.exitCode !== 0) {
 			return { success: false, usedManagedEnv: true };
@@ -215,26 +215,26 @@ export async function runSetupCommand(cmd: SetupCommandArgs): Promise<void> {
 async function handlePythonSetup(flags: { json?: boolean; check?: boolean }): Promise<void> {
 	const check = await checkPythonSetup();
 
-	if (flags.json) {
+	if (flags.json === true) {
 		console.log(JSON.stringify(check, null, 2));
 		if (!check.available) process.exit(1);
 		return;
 	}
 
-	if (!check.pythonPath) {
+	if (check.pythonPath === null || check.pythonPath === undefined || check.pythonPath === "") {
 		console.error(chalk.red(`${theme.status.error} Python not found`));
 		console.error(chalk.dim("Install Python 3.8+ and ensure it's in your PATH"));
 		process.exit(1);
 	}
 
 	console.log(chalk.dim(`Python: ${check.pythonPath}`));
-	if (check.usingManagedEnv) {
+	if (check.usingManagedEnv === true) {
 		console.log(chalk.dim(`Using managed environment: ${check.managedEnvPath}`));
 	}
 
-	if (check.uvPath) {
+	if (check.uvPath !== null && check.uvPath !== undefined && check.uvPath !== "") {
 		console.log(chalk.dim(`uv: ${check.uvPath}`));
-	} else if (check.pipPath) {
+	} else if (check.pipPath !== null && check.pipPath !== undefined && check.pipPath !== "") {
 		console.log(chalk.dim(`pip: ${check.pipPath}`));
 	}
 
@@ -249,11 +249,14 @@ async function handlePythonSetup(flags: { json?: boolean; check?: boolean }): Pr
 
 	console.log(chalk.yellow(`${theme.status.warning} Missing: ${check.missingPackages.join(", ")}`));
 
-	if (flags.check) {
+	if (flags.check === true) {
 		process.exit(1);
 	}
 
-	if (!check.uvPath && !check.pipPath) {
+	if (
+		(check.uvPath === null || check.uvPath === undefined || check.uvPath === "") &&
+		(check.pipPath === null || check.pipPath === undefined || check.pipPath === "")
+	) {
 		console.error(chalk.red(`\n${theme.status.error} No package manager found`));
 		console.error(chalk.dim("Install uv (recommended) or pip:"));
 		console.error(chalk.dim("  curl -LsSf https://astral.sh/uv/install.sh | sh"));
@@ -267,7 +270,7 @@ async function handlePythonSetup(flags: { json?: boolean; check?: boolean }): Pr
 		console.error(chalk.red(`\n${theme.status.error} Installation failed`));
 		console.error(chalk.dim("Try installing manually:"));
 		if (install.usedManagedEnv) {
-			if (check.uvPath) {
+			if (check.uvPath !== null && check.uvPath !== undefined && check.uvPath !== "") {
 				console.error(chalk.dim(`  uv venv ${MANAGED_PYTHON_ENV}`));
 				console.error(
 					chalk.dim(`  uv pip install --python ${MANAGED_PYTHON_ENV} ${check.missingPackages.join(" ")}`),
@@ -277,7 +280,11 @@ async function handlePythonSetup(flags: { json?: boolean; check?: boolean }): Pr
 				console.error(chalk.dim(`  ${managedPythonPath()} -m pip install ${check.missingPackages.join(" ")}`));
 			}
 		} else {
-			console.error(chalk.dim(`  ${check.uvPath ? "uv pip" : "pip"} install ${check.missingPackages.join(" ")}`));
+			console.error(
+				chalk.dim(
+					`  ${check.uvPath !== null && check.uvPath !== undefined && check.uvPath !== "" ? "uv pip" : "pip"} install ${check.missingPackages.join(" ")}`,
+				),
+			);
 		}
 		process.exit(1);
 	}
@@ -285,7 +292,7 @@ async function handlePythonSetup(flags: { json?: boolean; check?: boolean }): Pr
 	const recheck = await checkPythonSetup();
 	if (recheck.available) {
 		console.log(chalk.green(`\n${theme.status.success} Python execution is ready`));
-		if (recheck.usingManagedEnv) {
+		if (recheck.usingManagedEnv === true) {
 			console.log(chalk.dim(`Managed Python environment: ${recheck.managedEnvPath}`));
 		}
 	} else {
@@ -299,7 +306,7 @@ async function handleSttSetup(flags: { json?: boolean; check?: boolean }): Promi
 	const { checkDependencies, formatDependencyStatus } = await import("../stt/setup");
 	const status = await checkDependencies();
 
-	if (flags.json) {
+	if (flags.json === true) {
 		console.log(JSON.stringify(status, null, 2));
 		if (!status.recorder.available || !status.python.available || !status.whisper.available) process.exit(1);
 		return;
@@ -312,7 +319,7 @@ async function handleSttSetup(flags: { json?: boolean; check?: boolean }): Promi
 		return;
 	}
 
-	if (flags.check) {
+	if (flags.check === true) {
 		process.exit(1);
 	}
 

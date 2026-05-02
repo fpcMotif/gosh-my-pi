@@ -56,7 +56,7 @@ export class Hasher {
 
 	/** Feed a value that may be `undefined` or `null` (hashed as a 0xFF sentinel byte). */
 	optional(v: string | undefined | null): this {
-		if (v == null) {
+		if (v === null) {
 			hashView.setUint8(0, 0xff);
 			this.#h = Bun.hash.xxHash64(hashBytes1, this.#h);
 		} else {

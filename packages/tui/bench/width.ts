@@ -86,16 +86,9 @@ function formatResult(r: BenchResult, baseline?: BenchResult): string {
 	return `${r.name.padEnd(20)} ${r.totalMs.toFixed(2).padStart(8)}ms  ${perOp.padStart(8)}µs/op  (baseline)`;
 }
 
-console.log(`\n${"=".repeat(80)}`);
-console.log(`visibleWidth benchmark: ${ITERATIONS.toLocaleString()} iterations, ${WARMUP} warmup`);
-console.log(`${"=".repeat(80)}\n`);
-
-for (const [sampleName, sample] of Object.entries(samples)) {
-	console.log(`\n--- ${sampleName} (len=${sample.length}) ---`);
+for (const [_sampleName, sample] of Object.entries(samples)) {
 	if (sample.length > 0 && sample.length < 80) {
 		// Show sample for short strings (escape non-printable)
-		const display = sample.replace(/\x1b/g, "\\e").replace(/\x07/g, "\\a");
-		console.log(`    "${display}"`);
 	}
 
 	const results: BenchResult[] = [];
@@ -120,11 +113,8 @@ for (const [sampleName, sample] of Object.entries(samples)) {
 	);
 
 	// Find fastest as baseline
-	const baseline = results.reduce((a, b) => (a.perOpUs < b.perOpUs ? a : b));
 
-	console.log();
-	for (const r of results) {
-		console.log(`  ${formatResult(r, baseline)}`);
+	for (const _r of results) {
 	}
 
 	// Verify correctness
@@ -133,17 +123,11 @@ for (const [sampleName, sample] of Object.entries(samples)) {
 	const hybridResult = hybridVisibleWidth(sample);
 
 	if (nativeResult !== hybridResult) {
-		console.log(`  ⚠️  MISMATCH: native=${nativeResult}, hybrid=${hybridResult}`);
 	}
 	if (bunResult !== hybridResult && !sample.includes("\x00")) {
 		// Control chars can differ
-		console.log(`  ⚠️  MISMATCH: bun=${bunResult}, hybrid=${hybridResult}`);
 	}
 }
-
-console.log(`\n${"=".repeat(80)}`);
-console.log("Summary");
-console.log(`${"=".repeat(80)}\n`);
 
 // Aggregate by category
 const categories = {
@@ -157,7 +141,7 @@ const categories = {
 
 const benchTabW = getDefaultTabWidth();
 
-for (const [category, sampleNames] of Object.entries(categories)) {
+for (const [_category, sampleNames] of Object.entries(categories)) {
 	const categoryResults = { native: 0, bun: 0, hybrid: 0 };
 
 	for (const name of sampleNames) {
@@ -171,12 +155,4 @@ for (const [category, sampleNames] of Object.entries(categories)) {
 		categoryResults.bun += bunTime;
 		categoryResults.hybrid += hybridTime;
 	}
-
-	const fastest = Math.min(categoryResults.native, categoryResults.bun, categoryResults.hybrid);
-	const winner =
-		fastest === categoryResults.native ? "native" : fastest === categoryResults.bun ? "bun+strip" : "hybrid";
-
-	console.log(
-		`${category.padEnd(10)} native: ${categoryResults.native.toFixed(1)}µs  bun: ${categoryResults.bun.toFixed(1)}µs  hybrid: ${categoryResults.hybrid.toFixed(1)}µs  → ${winner} wins`,
-	);
 }

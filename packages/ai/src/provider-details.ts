@@ -76,6 +76,6 @@ function formatCodexWebSocket(details: OpenAICodexTransportDetails): string {
 }
 
 function formatCodexReuse(details: OpenAICodexTransportDetails, sessionId: string | undefined): string {
-	if (!sessionId) return "no session key";
+	if (sessionId === null || sessionId === undefined || sessionId === "") return "no session key";
 	return details.canAppend ? "append enabled" : "full request";
 }

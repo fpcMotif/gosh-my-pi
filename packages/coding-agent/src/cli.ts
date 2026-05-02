@@ -74,7 +74,8 @@ async function showHelp(config: import("@oh-my-pi/pi-utils/cli").CliConfig): Pro
  * If not, the entire argv is treated as args to the default "launch" command.
  */
 function isSubcommand(first: string | undefined): boolean {
-	if (!first || first.startsWith("-") || first.startsWith("@")) return false;
+	if (first === null || first === undefined || first === "" || first.startsWith("-") || first.startsWith("@"))
+		return false;
 	return commands.some(e => e.name === first || e.aliases?.includes(first));
 }
 
@@ -86,9 +87,9 @@ export function runCli(argv: string[]): Promise<void> {
 	const runArgv =
 		first === "--help" || first === "-h" || first === "--version" || first === "-v" || first === "help"
 			? argv
-			: isSubcommand(first)
+			: (isSubcommand(first)
 				? argv
-				: ["launch", ...argv];
+				: ["launch", ...argv]);
 	return run({ bin: APP_NAME, version: VERSION, argv: runArgv, commands, help: showHelp });
 }
 

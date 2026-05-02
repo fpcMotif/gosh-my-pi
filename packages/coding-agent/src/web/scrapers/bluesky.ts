@@ -75,7 +75,7 @@ async function resolveHandle(handle: string, timeout: number, signal?: AbortSign
  */
 function formatPost(post: BlueskyPost, isQuote = false): string {
 	const author = post.author;
-	const name = author.displayName || author.handle;
+	const name = author.displayName ?? author.handle;
 	const handle = `@${author.handle}`;
 	const date = new Date(post.record.createdAt).toLocaleString("en-US", {
 		year: "numeric",
@@ -106,12 +106,13 @@ function formatPost(post: BlueskyPost, isQuote = false): string {
 		if (embed.$type === "app.bsky.embed.external#view" && embed.external) {
 			const ext = embed.external;
 			md += `\n📎 [${ext.title || ext.uri}](${ext.uri})`;
-			if (ext.description) md += `\n*${ext.description}*`;
+			if (ext.description !== null && ext.description !== undefined && ext.description !== "")
+				md += `\n*${ext.description}*`;
 			md += "\n";
 		} else if (embed.$type === "app.bsky.embed.images#view" && embed.images) {
 			md += `\n🖼️ ${embed.images.length} image(s)`;
 			for (const img of embed.images) {
-				if (img.alt) md += `\n- Alt: "${img.alt}"`;
+				if (img.alt !== null && img.alt !== undefined && img.alt !== "") md += `\n- Alt: "${img.alt}"`;
 			}
 			md += "\n";
 		} else if (
@@ -119,9 +120,9 @@ function formatPost(post: BlueskyPost, isQuote = false): string {
 			embed.record
 		) {
 			const rec = embed.record;
-			if (rec.value?.text && rec.author) {
+			if (rec.value?.text !== null && rec.value?.text !== undefined && rec.value?.text !== "" && rec.author) {
 				md += "\n**Quoted post:**\n";
-				md += `> **${rec.author.displayName || rec.author.handle}** (@${rec.author.handle})\n`;
+				md += `> **${rec.author.displayName ?? rec.author.handle}** (@${rec.author.handle})\n`;
 				md += rec.value.text
 					.split("\n")
 					.map(line => `> ${line}`)
@@ -134,10 +135,14 @@ function formatPost(post: BlueskyPost, isQuote = false): string {
 	// Stats
 	if (!isQuote) {
 		const stats: string[] = [];
-		if (post.likeCount) stats.push(`❤️ ${formatNumber(post.likeCount)}`);
-		if (post.repostCount) stats.push(`🔁 ${formatNumber(post.repostCount)}`);
-		if (post.replyCount) stats.push(`💬 ${formatNumber(post.replyCount)}`);
-		if (post.quoteCount) stats.push(`📝 ${formatNumber(post.quoteCount)}`);
+		if (post.likeCount !== null && post.likeCount !== undefined && post.likeCount !== 0)
+			stats.push(`❤️ ${formatNumber(post.likeCount)}`);
+		if (post.repostCount !== null && post.repostCount !== undefined && post.repostCount !== 0)
+			stats.push(`🔁 ${formatNumber(post.repostCount)}`);
+		if (post.replyCount !== null && post.replyCount !== undefined && post.replyCount !== 0)
+			stats.push(`💬 ${formatNumber(post.replyCount)}`);
+		if (post.quoteCount !== null && post.quoteCount !== undefined && post.quoteCount !== 0)
+			stats.push(`📝 ${formatNumber(post.quoteCount)}`);
 		if (stats.length) md += `\n${stats.join(" • ")}\n`;
 	}
 
@@ -171,7 +176,7 @@ export const handleBluesky: SpecialHandler = async (
 
 				// First resolve handle to DID
 				const did = await resolveHandle(handle, timeout, signal);
-				if (!did) return null;
+				if (did === null || did === undefined || did === "") return null;
 
 				// Construct AT URI and fetch thread
 				const atUri = `at://${did}/app.bsky.feed.post/${rkey}`;
@@ -203,7 +208,11 @@ export const handleBluesky: SpecialHandler = async (
 				md += formatPost(thread.post);
 
 				// Show replies
-				if (thread.replies?.length) {
+				if (
+					thread.replies?.length !== null &&
+					thread.replies?.length !== undefined &&
+					thread.replies?.length !== 0
+				) {
 					md += "\n---\n\n## Replies\n\n";
 					let replyCount = 0;
 					for (const reply of thread.replies) {
@@ -231,19 +240,19 @@ export const handleBluesky: SpecialHandler = async (
 
 			const profile = JSON.parse(result.content) as BlueskyProfile;
 
-			let md = `# ${profile.displayName || profile.handle}\n\n`;
+			let md = `# ${profile.displayName ?? profile.handle}\n\n`;
 			md += `**@${profile.handle}**\n\n`;
 
-			if (profile.description) {
+			if (profile.description !== null && profile.description !== undefined && profile.description !== "") {
 				md += `${profile.description}\n\n`;
 			}
 
 			md += "---\n\n";
-			md += `- **Followers:** ${formatNumber(profile.followersCount || 0)}\n`;
-			md += `- **Following:** ${formatNumber(profile.followsCount || 0)}\n`;
-			md += `- **Posts:** ${formatNumber(profile.postsCount || 0)}\n`;
+			md += `- **Followers:** ${formatNumber(profile.followersCount ?? 0)}\n`;
+			md += `- **Following:** ${formatNumber(profile.followsCount ?? 0)}\n`;
+			md += `- **Posts:** ${formatNumber(profile.postsCount ?? 0)}\n`;
 
-			if (profile.createdAt) {
+			if (profile.createdAt !== null && profile.createdAt !== undefined && profile.createdAt !== "") {
 				const joined = new Date(profile.createdAt).toLocaleDateString("en-US", {
 					year: "numeric",
 					month: "long",

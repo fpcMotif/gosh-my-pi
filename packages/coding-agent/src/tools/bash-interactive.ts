@@ -37,14 +37,14 @@ function normalizeInputForPty(data: string, applicationCursorKeysMode: boolean):
 		return "";
 	}
 	const printableText = extractPrintableText(data);
-	if (printableText) {
+	if (printableText !== null && printableText !== undefined && printableText !== "") {
 		return printableText;
 	}
 	if (!kitty) {
 		return data;
 	}
 	const keyId = parseKey(data);
-	if (!keyId) {
+	if (keyId === null || keyId === undefined || keyId === "") {
 		return data;
 	}
 	const normalizedKey = keyId.toLowerCase();
@@ -242,9 +242,9 @@ class BashInteractiveOverlayComponent implements Component {
 		const statusIcon =
 			this.#state === "running"
 				? formatStatusIcon("running", this.uiTheme)
-				: this.#state === "complete" && this.#exitCode === 0
+				: (this.#state === "complete" && this.#exitCode === 0
 					? formatStatusIcon("success", this.uiTheme)
-					: formatStatusIcon("warning", this.uiTheme);
+					: formatStatusIcon("warning", this.uiTheme));
 		const title = this.uiTheme.fg("accent", "Console");
 		const statusBadge = `${this.uiTheme.fg("dim", this.uiTheme.format.bracketLeft)}${this.#stateText()}${this.uiTheme.fg("dim", this.uiTheme.format.bracketRight)}`;
 		const prefix = `${statusIcon} ${title} `;

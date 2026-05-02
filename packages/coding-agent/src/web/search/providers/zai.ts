@@ -108,10 +108,15 @@ async function callZaiTool(apiKey: string, args: Record<string, unknown>): Promi
 	const directErrorSuccess = parsedRecord?.success;
 	const directErrorMessage =
 		asString(parsedRecord?.msg) ?? asString(parsedRecord?.message) ?? asString(parsedRecord?.error_message);
-	if (directErrorSuccess === false && directErrorMessage) {
+	if (
+		directErrorSuccess === false &&
+		directErrorMessage !== null &&
+		directErrorMessage !== undefined &&
+		directErrorMessage !== ""
+	) {
 		throw new SearchProviderError(
 			"zai",
-			`Z.AI API error${directErrorCode ? ` (${directErrorCode})` : ""}: ${directErrorMessage}`,
+			`Z.AI API error${directErrorCode !== null && directErrorCode !== undefined && directErrorCode !== 0 ? ` (${directErrorCode})` : ""}: ${directErrorMessage}`,
 			directErrorCode,
 		);
 	}
@@ -121,7 +126,7 @@ async function callZaiTool(apiKey: string, args: Record<string, unknown>): Promi
 		const status = typeof payload.error.code === "number" ? payload.error.code : 400;
 		throw new SearchProviderError(
 			"zai",
-			`Z.AI MCP error${payload.error.code ? ` (${payload.error.code})` : ""}: ${payload.error.message ?? "Unknown error"}`,
+			`Z.AI MCP error${payload.error.code !== null && payload.error.code !== undefined && payload.error.code !== 0 ? ` (${payload.error.code})` : ""}: ${payload.error.message ?? "Unknown error"}`,
 			status,
 		);
 	}
@@ -131,7 +136,7 @@ async function callZaiTool(apiKey: string, args: Record<string, unknown>): Promi
 		const content = Array.isArray(resultRecord.content) ? resultRecord.content : [];
 		const errorText = content
 			.map(item => asString(asRecord(item)?.text))
-			.filter((text): text is string => text != null)
+			.filter((text): text is string => text !== null)
 			.join("\n")
 			.trim();
 		const statusMatch = errorText.match(/MCP error\s*(-?\d+)/i);
@@ -209,16 +214,17 @@ function parseSearchPayload(rawResult: unknown): {
 
 	const root = asRecord(rawResult);
 	if (root) {
-		if (root.structuredContent) candidates.push(root.structuredContent);
-		if (root.data) candidates.push(root.data);
-		if (root.result) candidates.push(root.result);
+		if (root.structuredContent !== null && root.structuredContent !== undefined)
+			candidates.push(root.structuredContent);
+		if (root.data !== null && root.data !== undefined) candidates.push(root.data);
+		if (root.result !== null && root.result !== undefined) candidates.push(root.result);
 
 		const content = root.content;
 		if (Array.isArray(content)) {
 			for (const part of content) {
 				const partObj = asRecord(part);
 				const text = asString(partObj?.text);
-				if (!text) continue;
+				if (text === null || text === undefined || text === "") continue;
 				textParts.push(text);
 				try {
 					candidates.push(JSON.parse(text));
@@ -251,7 +257,7 @@ function toSources(results: ZaiSearchResult[]): SearchSource[] {
 	const sources: SearchSource[] = [];
 	for (const result of results) {
 		const url = asString(result.link) ?? asString(result.url);
-		if (!url) continue;
+		if (url === null || url === undefined || url === "") continue;
 
 		const publishedDate = asString(result.publish_date) ?? asString(result.publishedDate);
 		sources.push({
@@ -269,7 +275,7 @@ function toSources(results: ZaiSearchResult[]): SearchSource[] {
 /** Execute Z.AI web search via remote MCP endpoint. */
 export async function searchZai(params: ZaiSearchParams): Promise<SearchResponse> {
 	const apiKey = await findApiKey();
-	if (!apiKey) {
+	if (apiKey === null || apiKey === undefined || apiKey === "") {
 		throw new Error("Z.AI credentials not found. Set ZAI_API_KEY or login with 'omp /login zai'.");
 	}
 
@@ -277,7 +283,12 @@ export async function searchZai(params: ZaiSearchParams): Promise<SearchResponse
 	const payload = parseSearchPayload(rawResult);
 	let sources = toSources(payload.results);
 
-	if (params.num_results && sources.length > params.num_results) {
+	if (
+		params.num_results !== null &&
+		params.num_results !== undefined &&
+		params.num_results !== 0 &&
+		sources.length > params.num_results
+	) {
 		sources = sources.slice(0, params.num_results);
 	}
 

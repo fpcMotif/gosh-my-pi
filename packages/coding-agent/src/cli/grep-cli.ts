@@ -97,7 +97,7 @@ export async function runGrepCommand(cmd: GrepCommandArgs): Promise<void> {
 		console.log(chalk.green(`Total matches: ${result.totalMatches}`));
 		console.log(chalk.green(`Files with matches: ${result.filesWithMatches}`));
 		console.log(chalk.green(`Files searched: ${result.filesSearched}`));
-		if (result.limitReached) {
+		if (result.limitReached === true) {
 			console.log(chalk.yellow(`Limit reached: true`));
 		}
 		console.log("");
@@ -124,8 +124,8 @@ export async function runGrepCommand(cmd: GrepCommandArgs): Promise<void> {
 				console.log(chalk.cyan(displayPath));
 			}
 		}
-	} catch (err) {
-		console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+	} catch (error) {
+		console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
 		process.exit(1);
 	}
 }

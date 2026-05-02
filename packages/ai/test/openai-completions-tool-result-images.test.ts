@@ -159,7 +159,7 @@ describe("openai-completions convertMessages", () => {
 					type: "toolCall",
 					id: "tool-1",
 					name: "read",
-					arguments: '{"path":"README.md"}' as unknown as Record<string, any>,
+					arguments: '{"path":"README.md"}' as unknown as Record<string, unknown>,
 				},
 			],
 			api: model.api,

@@ -44,7 +44,7 @@ export function parseModelString(
 	if (colonIdx !== -1) {
 		const suffix = id.slice(colonIdx + 1);
 		const thinkingLevel = parseThinkingLevel(suffix);
-		if (thinkingLevel) {
+		if (thinkingLevel !== undefined) {
 			return { provider, id: id.slice(0, colonIdx), thinkingLevel };
 		}
 	}
@@ -59,7 +59,9 @@ export function formatModelString(model: Model<Api>): string {
 }
 
 export function formatModelSelectorValue(selector: string, thinkingLevel: ThinkingLevel | undefined): string {
-	return thinkingLevel && thinkingLevel !== ThinkingLevel.Inherit ? `${selector}:${thinkingLevel}` : selector;
+	return thinkingLevel !== undefined && thinkingLevel !== ThinkingLevel.Inherit
+		? `${selector}:${thinkingLevel}`
+		: selector;
 }
 
 function getOpenRouterRouteSuffix(modelId: string): { baseId: string; suffix: string } | undefined {
@@ -69,7 +71,7 @@ function getOpenRouterRouteSuffix(modelId: string): { baseId: string; suffix: st
 	}
 
 	const suffix = modelId.slice(colonIdx + 1).trim();
-	if (!suffix || parseThinkingLevel(suffix)) {
+	if (!suffix || parseThinkingLevel(suffix) !== undefined) {
 		return undefined;
 	}
 
@@ -88,7 +90,7 @@ function getOpenRouterFallbackModelIds(modelId: string): string[] {
 
 	while (queue.length > 0) {
 		const candidate = queue.shift();
-		if (!candidate || seen.has(candidate)) {
+		if (candidate === null || candidate === undefined || candidate === "" || seen.has(candidate)) {
 			continue;
 		}
 		seen.add(candidate);
@@ -100,7 +102,7 @@ function getOpenRouterFallbackModelIds(modelId: string): string[] {
 		}
 
 		const strippedDate = stripOpenRouterDateSuffix(candidate);
-		if (strippedDate) {
+		if (strippedDate !== null && strippedDate !== undefined && strippedDate !== "") {
 			queue.push(strippedDate);
 		}
 	}
@@ -426,12 +428,12 @@ function parseModelPatternWithContext(
 	const suffix = pattern.substring(lastColonIndex + 1);
 
 	const parsedThinkingLevel = parseThinkingLevel(suffix);
-	if (parsedThinkingLevel) {
+	if (parsedThinkingLevel !== undefined) {
 		// Valid thinking level - recurse on prefix and use this level
 		const result = parseModelPatternWithContext(prefix, availableModels, context, options);
 		if (result.model) {
 			// Only use this thinking level if no warning from inner recursion
-			const explicitThinkingLevel = !result.warning;
+			const explicitThinkingLevel = result.warning === null || result.warning === undefined || result.warning === "";
 			return {
 				model: result.model,
 				thinkingLevel: explicitThinkingLevel ? parsedThinkingLevel : undefined,
@@ -501,18 +503,21 @@ function resolveConfiguredRolePattern(value: string, settings?: Settings): strin
 	const lastColonIndex = normalized.lastIndexOf(":");
 	const thinkingLevel =
 		lastColonIndex > PREFIX_MODEL_ROLE.length ? parseThinkingLevel(normalized.slice(lastColonIndex + 1)) : undefined;
-	const aliasCandidate = thinkingLevel ? normalized.slice(0, lastColonIndex) : normalized;
+	const aliasCandidate = thinkingLevel !== undefined ? normalized.slice(0, lastColonIndex) : normalized;
 	const role = getModelRoleAlias(aliasCandidate);
 	if (!role) return [normalized];
 
 	const configured = settings?.getModelRole(role)?.trim();
 	const roleDefaults = normalizeModelPatternList(MODEL_PRIO[role as keyof typeof MODEL_PRIO]);
-	const resolved = configured ? normalizeModelPatternList(configured) : roleDefaults;
+	const resolved =
+		configured !== null && configured !== undefined && configured !== ""
+			? normalizeModelPatternList(configured)
+			: roleDefaults;
 	if (!resolved || resolved.length === 0) {
 		return undefined;
 	}
 
-	return thinkingLevel ? resolved.map(pattern => `${pattern}:${thinkingLevel}`) : resolved;
+	return thinkingLevel !== undefined ? resolved.map(pattern => `${pattern}:${thinkingLevel}`) : resolved;
 }
 
 /**
@@ -552,14 +557,17 @@ export function resolveAgentModelPatterns(options: AgentModelPatternResolutionOp
 	const normalizedAgentPatterns = normalizeModelPatternList(agentModel);
 	const configuredAgentPatterns = resolveConfiguredModelPatterns(agentModel, settings);
 	const singleAgentPattern = normalizedAgentPatterns.length === 1 ? normalizedAgentPatterns[0] : undefined;
-	const agentInheritsSessionModel = singleAgentPattern ? isSessionInheritedAgentPattern(singleAgentPattern) : false;
+	const agentInheritsSessionModel =
+		singleAgentPattern !== null && singleAgentPattern !== undefined && singleAgentPattern !== ""
+			? isSessionInheritedAgentPattern(singleAgentPattern)
+			: false;
 	if (configuredAgentPatterns.length > 0) {
 		if (!agentInheritsSessionModel) return configuredAgentPatterns;
 		if (singleAgentPattern === "pi/task") return configuredAgentPatterns;
 	}
 
 	const fallback =
-		activeModelPattern?.trim() || fallbackModelPattern?.trim() || settings?.getModelRole("default")?.trim() || "";
+		activeModelPattern?.trim() ?? fallbackModelPattern?.trim() ?? settings?.getModelRole("default")?.trim() ?? "";
 	return resolveConfiguredModelPatterns(fallback, settings);
 }
 
@@ -578,7 +586,7 @@ export function resolveModelRoleValue(
 	availableModels: Model<Api>[],
 	options?: { settings?: Settings; matchPreferences?: ModelMatchPreferences; modelRegistry?: CanonicalModelRegistry },
 ): ResolvedModelRoleValue {
-	if (!roleValue) {
+	if (roleValue === null || roleValue === undefined || roleValue === "") {
 		return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
 	}
 
@@ -610,7 +618,12 @@ export function resolveModelRoleValue(
 				warning: resolved.warning,
 			};
 		}
-		if (!warning && resolved.warning) {
+		if (
+			(warning === null || warning === undefined || warning === "") &&
+			resolved.warning !== null &&
+			resolved.warning !== undefined &&
+			resolved.warning !== ""
+		) {
 			warning = resolved.warning;
 		}
 	}
@@ -622,7 +635,7 @@ export function extractExplicitThinkingSelector(
 	value: string | undefined,
 	settings?: Settings,
 ): ThinkingLevel | undefined {
-	if (!value) return undefined;
+	if (value === null || value === undefined || value === "") return undefined;
 	const normalized = value.trim();
 	if (!normalized || normalized === DEFAULT_MODEL_ROLE) return undefined;
 
@@ -633,7 +646,7 @@ export function extractExplicitThinkingSelector(
 		const lastColonIndex = current.lastIndexOf(":");
 		const thinkingSelector =
 			lastColonIndex > PREFIX_MODEL_ROLE.length ? parseThinkingLevel(current.slice(lastColonIndex + 1)) : undefined;
-		if (thinkingSelector) {
+		if (thinkingSelector !== undefined) {
 			return thinkingSelector;
 		}
 		const expanded = expandRoleAlias(current, settings).trim();
@@ -676,7 +689,7 @@ export function resolveModelFromSettings(options: {
 	const roles = roleOrder ?? MODEL_ROLE_IDS;
 	for (const role of roles) {
 		const configured = settings.getModelRole(role);
-		if (!configured) continue;
+		if (configured === null || configured === undefined || configured === "") continue;
 		const resolved = resolveModelFromString(
 			expandRoleAlias(configured, settings),
 			availableModels,
@@ -748,7 +761,7 @@ function resolveExactCanonicalScopePattern(
 	if (lastColonIndex !== -1) {
 		const suffix = pattern.substring(lastColonIndex + 1);
 		const parsedThinkingLevel = parseThinkingLevel(suffix);
-		if (parsedThinkingLevel) {
+		if (parsedThinkingLevel !== undefined) {
 			canonicalId = pattern.substring(0, lastColonIndex);
 			thinkingLevel = parsedThinkingLevel;
 			explicitThinkingLevel = true;
@@ -797,7 +810,7 @@ export async function resolveModelScope(
 			if (colonIdx !== -1) {
 				const suffix = pattern.substring(colonIdx + 1);
 				const parsedThinkingLevel = parseThinkingLevel(suffix);
-				if (parsedThinkingLevel) {
+				if (parsedThinkingLevel !== undefined) {
 					thinkingLevel = parsedThinkingLevel;
 					explicitThinkingLevel = true;
 					globPattern = pattern.substring(0, colonIdx);
@@ -855,7 +868,7 @@ export async function resolveModelScope(
 			{ modelRegistry },
 		);
 
-		if (warning) {
+		if (warning !== null && warning !== undefined && warning !== "") {
 			console.warn(chalk.yellow(`Warning: ${warning}`));
 		}
 
@@ -898,7 +911,7 @@ export function resolveCliModel(options: {
 }): ResolveCliModelResult {
 	const { cliProvider, cliModel, modelRegistry, preferences } = options;
 
-	if (!cliModel) {
+	if (cliModel === null || cliModel === undefined || cliModel === "") {
 		return { model: undefined, selector: undefined, warning: undefined, error: undefined };
 	}
 
@@ -917,8 +930,16 @@ export function resolveCliModel(options: {
 		providerMap.set(model.provider.toLowerCase(), model.provider);
 	}
 
-	let provider = cliProvider ? providerMap.get(cliProvider.toLowerCase()) : undefined;
-	if (cliProvider && !provider) {
+	let provider =
+		cliProvider !== null && cliProvider !== undefined && cliProvider !== ""
+			? providerMap.get(cliProvider.toLowerCase())
+			: undefined;
+	if (
+		cliProvider !== null &&
+		cliProvider !== undefined &&
+		cliProvider !== "" &&
+		(provider === null || provider === undefined || provider === "")
+	) {
 		return {
 			model: undefined,
 			selector: undefined,
@@ -928,7 +949,7 @@ export function resolveCliModel(options: {
 	}
 
 	const trimmedModel = cliModel.trim();
-	if (!provider) {
+	if (provider === null || provider === undefined || provider === "") {
 		const lower = trimmedModel.toLowerCase();
 		// When input has provider/id format (e.g. "zai/glm-5"), prefer decomposed
 		// provider+id match over flat id match. Without this, a model with id
@@ -971,12 +992,12 @@ export function resolveCliModel(options: {
 
 	let pattern = trimmedModel;
 
-	if (!provider) {
+	if (provider === null || provider === undefined || provider === "") {
 		const slashIndex = cliModel.indexOf("/");
 		if (slashIndex !== -1) {
 			const maybeProvider = cliModel.substring(0, slashIndex);
 			const canonical = providerMap.get(maybeProvider.toLowerCase());
-			if (canonical) {
+			if (canonical !== null && canonical !== undefined && canonical !== "") {
 				provider = canonical;
 				pattern = cliModel.substring(slashIndex + 1);
 			}
@@ -988,7 +1009,7 @@ export function resolveCliModel(options: {
 		}
 	}
 
-	if (provider) {
+	if (provider !== null && provider !== undefined && provider !== "") {
 		const exactProviderMatch = resolveProviderModelReference(provider, pattern, availableModels);
 		if (exactProviderMatch) {
 			return {
@@ -1001,14 +1022,18 @@ export function resolveCliModel(options: {
 		}
 	}
 
-	const candidates = provider ? availableModels.filter(model => model.provider === provider) : availableModels;
+	const candidates =
+		provider !== null && provider !== undefined && provider !== ""
+			? availableModels.filter(model => model.provider === provider)
+			: availableModels;
 	const { model, thinkingLevel, warning } = parseModelPattern(pattern, candidates, preferences, {
 		allowInvalidThinkingSelectorFallback: false,
 		modelRegistry,
 	});
 
 	if (!model) {
-		const display = provider ? `${provider}/${pattern}` : cliModel;
+		const display =
+			provider !== null && provider !== undefined && provider !== "" ? `${provider}/${pattern}` : cliModel;
 		return {
 			model: undefined,
 			selector: undefined,
@@ -1018,8 +1043,8 @@ export function resolveCliModel(options: {
 		};
 	}
 
-	let selector = provider ? formatModelString(model) : undefined;
-	if (!provider) {
+	let selector = provider !== null && provider !== undefined && provider !== "" ? formatModelString(model) : undefined;
+	if (provider === null || provider === undefined || provider === "") {
 		const lastColonIndex = pattern.lastIndexOf(":");
 		const canonicalCandidate =
 			lastColonIndex !== -1 && parseThinkingLevel(pattern.substring(lastColonIndex + 1))
@@ -1081,7 +1106,14 @@ export async function findInitialModel(options: {
 	let thinkingLevel: Effort | undefined;
 
 	// 1. CLI args take priority
-	if (cliProvider && cliModel) {
+	if (
+		cliProvider !== null &&
+		cliProvider !== undefined &&
+		cliProvider !== "" &&
+		cliModel !== null &&
+		cliModel !== undefined &&
+		cliModel !== ""
+	) {
 		const found = modelRegistry.find(cliProvider, cliModel);
 		if (!found) {
 			console.error(chalk.red(`Model ${cliProvider}/${cliModel} not found`));
@@ -1108,7 +1140,14 @@ export async function findInitialModel(options: {
 	}
 
 	// 3. Try saved default from settings
-	if (defaultProvider && defaultModelId) {
+	if (
+		defaultProvider !== null &&
+		defaultProvider !== undefined &&
+		defaultProvider !== "" &&
+		defaultModelId !== null &&
+		defaultModelId !== undefined &&
+		defaultModelId !== ""
+	) {
 		const found = modelRegistry.find(defaultProvider, defaultModelId);
 		if (found) {
 			model = found;
@@ -1228,7 +1267,7 @@ export async function findSmolModel(
 	if (availableModels.length === 0) return undefined;
 
 	// 1. Try saved model from settings
-	if (savedModel) {
+	if (savedModel !== null && savedModel !== undefined && savedModel !== "") {
 		const match = resolveModelFromString(savedModel, availableModels, undefined, modelRegistry);
 		if (match) return match;
 	}
@@ -1268,7 +1307,7 @@ export async function findSlowModel(
 	if (availableModels.length === 0) return undefined;
 
 	// 1. Try saved model from settings
-	if (savedModel) {
+	if (savedModel !== null && savedModel !== undefined && savedModel !== "") {
 		const match = resolveModelFromString(savedModel, availableModels, undefined, modelRegistry);
 		if (match) return match;
 	}

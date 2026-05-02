@@ -127,26 +127,36 @@ async function fetchRelease(
 
 function formatModuleMarkdown(module: ModuleResponse, release: ReleaseResponse | null): string {
 	let md = `# ${module.name}\n\n`;
-	if (module.abstract) md += `${module.abstract}\n\n`;
+	if (module.abstract !== null && module.abstract !== undefined && module.abstract !== "")
+		md += `${module.abstract}\n\n`;
 
 	md += `**Version:** ${module.version}`;
 	md += ` · **Distribution:** ${module.distribution}`;
 	md += ` · **Author:** [${module.author}](https://metacpan.org/author/${module.author})\n`;
 
 	if (release) {
-		if (release.license?.length) {
+		if (release.license?.length !== null && release.license?.length !== undefined && release.license?.length !== 0) {
 			md += `**License:** ${release.license.join(", ")}\n`;
 		}
 
 		const resources = release.metadata?.resources;
-		if (resources?.repository?.web || resources?.repository?.url) {
-			const repoUrl = resources.repository.web || resources.repository.url;
+		if (
+			resources?.repository?.web ??
+			(resources?.repository?.url !== null &&
+				resources?.repository?.url !== undefined &&
+				resources?.repository?.url !== "")
+		) {
+			const repoUrl = resources.repository.web ?? resources.repository.url;
 			md += `**Repository:** ${repoUrl}\n`;
 		}
-		if (resources?.homepage) {
+		if (resources?.homepage !== null && resources?.homepage !== undefined && resources?.homepage !== "") {
 			md += `**Homepage:** ${resources.homepage}\n`;
 		}
-		if (resources?.bugtracker?.web) {
+		if (
+			resources?.bugtracker?.web !== null &&
+			resources?.bugtracker?.web !== undefined &&
+			resources?.bugtracker?.web !== ""
+		) {
 			md += `**Issues:** ${resources.bugtracker.web}\n`;
 		}
 
@@ -154,7 +164,7 @@ function formatModuleMarkdown(module: ModuleResponse, release: ReleaseResponse |
 		const runtimeDeps = release.dependency?.filter(
 			d => d.phase === "runtime" && d.relationship === "requires" && d.module !== "perl",
 		);
-		if (runtimeDeps?.length) {
+		if (runtimeDeps?.length !== null && runtimeDeps?.length !== undefined && runtimeDeps?.length !== 0) {
 			md += `\n## Dependencies\n\n`;
 			for (const dep of runtimeDeps.slice(0, 20)) {
 				md += `- **${dep.module}**`;
@@ -174,29 +184,39 @@ function formatModuleMarkdown(module: ModuleResponse, release: ReleaseResponse |
 
 function formatReleaseMarkdown(release: ReleaseResponse): string {
 	let md = `# ${release.distribution}\n\n`;
-	if (release.abstract) md += `${release.abstract}\n\n`;
+	if (release.abstract !== null && release.abstract !== undefined && release.abstract !== "")
+		md += `${release.abstract}\n\n`;
 
 	md += `**Version:** ${release.version}`;
 	md += ` · **Author:** [${release.author}](https://metacpan.org/author/${release.author})\n`;
 
-	if (release.license?.length) {
+	if (release.license?.length !== null && release.license?.length !== undefined && release.license?.length !== 0) {
 		md += `**License:** ${release.license.join(", ")}\n`;
 	}
 
-	if (release.stat?.mtime) {
+	if (release.stat?.mtime !== null && release.stat?.mtime !== undefined && release.stat?.mtime !== 0) {
 		const date = formatIsoDate(release.stat.mtime * 1000);
 		md += `**Released:** ${date}\n`;
 	}
 
 	const resources = release.metadata?.resources;
-	if (resources?.repository?.web || resources?.repository?.url) {
-		const repoUrl = resources.repository.web || resources.repository.url;
+	if (
+		resources?.repository?.web ??
+		(resources?.repository?.url !== null &&
+			resources?.repository?.url !== undefined &&
+			resources?.repository?.url !== "")
+	) {
+		const repoUrl = resources.repository.web ?? resources.repository.url;
 		md += `**Repository:** ${repoUrl}\n`;
 	}
-	if (resources?.homepage) {
+	if (resources?.homepage !== null && resources?.homepage !== undefined && resources?.homepage !== "") {
 		md += `**Homepage:** ${resources.homepage}\n`;
 	}
-	if (resources?.bugtracker?.web) {
+	if (
+		resources?.bugtracker?.web !== null &&
+		resources?.bugtracker?.web !== undefined &&
+		resources?.bugtracker?.web !== ""
+	) {
 		md += `**Issues:** ${resources.bugtracker.web}\n`;
 	}
 
@@ -204,7 +224,7 @@ function formatReleaseMarkdown(release: ReleaseResponse): string {
 	const runtimeDeps = release.dependency?.filter(
 		d => d.phase === "runtime" && d.relationship === "requires" && d.module !== "perl",
 	);
-	if (runtimeDeps?.length) {
+	if (runtimeDeps?.length !== null && runtimeDeps?.length !== undefined && runtimeDeps?.length !== 0) {
 		md += `\n## Dependencies\n\n`;
 		for (const dep of runtimeDeps.slice(0, 20)) {
 			md += `- **${dep.module}**`;

@@ -39,7 +39,7 @@ export async function loginZai(options: OAuthController): Promise<string> {
 		placeholder: "sk-...",
 	});
 
-	if (options.signal?.aborted) {
+	if (options.signal !== undefined && options.signal.aborted) {
 		throw new Error("Login cancelled");
 	}
 

@@ -80,7 +80,7 @@ export class CommandController {
 				this.ctx.showError("No messages to dump yet.");
 				return;
 			}
-			copyToClipboard(formatted);
+			void copyToClipboard(formatted);
 			this.ctx.showStatus("Session copied to clipboard");
 		} catch (error: unknown) {
 			this.ctx.showError(`Failed to copy session: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -148,23 +148,26 @@ export class CommandController {
 						this.openInBrowser(result);
 					} else if (result) {
 						const parts: string[] = [];
-						if (result.url) parts.push(`Share URL: ${result.url}`);
-						if (result.message) parts.push(result.message);
+						if (result.url !== null && result.url !== undefined && result.url !== "")
+							parts.push(`Share URL: ${result.url}`);
+						if (result.message !== null && result.message !== undefined && result.message !== "")
+							parts.push(result.message);
 						if (parts.length > 0) this.ctx.showStatus(parts.join("\n"));
-						if (result.url) this.openInBrowser(result.url);
+						if (result.url !== null && result.url !== undefined && result.url !== "")
+							this.openInBrowser(result.url);
 					} else {
 						this.ctx.showStatus("Session shared");
 					}
 					return;
-				} catch (err) {
+				} catch (error) {
 					await restoreEditor();
-					this.ctx.showError(`Custom share failed: ${err instanceof Error ? err.message : String(err)}`);
+					this.ctx.showError(`Custom share failed: ${error instanceof Error ? error.message : String(error)}`);
 					return;
 				}
 			}
-		} catch (err) {
+		} catch (error) {
 			await cleanupTempFile();
-			this.ctx.showError(err instanceof Error ? err.message : String(err));
+			this.ctx.showError(error instanceof Error ? error.message : String(error));
 			return;
 		}
 
@@ -214,7 +217,7 @@ export class CommandController {
 
 			const gistUrl = result.stdout.toString("utf-8").trim();
 			const gistId = gistUrl.split("/").pop();
-			if (!gistId) {
+			if (gistId === null || gistId === undefined || gistId === "") {
 				this.ctx.showError("Failed to parse gist ID from gh output");
 				return;
 			}
@@ -248,7 +251,7 @@ export class CommandController {
 
 	#copyLastMessage() {
 		const text = this.ctx.session.getLastAssistantText();
-		if (!text) {
+		if (text === null || text === undefined || text === "") {
 			this.ctx.showError("No agent messages to copy yet.");
 			return;
 		}
@@ -257,7 +260,7 @@ export class CommandController {
 
 	#copyCode() {
 		const text = this.ctx.session.getLastAssistantText();
-		if (!text) {
+		if (text === null || text === undefined || text === "") {
 			this.ctx.showError("No agent messages to copy yet.");
 			return;
 		}
@@ -272,7 +275,7 @@ export class CommandController {
 
 	#copyAllCode() {
 		const text = this.ctx.session.getLastAssistantText();
-		if (!text) {
+		if (text === null || text === undefined || text === "") {
 			this.ctx.showError("No agent messages to copy yet.");
 			return;
 		}
@@ -309,7 +312,7 @@ export class CommandController {
 
 	#doCopy(content: string, label: string) {
 		try {
-			copyToClipboard(content);
+			void copyToClipboard(content);
 			this.ctx.showStatus(label);
 		} catch (error) {
 			this.ctx.showError(error instanceof Error ? error.message : String(error));
@@ -335,7 +338,7 @@ export class CommandController {
 			const authMode = resolveProviderAuthMode(this.ctx.session.modelRegistry.authStorage, model.provider);
 			const openaiWebsocketSetting = this.ctx.settings.get("providers.openaiWebsockets") ?? "auto";
 			const preferOpenAICodexWebsockets =
-				openaiWebsocketSetting === "on" ? true : openaiWebsocketSetting === "off" ? false : undefined;
+				openaiWebsocketSetting === "on" ? true : (openaiWebsocketSetting === "off" ? false : undefined);
 			const providerDetails = getProviderDetails({
 				model,
 				sessionId: stats.sessionId,
@@ -379,10 +382,10 @@ export class CommandController {
 			info += `${theme.fg("dim", "Status:")} ${theme.fg("success", "Active (Global)")}\n`;
 			info += `${theme.fg("dim", "URL:")} ${gateway.url}\n`;
 			info += `${theme.fg("dim", "PID:")} ${gateway.pid}\n`;
-			if (gateway.pythonPath) {
+			if (gateway.pythonPath !== null && gateway.pythonPath !== undefined && gateway.pythonPath !== "") {
 				info += `${theme.fg("dim", "Python:")} ${gateway.pythonPath}\n`;
 			}
-			if (gateway.venvPath) {
+			if (gateway.venvPath !== null && gateway.venvPath !== undefined && gateway.venvPath !== "") {
 				info += `${theme.fg("dim", "Venv:")} ${gateway.venvPath}\n`;
 			}
 			if (gateway.uptime !== null) {
@@ -399,9 +402,11 @@ export class CommandController {
 			info += `\n${theme.bold("LSP Servers")}\n`;
 			for (const server of this.ctx.lspServers) {
 				const statusColor =
-					server.status === "ready" ? "success" : server.status === "connecting" ? "warning" : "error";
+					server.status === "ready" ? "success" : (server.status === "connecting" ? "warning" : "error");
 				const statusText =
-					server.status === "error" && server.error ? `${server.status}: ${server.error}` : server.status;
+					server.status === "error" && server.error !== null && server.error !== undefined && server.error !== ""
+						? `${server.status}: ${server.error}`
+						: server.status;
 				info += `${theme.fg("dim", `${server.name}:`)} ${theme.fg(statusColor, statusText)} ${theme.fg("dim", `(${server.fileTypes.join(", ")})`)}\n`;
 			}
 		}
@@ -553,7 +558,7 @@ export class CommandController {
 
 		if (action === "view") {
 			const payload = await buildMemoryToolDeveloperInstructions(agentDir, this.ctx.settings);
-			if (!payload) {
+			if (payload === null || payload === undefined || payload === "") {
 				this.ctx.showWarning("Memory payload is empty (memories disabled or no memory summary found).");
 				return;
 			}
@@ -616,6 +621,7 @@ export class CommandController {
 		this.ctx.statusLine.setSessionStartTime(Date.now());
 		this.ctx.updateEditorTopBorder();
 		this.ctx.updateEditorBorderColor();
+		this.ctx.refreshSessionChrome?.();
 		this.ctx.ui.requestRender();
 
 		this.ctx.chatContainer.clear();
@@ -636,7 +642,7 @@ export class CommandController {
 	}
 
 	async handleDropCommand(): Promise<void> {
-		if (!this.ctx.sessionManager.getSessionFile()) {
+		if (this.ctx.sessionManager.getSessionFile() === undefined || this.ctx.sessionManager.getSessionFile() === "") {
 			this.ctx.showError("Nothing to drop (in-memory session)");
 			return;
 		}
@@ -662,9 +668,13 @@ export class CommandController {
 
 		this.ctx.statusLine.invalidate();
 		this.ctx.updateEditorTopBorder();
+		this.ctx.refreshSessionChrome?.();
 
 		const sessionFile = this.ctx.session.sessionFile;
-		const shortPath = sessionFile ? sessionFile.split("/").pop() : "new session";
+		const shortPath =
+			sessionFile !== null && sessionFile !== undefined && sessionFile !== ""
+				? sessionFile.split("/").pop()
+				: "new session";
 		this.ctx.chatContainer.addChild(new Spacer(1));
 		this.ctx.chatContainer.addChild(
 			new Text(`${theme.fg("accent", `${theme.status.success} Session forked to ${shortPath}`)}`, 1, 1),
@@ -708,14 +718,15 @@ export class CommandController {
 
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorTopBorder();
+			this.ctx.refreshSessionChrome?.();
 
 			this.ctx.chatContainer.addChild(new Spacer(1));
 			this.ctx.chatContainer.addChild(
 				new Text(`${theme.fg("accent", `${theme.status.success} Session moved to ${resolvedPath}`)}`, 1, 1),
 			);
 			this.ctx.ui.requestRender();
-		} catch (err) {
-			this.ctx.showError(`Move failed: ${err instanceof Error ? err.message : String(err)}`);
+		} catch (error) {
+			this.ctx.showError(`Move failed: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
@@ -730,9 +741,10 @@ export class CommandController {
 			setSessionTerminalTitle(name, this.ctx.sessionManager.getCwd(), this.ctx.sessionManager.titleSource);
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorBorderColor();
+			this.ctx.refreshSessionChrome?.();
 			this.ctx.showStatus(`Session renamed to "${name}".`);
-		} catch (err) {
-			this.ctx.showError(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
+		} catch (error) {
+			this.ctx.showError(`Rename failed: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
@@ -840,8 +852,8 @@ export class CommandController {
 			}
 			const message = `${body}\n\n---\n\n${metaLines.join("\n")}`;
 			await this.ctx.session.prompt(message);
-		} catch (err) {
-			this.ctx.showError(`Failed to load skill: ${err instanceof Error ? err.message : String(err)}`);
+		} catch (error) {
+			this.ctx.showError(`Failed to load skill: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
@@ -926,7 +938,7 @@ export class CommandController {
 			this.ctx.chatContainer.addChild(
 				new Text(`${theme.fg("accent", `${theme.status.success} New session started with handoff context`)}`, 1, 1),
 			);
-			if (result.savedPath) {
+			if (result.savedPath !== null && result.savedPath !== undefined && result.savedPath !== "") {
 				this.ctx.showStatus(`Handoff document saved to: ${result.savedPath}`);
 			}
 		} catch (error) {
@@ -992,7 +1004,7 @@ function resolveProviderAuthMode(authStorage: AuthStorage, provider: string): st
 	if (authStorage.has(provider)) {
 		return "api key";
 	}
-	if (getEnvApiKey(provider)) {
+	if (getEnvApiKey(provider) !== undefined && getEnvApiKey(provider) !== "") {
 		return "env api key";
 	}
 	if (authStorage.hasAuth(provider)) {
@@ -1031,7 +1043,7 @@ function resolveProviderUsageTotal(reports: UsageReport[]): number {
 
 function formatLimitTitle(limit: UsageLimit): string {
 	const tier = limit.scope.tier;
-	if (tier && !limit.label.toLowerCase().includes(tier.toLowerCase())) {
+	if (tier !== null && tier !== undefined && tier !== "" && !limit.label.toLowerCase().includes(tier.toLowerCase())) {
 		return `${limit.label} (${tier})`;
 	}
 	return limit.label;
@@ -1047,17 +1059,17 @@ function formatWindowSuffix(label: string, windowLabel: string, uiTheme: typeof 
 
 function formatAccountLabel(limit: UsageLimit, report: UsageReport, index: number): string {
 	const email = (report.metadata?.email as string | undefined) ?? limit.scope.accountId;
-	if (email) return email;
+	if (email !== null && email !== undefined && email !== "") return email;
 	const accountId = (report.metadata?.accountId as string | undefined) ?? limit.scope.accountId;
-	if (accountId) return accountId;
+	if (accountId !== null && accountId !== undefined && accountId !== "") return accountId;
 	return `account ${index + 1}`;
 }
 
 function formatUnlimitedReportLabel(report: UsageReport, index: number): string {
 	const email = report.metadata?.email as string | undefined;
-	if (email) return email;
+	if (email !== null && email !== undefined && email !== "") return email;
 	const accountId = report.metadata?.accountId as string | undefined;
-	if (accountId) return accountId;
+	if (accountId !== null && accountId !== undefined && accountId !== "") return accountId;
 	return `account ${index + 1}`;
 }
 
@@ -1071,7 +1083,7 @@ function formatResetShort(limit: UsageLimit, nowMs: number): string | undefined 
 function formatAccountHeader(limit: UsageLimit, report: UsageReport, index: number, nowMs: number): string {
 	const label = formatAccountLabel(limit, report, index);
 	const reset = formatResetShort(limit, nowMs);
-	if (!reset) return label;
+	if (reset === null || reset === undefined || reset === "") return label;
 	return `${label} (${reset})`;
 }
 
@@ -1238,7 +1250,7 @@ function renderUsageReports(reports: UsageReport[], uiTheme: typeof theme, nowMs
 			const bars = sortedLimits.map(limit => padColumn(renderUsageBar(limit, uiTheme), COLUMN_WIDTH));
 			lines.push(`  ${bars.join(" ")} ${formatAggregateAmount(sortedLimits)}`.trimEnd());
 			const resetText = sortedLimits.length <= 1 ? resolveResetRange(sortedLimits, nowMs) : null;
-			if (resetText) {
+			if (resetText !== null && resetText !== undefined && resetText !== "") {
 				lines.push(`  ${uiTheme.fg("dim", resetText)}`.trimEnd());
 			}
 			const notes = sortedLimits.flatMap(limit => limit.notes ?? []);
@@ -1252,7 +1264,8 @@ function renderUsageReports(reports: UsageReport[], uiTheme: typeof theme, nowMs
 		for (const report of unlimitedReports) {
 			const label = formatUnlimitedReportLabel(report, 0);
 			const tier = report.metadata?.planType as string | undefined;
-			const tierSuffix = tier ? ` ${uiTheme.fg("dim", `(${tier})`)}` : "";
+			const tierSuffix =
+				tier !== null && tier !== undefined && tier !== "" ? ` ${uiTheme.fg("dim", `(${tier})`)}` : "";
 			lines.push(
 				`${uiTheme.fg("success", uiTheme.status.success)} ${label}${tierSuffix} ${uiTheme.fg("dim", "-- no limits")}`,
 			);

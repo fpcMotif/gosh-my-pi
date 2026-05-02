@@ -19,7 +19,7 @@ function isLoopbackHostname(hostname: string): boolean {
 function resolveRedirectUri(redirectUri: string | undefined): string | undefined {
 	const configured = redirectUri;
 	const trimmed = configured?.trim();
-	if (!trimmed) return undefined;
+	if (trimmed === null || trimmed === undefined || trimmed === "") return undefined;
 	if (trimmed !== configured) {
 		throw new Error("OAuth redirect URI must not include surrounding whitespace");
 	}
@@ -32,7 +32,7 @@ function resolveRedirectUri(redirectUri: string | undefined): string | undefined
 }
 
 function parseRedirectUri(redirectUri: string | undefined): URL | undefined {
-	return redirectUri ? new URL(redirectUri) : undefined;
+	return redirectUri !== null && redirectUri !== undefined && redirectUri !== "" ? new URL(redirectUri) : undefined;
 }
 
 function getUriPort(uri: URL): number {
@@ -73,10 +73,11 @@ function resolveCallbackPort(callbackPort: number | undefined, redirectUri: stri
 
 function resolveCallbackPath(callbackPath: string | undefined, redirectUri: string | undefined): string {
 	const trimmed = callbackPath?.trim();
-	if (trimmed) return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+	if (trimmed !== null && trimmed !== undefined && trimmed !== "")
+		return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 
 	const parsed = parseRedirectUri(redirectUri);
-	if (parsed?.pathname) return parsed.pathname;
+	if (parsed?.pathname !== null && parsed?.pathname !== undefined && parsed?.pathname !== "") return parsed.pathname;
 	return CALLBACK_PATH;
 }
 
@@ -134,21 +135,31 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 	}
 
 	async generateAuthUrl(state: string, redirectUri: string): Promise<{ url: string; instructions?: string }> {
-		if (!this.#resolvedClientId) {
+		if (this.#resolvedClientId === null || this.#resolvedClientId === undefined || this.#resolvedClientId === "") {
 			await this.#tryRegisterClient(redirectUri);
 		}
 
 		const authUrl = new URL(this.config.authorizationUrl);
 		const params = authUrl.searchParams;
 
-		if (!params.get("response_type")) {
+		if (params.get("response_type") === undefined || params.get("response_type") === "") {
 			params.set("response_type", "code");
 		}
 		const existingClientId = params.get("client_id")?.trim();
-		if (this.#resolvedClientId && !existingClientId) {
+		if (
+			this.#resolvedClientId !== null &&
+			this.#resolvedClientId !== undefined &&
+			this.#resolvedClientId !== "" &&
+			(existingClientId === null || existingClientId === undefined || existingClientId === "")
+		) {
 			params.set("client_id", this.#resolvedClientId);
 		}
-		if (this.config.scopes && !params.get("scope")) {
+		if (
+			this.config.scopes !== null &&
+			this.config.scopes !== undefined &&
+			this.config.scopes !== "" &&
+			(params.get("scope") === undefined || params.get("scope") === "")
+		) {
 			params.set("scope", this.config.scopes);
 		}
 		params.set("redirect_uri", redirectUri);
@@ -163,7 +174,7 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 		// Store code verifier for token exchange
 		this.#codeVerifier = codeVerifier;
 
-		if (!params.get("client_id")) {
+		if (params.get("client_id") === undefined || params.get("client_id") === "") {
 			await this.#assertClientIdNotRequired(authUrl.toString());
 		}
 
@@ -176,19 +187,19 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 			code,
 			redirect_uri: redirectUri,
 		});
-		if (this.#resolvedClientId) {
+		if (this.#resolvedClientId !== null && this.#resolvedClientId !== undefined && this.#resolvedClientId !== "") {
 			params.set("client_id", this.#resolvedClientId);
 		}
 
 		// Add code verifier for PKCE
-		if (this.#codeVerifier) {
+		if (this.#codeVerifier !== null && this.#codeVerifier !== undefined && this.#codeVerifier !== "") {
 			params.set("code_verifier", this.#codeVerifier);
 		}
 		this.#codeVerifier = undefined;
 
 		// Add client secret if provided
 		const clientSecret = this.config.clientSecret ?? this.#registeredClientSecret;
-		if (clientSecret) {
+		if (clientSecret !== null && clientSecret !== undefined && clientSecret !== "") {
 			params.set("client_secret", clientSecret);
 		}
 
@@ -252,7 +263,7 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 
 	#resolveClientId(config: MCPOAuthConfig): string | undefined {
 		const fromConfig = config.clientId?.trim();
-		if (fromConfig) return fromConfig;
+		if (fromConfig !== null && fromConfig !== undefined && fromConfig !== "") return fromConfig;
 
 		try {
 			return new URL(config.authorizationUrl).searchParams.get("client_id") ?? undefined;
@@ -266,7 +277,7 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 	 */
 	async #tryRegisterClient(redirectUri: string): Promise<void> {
 		const registrationEndpoint = await this.#resolveRegistrationEndpoint();
-		if (!registrationEndpoint) return;
+		if (registrationEndpoint === null || registrationEndpoint === undefined || registrationEndpoint === "") return;
 
 		try {
 			const response = await fetch(registrationEndpoint, {
@@ -292,10 +303,20 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 				client_secret?: string;
 			};
 
-			if (data.client_id && data.client_id.trim() !== "") {
+			if (
+				data.client_id !== null &&
+				data.client_id !== undefined &&
+				data.client_id !== "" &&
+				data.client_id.trim() !== ""
+			) {
 				this.#resolvedClientId = data.client_id;
 			}
-			if (data.client_secret && data.client_secret.trim() !== "") {
+			if (
+				data.client_secret !== null &&
+				data.client_secret !== undefined &&
+				data.client_secret !== "" &&
+				data.client_secret.trim() !== ""
+			) {
 				this.#registeredClientSecret = data.client_secret;
 			}
 		} catch {
@@ -314,7 +335,12 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 
 			if (!response.ok) return null;
 			const metadata = (await response.json()) as { registration_endpoint?: string };
-			if (metadata.registration_endpoint && metadata.registration_endpoint.trim() !== "") {
+			if (
+				metadata.registration_endpoint !== null &&
+				metadata.registration_endpoint !== undefined &&
+				metadata.registration_endpoint !== "" &&
+				metadata.registration_endpoint.trim() !== ""
+			) {
 				return metadata.registration_endpoint;
 			}
 		} catch {
@@ -359,8 +385,9 @@ export async function refreshMCPOAuthToken(
 		grant_type: "refresh_token",
 		refresh_token: refreshToken,
 	});
-	if (clientId) params.set("client_id", clientId);
-	if (clientSecret) params.set("client_secret", clientSecret);
+	if (clientId !== null && clientId !== undefined && clientId !== "") params.set("client_id", clientId);
+	if (clientSecret !== null && clientSecret !== undefined && clientSecret !== "")
+		params.set("client_secret", clientSecret);
 
 	const response = await fetch(tokenUrl, {
 		method: "POST",

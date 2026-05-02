@@ -163,7 +163,7 @@ async function waitForPromiseWithCancellation<T>(
 	promise: Promise<T>,
 	options: Pick<KernelSessionExecutionOptions, "signal" | "deadlineMs">,
 ): Promise<T> {
-	if (options.signal?.aborted) {
+	if (options.signal !== undefined && options.signal.aborted) {
 		throw new PythonExecutionCancelledError(isTimedOutCancellation(options.signal.reason, options.signal));
 	}
 
@@ -297,9 +297,9 @@ async function readPreludeCache(state: PreludeCacheState): Promise<PreludeHelper
 	let raw: string;
 	try {
 		raw = await Bun.file(state.cachePath).text();
-	} catch (err) {
-		if (isEnoent(err)) return null;
-		logger.warn("Failed to read Python prelude cache", { path: state.cachePath, error: String(err) });
+	} catch (error) {
+		if (isEnoent(error)) return null;
+		logger.warn("Failed to read Python prelude cache", { path: state.cachePath, error: String(error) });
 		return null;
 	}
 	try {
@@ -307,8 +307,8 @@ async function readPreludeCache(state: PreludeCacheState): Promise<PreludeHelper
 		const helpers = Array.isArray(parsed) ? parsed : parsed.helpers;
 		if (!Array.isArray(helpers) || helpers.length === 0) return null;
 		return helpers;
-	} catch (err) {
-		logger.warn("Failed to parse Python prelude cache", { path: state.cachePath, error: String(err) });
+	} catch (error) {
+		logger.warn("Failed to parse Python prelude cache", { path: state.cachePath, error: String(error) });
 		return null;
 	}
 }
@@ -317,8 +317,8 @@ async function writePreludeCache(state: PreludeCacheState, helpers: PreludeHelpe
 	const payload: PreludeCachePayload = { helpers, sources: state.sources };
 	try {
 		await Bun.write(state.cachePath, JSON.stringify(payload));
-	} catch (err) {
-		logger.warn("Failed to write Python prelude cache", { path: state.cachePath, error: String(err) });
+	} catch (error) {
+		logger.warn("Failed to write Python prelude cache", { path: state.cachePath, error: String(error) });
 	}
 }
 
@@ -574,8 +574,8 @@ export async function warmPythonEnvironment(
 	const resolvedSessionId = sessionId ?? `session:${cwd}`;
 	try {
 		await logger.time("warmPython:ensureKernelAvailable", ensureKernelAvailable, cwd, { signal });
-	} catch (err: unknown) {
-		const reason = err instanceof Error ? err.message : String(err);
+	} catch (error: unknown) {
+		const reason = error instanceof Error ? error.message : String(error);
 		cachedPreludeDocs = [];
 		return { ok: false, reason, docs: [] };
 	}
@@ -588,8 +588,8 @@ export async function warmPythonEnvironment(
 				attachKernelOwner(resolvedSessionId, kernelOwnerId);
 				return { ok: true, docs: cached };
 			}
-		} catch (err) {
-			logger.warn("Failed to resolve Python prelude cache", { error: String(err) });
+		} catch (error) {
+			logger.warn("Failed to resolve Python prelude cache", { error: String(error) });
 			cacheState = null;
 		}
 	}
@@ -612,8 +612,8 @@ export async function warmPythonEnvironment(
 			},
 		);
 		return { ok: true, docs };
-	} catch (err: unknown) {
-		const reason = err instanceof Error ? err.message : String(err);
+	} catch (error: unknown) {
+		const reason = error instanceof Error ? error.message : String(error);
 		cachedPreludeDocs = [];
 		return { ok: false, reason, docs: [] };
 	}
@@ -701,20 +701,21 @@ async function createKernelSession(
 	isRetry?: boolean,
 ): Promise<KernelSession> {
 	requireRemainingTimeoutMs(options.deadlineMs);
-	const env: Record<string, string> | undefined = options.sessionFile
-		? { PI_SESSION_FILE: options.sessionFile }
-		: undefined;
+	const env: Record<string, string> | undefined =
+		options.sessionFile !== null && options.sessionFile !== undefined && options.sessionFile !== ""
+			? { PI_SESSION_FILE: options.sessionFile }
+			: undefined;
 	const startOptions = buildKernelStartOptions(cwd, env, options);
 
 	let kernel: PythonKernel;
 	try {
 		kernel = await logger.time("createKernelSession:PythonKernel.start", PythonKernel.start, startOptions);
-	} catch (err) {
-		if (!isRetry && isResourceExhaustionError(err)) {
+	} catch (error) {
+		if (isRetry !== true && isResourceExhaustionError(error)) {
 			await recoverFromResourceExhaustion();
 			return createKernelSession(sessionId, cwd, options, true);
 		}
-		throw err;
+		throw error;
 	}
 
 	const hasFallbackOwner = options.kernelOwnerId === undefined;
@@ -764,9 +765,10 @@ async function restartKernelSession(
 				});
 			}
 		}
-		const env: Record<string, string> | undefined = options.sessionFile
-			? { PI_SESSION_FILE: options.sessionFile }
-			: undefined;
+		const env: Record<string, string> | undefined =
+			options.sessionFile !== null && options.sessionFile !== undefined && options.sessionFile !== ""
+				? { PI_SESSION_FILE: options.sessionFile }
+				: undefined;
 		const startOptions = buildKernelStartOptions(cwd, env, options);
 		const kernel = await PythonKernel.start(startOptions);
 		session.kernel = kernel;
@@ -775,10 +777,10 @@ async function restartKernelSession(
 		session.kernelInvalidatedByRecovery = false;
 		session.lastUsedAt = Date.now();
 		ensureKernelHeartbeat(session);
-	} catch (err) {
+	} catch (error) {
 		session.restartCount = 0;
-		logger.warn("Failed to restart kernel", { error: err instanceof Error ? err.message : String(err) });
-		throw err;
+		logger.warn("Failed to restart kernel", { error: error instanceof Error ? error.message : String(error) });
+		throw error;
 	}
 }
 
@@ -793,7 +795,7 @@ function createKernelDisposalResultPromise(session: KernelSession, timeoutMs?: n
 		.then(() => session.kernel.shutdown(timeoutMs === undefined ? undefined : { timeoutMs }))
 		.then(
 			result => (result.confirmed ? { status: "confirmed" as const } : { status: "unconfirmed" as const }),
-			(err: unknown) => ({ status: "failed" as const, err }),
+			(error: unknown) => ({ status: "failed" as const, error }),
 		);
 }
 
@@ -895,7 +897,7 @@ async function disposeKernelSession(session: KernelSession, shutdownTimeoutMs?: 
 			? OWNER_CLEANUP_KERNEL_SHUTDOWN_TIMEOUT_MS
 			: shutdownTimeoutMs;
 
-	getOrStartKernelDisposalResultPromise(session, shutdownTimeoutMs);
+	void getOrStartKernelDisposalResultPromise(session, shutdownTimeoutMs);
 	const result = await waitForKernelSessionDisposal(session, inheritedBackgroundRetryTimeoutMs);
 	if (!result) {
 		return;
@@ -953,13 +955,13 @@ async function withKernelSession<T>(
 	options: KernelSessionExecutionOptions = {},
 ): Promise<T> {
 	let session = kernelSessions.get(sessionId);
-	if (session?.disposing) {
+	if (session?.disposing === true) {
 		session = undefined;
 	}
 	if (!session) {
 		await ensureKernelSessionCapacity(options);
 		requireRemainingTimeoutMs(options.deadlineMs);
-		if (options.signal?.aborted) {
+		if (options.signal !== undefined && options.signal.aborted) {
 			throw new PythonExecutionCancelledError(isTimedOutCancellation(options.signal.reason, options.signal));
 		}
 		session = await logger.time("kernel:createKernelSession", createKernelSession, sessionId, cwd, options);
@@ -981,9 +983,9 @@ async function withKernelSession<T>(
 			const result = await logger.time("kernel:withSession:handler", handler, session!.kernel);
 			session!.restartCount = 0;
 			return result;
-		} catch (err) {
+		} catch (error) {
 			if (!session!.dead && !session!.needsRestart && session!.kernel.isAlive()) {
-				throw err;
+				throw error;
 			}
 			await logger.time("kernel:restartKernelSession", restartKernelSession, session!, cwd, options);
 			const result = await logger.time("kernel:postRestart:handler", handler, session!.kernel);
@@ -1070,9 +1072,9 @@ async function executeWithKernel(
 			stdinRequested: false,
 			...(await sink.dump()),
 		};
-	} catch (err) {
-		if (isCancellationError(err) || options?.signal?.aborted) {
-			const timedOut = isTimedOutCancellation(err, options?.signal);
+	} catch (error) {
+		if (isCancellationError(error) || (options?.signal !== undefined && options?.signal.aborted)) {
+			const timedOut = isTimedOutCancellation(error, options?.signal);
 			return {
 				exitCode: undefined,
 				cancelled: true,
@@ -1081,7 +1083,7 @@ async function executeWithKernel(
 				...(await sink.dump(timedOut ? formatTimeoutAnnotation(executionTimeoutMs) : undefined)),
 			};
 		}
-		const error = err instanceof Error ? err : new Error(String(err));
+		const error = error instanceof Error ? error : new Error(String(error));
 		logger.error("Python execution failed", { error: error.message });
 		throw error;
 	}
@@ -1099,13 +1101,13 @@ export async function executePython(code: string, options?: PythonExecutorOption
 	const cwd = options?.cwd ?? getProjectDir();
 	const deadlineMs = getExecutionDeadlineMs(options);
 	const executionOptions: PythonExecutorOptions = {
-		...(options ?? {}),
+		...options,
 		deadlineMs,
 	};
 
 	try {
 		requireRemainingTimeoutMs(deadlineMs);
-		if (executionOptions.signal?.aborted) {
+		if (executionOptions.signal !== undefined && executionOptions.signal.aborted) {
 			throw new PythonExecutionCancelledError(
 				isTimedOutCancellation(executionOptions.signal.reason, executionOptions.signal),
 			);
@@ -1117,7 +1119,10 @@ export async function executePython(code: string, options?: PythonExecutorOption
 		const sessionFile = executionOptions.sessionFile;
 
 		if (kernelMode === "per-call") {
-			const env: Record<string, string> | undefined = sessionFile ? { PI_SESSION_FILE: sessionFile } : undefined;
+			const env: Record<string, string> | undefined =
+				sessionFile !== null && sessionFile !== undefined && sessionFile !== ""
+					? { PI_SESSION_FILE: sessionFile }
+					: undefined;
 			requireRemainingTimeoutMs(deadlineMs);
 			const startOptions = buildKernelStartOptions(cwd, env, executionOptions);
 			const kernel = await PythonKernel.start(startOptions);
@@ -1129,7 +1134,7 @@ export async function executePython(code: string, options?: PythonExecutorOption
 		}
 
 		const sessionId = executionOptions.sessionId ?? `session:${cwd}`;
-		if (executionOptions.reset) {
+		if (executionOptions.reset === true) {
 			const existing = kernelSessions.get(sessionId);
 			if (existing) {
 				await disposeKernelSession(existing);
@@ -1144,10 +1149,10 @@ export async function executePython(code: string, options?: PythonExecutorOption
 			async kernel => executeWithKernel(kernel, code, executionOptions),
 			executionOptions,
 		);
-	} catch (err) {
-		if (isCancellationError(err) || executionOptions.signal?.aborted) {
-			return createCancelledPythonResult(isTimedOutCancellation(err, executionOptions.signal));
+	} catch (error) {
+		if (isCancellationError(error) || (executionOptions.signal !== undefined && executionOptions.signal.aborted)) {
+			return createCancelledPythonResult(isTimedOutCancellation(error, executionOptions.signal));
 		}
-		throw err;
+		throw error;
 	}
 }

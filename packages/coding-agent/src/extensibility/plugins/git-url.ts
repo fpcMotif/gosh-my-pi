@@ -50,7 +50,7 @@ function extractGitLab(pathname: string, _hash: string): { user: string; project
 	if (path.includes("/-/") || path.includes("/archive.tar.gz")) return null;
 	const segments = path.split("/");
 	let project = segments.pop();
-	if (!project) return null;
+	if (project === null || project === undefined || project === "") return null;
 	project = project.replace(/\.git$/, "");
 	const user = segments.join("/");
 	if (!user || !project) return null;
@@ -151,7 +151,7 @@ function tryKnownHostSource(
 ): GitSource | null {
 	const info = tryKnownHost(candidate);
 	if (!info) return null;
-	if (split.ref && info.project.includes("@")) return null;
+	if (split.ref !== null && split.ref !== undefined && split.ref !== "" && info.project.includes("@")) return null;
 	return {
 		type: "git",
 		repo: stripUrlCredentials(repoUrl),
@@ -259,7 +259,10 @@ export function parseGitUrl(source: string): GitSource | null {
 	}
 
 	for (const candidate of directCandidates) {
-		const withRef = split.ref ? `${candidate.replace(/#.*$/, "")}#${split.ref}` : candidate;
+		const withRef =
+			split.ref !== null && split.ref !== undefined && split.ref !== ""
+				? `${candidate.replace(/#.*$/, "")}#${split.ref}`
+				: candidate;
 		const needsHttps =
 			!split.repo.startsWith("http://") &&
 			!split.repo.startsWith("https://") &&
@@ -272,7 +275,10 @@ export function parseGitUrl(source: string): GitSource | null {
 
 	// Try with https:// prefix for bare host/user/repo shorthand
 	if (!split.repo.includes("://") && !split.repo.startsWith("git@")) {
-		const httpsCandidate = split.ref ? `https://${split.repo}#${split.ref}` : `https://${url}`;
+		const httpsCandidate =
+			split.ref !== null && split.ref !== undefined && split.ref !== ""
+				? `https://${split.repo}#${split.ref}`
+				: `https://${url}`;
 		const result = tryKnownHostSource(split, httpsCandidate, `https://${split.repo}`);
 		if (result) return result;
 	}

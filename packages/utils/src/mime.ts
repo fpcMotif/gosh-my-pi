@@ -45,6 +45,36 @@ function parsePngMetadata(header: Uint8Array): ImageMetadata | null {
 	return { mimeType: "image/png", width, height };
 }
 
+function isMarkerStandalone(marker: number): boolean {
+	return marker === 0xd8 || marker === 0xd9 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7);
+}
+
+function isStartOfFrameMarker(marker: number): boolean {
+	return marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+}
+
+function readJpegMarkerOffset(header: Uint8Array, offset: number): number {
+	let markerOffset = offset + 1;
+	while (markerOffset < header.length && header[markerOffset] === 0xff) {
+		markerOffset += 1;
+	}
+	return markerOffset;
+}
+
+function readJpegSofMetadata(header: Uint8Array, view: DataView, segmentOffset: number): ImageMetadata | null {
+	if (segmentOffset + 7 >= header.length) return null;
+	const height = view.getUint16(segmentOffset + 3, false);
+	const width = view.getUint16(segmentOffset + 5, false);
+	const channels = header[segmentOffset + 7];
+	return {
+		mimeType: "image/jpeg",
+		width,
+		height,
+		channels: Number.isFinite(channels) ? channels : undefined,
+		hasAlpha: false,
+	};
+}
+
 function parseJpegMetadata(header: Uint8Array): ImageMetadata | null {
 	if (!magicEquals(header, 0, JPEG_MAGIC)) return null;
 	if (header.length < 4) return { mimeType: "image/jpeg" };
@@ -57,15 +87,12 @@ function parseJpegMetadata(header: Uint8Array): ImageMetadata | null {
 			continue;
 		}
 
-		let markerOffset = offset + 1;
-		while (markerOffset < header.length && header[markerOffset] === 0xff) {
-			markerOffset += 1;
-		}
+		const markerOffset = readJpegMarkerOffset(header, offset);
 		if (markerOffset >= header.length) break;
 
 		const marker = header[markerOffset];
 		const segmentOffset = markerOffset + 1;
-		if (marker === 0xd8 || marker === 0xd9 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+		if (isMarkerStandalone(marker)) {
 			offset = segmentOffset;
 			continue;
 		}
@@ -74,19 +101,10 @@ function parseJpegMetadata(header: Uint8Array): ImageMetadata | null {
 		const segmentLength = view.getUint16(segmentOffset, false);
 		if (segmentLength < 2) break;
 
-		const isStartOfFrame = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
-		if (isStartOfFrame) {
-			if (segmentOffset + 7 >= header.length) break;
-			const height = view.getUint16(segmentOffset + 3, false);
-			const width = view.getUint16(segmentOffset + 5, false);
-			const channels = header[segmentOffset + 7];
-			return {
-				mimeType: "image/jpeg",
-				width,
-				height,
-				channels: Number.isFinite(channels) ? channels : undefined,
-				hasAlpha: false,
-			};
+		if (isStartOfFrameMarker(marker)) {
+			const sof = readJpegSofMetadata(header, view, segmentOffset);
+			if (sof !== null) return sof;
+			break;
 		}
 
 		offset = segmentOffset + segmentLength;

@@ -62,17 +62,17 @@ describe("ExitPlanModeTool", () => {
 		await fs.rm(path.join(artifactsDir, "local", "PLAN.md"), { force: true });
 		const tool = new ExitPlanModeTool(createSession());
 
-		await expect(tool.execute("call-missing", { title: "WP_MIGRATION_PLAN" })).rejects.toThrow(
+		expect(tool.execute("call-missing", { title: "WP_MIGRATION_PLAN" })).rejects.toThrow(
 			"Plan file not found at local://PLAN.md. Write the finalized plan to local://PLAN.md before calling exit_plan_mode.",
 		);
 	});
 
 	it("rejects invalid title characters", async () => {
 		const tool = new ExitPlanModeTool(createSession());
-		await expect(tool.execute("call-3", { title: "../bad" })).rejects.toThrow(
+		expect(tool.execute("call-3", { title: "../bad" })).rejects.toThrow(
 			"Title must not contain path separators or '..'.",
 		);
-		await expect(tool.execute("call-4", { title: "bad name" })).rejects.toThrow(
+		expect(tool.execute("call-4", { title: "bad name" })).rejects.toThrow(
 			"Title may only contain letters, numbers, underscores, or hyphens.",
 		);
 	});

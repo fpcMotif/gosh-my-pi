@@ -29,13 +29,13 @@ export class RowSplit implements Component {
 	#left: Component;
 	#right: Component;
 	#leftWidth: number;
-	#separator: string;
+	#separator: string | undefined;
 
 	constructor(left: Component, right: Component, options: RowSplitOptions) {
 		this.#left = left;
 		this.#right = right;
 		this.#leftWidth = Math.max(0, options.leftWidth | 0);
-		this.#separator = options.separator ?? "";
+		this.#separator = options.separator;
 	}
 
 	setLeftWidth(width: number): void {
@@ -50,13 +50,13 @@ export class RowSplit implements Component {
 	render(width: number): string[] {
 		if (width <= 0) return [];
 
-		// Render the configured separator with the dim-rule fallback only when
-		// the caller supplied no override and there's room to draw it.
-		const sepRaw = this.#separator || (width >= 4 ? theme.boxRound.vertical : "");
+		// Render the default separator only when the caller supplied no override and
+		// there's room to draw it. An explicit empty string intentionally omits it.
+		const sepRaw = this.#separator === undefined ? (width >= 4 ? theme.boxRound.vertical : "") : this.#separator;
 		const sepWidth = visibleWidth(sepRaw);
 		const styledSep = sepRaw === theme.boxRound.vertical ? theme.fg("dim", sepRaw) : sepRaw;
 
-		const leftCol = Math.min(this.#leftWidth, Math.max(0, width - sepWidth - 1));
+		const leftCol = Math.min(this.#leftWidth, Math.max(0, width - sepWidth));
 		const rightCol = Math.max(0, width - leftCol - sepWidth);
 
 		const leftLines = leftCol > 0 ? this.#left.render(leftCol) : [];

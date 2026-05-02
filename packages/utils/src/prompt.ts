@@ -75,101 +75,124 @@ function replaceCommonAsciiSymbols(line: string): string {
 		.replace(/>=/g, "≥");
 }
 
+interface FormatState {
+	lines: string[];
+	result: string[];
+	inCodeBlock: boolean;
+	topLevelTags: string[];
+}
+
+interface FormatFlags {
+	isPreRender: boolean;
+	replaceAsciiSymbols: boolean;
+	shouldBoldRfc2119: boolean;
+}
+
+function shouldDropBlankLine(state: FormatState, isPreRender: boolean, currentIdx: number): boolean {
+	const { result, lines } = state;
+	const prevLine = result[result.length - 1]?.trim() ?? "";
+	const nextLine = lines[currentIdx + 1]?.trim() ?? "";
+	if (LIST_ITEM.test(nextLine)) return true;
+	if (OPENING_XML.test(prevLine) || (isPreRender && OPENING_HBS.test(prevLine))) return true;
+	if (CLOSING_XML.test(nextLine) || (isPreRender && CLOSING_HBS.test(nextLine))) return true;
+	return prevLine === "";
+}
+
+function compactTableLine(line: string, trimmedStart: string): string {
+	if (TABLE_SEP.test(trimmedStart)) {
+		const leadingWhitespace = line.slice(0, line.length - trimmedStart.length);
+		return `${leadingWhitespace}${compactTableSep(trimmedStart)}`;
+	}
+	if (TABLE_ROW.test(trimmedStart)) {
+		const leadingWhitespace = line.slice(0, line.length - trimmedStart.length);
+		return `${leadingWhitespace}${compactTableRow(trimmedStart)}`;
+	}
+	return line;
+}
+
+function trackXmlTags(state: FormatState, line: string, trimmedStart: string): void {
+	const isOpeningXml = OPENING_XML.test(trimmedStart) && !trimmedStart.endsWith("/>");
+	if (isOpeningXml && line.length === trimmedStart.length) {
+		const match = OPENING_XML.exec(trimmedStart);
+		if (match) state.topLevelTags.push(match[1]);
+	}
+	const closingMatch = CLOSING_XML.exec(trimmedStart);
+	if (closingMatch) {
+		const tagName = closingMatch[1];
+		const tags = state.topLevelTags;
+		if (tags.length > 0 && tags[tags.length - 1] === tagName) {
+			tags.pop();
+		}
+	}
+}
+
+function popTrailingBlanks(result: string[]): void {
+	while (result.length > 0 && result[result.length - 1].trim() === "") {
+		result.pop();
+	}
+}
+
+function transformLineForFormat(line: string, trimmedStart: string, flags: FormatFlags): string {
+	const isClosingXml = CLOSING_XML.test(trimmedStart);
+	const isHbsMarker = flags.isPreRender && trimmedStart.startsWith("{{");
+	let next = isClosingXml || isHbsMarker ? line : compactTableLine(line, trimmedStart);
+	if (flags.shouldBoldRfc2119) next = boldRfc2119Keywords(next);
+	return next;
+}
+
+function processFormatLine(state: FormatState, flags: FormatFlags, idx: number): void {
+	let line = state.lines[idx].trimEnd();
+	let trimmedStart = line.trimStart();
+	if (trimmedStart.startsWith("```") || trimmedStart.startsWith("~~~")) {
+		state.inCodeBlock = !state.inCodeBlock;
+		state.result.push(line);
+		return;
+	}
+	if (state.inCodeBlock) {
+		state.result.push(line);
+		return;
+	}
+
+	if (flags.replaceAsciiSymbols) line = replaceCommonAsciiSymbols(line);
+	trimmedStart = line.trimStart();
+	const trimmed = line.trim();
+
+	trackXmlTags(state, line, trimmedStart);
+	line = transformLineForFormat(line, trimmedStart, flags);
+
+	if (trimmed === "" && shouldDropBlankLine(state, flags.isPreRender, idx)) return;
+
+	if (CLOSING_XML.test(trimmed) || (flags.isPreRender && CLOSING_HBS.test(trimmed))) {
+		popTrailingBlanks(state.result);
+	}
+
+	state.result.push(line);
+}
+
 export function format(content: string, options: PromptFormatOptions = {}): string {
 	const {
 		renderPhase = "post-render",
 		replaceAsciiSymbols = false,
 		boldRfc2119Keywords: shouldBoldRfc2119 = false,
 	} = options;
-	const isPreRender = renderPhase === "pre-render";
-	const lines = content.split("\n");
-	const result: string[] = [];
-	let inCodeBlock = false;
-	const topLevelTags: string[] = [];
+	const flags: FormatFlags = {
+		isPreRender: renderPhase === "pre-render",
+		replaceAsciiSymbols,
+		shouldBoldRfc2119,
+	};
+	const state: FormatState = {
+		lines: content.split("\n"),
+		result: [],
+		inCodeBlock: false,
+		topLevelTags: [],
+	};
 
-	for (let i = 0; i < lines.length; i++) {
-		let line = lines[i].trimEnd();
-		let trimmedStart = line.trimStart();
-		if (trimmedStart.startsWith("```") || trimmedStart.startsWith("~~~")) {
-			inCodeBlock = !inCodeBlock;
-			result.push(line);
-			continue;
-		}
-
-		if (inCodeBlock) {
-			result.push(line);
-			continue;
-		}
-
-		if (replaceAsciiSymbols) {
-			line = replaceCommonAsciiSymbols(line);
-		}
-		trimmedStart = line.trimStart();
-		const trimmed = line.trim();
-
-		const isOpeningXml = OPENING_XML.test(trimmedStart) && !trimmedStart.endsWith("/>");
-		if (isOpeningXml && line.length === trimmedStart.length) {
-			const match = OPENING_XML.exec(trimmedStart);
-			if (match) topLevelTags.push(match[1]);
-		}
-
-		const closingMatch = CLOSING_XML.exec(trimmedStart);
-		if (closingMatch) {
-			const tagName = closingMatch[1];
-			if (topLevelTags.length > 0 && topLevelTags[topLevelTags.length - 1] === tagName) {
-				topLevelTags.pop();
-			}
-		} else if (isPreRender && trimmedStart.startsWith("{{")) {
-			/* keep indentation as-is in pre-render for Handlebars markers */
-		} else if (TABLE_SEP.test(trimmedStart)) {
-			const leadingWhitespace = line.slice(0, line.length - trimmedStart.length);
-			line = `${leadingWhitespace}${compactTableSep(trimmedStart)}`;
-		} else if (TABLE_ROW.test(trimmedStart)) {
-			const leadingWhitespace = line.slice(0, line.length - trimmedStart.length);
-			line = `${leadingWhitespace}${compactTableRow(trimmedStart)}`;
-		}
-
-		if (shouldBoldRfc2119) {
-			line = boldRfc2119Keywords(line);
-		}
-
-		const isBlank = trimmed === "";
-		if (isBlank) {
-			const prevLine = result[result.length - 1]?.trim() ?? "";
-			const nextLine = lines[i + 1]?.trim() ?? "";
-
-			if (LIST_ITEM.test(nextLine)) {
-				continue;
-			}
-
-			if (OPENING_XML.test(prevLine) || (isPreRender && OPENING_HBS.test(prevLine))) {
-				continue;
-			}
-
-			if (CLOSING_XML.test(nextLine) || (isPreRender && CLOSING_HBS.test(nextLine))) {
-				continue;
-			}
-
-			const prevIsBlank = prevLine === "";
-			if (prevIsBlank) {
-				continue;
-			}
-		}
-
-		if (CLOSING_XML.test(trimmed) || (isPreRender && CLOSING_HBS.test(trimmed))) {
-			while (result.length > 0 && result[result.length - 1].trim() === "") {
-				result.pop();
-			}
-		}
-
-		result.push(line);
+	for (let i = 0; i < state.lines.length; i++) {
+		processFormatLine(state, flags, i);
 	}
 
-	while (result.length > 0 && result[result.length - 1].trim() === "") {
-		result.pop();
-	}
-
-	return result.join("\n");
+	popTrailingBlanks(state.result);
+	return state.result.join("\n");
 }
 
 export interface TemplateContext extends Record<string, unknown> {
@@ -220,7 +243,7 @@ handlebars.registerHelper("join", (context: unknown[], separator?: unknown): str
  * {{default value "fallback"}}
  * Returns the value if truthy, otherwise returns the fallback.
  */
-handlebars.registerHelper("default", (value: unknown, defaultValue: unknown): unknown => value || defaultValue);
+handlebars.registerHelper("default", (value: unknown, defaultValue: unknown): unknown => value ?? defaultValue);
 
 /**
  * {{pluralize count "item" "items"}}
@@ -249,7 +272,7 @@ handlebars.registerHelper(
 			"<=": (a, b) => (a as number) <= (b as number),
 		};
 		const fn = ops[operator];
-		if (!fn) return options.inverse(this);
+		if (fn === undefined) return options.inverse(this);
 		return fn(lhs, rhs) ? options.fn(this) : options.inverse(this);
 	},
 );
@@ -314,8 +337,14 @@ handlebars.registerHelper("xml", function (this: unknown, tag: string, options: 
  * Escapes XML special characters: & < > "
  */
 handlebars.registerHelper("escapeXml", (value: unknown): string => {
-	if (value == null) return "";
-	return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+	if (value === null || value === undefined) return "";
+	const str =
+		typeof value === "string"
+			? value
+			: (typeof value === "number" || typeof value === "boolean"
+				? String(value)
+				: JSON.stringify(value));
+	return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 });
 
 /**
@@ -354,7 +383,7 @@ handlebars.registerHelper(
 			found = collection.has(item);
 		} else if (collection instanceof Map) {
 			found = collection.has(item);
-		} else if (collection && typeof collection === "object") {
+		} else if (collection !== null && collection !== undefined && typeof collection === "object") {
 			if (typeof item === "string" || typeof item === "number" || typeof item === "symbol") {
 				found = item in collection;
 			}
@@ -378,7 +407,7 @@ handlebars.registerHelper("includes", (collection: unknown, item: unknown): bool
  * {{not value}}
  * Returns logical NOT of value. For use in subexpressions.
  */
-handlebars.registerHelper("not", (value: unknown): boolean => !value);
+handlebars.registerHelper("not", (value: unknown): boolean => value === null || value === undefined);
 
 handlebars.registerHelper("jsonStringify", (value: unknown): string => JSON.stringify(value));
 

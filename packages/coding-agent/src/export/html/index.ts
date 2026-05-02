@@ -118,7 +118,8 @@ export async function exportSessionToHtml(
 	const opts: ExportOptions = typeof options === "string" ? { outputPath: options } : options || {};
 
 	const sessionFile = sm.getSessionFile();
-	if (!sessionFile) throw new Error("Cannot export in-memory session to HTML");
+	if (sessionFile === null || sessionFile === undefined || sessionFile === "")
+		throw new Error("Cannot export in-memory session to HTML");
 
 	const sessionData: SessionData = {
 		header: sm.getHeader(),
@@ -129,7 +130,7 @@ export async function exportSessionToHtml(
 	};
 
 	const html = await generateHtml(sessionData, opts.themeName);
-	const outputPath = opts.outputPath || `${APP_NAME}-session-${path.basename(sessionFile, ".jsonl")}.html`;
+	const outputPath = opts.outputPath ?? `${APP_NAME}-session-${path.basename(sessionFile, ".jsonl")}.html`;
 
 	await Bun.write(outputPath, html);
 	return outputPath;
@@ -142,9 +143,9 @@ export async function exportFromFile(inputPath: string, options?: ExportOptions 
 	let sm: SessionManager;
 	try {
 		sm = await SessionManager.open(inputPath);
-	} catch (err) {
-		if (isEnoent(err)) throw new Error(`File not found: ${inputPath}`);
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) throw new Error(`File not found: ${inputPath}`);
+		throw error;
 	}
 
 	const sessionData: SessionData = {
@@ -154,7 +155,7 @@ export async function exportFromFile(inputPath: string, options?: ExportOptions 
 	};
 
 	const html = await generateHtml(sessionData, opts.themeName);
-	const outputPath = opts.outputPath || `${APP_NAME}-session-${path.basename(inputPath, ".jsonl")}.html`;
+	const outputPath = opts.outputPath ?? `${APP_NAME}-session-${path.basename(inputPath, ".jsonl")}.html`;
 
 	await Bun.write(outputPath, html);
 	return outputPath;

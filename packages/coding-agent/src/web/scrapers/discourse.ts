@@ -62,26 +62,35 @@ function formatAuthor(user?: DiscourseUser | null): string {
 	if (!user) return "unknown";
 	const name = user.name?.trim();
 	const username = user.username?.trim();
-	if (name && username && name !== username) return `${name} (@${username})`;
-	if (username) return `@${username}`;
-	if (name) return name;
+	if (
+		name !== null &&
+		name !== undefined &&
+		name !== "" &&
+		username !== null &&
+		username !== undefined &&
+		username !== "" &&
+		name !== username
+	)
+		return `${name} (@${username})`;
+	if (username !== null && username !== undefined && username !== "") return `@${username}`;
+	if (name !== null && name !== undefined && name !== "") return name;
 	return "unknown";
 }
 
 function formatCategory(topic: DiscourseTopic): string | null {
 	const parts: string[] = [];
 	const name = topic.category?.name ?? topic.category_slug;
-	if (name) parts.push(name);
+	if (name !== null && name !== undefined && name !== "") parts.push(name);
 	const id = topic.category?.id ?? topic.category_id;
-	if (id != null) parts.push(`#${id}`);
+	if (id !== null) parts.push(`#${id}`);
 	return parts.length ? parts.join(" ") : null;
 }
 
 function formatPostBody(post: DiscoursePost): string {
 	const raw = post.raw?.trim();
-	if (raw) return raw;
+	if (raw !== null && raw !== undefined && raw !== "") return raw;
 	const cooked = post.cooked?.trim();
-	if (!cooked) return "";
+	if (cooked === null || cooked === undefined || cooked === "") return "";
 	return htmlToBasicMarkdown(cooked);
 }
 
@@ -117,19 +126,19 @@ export const handleDiscourse: SpecialHandler = async (
 		let requestedPost: DiscoursePost | null = null;
 		let topicId = topicMatch?.topicId ?? null;
 
-		if (!topicId && postMatch) {
+		if ((topicId === null || topicId === undefined || topicId === "") && postMatch) {
 			const postResult = await loadPage(buildPostUrl(baseUrl, postMatch.postId), { timeout, signal });
 			if (!postResult.ok) return null;
 
 			const postData = tryParseJson<DiscoursePostResponse>(postResult.content);
 			if (!postData) return null;
 
-			if (!postData.topic_id) return null;
+			if (postData.topic_id === null || postData.topic_id === undefined || postData.topic_id === 0) return null;
 			topicId = String(postData.topic_id);
 			requestedPost = postData;
 		}
 
-		if (!topicId) return null;
+		if (topicId === null || topicId === undefined || topicId === "") return null;
 
 		const topicResult = await loadPage(buildTopicUrl(baseUrl, topicId), { timeout, signal });
 		if (!topicResult.ok) return null;
@@ -137,8 +146,8 @@ export const handleDiscourse: SpecialHandler = async (
 		const topic = tryParseJson<DiscourseTopic>(topicResult.content);
 		if (!topic) return null;
 
-		const title = topic.title || topic.fancy_title;
-		if (!title) return null;
+		const title = topic.title ?? topic.fancy_title;
+		if (title === null || title === undefined || title === "") return null;
 
 		const fetchedAt = new Date().toISOString();
 
@@ -150,28 +159,34 @@ export const handleDiscourse: SpecialHandler = async (
 		let md = `# ${title}\n\n`;
 
 		const metaParts: string[] = [];
-		if (topic.id != null) metaParts.push(`**Topic ID:** ${topic.id}`);
-		if (topic.posts_count != null) metaParts.push(`**Posts:** ${topic.posts_count}`);
-		if (topic.views != null) metaParts.push(`**Views:** ${topic.views}`);
-		if (topic.like_count != null) metaParts.push(`**Likes:** ${topic.like_count}`);
+		if (topic.id !== null) metaParts.push(`**Topic ID:** ${topic.id}`);
+		if (topic.posts_count !== null) metaParts.push(`**Posts:** ${topic.posts_count}`);
+		if (topic.views !== null) metaParts.push(`**Views:** ${topic.views}`);
+		if (topic.like_count !== null) metaParts.push(`**Likes:** ${topic.like_count}`);
 		if (metaParts.length) md += `${metaParts.join(" | ")}\n`;
 
 		const categoryLabel = formatCategory(topic);
-		if (categoryLabel) md += `**Category:** ${categoryLabel}\n`;
-		if (topic.tags?.length) md += `**Tags:** ${topic.tags.join(", ")}\n`;
+		if (categoryLabel !== null && categoryLabel !== undefined && categoryLabel !== "")
+			md += `**Category:** ${categoryLabel}\n`;
+		if (topic.tags?.length !== null && topic.tags?.length !== undefined && topic.tags?.length !== 0)
+			md += `**Tags:** ${topic.tags.join(", ")}\n`;
 
 		const createdBy = formatAuthor(topic.details?.created_by ?? null);
-		if (createdBy !== "unknown" || topic.created_at) {
+		if (
+			createdBy !== "unknown" ||
+			(topic.created_at !== null && topic.created_at !== undefined && topic.created_at !== "")
+		) {
 			md += `**Created by:** ${createdBy} - ${formatIsoDate(topic.created_at)}\n`;
 		}
 
 		md += "\n";
 
-		const description = topic.excerpt
-			? htmlToBasicMarkdown(topic.excerpt)
-			: posts.length
-				? formatPostBody(posts[0])
-				: "";
+		const description =
+			topic.excerpt !== null && topic.excerpt !== undefined && topic.excerpt !== ""
+				? htmlToBasicMarkdown(topic.excerpt)
+				: (posts.length
+					? formatPostBody(posts[0])
+					: "");
 		if (description) {
 			md += `## Description\n\n${description}\n\n`;
 		}
@@ -183,7 +198,7 @@ export const handleDiscourse: SpecialHandler = async (
 				const date = formatIsoDate(post.created_at);
 				const likes = post.like_count ?? 0;
 				const content = formatPostBody(post);
-				const postLabel = post.post_number != null ? `Post ${post.post_number}` : `Post ${post.id}`;
+				const postLabel = post.post_number !== null ? `Post ${post.post_number}` : `Post ${post.id}`;
 
 				md += `### ${postLabel} - ${author} - ${date} - Likes: ${likes}\n\n`;
 				md += content ? `${content}\n\n---\n\n` : "_No content available._\n\n---\n\n";

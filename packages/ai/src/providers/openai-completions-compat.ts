@@ -1,6 +1,5 @@
 import type { Model, OpenAICompat } from "../types";
 
-type OpenAIReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 type ResolvedToolStrictMode = NonNullable<OpenAICompat["toolStrictMode"]> | "mixed";
 
 export type ResolvedOpenAICompat = Required<
@@ -13,14 +12,7 @@ export type ResolvedOpenAICompat = Required<
 };
 
 function detectStrictModeSupport(provider: string, baseUrl: string): boolean {
-	if (
-		provider === "openai" ||
-		provider === "openrouter" ||
-		provider === "cerebras" ||
-		provider === "together" ||
-		provider === "github-copilot" ||
-		provider === "zenmux"
-	) {
+	if (provider === "openai") {
 		return true;
 	}
 
@@ -28,134 +20,52 @@ function detectStrictModeSupport(provider: string, baseUrl: string): boolean {
 	return (
 		normalizedBaseUrl.includes("api.openai.com") ||
 		normalizedBaseUrl.includes(".openai.azure.com") ||
-		normalizedBaseUrl.includes("models.inference.ai.azure.com") ||
-		normalizedBaseUrl.includes("api.cerebras.ai") ||
-		normalizedBaseUrl.includes("api.together.xyz") ||
-		normalizedBaseUrl.includes("openrouter.ai") ||
-		normalizedBaseUrl.includes("api.deepseek.com") ||
-		normalizedBaseUrl.includes("deepseek.com")
+		normalizedBaseUrl.includes("models.inference.ai.azure.com")
 	);
 }
 
 /**
  * Detect compatibility settings from provider and baseUrl for known providers.
- * Provider takes precedence over URL-based detection since it's explicitly configured.
- * @param model - The model configuration
- * @param resolvedBaseUrl - Optional resolved base URL (e.g., after GitHub Copilot proxy-ep resolution).
- *                           If provided, this takes precedence over model.baseUrl for URL-based checks.
  */
 export function detectOpenAICompat(model: Model<"openai-completions">, resolvedBaseUrl?: string): ResolvedOpenAICompat {
 	const provider = model.provider;
-	// Use resolvedBaseUrl if provided (e.g., after GitHub Copilot proxy-ep resolution)
 	const baseUrl = resolvedBaseUrl ?? model.baseUrl;
 
-	const isCerebras = provider === "cerebras" || baseUrl.includes("cerebras.ai");
 	const isZai = provider === "zai" || baseUrl.includes("api.z.ai");
-	const isKilo = provider === "kilo" || baseUrl.includes("api.kilo.ai");
 	const isKimiModel = model.id.includes("moonshotai/kimi") || /^kimi[-.]/i.test(model.id);
-	const isAnthropicModel =
-		provider === "anthropic" ||
-		baseUrl.includes("api.anthropic.com") ||
-		/(^|\/)claude[-.]/i.test(model.id) ||
-		/(^|\/)anthropic\//i.test(model.id);
-	const isAlibaba = provider === "alibaba-coding-plan" || baseUrl.includes("dashscope");
-	const isQwen = model.id.toLowerCase().includes("qwen");
-	// DeepSeek V4 (and other reasoning-capable DeepSeek models) reject follow-up requests in
-	// thinking mode unless prior assistant tool-call turns include `reasoning_content`. The
-	// upstream model is reachable through many OpenAI-compat hosts (api.deepseek.com, Deepinfra,
-	// Kilo, NVIDIA NIM, Zenmux, OpenRouter, …), so we match by model id/name as well as by
-	// provider/baseUrl. The flag is gated by `model.reasoning` because the invariant only
-	// applies when thinking mode is actually engaged.
-	const lowerId = model.id.toLowerCase();
-	const lowerName = (model.name ?? "").toLowerCase();
-	const isDeepseekFamily =
-		provider === "deepseek" ||
-		baseUrl.includes("deepseek.com") ||
-		lowerId.includes("deepseek") ||
-		lowerName.includes("deepseek");
 
-	const isNonStandard =
-		isCerebras ||
-		provider === "xai" ||
-		baseUrl.includes("api.x.ai") ||
-		provider === "mistral" ||
-		baseUrl.includes("mistral.ai") ||
-		baseUrl.includes("chutes.ai") ||
-		baseUrl.includes("deepseek.com") ||
-		baseUrl.includes("fireworks.ai") ||
-		isAlibaba ||
-		isZai ||
-		isKilo ||
-		isQwen ||
-		provider === "opencode-zen" ||
-		provider === "opencode-go" ||
-		baseUrl.includes("opencode.ai");
+	const isNonStandard = isZai;
 
-	const useMaxTokens =
-		provider === "mistral" ||
-		baseUrl.includes("mistral.ai") ||
-		baseUrl.includes("chutes.ai") ||
-		baseUrl.includes("fireworks.ai");
-	const isGrok = provider === "xai" || baseUrl.includes("api.x.ai");
-	const isMistral = provider === "mistral" || baseUrl.includes("mistral.ai");
-
-	const reasoningEffortMap: NonNullable<OpenAICompat["reasoningEffortMap"]> =
-		provider === "groq" && model.id === "qwen/qwen3-32b"
-			? ({
-					minimal: "default",
-					low: "default",
-					medium: "default",
-					high: "default",
-					xhigh: "default",
-				} satisfies Partial<Record<OpenAIReasoningEffort, string>>)
-			: {};
+	const reasoningEffortMap: NonNullable<OpenAICompat["reasoningEffortMap"]> = {};
 
 	return {
 		supportsStore: !isNonStandard,
 		supportsDeveloperRole: !isNonStandard,
-		supportsReasoningEffort: !isGrok && !isZai,
+		supportsReasoningEffort: !isZai,
 		reasoningEffortMap,
-		supportsUsageInStreaming: !isCerebras,
-		disableReasoningOnForcedToolChoice: isKimiModel || isAnthropicModel,
+		supportsUsageInStreaming: true,
+		disableReasoningOnForcedToolChoice: isKimiModel,
 		supportsToolChoice: true,
-		maxTokensField: useMaxTokens ? "max_tokens" : "max_completion_tokens",
-		requiresToolResultName: isMistral,
+		maxTokensField: "max_completion_tokens",
+		requiresToolResultName: false,
 		requiresAssistantAfterToolResult: false,
-		requiresThinkingAsText: isMistral,
-		requiresMistralToolIds: isMistral,
-		thinkingFormat: isZai
-			? "zai"
-			: provider === "openrouter" || baseUrl.includes("openrouter.ai")
-				? "openrouter"
-				: isAlibaba || isQwen
-					? "qwen"
-					: "openai",
+		requiresThinkingAsText: false,
+		requiresMistralToolIds: false,
+		thinkingFormat: isZai ? "zai" : "openai",
 		reasoningContentField: "reasoning_content",
-		// Backends that 400 follow-up requests when prior assistant tool-call turns lack `reasoning_content`:
-		//   - Kimi: documented invariant on its native API and via OpenCode-Go.
-		//   - Any reasoning-capable model reached through OpenRouter: DeepSeek V4 Pro and similar enforce
-		//     this server-side whenever the request is in thinking mode. We can't translate Anthropic's
-		//     redacted/encrypted reasoning into DeepSeek's plaintext form, so cross-provider continuations
-		//     rely on a placeholder — see `convertMessages` for the placeholder injection.
-		requiresReasoningContentForToolCalls:
-			isKimiModel ||
-			(isDeepseekFamily && Boolean(model.reasoning)) ||
-			((provider === "openrouter" || baseUrl.includes("openrouter.ai")) && Boolean(model.reasoning)),
+		requiresReasoningContentForToolCalls: isKimiModel,
 		requiresAssistantContentForToolCalls: isKimiModel,
 		openRouterRouting: undefined,
 		vercelGatewayRouting: undefined,
 		supportsStrictMode: detectStrictModeSupport(provider, baseUrl),
 		extraBody: undefined,
-		toolStrictMode: isCerebras ? "all_strict" : "mixed",
+		toolStrictMode: "mixed",
 	};
 }
 
 /**
  * Resolve compatibility settings by layering explicit model.compat overrides onto
- * the detected defaults. This is the canonical compat view for both metadata and transport.
- * @param model - The model configuration
- * @param resolvedBaseUrl - Optional resolved base URL (e.g., after GitHub Copilot proxy-ep resolution).
- *                           If provided, this takes precedence over model.baseUrl for URL-based checks.
+ * the detected defaults.
  */
 export function resolveOpenAICompat(
 	model: Model<"openai-completions">,

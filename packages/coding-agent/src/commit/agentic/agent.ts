@@ -99,7 +99,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 			case "message_update": {
 				if (event.message?.role !== "assistant") break;
 				const preview = extractMessagePreview(event.message?.content ?? []);
-				if (!preview) break;
+				if (preview === null || preview === undefined || preview === "") break;
 				writeThinkingLine(preview);
 				break;
 			}
@@ -114,11 +114,16 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 					isThinking = false;
 					clearThinkingLine();
 					const assistantMessage = event.message as { stopReason?: string; errorMessage?: string };
-					if (assistantMessage.stopReason === "error" && assistantMessage.errorMessage) {
+					if (
+						assistantMessage.stopReason === "error" &&
+						assistantMessage.errorMessage !== null &&
+						assistantMessage.errorMessage !== undefined &&
+						assistantMessage.errorMessage !== ""
+					) {
 						process.stdout.write(`● Error: ${assistantMessage.errorMessage}\n`);
 					}
 					const messageText = extractMessageText(event.message?.content ?? []);
-					if (messageText) {
+					if (messageText !== null && messageText !== undefined && messageText !== "") {
 						writeAssistantMessage(messageText);
 					}
 				}
@@ -129,7 +134,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 				toolArgsById.delete(event.toolCallId);
 				clearThinkingLine();
 				const toolLabel = formatToolLabel(stored.name);
-				const symbol = event.isError ? "" : "";
+				const symbol = event.isError === true ? "" : "";
 				process.stdout.write(`${symbol} ${toolLabel}\n`);
 				const argsLines = formatToolArgs(stored.args);
 				if (argsLines.length > 0) {
@@ -246,7 +251,7 @@ function formatToolArgs(args?: Record<string, unknown>): string[] {
 			return;
 		}
 		const rendered = renderPrimitive(value);
-		if (rendered) {
+		if (rendered !== null && rendered !== undefined && rendered !== "") {
 			lines.push(`${keyPath}: ${rendered}`);
 		}
 	};

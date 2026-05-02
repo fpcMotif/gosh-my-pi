@@ -130,7 +130,8 @@ async function renderGitLabRepo(
 	if (!repo) return { content: "", ok: false };
 
 	let md = `# ${repo.name}\n\n`;
-	if (repo.description) md += `${repo.description}\n\n`;
+	if (repo.description !== null && repo.description !== undefined && repo.description !== "")
+		md += `${repo.description}\n\n`;
 	md += `**Stars:** ${formatNumber(repo.star_count)} · **Forks:** ${formatNumber(repo.forks_count)} · **Issues:** ${formatNumber(repo.open_issues_count)}\n`;
 	md += `**Visibility:** ${repo.visibility} · **Default Branch:** ${repo.default_branch}\n`;
 	if (repo.topics && repo.topics.length > 0) {
@@ -139,7 +140,7 @@ async function renderGitLabRepo(
 	md += `**Created:** ${formatIsoDate(repo.created_at)} · **Last Activity:** ${formatIsoDate(repo.last_activity_at)}\n\n`;
 
 	// Try to fetch README
-	if (repo.readme_url) {
+	if (repo.readme_url !== null && repo.readme_url !== undefined && repo.readme_url !== "") {
 		const readmeResult = await loadPage(repo.readme_url, { timeout, signal });
 		if (readmeResult.ok && readmeResult.content.trim().length > 0) {
 			md += `---\n\n## README\n\n${readmeResult.content}\n`;
@@ -176,7 +177,7 @@ async function renderGitLabTree(
 	timeout: number,
 	signal?: AbortSignal,
 ): Promise<{ content: string; ok: boolean }> {
-	const apiUrl = `https://gitlab.com/api/v4/projects/${projectId}/repository/tree?ref=${gl.ref}&path=${gl.path || ""}&per_page=100`;
+	const apiUrl = `https://gitlab.com/api/v4/projects/${projectId}/repository/tree?ref=${gl.ref}&path=${gl.path ?? ""}&per_page=100`;
 
 	const result = await loadPage(apiUrl, { timeout, signal });
 	if (!result.ok) return { content: "", ok: false };
@@ -191,7 +192,7 @@ async function renderGitLabTree(
 	>(result.content);
 	if (!tree) return { content: "", ok: false };
 
-	let md = `# Directory: ${gl.path || "/"}\n\n`;
+	let md = `# Directory: ${gl.path ?? "/"}\n\n`;
 	md += `**Ref:** ${gl.ref}\n\n`;
 
 	// Separate directories and files
@@ -259,7 +260,10 @@ async function renderGitLabIssue(
 	}
 
 	md += `\n---\n\n## Description\n\n`;
-	md += issue.description ? htmlToBasicMarkdown(issue.description) : "*No description*";
+	md +=
+		issue.description !== null && issue.description !== undefined && issue.description !== ""
+			? htmlToBasicMarkdown(issue.description)
+			: "*No description*";
 
 	return { content: md, ok: true };
 }
@@ -313,7 +317,10 @@ async function renderGitLabMR(
 	}
 
 	md += `\n---\n\n## Description\n\n`;
-	md += mr.description ? htmlToBasicMarkdown(mr.description) : "*No description*";
+	md +=
+		mr.description !== null && mr.description !== undefined && mr.description !== ""
+			? htmlToBasicMarkdown(mr.description)
+			: "*No description*";
 
 	return { content: md, ok: true };
 }
@@ -335,7 +342,7 @@ export const handleGitLab: SpecialHandler = async (
 	switch (gl.type) {
 		case "blob": {
 			const projectId = await getProjectId(gl, timeout, signal);
-			if (!projectId) break;
+			if (projectId === null || projectId === undefined || projectId === 0) break;
 
 			notes.push(`Fetched raw file via GitLab API`);
 			const result = await renderGitLabFile(gl, projectId, timeout, signal);
@@ -353,7 +360,7 @@ export const handleGitLab: SpecialHandler = async (
 
 		case "tree": {
 			const projectId = await getProjectId(gl, timeout, signal);
-			if (!projectId) break;
+			if (projectId === null || projectId === undefined || projectId === 0) break;
 
 			notes.push(`Fetched directory tree via GitLab API`);
 			const result = await renderGitLabTree(gl, projectId, timeout, signal);
@@ -365,7 +372,7 @@ export const handleGitLab: SpecialHandler = async (
 
 		case "issue": {
 			const projectId = await getProjectId(gl, timeout, signal);
-			if (!projectId) break;
+			if (projectId === null || projectId === undefined || projectId === 0) break;
 
 			notes.push(`Fetched issue via GitLab API`);
 			const result = await renderGitLabIssue(gl, projectId, timeout, signal);
@@ -377,7 +384,7 @@ export const handleGitLab: SpecialHandler = async (
 
 		case "merge_request": {
 			const projectId = await getProjectId(gl, timeout, signal);
-			if (!projectId) break;
+			if (projectId === null || projectId === undefined || projectId === 0) break;
 
 			notes.push(`Fetched merge request via GitLab API`);
 			const result = await renderGitLabMR(gl, projectId, timeout, signal);

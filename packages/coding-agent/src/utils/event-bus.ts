@@ -18,9 +18,9 @@ export class EventBus {
 		}
 		const safeHandler = async (data: unknown) => {
 			try {
-				await handler(data);
-			} catch (err) {
-				logger.error("Event handler error", { channel, error: String(err) });
+				handler(data);
+			} catch (error) {
+				logger.error("Event handler error", { channel, error: String(error) });
 			}
 		};
 		this.#listeners.get(channel)!.add(safeHandler);

@@ -53,7 +53,7 @@ function formatCodeBlock(
 	language: string | undefined,
 	lines: number[] | null,
 ): string | null {
-	if (!code) return null;
+	if (code === null || code === undefined || code === "") return null;
 
 	const normalized = code.replace(/\r\n/g, "\n").trimEnd();
 	const codeLines = normalized.split("\n");
@@ -88,26 +88,30 @@ export const handleSearchcode: SpecialHandler = async (
 			const data = tryParseJson<SearchcodeResult>(result.content);
 			if (!data) return null;
 
-			const filename = data.filename || data.location || `Result ${id}`;
+			const filename = data.filename ?? data.location ?? `Result ${id}`;
 			const lineNumbers = parseLineNumbers(data.lines);
 			const formattedLines = formatLineNumbers(lineNumbers);
-			const viewUrl = data.url || `https://searchcode.com/codesearch/view/${id}`;
+			const viewUrl = data.url ?? `https://searchcode.com/codesearch/view/${id}`;
 			const snippetBlock = formatCodeBlock(data.code, data.language, lineNumbers);
 
 			let md = `# ${filename}\n\n`;
 			md += `## Description\n\n`;
 			md += "Code snippet from searchcode.com.\n\n";
 			md += `## Metadata\n\n`;
-			if (data.repo) md += `**Repository:** ${data.repo}\n`;
-			if (data.language) md += `**Language:** ${data.language}\n`;
-			if (data.filename) md += `**File:** ${data.filename}\n`;
-			if (data.location) md += `**Location:** ${data.location}\n`;
-			if (formattedLines) md += `**Lines:** ${formattedLines}\n`;
+			if (data.repo !== null && data.repo !== undefined && data.repo !== "") md += `**Repository:** ${data.repo}\n`;
+			if (data.language !== null && data.language !== undefined && data.language !== "")
+				md += `**Language:** ${data.language}\n`;
+			if (data.filename !== null && data.filename !== undefined && data.filename !== "")
+				md += `**File:** ${data.filename}\n`;
+			if (data.location !== null && data.location !== undefined && data.location !== "")
+				md += `**Location:** ${data.location}\n`;
+			if (formattedLines !== null && formattedLines !== undefined && formattedLines !== "")
+				md += `**Lines:** ${formattedLines}\n`;
 			md += `**Result ID:** ${id}\n`;
 			md += `**URL:** ${viewUrl}\n`;
 
 			md += `\n## Snippet`;
-			if (snippetBlock) {
+			if (snippetBlock !== null && snippetBlock !== undefined && snippetBlock !== "") {
 				md += snippetBlock;
 			} else {
 				md += "\n\n_No snippet available._\n";
@@ -119,10 +123,10 @@ export const handleSearchcode: SpecialHandler = async (
 		const query = parsed.searchParams.get("q");
 		const isSearchPage =
 			parsed.pathname === "/" || parsed.pathname === "/codesearch" || parsed.pathname === "/codesearch/";
-		if (!query || !isSearchPage) return null;
+		if (query === null || query === undefined || query === "" || !isSearchPage) return null;
 
 		const pageRaw = parsed.searchParams.get("p") ?? parsed.searchParams.get("page");
-		const pageNumber = pageRaw ? Number.parseInt(pageRaw, 10) : 0;
+		const pageNumber = pageRaw !== null && pageRaw !== undefined && pageRaw !== "" ? Number.parseInt(pageRaw, 10) : 0;
 		const page = Number.isFinite(pageNumber) && pageNumber >= 0 ? pageNumber : 0;
 		const apiUrl = `https://searchcode.com/api/codesearch_I/?q=${encodeURIComponent(query)}&p=${page}`;
 		const result = await loadPage(apiUrl, { timeout, signal, headers: { Accept: "application/json" } });
@@ -135,9 +139,9 @@ export const handleSearchcode: SpecialHandler = async (
 		const total =
 			typeof data.total === "number"
 				? data.total
-				: typeof data.total_results === "number"
+				: (typeof data.total_results === "number"
 					? data.total_results
-					: null;
+					: null);
 
 		let md = `# Searchcode Results\n\n`;
 		md += `## Description\n\n`;
@@ -157,21 +161,28 @@ export const handleSearchcode: SpecialHandler = async (
 			const maxResults = 10;
 			for (const resultItem of results.slice(0, maxResults)) {
 				const id = resultItem.id !== undefined ? String(resultItem.id) : null;
-				const filename = resultItem.filename || resultItem.location || "Result";
+				const filename = resultItem.filename ?? resultItem.location ?? "Result";
 				const lineNumbers = parseLineNumbers(resultItem.lines);
 				const formattedLines = formatLineNumbers(lineNumbers);
-				const viewUrl = resultItem.url || (id ? `https://searchcode.com/codesearch/view/${id}` : null);
+				const viewUrl =
+					resultItem.url ??
+					(id !== null && id !== undefined && id !== "" ? `https://searchcode.com/codesearch/view/${id}` : null);
 				const snippetBlock = formatCodeBlock(resultItem.code, resultItem.language, lineNumbers);
 
 				md += `### ${filename}\n\n`;
-				if (resultItem.repo) md += `**Repository:** ${resultItem.repo}\n`;
-				if (resultItem.language) md += `**Language:** ${resultItem.language}\n`;
-				if (resultItem.filename) md += `**File:** ${resultItem.filename}\n`;
-				if (resultItem.location) md += `**Location:** ${resultItem.location}\n`;
-				if (formattedLines) md += `**Lines:** ${formattedLines}\n`;
-				if (viewUrl) md += `**URL:** ${viewUrl}\n`;
+				if (resultItem.repo !== null && resultItem.repo !== undefined && resultItem.repo !== "")
+					md += `**Repository:** ${resultItem.repo}\n`;
+				if (resultItem.language !== null && resultItem.language !== undefined && resultItem.language !== "")
+					md += `**Language:** ${resultItem.language}\n`;
+				if (resultItem.filename !== null && resultItem.filename !== undefined && resultItem.filename !== "")
+					md += `**File:** ${resultItem.filename}\n`;
+				if (resultItem.location !== null && resultItem.location !== undefined && resultItem.location !== "")
+					md += `**Location:** ${resultItem.location}\n`;
+				if (formattedLines !== null && formattedLines !== undefined && formattedLines !== "")
+					md += `**Lines:** ${formattedLines}\n`;
+				if (viewUrl !== null && viewUrl !== undefined && viewUrl !== "") md += `**URL:** ${viewUrl}\n`;
 
-				if (snippetBlock) {
+				if (snippetBlock !== null && snippetBlock !== undefined && snippetBlock !== "") {
 					md += `${snippetBlock}\n`;
 				}
 

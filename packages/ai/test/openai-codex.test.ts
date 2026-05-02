@@ -51,19 +51,19 @@ describe("openai-codex request transformer", () => {
 describe("openai-codex reasoning effort validation", () => {
 	it("rejects gpt-5.1 xhigh when metadata does not list it", async () => {
 		const body: RequestBody = { model: "gpt-5.1", input: [] };
-		await expect(
-			transformRequestBody(body, createCodexModel(body.model), { reasoningEffort: "xhigh" }),
-		).rejects.toThrow(/Supported efforts: minimal, low, medium, high/);
+		expect(transformRequestBody(body, createCodexModel(body.model), { reasoningEffort: "xhigh" })).rejects.toThrow(
+			/Supported efforts: minimal, low, medium, high/,
+		);
 	});
 
 	it("rejects unsupported Codex mini efforts instead of clamping", async () => {
 		const body: RequestBody = { model: "gpt-5.1-codex-mini", input: [] };
 
-		await expect(
+		expect(
 			transformRequestBody({ ...body }, createCodexModel(body.model), { reasoningEffort: "low" }),
 		).rejects.toThrow(/Supported efforts: medium, high/);
 
-		await expect(
+		expect(
 			transformRequestBody({ ...body }, createCodexModel(body.model), { reasoningEffort: "xhigh" }),
 		).rejects.toThrow(/Supported efforts: medium, high/);
 	});

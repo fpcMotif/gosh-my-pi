@@ -74,7 +74,7 @@ function getContentType(url: string): string | null {
  * Format duration from seconds string
  */
 function formatDuration(seconds: string | undefined): string | null {
-	if (!seconds) return null;
+	if (seconds === null || seconds === undefined || seconds === "") return null;
 	const num = parseInt(seconds, 10);
 	if (Number.isNaN(num)) return null;
 	return formatMediaDuration(num);
@@ -87,34 +87,34 @@ function formatOutput(contentType: string, oEmbed: SpotifyOEmbedResponse, og: Op
 	const sections: string[] = [];
 
 	// Title
-	const title = og.title || oEmbed.title || "Unknown";
+	const title = og.title ?? oEmbed.title ?? "Unknown";
 	sections.push(`# ${title}\n`);
 
 	// Type
 	sections.push(`**Type**: ${contentType}\n`);
 
 	// Description
-	if (og.description) {
+	if (og.description !== null && og.description !== undefined && og.description !== "") {
 		sections.push(`**Description**: ${og.description}\n`);
 	}
 
 	// Content-specific metadata
 	if (contentType === "track" || contentType === "podcast-episode") {
-		if (og.artist || og.musician) {
-			sections.push(`**Artist**: ${og.artist || og.musician}\n`);
+		if (og.artist ?? (og.musician !== null && og.musician !== undefined && og.musician !== "")) {
+			sections.push(`**Artist**: ${og.artist ?? og.musician}\n`);
 		}
-		if (og.album) {
+		if (og.album !== null && og.album !== undefined && og.album !== "") {
 			sections.push(`**Album**: ${og.album}\n`);
 		}
-		if (og.duration) {
+		if (og.duration !== null && og.duration !== undefined && og.duration !== "") {
 			const formatted = formatDuration(og.duration);
-			if (formatted) {
+			if (formatted !== null && formatted !== undefined && formatted !== "") {
 				sections.push(`**Duration**: ${formatted}\n`);
 			}
 		}
 	}
 
-	if (contentType === "album" && og.releaseDate) {
+	if (contentType === "album" && og.releaseDate !== null && og.releaseDate !== undefined && og.releaseDate !== "") {
 		sections.push(`**Release Date**: ${og.releaseDate}\n`);
 	}
 
@@ -139,9 +139,9 @@ function formatOutput(contentType: string, oEmbed: SpotifyOEmbedResponse, og: Op
 
 	sections.push(`**URL**: ${url}\n`);
 
-	if (oEmbed.thumbnail_url) {
+	if (oEmbed.thumbnail_url !== null && oEmbed.thumbnail_url !== undefined && oEmbed.thumbnail_url !== "") {
 		sections.push(`**Thumbnail**: ${oEmbed.thumbnail_url}\n`);
-	} else if (og.image) {
+	} else if (og.image !== null && og.image !== undefined && og.image !== "") {
 		sections.push(`**Image**: ${og.image}\n`);
 	}
 
@@ -155,7 +155,7 @@ export const handleSpotify: SpecialHandler = async (url: string, timeout: number
 	}
 
 	const contentType = getContentType(url);
-	if (!contentType) {
+	if (contentType === null || contentType === undefined || contentType === "") {
 		return null;
 	}
 
@@ -172,10 +172,10 @@ export const handleSpotify: SpecialHandler = async (url: string, timeout: number
 			oEmbedData = JSON.parse(response.content) as SpotifyOEmbedResponse;
 			notes.push("Retrieved metadata via Spotify oEmbed API");
 		} else {
-			notes.push(`oEmbed API returned status ${response.status || "error"}`);
+			notes.push(`oEmbed API returned status ${response.status ?? "error"}`);
 		}
-	} catch (err) {
-		notes.push(`Failed to fetch oEmbed data: ${err instanceof Error ? err.message : String(err)}`);
+	} catch (error) {
+		notes.push(`Failed to fetch oEmbed data: ${error instanceof Error ? error.message : String(error)}`);
 	}
 
 	// Fetch page HTML for Open Graph metadata
@@ -186,10 +186,10 @@ export const handleSpotify: SpecialHandler = async (url: string, timeout: number
 			ogData = parseOpenGraph(pageResponse.content);
 			notes.push("Parsed Open Graph metadata from page HTML");
 		} else {
-			notes.push(`Page fetch returned status ${pageResponse.status || "error"}`);
+			notes.push(`Page fetch returned status ${pageResponse.status ?? "error"}`);
 		}
-	} catch (err) {
-		notes.push(`Failed to fetch page HTML: ${err instanceof Error ? err.message : String(err)}`);
+	} catch (error) {
+		notes.push(`Failed to fetch page HTML: ${error instanceof Error ? error.message : String(error)}`);
 	}
 
 	// Format output

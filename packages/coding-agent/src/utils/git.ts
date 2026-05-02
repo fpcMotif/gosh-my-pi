@@ -167,7 +167,7 @@ function normalizeStdin(input: CommandOptions["stdin"]): "ignore" | Uint8Array {
 }
 
 function ensureAvailable(): void {
-	if (!$which("git")) {
+	if ($which("git") === undefined || $which("git") === "") {
 		throw new Error("git is not installed.");
 	}
 }
@@ -188,7 +188,7 @@ async function runCommand(
 	args: readonly string[],
 	options: CommandOptions = {},
 ): Promise<GitCommandResult> {
-	const commandArgs = withShortLivedGitConfig(options.readOnly ? withNoOptionalLocks(args) : [...args]);
+	const commandArgs = withShortLivedGitConfig(options.readOnly === true ? withNoOptionalLocks(args) : [...args]);
 	const child = Bun.spawn(["git", ...commandArgs], {
 		cwd,
 		env: options.env ? { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...options.env } : undefined,
@@ -322,7 +322,7 @@ function splitLines(text: string): string[] {
 
 function trimScalar(text: string | undefined): string | undefined {
 	const trimmed = text?.trim();
-	return trimmed || undefined;
+	return trimmed ?? undefined;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -331,27 +331,28 @@ function trimScalar(text: string | undefined): string | undefined {
 
 function buildDiffArgs(options: DiffOptions): string[] {
 	const args = ["diff"];
-	if (options.binary) args.push("--binary");
-	if (options.cached) args.push("--cached");
-	if (options.nameOnly) args.push("--name-only");
-	if (options.stat) args.push("--stat");
-	if (options.numstat) args.push("--numstat");
+	if (options.binary === true) args.push("--binary");
+	if (options.cached === true) args.push("--cached");
+	if (options.nameOnly === true) args.push("--name-only");
+	if (options.stat === true) args.push("--stat");
+	if (options.numstat === true) args.push("--numstat");
 	if (options.noIndex) {
 		args.push("--no-index", options.noIndex.left, options.noIndex.right);
 		return args;
 	}
-	if (options.base) {
+	if (options.base !== null && options.base !== undefined && options.base !== "") {
 		args.push(options.base);
-		if (options.head) args.push(options.head);
+		if (options.head !== null && options.head !== undefined && options.head !== "") args.push(options.head);
 	}
-	if (options.files?.length) args.push("--", ...options.files);
+	if (options.files?.length !== null && options.files?.length !== undefined && options.files?.length !== 0)
+		args.push("--", ...options.files);
 	return args;
 }
 
 function buildApplyArgs(patchPath: string, options: PatchOptions): string[] {
 	const args = ["apply"];
-	if (options.check) args.push("--check");
-	if (options.cached) args.push("--cached");
+	if (options.check === true) args.push("--check");
+	if (options.cached === true) args.push("--cached");
 	args.push("--binary", patchPath);
 	return args;
 }
@@ -378,9 +379,9 @@ function getEntryTypeSync(gitEntryPath: string): EntryType | null {
 		if (stat.isDirectory()) return "directory";
 		if (stat.isFile()) return "file";
 		return null;
-	} catch (err) {
-		if (isOptionalGitMetadataUnavailable(err)) return null;
-		throw err;
+	} catch (error) {
+		if (isOptionalGitMetadataUnavailable(error)) return null;
+		throw error;
 	}
 }
 
@@ -390,27 +391,27 @@ async function getEntryType(gitEntryPath: string): Promise<EntryType | null> {
 		if (stat.isDirectory()) return "directory";
 		if (stat.isFile()) return "file";
 		return null;
-	} catch (err) {
-		if (isOptionalGitMetadataUnavailable(err)) return null;
-		throw err;
+	} catch (error) {
+		if (isOptionalGitMetadataUnavailable(error)) return null;
+		throw error;
 	}
 }
 
 function readOptionalTextSync(filePath: string): string | null {
 	try {
 		return fs.readFileSync(filePath, "utf8");
-	} catch (err) {
-		if (isOptionalGitMetadataUnavailable(err)) return null;
-		throw err;
+	} catch (error) {
+		if (isOptionalGitMetadataUnavailable(error)) return null;
+		throw error;
 	}
 }
 
 async function readOptionalText(filePath: string): Promise<string | null> {
 	try {
 		return await Bun.file(filePath).text();
-	} catch (err) {
-		if (isOptionalGitMetadataUnavailable(err)) return null;
-		throw err;
+	} catch (error) {
+		if (isOptionalGitMetadataUnavailable(error)) return null;
+		throw error;
 	}
 }
 
@@ -424,7 +425,7 @@ function resolveGitDirSync(gitEntryPath: string, entryType: EntryType): string |
 	const content = readOptionalTextSync(gitEntryPath);
 	if (content === null) return null;
 	const parsed = parseGitDirPointer(content);
-	if (!parsed) return null;
+	if (parsed === null || parsed === undefined || parsed === "") return null;
 	const gitDir = path.resolve(path.dirname(gitEntryPath), parsed);
 	return getEntryTypeSync(gitDir) === "directory" ? gitDir : null;
 }
@@ -434,7 +435,7 @@ async function resolveGitDir(gitEntryPath: string, entryType: EntryType): Promis
 	const content = await readOptionalText(gitEntryPath);
 	if (content === null) return null;
 	const parsed = parseGitDirPointer(content);
-	if (!parsed) return null;
+	if (parsed === null || parsed === undefined || parsed === "") return null;
 	const gitDir = path.resolve(path.dirname(gitEntryPath), parsed);
 	return (await getEntryType(gitDir)) === "directory" ? gitDir : null;
 }
@@ -442,20 +443,20 @@ async function resolveGitDir(gitEntryPath: string, entryType: EntryType): Promis
 function resolveCommonDirSync(gitDir: string): string {
 	const content = readOptionalTextSync(path.join(gitDir, "commondir"));
 	const relative = content?.trim();
-	if (!relative) return gitDir;
+	if (relative === null || relative === undefined || relative === "") return gitDir;
 	return path.resolve(gitDir, relative);
 }
 
 async function resolveCommonDir(gitDir: string): Promise<string> {
 	const content = await readOptionalText(path.join(gitDir, "commondir"));
 	const relative = content?.trim();
-	if (!relative) return gitDir;
+	if (relative === null || relative === undefined || relative === "") return gitDir;
 	return path.resolve(gitDir, relative);
 }
 
 function resolveRepoFromEntrySync(repoRoot: string, gitEntryPath: string, entryType: EntryType): GitRepository | null {
 	const gitDir = resolveGitDirSync(gitEntryPath, entryType);
-	if (!gitDir) return null;
+	if (gitDir === null || gitDir === undefined || gitDir === "") return null;
 	return {
 		commonDir: resolveCommonDirSync(gitDir),
 		gitDir,
@@ -471,7 +472,7 @@ async function resolveRepoFromEntry(
 	entryType: EntryType,
 ): Promise<GitRepository | null> {
 	const gitDir = await resolveGitDir(gitEntryPath, entryType);
-	if (!gitDir) return null;
+	if (gitDir === null || gitDir === undefined || gitDir === "") return null;
 	return {
 		commonDir: await resolveCommonDir(gitDir),
 		gitDir,
@@ -526,7 +527,7 @@ function normalizeRefValue(content: string | null): string | null {
 }
 
 function parsePackedRefs(content: string | null, targetRef: string): string | null {
-	if (!content) return null;
+	if (content === null || content === undefined || content === "") return null;
 	for (const line of content.split("\n")) {
 		const trimmed = line.trim();
 		if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("^")) continue;
@@ -539,11 +540,11 @@ function parsePackedRefs(content: string | null, targetRef: string): string | nu
 function readRefSync(repository: GitRepository, targetRef: string): string | null {
 	for (const dir of getRefLookupDirs(repository)) {
 		const value = normalizeRefValue(readOptionalTextSync(path.join(dir, targetRef)));
-		if (value) return value;
+		if (value !== null && value !== undefined && value !== "") return value;
 	}
 	for (const dir of getRefLookupDirs(repository)) {
 		const value = parsePackedRefs(readOptionalTextSync(path.join(dir, "packed-refs")), targetRef);
-		if (value) return value;
+		if (value !== null && value !== undefined && value !== "") return value;
 	}
 	return null;
 }
@@ -551,11 +552,11 @@ function readRefSync(repository: GitRepository, targetRef: string): string | nul
 async function readRef(repository: GitRepository, targetRef: string): Promise<string | null> {
 	for (const dir of getRefLookupDirs(repository)) {
 		const value = normalizeRefValue(await readOptionalText(path.join(dir, targetRef)));
-		if (value) return value;
+		if (value !== null && value !== undefined && value !== "") return value;
 	}
 	for (const dir of getRefLookupDirs(repository)) {
 		const value = parsePackedRefs(await readOptionalText(path.join(dir, "packed-refs")), targetRef);
-		if (value) return value;
+		if (value !== null && value !== undefined && value !== "") return value;
 	}
 	return null;
 }
@@ -599,7 +600,7 @@ async function parseHeadState(repository: GitRepository, headContent: string): P
 }
 
 function parseDefaultBranchRef(refPath: string, target: string | null): string | null {
-	if (!target?.startsWith(HEAD_REF_PREFIX)) return null;
+	if (target?.startsWith(HEAD_REF_PREFIX) !== true) return null;
 	const resolvedRef = target.slice(HEAD_REF_PREFIX.length).trim();
 	const remotePrefix = refPath.slice(0, -"HEAD".length);
 	if (!resolvedRef.startsWith(remotePrefix)) return null;
@@ -684,7 +685,7 @@ function parseStatusPorcelain(text: string): GitStatusSummary {
 export const diff = Object.assign(
 	async function diff(cwd: string, options: DiffOptions = {}): Promise<string> {
 		const args = buildDiffArgs(options);
-		if (options.allowFailure) {
+		if (options.allowFailure === true) {
 			return (await runCommand(cwd, args, { env: options.env, readOnly: true, signal: options.signal })).stdout;
 		}
 		return runText(cwd, args, { env: options.env, readOnly: true, signal: options.signal });
@@ -714,9 +715,10 @@ export const diff = Object.assign(
 		/** Check whether a diff exists (uses `--quiet` for efficiency). */
 		async has(cwd: string, options: Pick<DiffOptions, "cached" | "files" | "signal"> = {}): Promise<boolean> {
 			const args = ["diff"];
-			if (options.cached) args.push("--cached");
+			if (options.cached === true) args.push("--cached");
 			args.push("--quiet");
-			if (options.files?.length) args.push("--", ...options.files);
+			if (options.files?.length !== null && options.files?.length !== undefined && options.files?.length !== 0)
+				args.push("--", ...options.files);
 			const result = await runCommand(cwd, args, { readOnly: true, signal: options.signal });
 			if (result.exitCode === 0) return false;
 			if (result.exitCode === 1) return true;
@@ -730,9 +732,9 @@ export const diff = Object.assign(
 			options: { binary?: boolean; signal?: AbortSignal; allowFailure?: boolean } = {},
 		): Promise<string> {
 			const args = ["diff-tree", "-r", "-p"];
-			if (options.binary) args.push("--binary");
+			if (options.binary === true) args.push("--binary");
 			args.push(base, headRef);
-			if (options.allowFailure) {
+			if (options.allowFailure === true) {
 				return (await runCommand(cwd, args, { readOnly: true, signal: options.signal })).stdout;
 			}
 			return runText(cwd, args, { readOnly: true, signal: options.signal });
@@ -756,10 +758,15 @@ export const diff = Object.assign(
 export const status = Object.assign(
 	async function status(cwd: string, options: StatusOptions = {}): Promise<string> {
 		const args = ["status"];
-		args.push(options.porcelainV1 ? "--porcelain=v1" : "--porcelain");
-		if (options.z) args.push("-z");
+		args.push(options.porcelainV1 === true ? "--porcelain=v1" : "--porcelain");
+		if (options.z === true) args.push("-z");
 		if (options.untrackedFiles) args.push(`--untracked-files=${options.untrackedFiles}`);
-		if (options.pathspecs?.length) args.push("--", ...options.pathspecs);
+		if (
+			options.pathspecs?.length !== null &&
+			options.pathspecs?.length !== undefined &&
+			options.pathspecs?.length !== 0
+		)
+			args.push("--", ...options.pathspecs);
 		return runText(cwd, args, { readOnly: true, signal: options.signal });
 	},
 	{
@@ -832,17 +839,18 @@ export const stage = {
 /** Create a commit with the given message (passed via stdin). */
 export async function commit(cwd: string, message: string, options: CommitOptions = {}): Promise<GitCommandResult> {
 	const args = ["commit", "-F", "-"];
-	if (options.allowEmpty) args.push("--allow-empty");
-	if (options.files?.length) args.push("--", ...options.files);
+	if (options.allowEmpty === true) args.push("--allow-empty");
+	if (options.files?.length !== null && options.files?.length !== undefined && options.files?.length !== 0)
+		args.push("--", ...options.files);
 	return runChecked(cwd, args, { signal: options.signal, stdin: message });
 }
 
 /** Push the current branch. */
 export async function push(cwd: string, options: PushOptions = {}): Promise<void> {
 	const args = ["push"];
-	if (options.forceWithLease) args.push("--force-with-lease");
-	if (options.remote) args.push(options.remote);
-	if (options.refspec) args.push(options.refspec);
+	if (options.forceWithLease === true) args.push("--force-with-lease");
+	if (options.remote !== null && options.remote !== undefined && options.remote !== "") args.push(options.remote);
+	if (options.refspec !== null && options.refspec !== undefined && options.refspec !== "") args.push(options.refspec);
 	await runEffect(cwd, args, { signal: options.signal });
 }
 
@@ -933,14 +941,14 @@ export const branch = {
 			for (const refPath of DEFAULT_BRANCH_REFS) {
 				const target = await readRef(repository, refPath);
 				const branchName = parseDefaultBranchRef(refPath, target);
-				if (branchName) return branchName;
+				if (branchName !== null && branchName !== undefined && branchName !== "") return branchName;
 			}
 		}
 		for (const remoteRef of ["origin/HEAD", "upstream/HEAD"]) {
 			const result = await runCommand(cwd, ["rev-parse", "--abbrev-ref", remoteRef], { readOnly: true, signal });
 			if (result.exitCode !== 0) continue;
 			const branchName = stripRemotePrefix(result.stdout.trim());
-			if (branchName) return branchName;
+			if (branchName !== null && branchName !== undefined && branchName !== "") return branchName;
 		}
 		return null;
 	},
@@ -980,7 +988,7 @@ export const branch = {
 	/** List branches. Pass `{ all: true }` to include remotes. */
 	async list(cwd: string, options: { all?: boolean; signal?: AbortSignal } = {}): Promise<string[]> {
 		const args = ["branch"];
-		if (options.all) args.push("-a");
+		if (options.all === true) args.push("-a");
 		args.push("--format=%(refname:short)");
 		return splitLines(await runText(cwd, args, { readOnly: true, signal: options.signal }));
 	},
@@ -1097,7 +1105,7 @@ export const worktree = {
 		options: { detach?: boolean; signal?: AbortSignal } = {},
 	): Promise<void> {
 		const args = ["worktree", "add"];
-		if (options.detach) args.push("--detach");
+		if (options.detach === true) args.push("--detach");
 		args.push(worktreePath, refName);
 		await runEffect(cwd, args, { signal: options.signal });
 	},
@@ -1206,7 +1214,7 @@ export const stash = {
 		ensureAvailable();
 		const previousStash = await ref.resolve(cwd, "refs/stash");
 		const args = ["stash", "push", "--include-untracked"];
-		if (message) args.push("-m", message);
+		if (message !== null && message !== undefined && message !== "") args.push("-m", message);
 		await runEffect(cwd, args);
 		const nextStash = await ref.resolve(cwd, "refs/stash");
 		return nextStash !== null && nextStash !== previousStash;
@@ -1214,7 +1222,7 @@ export const stash = {
 	/** Pop the most recent stash entry, optionally restoring its staged state. */
 	async pop(cwd: string, options?: { index?: boolean }): Promise<void> {
 		const args = ["stash", "pop"];
-		if (options?.index) args.push("--index");
+		if (options?.index === true) args.push("--index");
 		await runEffect(cwd, args);
 	},
 };
@@ -1229,13 +1237,14 @@ export async function clone(url: string, targetDir: string, options: CloneOption
 	await fs.promises.mkdir(path.dirname(absoluteTarget), { recursive: true });
 
 	const args = ["clone", "--depth", "1"];
-	if (options.ref) args.push("--branch", options.ref, "--single-branch");
+	if (options.ref !== null && options.ref !== undefined && options.ref !== "")
+		args.push("--branch", options.ref, "--single-branch");
 	else args.push("--single-branch");
 	args.push(url, absoluteTarget);
 
 	try {
 		await runEffect(path.dirname(absoluteTarget), args, { signal: options.signal });
-		if (options.sha) {
+		if (options.sha !== null && options.sha !== undefined && options.sha !== "") {
 			try {
 				await checkout(absoluteTarget, options.sha, options.signal);
 			} catch {
@@ -1243,18 +1252,20 @@ export async function clone(url: string, targetDir: string, options: CloneOption
 				throw new Error(`Failed to checkout SHA ${options.sha} - shallow clone may not contain this commit`);
 			}
 		}
-	} catch (err) {
+	} catch (error) {
 		await fs.promises.rm(absoluteTarget, { force: true, recursive: true });
-		throw err;
+		throw error;
 	}
 }
 
 export async function restore(cwd: string, options: RestoreOptions = {}): Promise<void> {
 	const args = ["restore"];
-	if (options.source) args.push(`--source=${options.source}`);
-	if (options.staged) args.push("--staged");
-	if (options.worktree) args.push("--worktree");
-	if (options.files?.length) args.push("--", ...options.files);
+	if (options.source !== null && options.source !== undefined && options.source !== "")
+		args.push(`--source=${options.source}`);
+	if (options.staged === true) args.push("--staged");
+	if (options.worktree === true) args.push("--worktree");
+	if (options.files?.length !== null && options.files?.length !== undefined && options.files?.length !== 0)
+		args.push("--", ...options.files);
 	await runEffect(cwd, args, { signal: options.signal });
 }
 
@@ -1262,8 +1273,9 @@ export async function clean(
 	cwd: string,
 	options: { ignoredOnly?: boolean; paths?: readonly string[]; signal?: AbortSignal } = {},
 ): Promise<void> {
-	const args = ["clean", options.ignoredOnly ? "-fdX" : "-fd"];
-	if (options.paths?.length) args.push("--", ...options.paths);
+	const args = ["clean", options.ignoredOnly === true ? "-fdX" : "-fd"];
+	if (options.paths?.length !== null && options.paths?.length !== undefined && options.paths?.length !== 0)
+		args.push("--", ...options.paths);
 	await runEffect(cwd, args, { signal: options.signal });
 }
 
@@ -1278,8 +1290,8 @@ export const ls = {
 		options: { others?: boolean; excludeStandard?: boolean; signal?: AbortSignal } = {},
 	): Promise<string[]> {
 		const args = ["ls-files"];
-		if (options.others) args.push("--others");
-		if (options.excludeStandard) args.push("--exclude-standard");
+		if (options.others === true) args.push("--others");
+		if (options.excludeStandard === true) args.push("--exclude-standard");
 		return splitLines(await runText(cwd, args, { readOnly: true, signal: options.signal }));
 	},
 
@@ -1324,7 +1336,8 @@ export const head = {
 	/** Current HEAD commit SHA. */
 	async sha(cwd: string, signal?: AbortSignal): Promise<string | null> {
 		const headState = await head.resolve(cwd);
-		if (headState?.commit) return headState.commit;
+		if (headState?.commit !== null && headState?.commit !== undefined && headState?.commit !== "")
+			return headState.commit;
 		const result = await runCommand(cwd, ["rev-parse", "HEAD"], { readOnly: true, signal });
 		if (result.exitCode !== 0) return null;
 		return result.stdout.trim() || null;
@@ -1360,7 +1373,7 @@ export const repo = {
 			return repository.repoRoot;
 		}
 		const repoRoot = await repo.root(cwd, signal);
-		if (!repoRoot) return null;
+		if (repoRoot === null || repoRoot === undefined || repoRoot === "") return null;
 		const commonDir = await runText(repoRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
 			readOnly: true,
 			signal,
@@ -1406,7 +1419,7 @@ function formatGhFailure(args: readonly string[], stdout: string, stderr: string
 		return "GitHub CLI is not authenticated. Run `gh auth login`.";
 	}
 	if (
-		!options?.repoProvided &&
+		options?.repoProvided !== true &&
 		(message.includes("not a git repository") ||
 			message.includes("no git remotes found") ||
 			message.includes("unable to determine current repository"))
@@ -1426,7 +1439,7 @@ export const github = {
 	/** Run a raw `gh` CLI command. Does not throw on non-zero exit. */
 	async run(cwd: string, args: string[], signal?: AbortSignal, options?: GhCommandOptions): Promise<GhCommandResult> {
 		throwIfAborted(signal);
-		if (!$which("gh")) {
+		if ($which("gh") === undefined || $which("gh") === "") {
 			throw new ToolError("GitHub CLI (gh) is not installed. Install it from https://cli.github.com/.");
 		}
 		try {
@@ -1454,7 +1467,7 @@ export const github = {
 				stderr: trim ? stderr.trim() : stderr,
 			};
 		} catch (error) {
-			if (signal?.aborted) throw new ToolAbortError();
+			if (signal !== undefined && signal.aborted) throw new ToolAbortError();
 			throw error;
 		}
 	},

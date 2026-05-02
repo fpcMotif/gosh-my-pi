@@ -103,24 +103,32 @@ function extractOrcidId(pathname: string): string | null {
 
 function formatName(name?: OrcidName): string | null {
 	const credit = name?.["credit-name"]?.value?.trim();
-	if (credit) return credit;
+	if (credit !== null && credit !== undefined && credit !== "") return credit;
 
 	const given = name?.["given-names"]?.value?.trim();
 	const family = name?.["family-name"]?.value?.trim();
-	if (given && family) return `${given} ${family}`;
-	return given || family || null;
+	if (
+		given !== null &&
+		given !== undefined &&
+		given !== "" &&
+		family !== null &&
+		family !== undefined &&
+		family !== ""
+	)
+		return `${given} ${family}`;
+	return given ?? family ?? null;
 }
 
 function formatDate(date?: OrcidSummaryDate): string | null {
 	const year = date?.year?.value;
-	if (!year) return null;
+	if (year === null || year === undefined || year === "") return null;
 
 	const month = date?.month?.value;
 	const day = date?.day?.value;
-	if (month && day) {
+	if (month !== null && month !== undefined && month !== "" && day !== null && day !== undefined && day !== "") {
 		return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 	}
-	if (month) return `${year}-${month.padStart(2, "0")}`;
+	if (month !== null && month !== undefined && month !== "") return `${year}-${month.padStart(2, "0")}`;
 	return year;
 }
 
@@ -133,10 +141,10 @@ function collectAffiliations(
 	if (!container) return summaries;
 
 	const direct = container[key];
-	if (direct?.length) summaries.push(...direct);
+	if (direct?.length !== null && direct?.length !== undefined && direct?.length !== 0) summaries.push(...direct);
 
 	const groups = container["affiliation-group"];
-	if (groups?.length) {
+	if (groups?.length !== null && groups?.length !== undefined && groups?.length !== 0) {
 		for (const group of groups) {
 			const groupSummaries = group.summaries || [];
 			for (const summary of groupSummaries) {
@@ -161,23 +169,48 @@ function formatAffiliation(summary: OrcidAffiliationSummary): string | null {
 	const start = formatDate(summary["start-date"]);
 	const end = formatDate(summary["end-date"]);
 	let dates: string | null = null;
-	if (start && end) {
+	if (start !== null && start !== undefined && start !== "" && end !== null && end !== undefined && end !== "") {
 		dates = `${start} - ${end}`;
-	} else if (start) {
+	} else if (start !== null && start !== undefined && start !== "") {
 		dates = `${start} - Present`;
-	} else if (end) {
+	} else if (end !== null && end !== undefined && end !== "") {
 		dates = `Until ${end}`;
 	}
 
-	const label = organization || role || department;
-	if (!label) return null;
+	const label = organization ?? role ?? department;
+	if (label === null || label === undefined || label === "") return null;
 
 	const details: string[] = [];
-	if (organization && role) details.push(role);
-	if (!organization && role && department) details.push(department);
-	if (organization && department) details.push(`Dept: ${department}`);
-	if (location) details.push(`Location: ${location}`);
-	if (dates) details.push(`Dates: ${dates}`);
+	if (
+		organization !== null &&
+		organization !== undefined &&
+		organization !== "" &&
+		role !== null &&
+		role !== undefined &&
+		role !== ""
+	)
+		details.push(role);
+	if (
+		(organization === null || organization === undefined || organization === "") &&
+		role !== null &&
+		role !== undefined &&
+		role !== "" &&
+		department !== null &&
+		department !== undefined &&
+		department !== ""
+	)
+		details.push(department);
+	if (
+		organization !== null &&
+		organization !== undefined &&
+		organization !== "" &&
+		department !== null &&
+		department !== undefined &&
+		department !== ""
+	)
+		details.push(`Dept: ${department}`);
+	if (location !== null && location !== undefined && location !== "") details.push(`Location: ${location}`);
+	if (dates !== null && dates !== undefined && dates !== "") details.push(`Dates: ${dates}`);
 
 	if (details.length === 0) return label;
 	return `${label} (${details.join("; ")})`;
@@ -192,7 +225,7 @@ function collectWorkTitles(container: OrcidWorksContainer | undefined): string[]
 		const summaries = group["work-summary"] || [];
 		for (const summary of summaries) {
 			const title = summary.title?.title?.value?.trim();
-			if (!title || seen.has(title)) continue;
+			if (title === null || title === undefined || title === "" || seen.has(title)) continue;
 			seen.add(title);
 			titles.push(title);
 			if (titles.length >= MAX_WORKS) return titles;
@@ -212,7 +245,7 @@ export const handleOrcid: SpecialHandler = async (
 		if (!isOrcidHost(parsed.hostname)) return null;
 
 		const orcid = extractOrcidId(parsed.pathname);
-		if (!orcid) return null;
+		if (orcid === null || orcid === undefined || orcid === "") return null;
 
 		const fetchedAt = new Date().toISOString();
 		const apiUrl = `https://pub.orcid.org/v3.0/${orcid}/record`;
@@ -236,12 +269,15 @@ export const handleOrcid: SpecialHandler = async (
 		const educations = collectAffiliations(activities?.educations, "education-summary");
 		const works = collectWorkTitles(activities?.works);
 
-		let md = `# ${personName || "ORCID Profile"}\n\n`;
+		let md = `# ${personName ?? "ORCID Profile"}\n\n`;
 		md += `**ORCID:** ${orcid}\n`;
 		md += `**ORCID Profile:** https://orcid.org/${orcid}\n\n`;
 
 		md += "## Biography\n\n";
-		md += biography ? `${biography}\n\n` : "No biography available.\n\n";
+		md +=
+			biography !== null && biography !== undefined && biography !== ""
+				? `${biography}\n\n`
+				: "No biography available.\n\n";
 
 		md += "## Affiliations\n\n";
 		let hasAffiliations = false;
@@ -251,7 +287,7 @@ export const handleOrcid: SpecialHandler = async (
 			md += "### Employment\n\n";
 			for (const summary of employments) {
 				const line = formatAffiliation(summary);
-				if (line) md += `- ${line}\n`;
+				if (line !== null && line !== undefined && line !== "") md += `- ${line}\n`;
 			}
 			md += "\n";
 		}
@@ -261,7 +297,7 @@ export const handleOrcid: SpecialHandler = async (
 			md += "### Education\n\n";
 			for (const summary of educations) {
 				const line = formatAffiliation(summary);
-				if (line) md += `- ${line}\n`;
+				if (line !== null && line !== undefined && line !== "") md += `- ${line}\n`;
 			}
 			md += "\n";
 		}

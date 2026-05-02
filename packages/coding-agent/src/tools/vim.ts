@@ -127,13 +127,13 @@ function renderViewportCursor(line: VimViewportLine, styledText: string, uiTheme
 }
 
 function renderViewportLine(line: VimViewportLine, styledText: string, padWidth: number, uiTheme: Theme): string {
-	const marker = line.isCursor ? ">" : line.isSelected ? "*" : "";
+	const marker = line.isCursor ? ">" : (line.isSelected ? "*" : "");
 	const gutterText = `${marker}${line.line}`.padStart(padWidth + 1, " ");
 	const gutterStyled = line.isCursor
 		? uiTheme.fg("accent", gutterText)
-		: line.isSelected
+		: (line.isSelected
 			? uiTheme.fg("warning", gutterText)
-			: uiTheme.fg("dim", gutterText);
+			: uiTheme.fg("dim", gutterText));
 	const separator = uiTheme.fg("dim", "│");
 	return `${gutterStyled}${separator}${renderViewportCursor(line, styledText, uiTheme)}`;
 }
@@ -511,7 +511,7 @@ export class VimTool implements AgentTool<typeof vimSchema, VimToolDetails> {
 		if (buffer.baseFingerprint) {
 			await assertEditableFile(buffer.filePath, buffer.displayPath);
 		}
-		if (!options?.force) {
+		if (options?.force !== true) {
 			const diskFingerprint = await statFingerprint(buffer.filePath);
 			if (!fingerprintEqual(buffer.baseFingerprint, diskFingerprint)) {
 				throw new ToolError("File changed on disk since open; reload with :e! before saving.");
@@ -540,7 +540,10 @@ export class VimTool implements AgentTool<typeof vimSchema, VimToolDetails> {
 			errorLocation,
 			statusMessage,
 		);
-		const resultText = modelDiff ? `${renderVimDetails(details)}\n\nDiff:\n${modelDiff}` : renderVimDetails(details);
+		const resultText =
+			modelDiff !== null && modelDiff !== undefined && modelDiff !== ""
+				? `${renderVimDetails(details)}\n\nDiff:\n${modelDiff}`
+				: renderVimDetails(details);
 		const builder = toolResult<VimToolDetails>(details).text(resultText);
 		if (engine.diagnostics) {
 			builder.diagnostics(engine.diagnostics.summary, engine.diagnostics.messages ?? []);
@@ -746,7 +749,7 @@ function unescapePartialJsonString(value: string): string {
 // Extract partial insert text from raw JSON buffer during streaming.
 // partial-json often doesn't surface string values until the closing quote is seen.
 function extractPartialInsert(partialJson: string | undefined): string | undefined {
-	if (!partialJson) {
+	if (partialJson === null || partialJson === undefined || partialJson === "") {
 		return undefined;
 	}
 	const matches = Array.from(partialJson.matchAll(/"insert"\s*:\s*"((?:\\.|[^"\\])*)(?:"|$)/gu));
@@ -773,7 +776,7 @@ function describeStepsForDisplay(args: VimRenderArgs): string {
 	if (insertText !== undefined && insertText.length > 0) {
 		description += `${description.length > 0 ? " · " : ""}insert: ${insertText}`;
 	}
-	if (args.pause) {
+	if (args.pause === true) {
 		description += `${description.length > 0 ? " · " : ""}pause`;
 	}
 	return description;
@@ -785,7 +788,12 @@ export function resetVimRendererStateForTest(): void {
 
 export const vimToolRenderer = {
 	renderCall(args: VimRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
-		if (args.file && (!args.steps || args.steps.length === 0)) {
+		if (
+			args.file !== null &&
+			args.file !== undefined &&
+			args.file !== "" &&
+			(!args.steps || args.steps.length === 0)
+		) {
 			return renderText(`${uiTheme.bold("Edit")} open ${args.file}`);
 		}
 
@@ -805,7 +813,7 @@ export const vimToolRenderer = {
 			const renderedLines = viewportLines.map((line, index) =>
 				renderViewportLine(line, highlightedLines[index] ?? line.text, padWidth, uiTheme),
 			);
-			if (details.statusMessage) {
+			if (details.statusMessage !== null && details.statusMessage !== undefined && details.statusMessage !== "") {
 				renderedLines.push(uiTheme.fg("dim", details.statusMessage));
 			}
 
@@ -882,7 +890,7 @@ export const vimToolRenderer = {
 		const renderedLines = viewportLines.map((line, index) =>
 			renderViewportLine(line, highlightedLines[index] ?? line.text, padWidth, uiTheme),
 		);
-		if (details.statusMessage) {
+		if (details.statusMessage !== null && details.statusMessage !== undefined && details.statusMessage !== "") {
 			renderedLines.push(uiTheme.fg("dim", details.statusMessage));
 		}
 
@@ -913,7 +921,7 @@ export const vimToolRenderer = {
 					return cached.result;
 				}
 
-				const icon = options.isPartial ? "pending" : isError ? "error" : "success";
+				const icon = options.isPartial ? "pending" : (isError ? "error" : "success");
 
 				// Mode badge
 				const modeBadge =
@@ -924,9 +932,9 @@ export const vimToolRenderer = {
 								color:
 									details.mode === "INSERT"
 										? ("success" as const)
-										: details.mode === "VISUAL" || details.mode === "VISUAL-LINE"
+										: (details.mode === "VISUAL" || details.mode === "VISUAL-LINE"
 											? ("warning" as const)
-											: ("accent" as const),
+											: ("accent" as const)),
 							};
 
 				const header = renderStatusLine(
@@ -944,7 +952,7 @@ export const vimToolRenderer = {
 				const lines = outputBlock.render(
 					{
 						header,
-						state: options.isPartial ? "pending" : isError ? "error" : "success",
+						state: options.isPartial ? "pending" : (isError ? "error" : "success"),
 						sections,
 						width,
 					},

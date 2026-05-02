@@ -20,7 +20,7 @@ class FakeKernel {
 
 	async execute(_code: string, options?: KernelExecuteOptions): Promise<KernelExecuteResult> {
 		this.executeCalls += 1;
-		options?.onChunk?.("ok\n");
+		void options?.onChunk?.("ok\n");
 		return { status: "ok", cancelled: false, timedOut: false, stdinRequested: false };
 	}
 

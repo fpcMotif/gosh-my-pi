@@ -438,11 +438,11 @@ function hasResidualCloudCodeAssistIncompatibilities(value: unknown, seen = new 
 		return true;
 	}
 	for (const combiner of CCA_FORBIDDEN_COMBINERS) {
-		if (Array.isArray(value[combiner])) {
+		if (Array.isArray((value as JsonObject)[combiner])) {
 			return true;
 		}
 	}
-	for (const entry of Object.values(value)) {
+	for (const entry of Object.values(value as JsonObject)) {
 		if (hasResidualCloudCodeAssistIncompatibilities(entry, seen)) {
 			return true;
 		}

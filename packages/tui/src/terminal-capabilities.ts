@@ -19,15 +19,15 @@ const SIXEL_DCS_START_REGEX = /\x1bP(?:[0-9;]*)q/u;
 /** Terminal capability details used for rendering and protocol selection. */
 export class TerminalInfo {
 	constructor(
-		public readonly id: TerminalId,
-		public readonly imageProtocol: ImageProtocol | null,
-		public readonly trueColor: boolean,
-		public readonly hyperlinks: boolean,
-		public readonly notifyProtocol: NotifyProtocol = NotifyProtocol.Bell,
+		readonly id: TerminalId,
+		readonly imageProtocol: ImageProtocol | null,
+		readonly trueColor: boolean,
+		readonly hyperlinks: boolean,
+		readonly notifyProtocol: NotifyProtocol = NotifyProtocol.Bell,
 	) {}
 
 	isImageLine(line: string): boolean {
-		if (!this.imageProtocol) return false;
+		if (this.imageProtocol === null) return false;
 		if (this.imageProtocol === ImageProtocol.Sixel) {
 			return SIXEL_DCS_START_REGEX.test(line.slice(0, 128));
 		}
@@ -64,7 +64,7 @@ function getForcedImageProtocol(): ImageProtocol | null | undefined {
 }
 
 function parseMajorMinorVersion(versionRaw?: string): { major: number; minor: number } | null {
-	if (!versionRaw) return null;
+	if (versionRaw === null || versionRaw === undefined || versionRaw === "") return null;
 	const match = /^(\d+)\.(\d+)/u.exec(versionRaw.trim());
 	if (!match) return null;
 	const major = Number.parseInt(match[1] ?? "", 10);
@@ -83,8 +83,13 @@ export function isWindowsTerminalPreviewSixelSupported(
 	platform: NodeJS.Platform = process.platform,
 ): boolean {
 	if (platform !== "win32") return false;
-	if (!env.WT_SESSION) return false;
-	if (env.TERM_PROGRAM && env.TERM_PROGRAM.toLowerCase() !== "windows_terminal") {
+	if (env.WT_SESSION === null || env.WT_SESSION === undefined || env.WT_SESSION === "") return false;
+	if (
+		env.TERM_PROGRAM !== null &&
+		env.TERM_PROGRAM !== undefined &&
+		env.TERM_PROGRAM !== "" &&
+		env.TERM_PROGRAM.toLowerCase() !== "windows_terminal"
+	) {
 		return false;
 	}
 	const version = parseMajorMinorVersion(env.TERM_PROGRAM_VERSION);
@@ -130,14 +135,16 @@ export const TERMINAL_ID: TerminalId = (() => {
 		COLORTERM,
 	} = Bun.env;
 
-	if (KITTY_WINDOW_ID) return "kitty";
-	if (GHOSTTY_RESOURCES_DIR) return "ghostty";
-	if (WEZTERM_PANE) return "wezterm";
-	if (ITERM_SESSION_ID) return "iterm2";
-	if (VSCODE_PID) return "vscode";
-	if (ALACRITTY_WINDOW_ID) return "alacritty";
+	if (KITTY_WINDOW_ID !== null && KITTY_WINDOW_ID !== undefined && KITTY_WINDOW_ID !== "") return "kitty";
+	if (GHOSTTY_RESOURCES_DIR !== null && GHOSTTY_RESOURCES_DIR !== undefined && GHOSTTY_RESOURCES_DIR !== "")
+		return "ghostty";
+	if (WEZTERM_PANE !== null && WEZTERM_PANE !== undefined && WEZTERM_PANE !== "") return "wezterm";
+	if (ITERM_SESSION_ID !== null && ITERM_SESSION_ID !== undefined && ITERM_SESSION_ID !== "") return "iterm2";
+	if (VSCODE_PID !== null && VSCODE_PID !== undefined && VSCODE_PID !== "") return "vscode";
+	if (ALACRITTY_WINDOW_ID !== null && ALACRITTY_WINDOW_ID !== undefined && ALACRITTY_WINDOW_ID !== "")
+		return "alacritty";
 
-	if (TERM_PROGRAM) {
+	if (TERM_PROGRAM !== null && TERM_PROGRAM !== undefined && TERM_PROGRAM !== "") {
 		if (caseEq(TERM_PROGRAM, "kitty")) return "kitty";
 		if (caseEq(TERM_PROGRAM, "ghostty")) return "ghostty";
 		if (caseEq(TERM_PROGRAM, "wezterm")) return "wezterm";
@@ -148,7 +155,7 @@ export const TERMINAL_ID: TerminalId = (() => {
 
 	if (TERM?.toLowerCase().includes("ghostty")) return "ghostty";
 
-	if (COLORTERM) {
+	if (COLORTERM !== null && COLORTERM !== undefined && COLORTERM !== "") {
 		if (caseEq(COLORTERM, "truecolor") || caseEq(COLORTERM, "24bit")) return "trueColor";
 	}
 	return "base";
@@ -166,9 +173,9 @@ export const TERMINAL = (() => {
 			terminal.notifyProtocol,
 		);
 	}
-	if (!terminal.imageProtocol) {
+	if (terminal.imageProtocol === null) {
 		const fallbackImageProtocol = getFallbackImageProtocol(terminal.id);
-		if (fallbackImageProtocol) {
+		if (fallbackImageProtocol !== null) {
 			return new TerminalInfo(
 				terminal.id,
 				fallbackImageProtocol,
@@ -235,9 +242,11 @@ export function encodeKitty(
 
 	const params: string[] = ["a=T", "f=100", "q=2"];
 
-	if (options.columns) params.push(`c=${options.columns}`);
-	if (options.rows) params.push(`r=${options.rows}`);
-	if (options.imageId) params.push(`i=${options.imageId}`);
+	if (options.columns !== null && options.columns !== undefined && options.columns !== 0)
+		params.push(`c=${options.columns}`);
+	if (options.rows !== null && options.rows !== undefined && options.rows !== 0) params.push(`r=${options.rows}`);
+	if (options.imageId !== null && options.imageId !== undefined && options.imageId !== 0)
+		params.push(`i=${options.imageId}`);
 
 	if (base64Data.length <= CHUNK_SIZE) {
 		return `\x1b_G${params.join(",")};${base64Data}\x1b\\`;
@@ -280,7 +289,7 @@ export function encodeITerm2(
 
 	if (options.width !== undefined) params.push(`width=${options.width}`);
 	if (options.height !== undefined) params.push(`height=${options.height}`);
-	if (options.name) {
+	if (options.name !== null && options.name !== undefined && options.name !== "") {
 		const nameBase64 = Buffer.from(options.name).toBase64();
 		params.push(`name=${nameBase64}`);
 	}
@@ -478,7 +487,7 @@ export function renderImage(
 	imageDimensions: ImageDimensions,
 	options: ImageRenderOptions = {},
 ): { sequence: string; rows: number } | null {
-	if (!TERMINAL.imageProtocol) {
+	if (TERMINAL.imageProtocol === undefined) {
 		return null;
 	}
 
@@ -518,7 +527,7 @@ export function renderImage(
 
 export function imageFallback(mimeType: string, dimensions?: ImageDimensions, filename?: string): string {
 	const parts: string[] = [];
-	if (filename) parts.push(filename);
+	if (filename !== null && filename !== undefined && filename !== "") parts.push(filename);
 	parts.push(`[${mimeType}]`);
 	if (dimensions) parts.push(`${dimensions.widthPx}x${dimensions.heightPx}`);
 	return `[Image: ${parts.join(" ")}]`;

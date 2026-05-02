@@ -57,7 +57,7 @@ export class ExtensionDashboard extends Container {
 
 	async #init(): Promise<void> {
 		const sm = this.settings ?? (await Settings.init());
-		const disabledIds = sm ? ((sm.get("disabledExtensions") as string[]) ?? []) : [];
+		const disabledIds = (sm.get("disabledExtensions") as string[]) ?? [];
 		this.#state = await createInitialState(this.cwd, disabledIds);
 
 		// Calculate max visible items based on terminal height
@@ -86,7 +86,7 @@ export class ExtensionDashboard extends Container {
 
 		// Create inspector
 		this.#inspector = new InspectorPanel();
-		if (this.#state.selected) {
+		if (this.#state.selected !== null) {
 			this.#inspector.setExtension(this.#state.selected);
 		}
 
@@ -95,7 +95,7 @@ export class ExtensionDashboard extends Container {
 
 	#getActiveProviderId(): string | null {
 		const tab = this.#state.tabs[this.#state.activeTabIndex];
-		return tab && tab.id !== "all" ? tab.id : null;
+		return tab !== undefined && tab.id !== "all" ? tab.id : null;
 	}
 
 	#buildLayout(): void {
@@ -165,7 +165,6 @@ export class ExtensionDashboard extends Container {
 
 	#handleExtensionToggle(extensionId: string, enabled: boolean): void {
 		const sm = this.settings ?? Settings.instance;
-		if (!sm) return;
 
 		const disabled = ((sm.get("disabledExtensions") as string[]) ?? []).slice();
 		if (enabled) {
@@ -174,11 +173,9 @@ export class ExtensionDashboard extends Container {
 				disabled.splice(index, 1);
 				sm.set("disabledExtensions", disabled);
 			}
-		} else {
-			if (!disabled.includes(extensionId)) {
-				disabled.push(extensionId);
-				sm.set("disabledExtensions", disabled);
-			}
+		} else if (!disabled.includes(extensionId)) {
+			disabled.push(extensionId);
+			sm.set("disabledExtensions", disabled);
 		}
 
 		void this.#refreshFromState();
@@ -189,7 +186,7 @@ export class ExtensionDashboard extends Container {
 		const currentTabId = this.#state.tabs[this.#state.activeTabIndex]?.id;
 
 		const sm = this.settings ?? Settings.instance;
-		const disabledIds = sm ? ((sm.get("disabledExtensions") as string[]) ?? []) : [];
+		const disabledIds = (sm.get("disabledExtensions") as string[]) ?? [];
 		this.#state = await refreshState(this.#state, this.cwd, disabledIds);
 
 		// Find the same tab in the new (re-sorted) list
@@ -203,7 +200,7 @@ export class ExtensionDashboard extends Container {
 		this.#mainList.setExtensions(this.#state.searchFiltered);
 		this.#mainList.setMasterSwitchProvider(this.#getActiveProviderId());
 
-		if (this.#state.selected) {
+		if (this.#state.selected !== null) {
 			this.#inspector.setExtension(this.#state.selected);
 		}
 
@@ -237,7 +234,7 @@ export class ExtensionDashboard extends Container {
 		this.#mainList.setMasterSwitchProvider(this.#getActiveProviderId());
 		this.#mainList.resetSelection();
 
-		if (this.#state.selected) {
+		if (this.#state.selected !== null) {
 			this.#inspector.setExtension(this.#state.selected);
 		}
 

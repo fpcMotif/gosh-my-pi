@@ -58,6 +58,11 @@ function tokenize(input: string): string[] {
 	return tokens;
 }
 
+function normalizeFuzzyQuery(input: string): string {
+	const tokens = tokenize(input);
+	return tokens.length === 0 ? "" : tokens.join(" ");
+}
+
 // =============================================================================
 // Name normalization
 // =============================================================================
@@ -206,7 +211,7 @@ export class TodoCommandController {
 			return;
 		}
 		try {
-			copyToClipboard(phasesToMarkdown(phases));
+			void copyToClipboard(phasesToMarkdown(phases));
 			this.ctx.showStatus("Copied todos as Markdown to clipboard.");
 		} catch (error) {
 			this.ctx.showError(error instanceof Error ? error.message : String(error));
@@ -276,7 +281,7 @@ export class TodoCommandController {
 		const next = current.map(phase => ({ ...phase, tasks: phase.tasks.slice() }));
 		let targetPhase: TodoPhase | undefined;
 
-		if (phaseName) {
+		if (phaseName !== null && phaseName !== undefined && phaseName !== "") {
 			targetPhase = findPhaseFuzzy(next, phaseName);
 			if (!targetPhase) {
 				targetPhase = { name: titleCase(phaseName), tasks: [] };
@@ -302,14 +307,15 @@ export class TodoCommandController {
 	// ------------------------------------------------------------- start / done / drop / rm
 
 	#start(rest: string): void {
-		if (!rest) {
+		const query = normalizeFuzzyQuery(rest);
+		if (!query) {
 			this.ctx.showError("Usage: /todo start <task>");
 			return;
 		}
 		const current = this.#currentPhases();
-		const hit = findTaskFuzzy(current, rest);
+		const hit = findTaskFuzzy(current, query);
 		if (!hit) {
-			this.ctx.showError(`No task matched "${rest}". Use /todo to list current tasks.`);
+			this.ctx.showError(`No task matched "${query}". Use /todo to list current tasks.`);
 			return;
 		}
 		const { phases, errors } = applyOpsToPhases(current, [{ op: "start", task: hit.task.content }]);
@@ -324,7 +330,7 @@ export class TodoCommandController {
 	#mutateStatus(rest: string, target: "completed" | "abandoned"): void {
 		const op = target === "completed" ? "done" : "drop";
 		const current = this.#currentPhases();
-		const trimmed = rest.trim();
+		const trimmed = normalizeFuzzyQuery(rest);
 		if (!trimmed) {
 			// no-arg: apply to all
 			const { phases, errors } = applyOpsToPhases(current, [{ op }]);
@@ -366,7 +372,7 @@ export class TodoCommandController {
 
 	#remove(rest: string): void {
 		const current = this.#currentPhases();
-		const trimmed = rest.trim();
+		const trimmed = normalizeFuzzyQuery(rest);
 		if (!trimmed) {
 			this.#commit([], "/todo rm (all)");
 			this.ctx.showStatus("Cleared all todos.");
@@ -401,7 +407,7 @@ export class TodoCommandController {
 
 	async #editInExternalEditor(): Promise<void> {
 		const editorCmd = getEditorCommand();
-		if (!editorCmd) {
+		if (editorCmd === null || editorCmd === undefined || editorCmd === "") {
 			this.ctx.showWarning("No editor configured. Set $VISUAL or $EDITOR environment variable.");
 			return;
 		}
@@ -448,7 +454,7 @@ export class TodoCommandController {
 	async #openTtyHandle(): Promise<fs.FileHandle | null> {
 		const stdinPath = (process.stdin as unknown as { path?: string }).path;
 		const candidate = typeof stdinPath === "string" ? stdinPath : undefined;
-		if (!candidate) return null;
+		if (candidate === null || candidate === undefined || candidate === "") return null;
 		try {
 			return await fs.open(candidate, "r+");
 		} catch {

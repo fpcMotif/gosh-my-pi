@@ -45,16 +45,23 @@ export const handleHex: SpecialHandler = async (url, timeout, signal) => {
 		if (!data) return null;
 
 		let md = `# ${data.name}\n\n`;
-		if (data.meta?.description) md += `${data.meta.description}\n\n`;
+		if (data.meta?.description !== null && data.meta?.description !== undefined && data.meta?.description !== "")
+			md += `${data.meta.description}\n\n`;
 
-		const version = data.latest_stable_version || data.latest_version || "unknown";
+		const version = data.latest_stable_version ?? data.latest_version ?? "unknown";
 		md += `**Latest:** ${version}`;
-		if (data.meta?.licenses?.length) md += ` · **License:** ${data.meta.licenses.join(", ")}`;
+		if (
+			data.meta?.licenses?.length !== null &&
+			data.meta?.licenses?.length !== undefined &&
+			data.meta?.licenses?.length !== 0
+		)
+			md += ` · **License:** ${data.meta.licenses.join(", ")}`;
 		md += "\n";
 
-		if (data.downloads?.all) {
+		if (data.downloads?.all !== null && data.downloads?.all !== undefined && data.downloads?.all !== 0) {
 			md += `**Total Downloads:** ${formatNumber(data.downloads.all)}`;
-			if (data.downloads.week) md += ` · **This Week:** ${formatNumber(data.downloads.week)}`;
+			if (data.downloads.week !== null && data.downloads.week !== undefined && data.downloads.week !== 0)
+				md += ` · **This Week:** ${formatNumber(data.downloads.week)}`;
 			md += "\n";
 		}
 		md += "\n";
@@ -68,7 +75,7 @@ export const handleHex: SpecialHandler = async (url, timeout, signal) => {
 		}
 
 		// Fetch releases if available
-		if (data.releases?.length) {
+		if (data.releases?.length !== null && data.releases?.length !== undefined && data.releases?.length !== 0) {
 			const releasesUrl = `https://hex.pm/api/packages/${packageName}/releases/${version}`;
 			const releaseResult = await loadPage(releasesUrl, { timeout: Math.min(timeout, 5), signal });
 

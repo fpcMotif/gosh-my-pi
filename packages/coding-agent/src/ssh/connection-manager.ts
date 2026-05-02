@@ -37,8 +37,8 @@ function ensureControlDir() {
 	fs.mkdirSync(CONTROL_DIR, { recursive: true, mode: 0o700 });
 	try {
 		fs.chmodSync(CONTROL_DIR, 0o700);
-	} catch (err) {
-		logger.debug("SSH control dir chmod failed", { path: CONTROL_DIR, error: String(err) });
+	} catch (error) {
+		logger.debug("SSH control dir chmod failed", { path: CONTROL_DIR, error: String(error) });
 	}
 }
 
@@ -47,15 +47,15 @@ function getHostInfoPath(name: string): string {
 }
 
 async function validateKeyPermissions(keyPath?: string): Promise<void> {
-	if (!keyPath) return;
+	if (keyPath === null || keyPath === undefined || keyPath === "") return;
 	let stats: fs.Stats;
 	try {
 		stats = await fs.promises.stat(keyPath);
-	} catch (err) {
-		if (isEnoent(err)) {
+	} catch (error) {
+		if (isEnoent(error)) {
 			throw new Error(`SSH key not found: ${keyPath}`);
 		}
-		throw err;
+		throw error;
 	}
 	if (!stats.isFile()) {
 		throw new Error(`SSH key is not a file: ${keyPath}`);
@@ -81,10 +81,10 @@ function buildCommonArgs(host: SSHConnectionTarget): string[] {
 		"StrictHostKeyChecking=accept-new",
 	];
 
-	if (host.port) {
+	if (host.port !== null && host.port !== undefined && host.port !== 0) {
 		args.push("-p", String(host.port));
 	}
-	if (host.keyPath) {
+	if (host.keyPath !== null && host.keyPath !== undefined && host.keyPath !== "") {
 		args.push("-i", host.keyPath);
 	}
 
@@ -106,7 +106,7 @@ async function runSshCaptureSync(args: string[]): Promise<{ exitCode: number | n
 }
 
 function ensureSshBinary(): void {
-	if (!$which("ssh")) {
+	if ($which("ssh") === undefined || $which("ssh") === "") {
 		throw new Error("ssh binary not found on PATH");
 	}
 }
@@ -151,9 +151,9 @@ function applyCompatOverride(host: SSHConnectionTarget, info: SSHHostInfo): SSHH
 		info.compatShell ??
 		(info.os === "windows" && info.shell === "bash"
 			? "bash"
-			: info.os === "windows" && info.shell === "sh"
+			: (info.os === "windows" && info.shell === "sh"
 				? "sh"
-				: undefined);
+				: undefined));
 	const compatEnabled = host.compat === false ? false : info.os === "windows" && compatShell !== undefined;
 	if (host.compat === true && !compatShell) {
 		logger.warn("SSH compat requested but no compatible shell detected", {
@@ -165,7 +165,7 @@ function applyCompatOverride(host: SSHConnectionTarget, info: SSHHostInfo): SSHH
 }
 
 function parseHostInfo(value: unknown): SSHHostInfo | null {
-	if (!value || typeof value !== "object") return null;
+	if (value === null || value === undefined || typeof value !== "object") return null;
 	const record = value as Record<string, unknown>;
 	const os = parseOs(record.os) ?? "unknown";
 	const shell = parseShell(record.shell) ?? "unknown";
@@ -200,9 +200,9 @@ async function loadHostInfoFromDisk(host: SSHConnectionTarget): Promise<SSHHostI
 		const resolved = applyCompatOverride(host, parsed);
 		hostInfoCache.set(host.name, resolved);
 		return resolved;
-	} catch (err) {
-		if (isEnoent(err)) return undefined;
-		logger.warn("Failed to load SSH host info", { host: host.name, error: String(err) });
+	} catch (error) {
+		if (isEnoent(error)) return undefined;
+		logger.warn("Failed to load SSH host info", { host: host.name, error: String(error) });
 		return undefined;
 	}
 }
@@ -214,9 +214,9 @@ async function loadHostInfoFromDiskByName(hostName: string): Promise<SSHHostInfo
 		const parsed = parseHostInfo(JSON.parse(raw));
 		if (!parsed) return undefined;
 		return parsed;
-	} catch (err) {
-		if (isEnoent(err)) return undefined;
-		logger.warn("Failed to load SSH host info", { host: hostName, error: String(err) });
+	} catch (error) {
+		if (isEnoent(error)) return undefined;
+		logger.warn("Failed to load SSH host info", { host: hostName, error: String(error) });
 		return undefined;
 	}
 }
@@ -227,8 +227,8 @@ async function persistHostInfo(host: SSHConnectionTarget, info: SSHHostInfo): Pr
 		const payload = { ...info, version: HOST_INFO_VERSION };
 		hostInfoCache.set(host.name, payload);
 		await Bun.write(path, JSON.stringify(payload, null, 2), { createPath: true });
-	} catch (err) {
-		logger.warn("Failed to persist SSH host info", { host: host.name, error: String(err) });
+	} catch (error) {
+		logger.warn("Failed to persist SSH host info", { host: host.name, error: String(error) });
 	}
 }
 

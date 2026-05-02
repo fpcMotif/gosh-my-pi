@@ -82,7 +82,7 @@ function combineAbortSignal(
 	timeoutCapMs?: number,
 	fallbackReason = "Operation aborted",
 ): AbortSignal | undefined {
-	if (options.signal?.aborted) {
+	if (options.signal !== undefined && options.signal.aborted) {
 		return options.signal;
 	}
 
@@ -95,9 +95,9 @@ function combineAbortSignal(
 	const timeoutMs =
 		remainingMs === undefined
 			? timeoutCapMs
-			: timeoutCapMs === undefined
+			: (timeoutCapMs === undefined
 				? remainingMs
-				: Math.min(remainingMs, timeoutCapMs);
+				: Math.min(remainingMs, timeoutCapMs));
 
 	if (timeoutMs !== undefined) {
 		if (timeoutMs <= 0) {
@@ -111,7 +111,7 @@ function combineAbortSignal(
 }
 
 function throwIfAborted(signal: AbortSignal | undefined, fallbackReason: string): void {
-	if (!signal?.aborted) return;
+	if (signal?.aborted !== true) return;
 	throw getAbortReason(signal, fallbackReason);
 }
 
@@ -225,15 +225,15 @@ export async function checkPythonKernelAvailability(cwd: string): Promise<Python
 			reason:
 				"kernel_gateway (jupyter-kernel-gateway) or ipykernel not installed. Run: python -m pip install jupyter_kernel_gateway ipykernel",
 		};
-	} catch (err: unknown) {
-		return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+	} catch (error: unknown) {
+		return { ok: false, reason: error instanceof Error ? error.message : String(error) };
 	}
 }
 
 async function checkExternalGatewayAvailability(config: ExternalGatewayConfig): Promise<PythonKernelAvailability> {
 	try {
 		const headers: Record<string, string> = {};
-		if (config.token) {
+		if (config.token !== null && config.token !== undefined && config.token !== "") {
 			headers.Authorization = `token ${config.token}`;
 		}
 
@@ -259,8 +259,8 @@ async function checkExternalGatewayAvailability(config: ExternalGatewayConfig): 
 			ok: false,
 			reason: `External gateway at ${config.url} returned status ${response.status}`,
 		};
-	} catch (err: unknown) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
 		if (message.includes("abort") || message.includes("timeout")) {
 			return {
 				ok: false,
@@ -421,7 +421,7 @@ export class PythonKernel {
 	}
 
 	#authHeaders(): Record<string, string> {
-		if (!this.#authToken) return {};
+		if (this.#authToken === null || this.#authToken === undefined || this.#authToken === "") return {};
 		return { Authorization: `token ${this.#authToken}` };
 	}
 
@@ -467,18 +467,18 @@ export class PythonKernel {
 					startup,
 				);
 				return kernel;
-			} catch (err) {
+			} catch (error) {
 				logger.debug("PythonKernel.start:sharedFailed");
-				if (attempt === 0 && err instanceof SharedGatewayCreateError && err.status >= 500) {
+				if (attempt === 0 && error instanceof SharedGatewayCreateError && error.status >= 500) {
 					logger.warn("Shared gateway kernel creation failed, retrying", {
-						status: err.status,
+						status: error.status,
 					});
 					continue;
 				}
 				logger.warn("Failed to acquire shared gateway", {
-					error: err instanceof Error ? err.message : String(err),
+					error: error instanceof Error ? error.message : String(error),
 				});
-				throw err;
+				throw error;
 			}
 		}
 
@@ -492,7 +492,7 @@ export class PythonKernel {
 		startup: KernelLifecycleOptions = {},
 	): Promise<PythonKernel> {
 		const headers: Record<string, string> = { "Content-Type": "application/json" };
-		if (config.token) {
+		if (config.token !== null && config.token !== undefined && config.token !== "") {
 			headers.Authorization = `token ${config.token}`;
 		}
 
@@ -538,9 +538,9 @@ export class PythonKernel {
 			);
 			await loadPythonModules(kernel, { cwd, signal: startup.signal, deadlineMs: startup.deadlineMs });
 			return kernel;
-		} catch (err: unknown) {
+		} catch (error: unknown) {
 			await kernel.shutdown({ timeoutMs: getStartupCleanupTimeoutMs(startup.deadlineMs) });
-			throw err;
+			throw error;
 		}
 	}
 
@@ -613,16 +613,16 @@ export class PythonKernel {
 				deadlineMs: startup.deadlineMs,
 			});
 			return kernel;
-		} catch (err: unknown) {
+		} catch (error: unknown) {
 			await kernel.shutdown({ timeoutMs: getStartupCleanupTimeoutMs(startup.deadlineMs) });
-			throw err;
+			throw error;
 		}
 	}
 
 	async #connectWebSocket(options: KernelLifecycleOptions = {}): Promise<void> {
 		const wsBase = this.gatewayUrl.replace(/^http/, "ws");
 		let wsUrl = `${wsBase}/api/kernels/${this.kernelId}/channels`;
-		if (this.#authToken) {
+		if (this.#authToken !== null && this.#authToken !== undefined && this.#authToken !== "") {
 			wsUrl += `?token=${encodeURIComponent(this.#authToken)}`;
 		}
 
@@ -661,7 +661,7 @@ export class PythonKernel {
 		};
 
 		ws.onerror = event => {
-			const error = new Error(`WebSocket error: ${event}`);
+			const error = new Error(`WebSocket error: ${String(event)}`);
 			if (!settled) {
 				settled = true;
 				finalize();
@@ -703,7 +703,7 @@ export class PythonKernel {
 			}
 
 			const parentId = (msg.parent_header as { msg_id?: string }).msg_id;
-			if (parentId) {
+			if (parentId !== null && parentId !== undefined && parentId !== "") {
 				const handler = this.#messageHandlers.get(parentId);
 				if (handler) handler(msg);
 			}
@@ -971,8 +971,8 @@ export class PythonKernel {
 		if (!trimmed) return [];
 		try {
 			return JSON.parse(trimmed) as PreludeHelper[];
-		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : String(err);
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
 			throw new Error(`Failed to parse Python prelude docs: ${message}`);
 		}
 	}
@@ -984,8 +984,10 @@ export class PythonKernel {
 				headers: this.#authHeaders(),
 				signal: AbortSignal.timeout(2000),
 			});
-		} catch (err: unknown) {
-			logger.warn("Failed to interrupt kernel via API", { error: err instanceof Error ? err.message : String(err) });
+		} catch (error: unknown) {
+			logger.warn("Failed to interrupt kernel via API", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		try {
@@ -1004,8 +1006,10 @@ export class PythonKernel {
 				content: {},
 			};
 			this.#sendMessage(msg);
-		} catch (err: unknown) {
-			logger.warn("Failed to send interrupt request", { error: err instanceof Error ? err.message : String(err) });
+		} catch (error: unknown) {
+			logger.warn("Failed to send interrupt request", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 
@@ -1043,8 +1047,10 @@ export class PythonKernel {
 					statusText: response.statusText,
 				});
 			}
-		} catch (err: unknown) {
-			logger.warn("Failed to delete kernel via API", { error: err instanceof Error ? err.message : String(err) });
+		} catch (error: unknown) {
+			logger.warn("Failed to delete kernel via API", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 		this.#shutdownConfirmed = confirmed;
 		this.#disposed = confirmed;
@@ -1052,9 +1058,9 @@ export class PythonKernel {
 		if (this.isSharedGateway) {
 			try {
 				await releaseSharedGateway();
-			} catch (err: unknown) {
+			} catch (error: unknown) {
 				logger.warn("Failed to release shared gateway after kernel shutdown", {
-					error: err instanceof Error ? err.message : String(err),
+					error: error instanceof Error ? error.message : String(error),
 				});
 			}
 		}

@@ -31,7 +31,7 @@ export function renderSwarmProgress(state: SwarmState): string[] {
 	for (const agent of agents) {
 		const icon = STATUS_LABELS[agent.status] ?? "[????]";
 		const duration = formatAgentDuration(agent);
-		const errorSuffix = agent.error ? ` - ${truncate(agent.error, 60)}` : "";
+		const errorSuffix = agent.error !== undefined && agent.error !== "" ? ` - ${truncate(agent.error, 60)}` : "";
 		lines.push(`  ${icon} ${agent.name}: ${agent.status}${duration}${errorSuffix}`);
 	}
 
@@ -53,10 +53,19 @@ export function renderSwarmProgress(state: SwarmState): string[] {
 }
 
 function formatAgentDuration(agent: { startedAt?: number; completedAt?: number; status: string }): string {
-	if (agent.startedAt && agent.completedAt) {
+	if (
+		agent.startedAt !== undefined &&
+		agent.startedAt !== 0 &&
+		agent.completedAt !== undefined &&
+		agent.completedAt !== 0
+	) {
 		return ` (${formatDuration(agent.completedAt - agent.startedAt)})`;
 	}
-	if (agent.startedAt && (agent.status === "running" || agent.status === "waiting")) {
+	if (
+		agent.startedAt !== undefined &&
+		agent.startedAt !== 0 &&
+		(agent.status === "running" || agent.status === "waiting")
+	) {
 		return ` (${formatDuration(Date.now() - agent.startedAt)}...)`;
 	}
 	return "";

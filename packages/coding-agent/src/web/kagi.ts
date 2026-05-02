@@ -48,7 +48,7 @@ export class KagiApiError extends Error {
 }
 
 function extractKagiErrorMessage(payload: unknown): string | null {
-	if (!payload || typeof payload !== "object") return null;
+	if (payload === null || payload === undefined || typeof payload !== "object") return null;
 	const record = payload as Record<string, unknown>;
 
 	for (const value of [record.message, record.detail]) {
@@ -63,7 +63,7 @@ function extractKagiErrorMessage(payload: unknown): string | null {
 
 	if (Array.isArray(record.error)) {
 		for (const entry of record.error) {
-			if (!entry || typeof entry !== "object") continue;
+			if (entry === null || entry === undefined || typeof entry !== "object") continue;
 			const message = (entry as Record<string, unknown>).msg;
 			if (typeof message === "string" && message.trim().length > 0) {
 				return message.trim();
@@ -76,7 +76,9 @@ function extractKagiErrorMessage(payload: unknown): string | null {
 
 function createKagiApiError(statusCode: number, detail?: string): KagiApiError {
 	return new KagiApiError(
-		detail ? `Kagi API error (${statusCode}): ${detail}` : `Kagi API error (${statusCode})`,
+		detail !== null && detail !== undefined && detail !== ""
+			? `Kagi API error (${statusCode}): ${detail}`
+			: `Kagi API error (${statusCode})`,
 		statusCode,
 	);
 }
@@ -126,7 +128,7 @@ function getAuthHeaders(apiKey: string): Record<string, string> {
 
 export async function searchWithKagi(query: string, options: KagiSearchOptions = {}): Promise<KagiSearchResult> {
 	const apiKey = await findKagiApiKey();
-	if (!apiKey) {
+	if (apiKey === null || apiKey === undefined || apiKey === "") {
 		throw new KagiApiError("Kagi credentials not found. Set KAGI_API_KEY or login with 'omp /login kagi'.");
 	}
 

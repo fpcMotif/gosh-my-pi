@@ -1,7 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { type TodoPhase, TodoWriteTool } from "@oh-my-pi/pi-coding-agent/tools";
+import type { SessionEntry, SessionMessageEntry } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import {
+	getLatestTodoPhasesFromEntries,
+	type TodoPhase,
+	type ToolSession,
+	TodoWriteTool,
+	USER_TODO_EDIT_CUSTOM_TYPE,
+} from "@oh-my-pi/pi-coding-agent/tools";
 
 function createSession(initialPhases: TodoPhase[] = []): ToolSession {
 	let phases = initialPhases;
@@ -200,5 +206,68 @@ describe("TodoWriteTool ops operations", () => {
 		const result = await tool.execute("call-2", { ops: [{ op: "drop", phase: "Work" }] });
 		const tasks = result.details?.phases[0]?.tasks ?? [];
 		expect(tasks.map(task => task.status)).toEqual(["abandoned", "abandoned"]);
+	});
+});
+
+function todoResultEntry(id: string, parentId: string | null, phases: TodoPhase[]): SessionMessageEntry {
+	return {
+		type: "message",
+		id,
+		parentId,
+		timestamp: `2026-04-30T00:00:0${id}.000Z`,
+		message: {
+			role: "toolResult",
+			toolName: "todo_write",
+			isError: false,
+			details: { phases },
+		} as unknown as SessionMessageEntry["message"],
+	};
+}
+
+function userTodoEditEntry(id: string, parentId: string | null, phases: TodoPhase[]): SessionEntry {
+	return {
+		type: "custom",
+		id,
+		parentId,
+		timestamp: `2026-04-30T00:00:0${id}.000Z`,
+		customType: USER_TODO_EDIT_CUSTOM_TYPE,
+		data: { phases },
+	};
+}
+
+describe("getLatestTodoPhasesFromEntries", () => {
+	it("prefers later user todo edits over earlier tool results and clones notes", () => {
+		const toolPhases: TodoPhase[] = [
+			{
+				name: "Tool State",
+				tasks: [{ content: "Old task", status: "completed", notes: ["old note"] }],
+			},
+		];
+		const userPhases: TodoPhase[] = [
+			{
+				name: "User State",
+				tasks: [{ content: "Write tests", status: "in_progress", notes: ["first note\nsecond line"] }],
+			},
+		];
+		const entries: SessionEntry[] = [todoResultEntry("1", null, toolPhases), userTodoEditEntry("2", "1", userPhases)];
+
+		const latest = getLatestTodoPhasesFromEntries(entries);
+
+		expect(latest).toEqual(userPhases);
+		expect(latest[0]).not.toBe(userPhases[0]);
+		expect(latest[0]?.tasks[0]).not.toBe(userPhases[0]?.tasks[0]);
+		expect(latest[0]?.tasks[0]?.notes).not.toBe(userPhases[0]?.tasks[0]?.notes);
+
+		latest[0]!.name = "Mutated";
+		latest[0]!.tasks[0]!.content = "Mutated task";
+		latest[0]!.tasks[0]!.notes?.push("mutated note");
+
+		expect(userPhases).toEqual([
+			{
+				name: "User State",
+				tasks: [{ content: "Write tests", status: "in_progress", notes: ["first note\nsecond line"] }],
+			},
+		]);
+		expect(getLatestTodoPhasesFromEntries(entries)).toEqual(userPhases);
 	});
 });

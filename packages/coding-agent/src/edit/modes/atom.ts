@@ -171,7 +171,7 @@ function parseLidStmt(body: string, lineNum: number): ParsedStmt[] | null {
 
 			const stmts: ParsedStmt[] = [];
 			for (let l = ln; l <= endLn; l++) {
-				const h = l === ln ? hash : l === endLn ? endHash : RANGE_INTERIOR_HASH;
+				const h = l === ln ? hash : (l === endLn ? endHash : RANGE_INTERIOR_HASH);
 				stmts.push({
 					kind: "anchor_op",
 					anchor: { line: l, hash: h },
@@ -247,7 +247,7 @@ function parseDeleteStmt(body: string, lineNum: number): ParsedStmt[] | null {
 		}
 		const stmts: ParsedStmt[] = [];
 		for (let ln = startLine; ln <= endLine; ln++) {
-			const hash = ln === startLine ? startHash : ln === endLine ? endHash : RANGE_INTERIOR_HASH;
+			const hash = ln === startLine ? startHash : (ln === endLine ? endHash : RANGE_INTERIOR_HASH);
 			stmts.push({
 				kind: "anchor_op",
 				anchor: { line: ln, hash },
@@ -878,7 +878,7 @@ function validateNoConflictingAtomMutations(edits: AtomEdit[]): void {
 	for (const edit of edits) {
 		if (edit.kind !== "set" && edit.kind !== "delete") continue;
 		const existing = mutatingPerLine.get(edit.anchor.line);
-		if (existing) {
+		if (existing !== null && existing !== undefined && existing !== "") {
 			throw new Error(
 				`Conflicting ops on anchor line ${edit.anchor.line}: \`${existing}\` and \`${edit.kind}\`. ` +
 					"At most one mutating op (set/delete) is allowed per anchor.",
@@ -1233,7 +1233,7 @@ function unquoteAtomPath(pathText: string): string {
 
 function normalizeAtomPath(rawPath: string, cwd?: string): string {
 	const unquoted = unquoteAtomPath(rawPath.trim());
-	if (!cwd || !path.isAbsolute(unquoted)) return unquoted;
+	if (cwd === null || cwd === undefined || cwd === "" || !path.isAbsolute(unquoted)) return unquoted;
 
 	const relative = path.relative(path.resolve(cwd), path.resolve(unquoted));
 	const isWithinCwd = relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -1403,7 +1403,12 @@ function normalizeFallbackInput(input: string, options: SplitAtomOptions): strin
 	if (hasAtomHeaderLine(input)) return input;
 	const standalone = normalizeStandaloneFileOpInput(input, options.cwd);
 	if (standalone !== null) return standalone;
-	if (!options.path || !containsRecognizableAtomOperations(input)) {
+	if (
+		options.path === null ||
+		options.path === undefined ||
+		options.path === "" ||
+		!containsRecognizableAtomOperations(input)
+	) {
 		return input;
 	}
 	const fallbackPath = normalizeAtomPath(options.path, options.cwd);
@@ -1707,7 +1712,7 @@ async function executeAtomSection(
 	const allWarnings = [...parseWarnings, ...(result.warnings ?? [])];
 	const warningsBlock = allWarnings.length > 0 ? `\n\nWarnings:\n${allWarnings.join("\n")}` : "";
 	const previewBlock = preview.preview ? `\n${preview.preview}` : "";
-	const resultText = preview.preview ? `${path}:` : source.exists ? `Updated ${path}` : `Created ${path}`;
+	const resultText = preview.preview ? `${path}:` : (source.exists ? `Updated ${path}` : `Created ${path}`);
 
 	return {
 		content: [

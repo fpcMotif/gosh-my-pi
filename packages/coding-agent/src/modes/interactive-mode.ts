@@ -73,7 +73,7 @@ import { MCPCommandController } from "./controllers/mcp-command-controller";
 import { SelectorController } from "./controllers/selector-controller";
 import { SSHCommandController } from "./controllers/ssh-command-controller";
 import { RowSplit } from "./components/row-split";
-import { Sidebar, type SidebarMcpServer } from "./components/sidebar";
+import { Sidebar, type SidebarMcpServer, type SidebarModelCard } from "./components/sidebar";
 import { TodoCommandController } from "./controllers/todo-command-controller";
 import { OAuthManualInputManager } from "./oauth-manual-input";
 import { SessionObserverRegistry } from "./session-observer-registry";
@@ -234,9 +234,9 @@ export class InteractiveMode implements InteractiveModeContext {
 	constructor(
 		session: AgentSession,
 		version: string,
-		changelogMarkdown: string | undefined = undefined,
+		changelogMarkdown?: string,
 		setToolUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void = () => {},
-		lspServers: LspStartupServerInfo[] | undefined = undefined,
+		lspServers?: LspStartupServerInfo[],
 		mcpManager?: import("../mcp").MCPManager,
 		eventBus?: EventBus,
 	) {
@@ -392,7 +392,11 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.ui.addChild(new Spacer(1));
 
 			// Add changelog if provided
-			if (this.#changelogMarkdown) {
+			if (
+				this.#changelogMarkdown !== null &&
+				this.#changelogMarkdown !== undefined &&
+				this.#changelogMarkdown !== ""
+			) {
 				this.ui.addChild(new DynamicBorder());
 				if (settings.get("collapseChangelog")) {
 					const versionMatch = this.#changelogMarkdown.match(/##\s+\[?(\d+\.\d+\.\d+)\]?/);
@@ -415,9 +419,9 @@ export class InteractiveMode implements InteractiveModeContext {
 			// re-parented under a single main Container, which then sits inside RowSplit.
 			this.#sidebar = new Sidebar({
 				sessionTitle: this.sessionManager.getSessionName() ?? "",
-				cwd: process.cwd(),
+				cwd: this.sessionManager.getCwd(),
 				mcpServers: this.#computeSidebarMcpServers(),
-				model: { name: modelName, provider: providerName },
+				model: this.#getSidebarModelCard(),
 			});
 			const mainColumn = new Container();
 			mainColumn.addChild(this.chatContainer);
@@ -430,7 +434,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			mainColumn.addChild(this.editorContainer);
 			mainColumn.addChild(this.hookWidgetContainerBelow);
 			this.ui.addChild(new RowSplit(this.#sidebar, mainColumn, { leftWidth: 30 }));
-			this.#updateSidebar();
+			this.#updateSessionChrome();
 		} else {
 			this.ui.addChild(this.chatContainer);
 			this.ui.addChild(this.pendingMessagesContainer);
@@ -536,7 +540,8 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	#scheduleLoopAutoSubmit(): void {
 		this.#cancelLoopAutoSubmit();
-		if (!this.loopModeEnabled || !this.loopPrompt) return;
+		if (!this.loopModeEnabled || this.loopPrompt === null || this.loopPrompt === undefined || this.loopPrompt === "")
+			return;
 		const prompt = this.loopPrompt;
 		const loopAction = settings.get("loop.mode");
 		// Brief delay so the user has a chance to press Esc between iterations.
@@ -681,7 +686,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		} else {
 			const hex = getSessionAccentHexForTitle(this.sessionManager.getSessionName(), this.sessionManager.titleSource);
 			const ansi = getSessionAccentAnsi(hex);
-			if (ansi) {
+			if (ansi !== null && ansi !== undefined && ansi !== "") {
 				this.editor.borderColor = (str: string) => `${ansi}${str}\x1b[39m`;
 			} else {
 				const level = this.session.thinkingLevel ?? ThinkingLevel.Off;
@@ -826,7 +831,7 @@ export class InteractiveMode implements InteractiveModeContext {
 					`Failed to switch to plan model for plan mode: ${error instanceof Error ? error.message : String(error)}`,
 				);
 			}
-		} else if (planThinkingLevel) {
+		} else if (planThinkingLevel !== undefined) {
 			this.session.setThinkingLevel(planThinkingLevel);
 		}
 	}
@@ -936,7 +941,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#updatePlanModeStatus();
 		const paused = options?.paused ?? false;
 		this.sessionManager.appendModeChange(paused ? "plan_paused" : "none");
-		if (!options?.silent) {
+		if (options?.silent !== true) {
 			this.showStatus(paused ? "Plan mode paused." : "Plan mode disabled.");
 		}
 	}
@@ -981,7 +986,7 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	async #openEditorTerminalHandle(): Promise<fs.FileHandle | null> {
 		const terminalPath = this.#getEditorTerminalPath();
-		if (!terminalPath) {
+		if (terminalPath === null || terminalPath === undefined || terminalPath === "") {
 			return null;
 		}
 		try {
@@ -1001,7 +1006,7 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	async #openPlanInExternalEditor(planFilePath: string): Promise<void> {
 		const editorCmd = getEditorCommand();
-		if (!editorCmd) {
+		if (editorCmd === null || editorCmd === undefined || editorCmd === "") {
 			this.showWarning("No editor configured. Set $VISUAL or $EDITOR environment variable.");
 			return;
 		}
@@ -1092,7 +1097,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			return;
 		}
 		await this.#enterPlanMode();
-		if (initialPrompt && this.onInputCallback) {
+		if (initialPrompt !== null && initialPrompt !== undefined && initialPrompt !== "" && this.onInputCallback) {
 			this.onInputCallback(this.startPendingSubmission({ text: initialPrompt }));
 		}
 	}
@@ -1112,7 +1117,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		const planFilePath = details.planFilePath || this.planModePlanFilePath || (await this.#getPlanFilePath());
 		this.planModePlanFilePath = planFilePath;
 		const planContent = await this.#readPlanFile(planFilePath);
-		if (!planContent) {
+		if (planContent === null || planContent === undefined || planContent === "") {
 			this.showError(`Plan file not found at ${planFilePath}`);
 			return;
 		}
@@ -1131,7 +1136,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			const finalPlanFilePath = details.finalPlanFilePath || planFilePath;
 			try {
 				const latestPlanContent = await this.#readPlanFile(planFilePath);
-				if (!latestPlanContent) {
+				if (latestPlanContent === null || latestPlanContent === undefined || latestPlanContent === "") {
 					this.showError(`Plan file not found at ${planFilePath}`);
 					return;
 				}
@@ -1145,7 +1150,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 		if (choice === "Refine plan") {
 			const refinement = (await this.showHookInput("What should be refined?"))?.trim();
-			if (refinement) {
+			if (refinement !== null && refinement !== undefined && refinement !== "") {
 				if (this.onInputCallback) {
 					this.onInputCallback(this.startPendingSubmission({ text: refinement }));
 				} else {
@@ -1218,7 +1223,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		// Print resumption hint if this is a persisted session
 		const sessionId = this.sessionManager.getSessionId();
 		const sessionFile = this.sessionManager.getSessionFile();
-		if (sessionId && sessionFile) {
+		if (sessionId && sessionFile !== null && sessionFile !== undefined && sessionFile !== "") {
 			process.stderr.write(`\n${chalk.dim(`Resume this session with ${APP_NAME} --resume ${sessionId}`)}\n`);
 		}
 
@@ -1281,7 +1286,10 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		if (failedServers.length === 1) {
 			const failedServer = failedServers[0];
-			const detail = failedServer.error ? `: ${failedServer.error}` : "";
+			const detail =
+				failedServer.error !== null && failedServer.error !== undefined && failedServer.error !== ""
+					? `: ${failedServer.error}`
+					: "";
 			this.showWarning(`LSP startup failed for ${failedServer.name}${detail}. It will retry lazily on write.`);
 			return;
 		}
@@ -1316,16 +1324,61 @@ export class InteractiveMode implements InteractiveModeContext {
 			const status = this.mcpManager.getConnectionStatus(name);
 			servers.push({
 				name,
-				status: status === "connected" ? "ready" : status === "connecting" ? "connecting" : "error",
+				status: status === "connected" ? "ready" : (status === "connecting" ? "connecting" : "error"),
 			});
 		}
 		return servers;
 	}
 
-	#updateSidebar(): void {
-		if (!this.#sidebar) return;
-		this.#sidebar.setSessionTitle(this.sessionManager.getSessionName() ?? "");
-		this.#sidebar.setMcpServers(this.#computeSidebarMcpServers());
+	refreshSessionChrome = (): void => {
+		this.#updateSessionChrome();
+	};
+
+	#getSidebarModelCard(): SidebarModelCard | undefined {
+		const model = this.session.model;
+		if (!model) return undefined;
+
+		const thinkingLevel = this.session.thinkingLevel;
+		const thinkingLabel =
+			model.thinking &&
+			thinkingLevel !== undefined &&
+			thinkingLevel !== ThinkingLevel.Off &&
+			thinkingLevel !== ThinkingLevel.Inherit
+				? thinkingLevel
+				: undefined;
+
+		return {
+			name: model.name || model.id,
+			provider: model.provider,
+			thinkingLevel: thinkingLabel,
+		};
+	}
+
+	#getCurrentModelLabel(): { modelName: string; providerName: string } {
+		const model = this.session.model;
+		return {
+			modelName: model?.name ?? model?.id ?? "Unknown",
+			providerName: model?.provider ?? "Unknown",
+		};
+	}
+
+	#updateSessionChrome(): void {
+		const cwd = this.sessionManager.getCwd();
+		const { modelName, providerName } = this.#getCurrentModelLabel();
+
+		if (this.#welcomeComponent) {
+			this.#welcomeComponent.setCwd(cwd);
+			this.#welcomeComponent.setModel(modelName, providerName);
+		}
+
+		if (this.#sidebar) {
+			this.#sidebar.setSessionTitle(this.sessionManager.getSessionName() ?? "");
+			this.#sidebar.setCwd(cwd);
+			this.#sidebar.setMcpServers(this.#computeSidebarMcpServers());
+			this.#sidebar.setModel(this.#getSidebarModelCard());
+		}
+
+		this.ui.requestRender();
 	}
 
 	#updateWelcomeLspServers(): void {
@@ -1683,7 +1736,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	showSessionSelector(): void {
-		this.#selectorController.showSessionSelector();
+		void this.#selectorController.showSessionSelector();
 	}
 
 	handleResumeSession(sessionPath: string): Promise<void> {
@@ -1788,7 +1841,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	openExternalEditor(): void {
-		this.#inputController.openExternalEditor();
+		void this.#inputController.openExternalEditor();
 	}
 
 	registerExtensionShortcuts(): void {

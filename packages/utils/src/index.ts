@@ -32,7 +32,7 @@ function isPlainObject(val: object): val is Record<string, unknown> {
 
 export function structuredCloneJSON<T>(value: T): T {
 	// primitives|null|undefined, copy
-	if (!value || typeof value !== "object") {
+	if (value === null || value === undefined || typeof value !== "object") {
 		return value;
 	}
 

@@ -102,7 +102,7 @@ export function parseKeySequences(sequences: string[]): VimKeyToken[] {
 
 			const rawSpecial = sequence.slice(offset + 1, close);
 			const special = normalizeSpecialKey(rawSpecial);
-			if (!special) {
+			if (special === null || special === undefined || special === "") {
 				throw new VimError(`Unknown special key <${rawSpecial}> in sequence ${sequenceIndex + 1}`, {
 					value: rawSpecial,
 					display: `<${rawSpecial}>`,

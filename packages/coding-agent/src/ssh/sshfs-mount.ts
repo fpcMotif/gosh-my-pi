@@ -15,7 +15,7 @@ async function ensureDir(path: string, mode = 0o700): Promise<void> {
 	try {
 		await fs.promises.mkdir(path, { recursive: true, mode });
 	} catch {
-		await fs.promises.chmod(path, mode).catch(e => void e);
+		await fs.promises.chmod(path, mode).catch(error => void error);
 	}
 }
 
@@ -48,11 +48,11 @@ function buildSshfsArgs(host: SSHConnectionTarget): string[] {
 		"ControlPersist=3600",
 	];
 
-	if (host.port) {
+	if (host.port !== null && host.port !== undefined && host.port !== 0) {
 		args.push("-p", String(host.port));
 	}
 
-	if (host.keyPath) {
+	if (host.keyPath !== null && host.keyPath !== undefined && host.keyPath !== "") {
 		args.push("-o", `IdentityFile=${host.keyPath}`);
 	}
 
@@ -61,13 +61,13 @@ function buildSshfsArgs(host: SSHConnectionTarget): string[] {
 
 async function unmountPath(path: string): Promise<boolean> {
 	const fusermount = $which("fusermount") ?? $which("fusermount3");
-	if (fusermount) {
+	if (fusermount !== null && fusermount !== undefined && fusermount !== "") {
 		const result = await $`${fusermount} -u ${path}`.quiet().nothrow();
 		if (result.exitCode === 0) return true;
 	}
 
 	const umount = $which("umount");
-	if (!umount) return false;
+	if (umount === null || umount === undefined || umount === "") return false;
 	const result = await $`${umount} ${path}`.quiet().nothrow();
 	return result.exitCode === 0;
 }
@@ -78,7 +78,7 @@ export function hasSshfs(): boolean {
 
 export async function isMounted(path: string): Promise<boolean> {
 	const mountpoint = $which("mountpoint");
-	if (!mountpoint) return false;
+	if (mountpoint === null || mountpoint === undefined || mountpoint === "") return false;
 	const result = await $`${mountpoint} -q ${path}`.quiet().nothrow();
 	return result.exitCode === 0;
 }

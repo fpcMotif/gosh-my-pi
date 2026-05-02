@@ -100,7 +100,7 @@ export class IrcTool implements AgentTool<typeof ircSchema, IrcDetails> {
 		if (!registry) {
 			return errorResult("IRC is unavailable in this session.", { op: params.op });
 		}
-		if (!senderId) {
+		if (senderId === null || senderId === undefined || senderId === "") {
 			return errorResult("IRC is unavailable: caller has no agent id.", { op: params.op });
 		}
 
@@ -150,10 +150,10 @@ export class IrcTool implements AgentTool<typeof ircSchema, IrcDetails> {
 	): Promise<AgentToolResult<IrcDetails>> {
 		const to = params.to?.trim();
 		const message = params.message?.trim();
-		if (!to) {
+		if (to === null || to === undefined || to === "") {
 			return errorResult('`to` is required for op="send".', { op: "send", from: senderId });
 		}
-		if (!message) {
+		if (message === null || message === undefined || message === "") {
 			return errorResult('`message` is required for op="send".', { op: "send", from: senderId });
 		}
 
@@ -200,11 +200,11 @@ export class IrcTool implements AgentTool<typeof ircSchema, IrcDetails> {
 					signal,
 				});
 				delivered.push(target.id);
-				if (awaitReply && result.replyText) {
+				if (awaitReply && result.replyText !== null && result.replyText !== undefined && result.replyText !== "") {
 					replies.push({ from: target.id, text: result.replyText });
 				}
-			} catch (err) {
-				failed.push({ id: target.id, error: err instanceof Error ? err.message : String(err) });
+			} catch (error) {
+				failed.push({ id: target.id, error: error instanceof Error ? error.message : String(error) });
 			}
 		});
 		await Promise.all(dispatches);

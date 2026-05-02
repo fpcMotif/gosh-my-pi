@@ -63,19 +63,23 @@ export class Sidebar implements Component {
 		if (width <= 0) return [];
 		const out: string[] = [];
 
+		// Section headers honour the width budget so narrow panels don't
+		// overflow on labels like "Working dir" (11 cells).
+		const heading = (label: string): string => truncateToWidth(theme.bold(theme.fg("dim", label)), width);
+
 		// Session
-		out.push(theme.bold(theme.fg("dim", "Session")));
+		out.push(heading("Session"));
 		out.push(this.#row(this.#sessionTitle || "—", "muted", width));
 		out.push("");
 
 		// Working dir
-		out.push(theme.bold(theme.fg("dim", "Working dir")));
+		out.push(heading("Working dir"));
 		const cwd = this.#cwd ? shortenPath(this.#cwd).replace(/\\/g, "/") : "—";
 		out.push(this.#row(cwd, "muted", width));
 		out.push("");
 
 		// MCP
-		out.push(theme.bold(theme.fg("dim", "MCP")));
+		out.push(heading("MCP"));
 		if (this.#mcpServers.length === 0) {
 			out.push(this.#row("none connected", "dim", width));
 		} else {
@@ -86,15 +90,19 @@ export class Sidebar implements Component {
 		out.push("");
 
 		// Model card
-		out.push(theme.bold(theme.fg("dim", "Model")));
+		out.push(heading("Model"));
 		if (this.#model) {
 			const diamond = theme.fg("accent", "◇");
 			const name = theme.fg("statusLineModel", this.#model.name);
 			out.push(truncateToWidth(`${diamond} ${name}`, width));
-			if (this.#model.provider) {
+			if (this.#model.provider !== null && this.#model.provider !== undefined && this.#model.provider !== "") {
 				out.push(this.#row(this.#model.provider, "dim", width));
 			}
-			if (this.#model.thinkingLevel) {
+			if (
+				this.#model.thinkingLevel !== null &&
+				this.#model.thinkingLevel !== undefined &&
+				this.#model.thinkingLevel !== ""
+			) {
 				out.push(this.#row(`thinking: ${this.#model.thinkingLevel}`, "dim", width));
 			}
 		} else {
@@ -112,9 +120,9 @@ export class Sidebar implements Component {
 		const icon =
 			server.status === "ready"
 				? theme.styledSymbol("status.success", "success")
-				: server.status === "connecting"
+				: (server.status === "connecting"
 					? theme.styledSymbol("status.pending", "muted")
-					: theme.styledSymbol("status.error", "error");
+					: theme.styledSymbol("status.error", "error"));
 		const name = theme.fg("muted", server.name);
 		const tools = server.toolCount !== undefined ? theme.fg("dim", ` (${server.toolCount})`) : "";
 		return truncateToWidth(`${icon} ${name}${tools}`, width);

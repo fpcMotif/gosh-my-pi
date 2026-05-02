@@ -50,26 +50,20 @@ const samples = {
 		"This is a long line that should wrap multiple times when rendered with ANSI \x1b[32mcolors\x1b[0m and tabs\tbetween words.",
 };
 
-const wrapWidth = 40;
-
 function bench(name: string, fn: () => void): number {
 	const start = Bun.nanoseconds();
 	for (let i = 0; i < ITERATIONS; i++) {
 		fn();
 	}
 	const elapsed = (Bun.nanoseconds() - start) / 1e6;
-	const perOp = (elapsed / ITERATIONS).toFixed(6);
-	console.log(`${name}: ${elapsed.toFixed(2)}ms total (${perOp}ms/op)`);
+
 	return elapsed;
 }
-
-console.log(`Text layout benchmark (${ITERATIONS} iterations)\n`);
 
 for (const [name, text] of Object.entries(samples)) {
 	const jsResult = jsSanitizeText(text);
 	const nativeResult = nativeSanitizeText(text);
 	if (jsResult !== nativeResult) {
-		console.log(`MISMATCH ${name}: js="${jsResult}" native="${nativeResult}"`);
 	}
 
 	bench(`jsSanitizeText/${name}`, () => {

@@ -189,8 +189,8 @@ async function loadHook(hookPath: string, cwd: string): Promise<{ hook: LoadedHo
 			},
 			error: null,
 		};
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		return { hook: null, error: `Failed to load hook: ${message}` };
 	}
 }
@@ -207,7 +207,7 @@ export async function loadHooks(paths: string[], cwd: string): Promise<LoadHooks
 	for (const hookPath of paths) {
 		const { hook, error } = await loadHook(hookPath, cwd);
 
-		if (error) {
+		if (error !== null && error !== undefined && error !== "") {
 			errors.push({ path: hookPath, error });
 			continue;
 		}

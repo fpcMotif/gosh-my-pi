@@ -81,9 +81,9 @@ async function lockExists(lockPath: string): Promise<boolean> {
 	try {
 		await fs.stat(lockPath);
 		return true;
-	} catch (err) {
-		if (isEnoent(err)) return false;
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return false;
+		throw error;
 	}
 }
 

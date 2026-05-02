@@ -81,7 +81,7 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 	const contents = await Promise.all(allPaths.map(({ path }) => readFile(path)));
 
 	const parseMcpServers = (content: string | null, path: string, level: "user" | "project"): MCPServer[] => {
-		if (!content) return [];
+		if (content === null || content === undefined || content === "") return [];
 		const json = tryParseJson<{ mcpServers?: Record<string, unknown> }>(content);
 		if (!json?.mcpServers) return [];
 
@@ -454,7 +454,7 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	const userSettingsJson = path.join(userBase, "settings.json");
 
 	const userContent = await readFile(userSettingsJson);
-	if (userContent) {
+	if (userContent !== null && userContent !== undefined && userContent !== "") {
 		const data = tryParseJson<Record<string, unknown>>(userContent);
 		if (data) {
 			items.push({
@@ -471,7 +471,7 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	const projectBase = getProjectClaude(ctx);
 	const projectSettingsJson = path.join(projectBase, "settings.json");
 	const projectContent = await readFile(projectSettingsJson);
-	if (projectContent) {
+	if (projectContent !== null && projectContent !== undefined && projectContent !== "") {
 		const data = tryParseJson<Record<string, unknown>>(projectContent);
 		if (data) {
 			items.push({

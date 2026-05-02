@@ -37,7 +37,12 @@ export function transformMessages<TApi extends Api>(
 		// Handle toolResult messages - normalize toolCallId if we have a mapping
 		if (msg.role === "toolResult") {
 			const normalizedId = toolCallIdMap.get(msg.toolCallId);
-			if (normalizedId && normalizedId !== msg.toolCallId) {
+			if (
+				normalizedId !== null &&
+				normalizedId !== undefined &&
+				normalizedId !== "" &&
+				normalizedId !== msg.toolCallId
+			) {
 				return { ...msg, toolCallId: normalizedId };
 			}
 			return msg;
@@ -64,11 +69,22 @@ export function transformMessages<TApi extends Api>(
 				if (block.type === "thinking") {
 					// Strip signature from aborted/errored messages — it's likely incomplete
 					const sanitized =
-						hasInvalidSignatures && block.thinkingSignature ? { ...block, thinkingSignature: undefined } : block;
+						hasInvalidSignatures &&
+						block.thinkingSignature !== null &&
+						block.thinkingSignature !== undefined &&
+						block.thinkingSignature !== ""
+							? { ...block, thinkingSignature: undefined }
+							: block;
 					if (mustPreserveLatestAnthropicThinking) return sanitized;
 					// For same model: keep thinking blocks with signatures (needed for replay)
 					// even if the thinking text is empty (OpenAI encrypted reasoning)
-					if (isSameModel && sanitized.thinkingSignature) return sanitized;
+					if (
+						isSameModel &&
+						sanitized.thinkingSignature !== null &&
+						sanitized.thinkingSignature !== undefined &&
+						sanitized.thinkingSignature !== ""
+					)
+						return sanitized;
 					// Skip empty thinking blocks, convert others to plain text
 					if (!sanitized.thinking || sanitized.thinking.trim() === "") return [];
 					if (isSameModel) return sanitized;
@@ -96,7 +112,12 @@ export function transformMessages<TApi extends Api>(
 					const toolCall = block as ToolCall;
 					let normalizedToolCall: ToolCall = toolCall;
 
-					if (!isSameModel && toolCall.thoughtSignature) {
+					if (
+						!isSameModel &&
+						toolCall.thoughtSignature !== null &&
+						toolCall.thoughtSignature !== undefined &&
+						toolCall.thoughtSignature !== ""
+					) {
 						normalizedToolCall = { ...toolCall };
 						delete (normalizedToolCall as { thoughtSignature?: string }).thoughtSignature;
 					}
@@ -200,28 +221,19 @@ export function transformMessages<TApi extends Api>(
 			if (toolCalls.length > 0) {
 				pendingToolCalls = toolCalls;
 			}
-
-			result.push(msg);
 		} else if (msg.role === "toolResult") {
 			if (pendingAbortedToolCalls.has(msg.toolCallId)) {
 				pendingAbortedToolCalls.delete(msg.toolCallId);
-				toolCallStatus.set(msg.toolCallId, ToolCallStatus.Resolved);
-				result.push(msg);
+			} else if (toolCallStatus.get(msg.toolCallId) === ToolCallStatus.Aborted) {
 				continue;
 			}
-
-			if (toolCallStatus.get(msg.toolCallId) === ToolCallStatus.Aborted) continue;
 			toolCallStatus.set(msg.toolCallId, ToolCallStatus.Resolved);
-			result.push(msg);
-		} else if (msg.role === "user" || msg.role === "developer") {
-			flushPendingToolCalls(messageTimestamp);
-			flushPendingAbortedToolCalls();
-			result.push(msg);
 		} else {
 			flushPendingToolCalls(messageTimestamp);
 			flushPendingAbortedToolCalls();
-			result.push(msg);
 		}
+
+		result.push(msg);
 	}
 
 	flushPendingToolCalls(Date.now());

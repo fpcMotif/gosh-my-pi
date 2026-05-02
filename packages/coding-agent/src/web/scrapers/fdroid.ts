@@ -25,15 +25,15 @@ type FdroidPackage = {
 };
 
 function normalizeAuthor(data: FdroidPackage): string | undefined {
-	if (data.authorName) return data.authorName;
+	if (data.authorName !== null && data.authorName !== undefined && data.authorName !== "") return data.authorName;
 	if (typeof data.author === "string") return data.author;
 	if (data.author && typeof data.author !== "string" && typeof data.author.name === "string") return data.author.name;
-	if (data.authorEmail) return data.authorEmail;
+	if (data.authorEmail !== null && data.authorEmail !== undefined && data.authorEmail !== "") return data.authorEmail;
 	return undefined;
 }
 
 function normalizeAuthorEmail(data: FdroidPackage): string | undefined {
-	if (data.authorEmail) return data.authorEmail;
+	if (data.authorEmail !== null && data.authorEmail !== undefined && data.authorEmail !== "") return data.authorEmail;
 	if (data.author && typeof data.author !== "string" && typeof data.author.email === "string")
 		return data.author.email;
 	return undefined;
@@ -49,10 +49,20 @@ function collectAntiFeatures(data: FdroidPackage): string[] {
 }
 
 function resolveSuggestedVersion(data: FdroidPackage): string | undefined {
-	if (data.suggestedVersionName) return data.suggestedVersionName;
-	if (data.suggestedVersionCode) {
+	if (
+		data.suggestedVersionName !== null &&
+		data.suggestedVersionName !== undefined &&
+		data.suggestedVersionName !== ""
+	)
+		return data.suggestedVersionName;
+	if (
+		data.suggestedVersionCode !== null &&
+		data.suggestedVersionCode !== undefined &&
+		data.suggestedVersionCode !== 0
+	) {
 		const match = data.packages?.find(pkg => pkg.versionCode === data.suggestedVersionCode);
-		if (match?.versionName) return match.versionName;
+		if (match?.versionName !== null && match?.versionName !== undefined && match?.versionName !== "")
+			return match.versionName;
 	}
 	return data.packages?.[0]?.versionName;
 }
@@ -97,32 +107,40 @@ export const handleFdroid: SpecialHandler = async (
 		const latestVersion = resolveSuggestedVersion(data);
 
 		let md = `# ${displayName}\n\n`;
-		if (summary) md += `${summary}\n\n`;
+		if (summary !== null && summary !== undefined && summary !== "") md += `${summary}\n\n`;
 
 		md += `**Package:** ${packageName}`;
-		if (latestVersion) md += ` · **Latest:** ${latestVersion}`;
-		if (data.license) md += ` · **License:** ${data.license}`;
+		if (latestVersion !== null && latestVersion !== undefined && latestVersion !== "")
+			md += ` · **Latest:** ${latestVersion}`;
+		if (data.license !== null && data.license !== undefined && data.license !== "")
+			md += ` · **License:** ${data.license}`;
 		md += "\n";
 
-		if (author) {
+		if (author !== null && author !== undefined && author !== "") {
 			md += `**Author:** ${author}`;
-			if (authorEmail && authorEmail !== author) md += ` <${authorEmail}>`;
+			if (authorEmail !== null && authorEmail !== undefined && authorEmail !== "" && authorEmail !== author)
+				md += ` <${authorEmail}>`;
 			md += "\n";
 		}
 
-		if (data.sourceCode) md += `**Source Code:** ${data.sourceCode}\n`;
-		if (data.categories?.length) md += `**Categories:** ${data.categories.join(", ")}\n`;
+		if (data.sourceCode !== null && data.sourceCode !== undefined && data.sourceCode !== "")
+			md += `**Source Code:** ${data.sourceCode}\n`;
+		if (data.categories?.length !== null && data.categories?.length !== undefined && data.categories?.length !== 0)
+			md += `**Categories:** ${data.categories.join(", ")}\n`;
 		if (antiFeatures.length) md += `**Anti-Features:** ${antiFeatures.join(", ")}\n`;
 
-		if (description) {
+		if (description !== null && description !== undefined && description !== "") {
 			md += `\n## Description\n\n${description}\n`;
 		}
 
-		if (data.packages?.length) {
+		if (data.packages?.length !== null && data.packages?.length !== undefined && data.packages?.length !== 0) {
 			md += "\n## Version History\n\n";
 			for (const version of data.packages.slice(0, 10)) {
 				const label = version.versionName ?? "unknown";
-				const code = version.versionCode ? ` (${version.versionCode})` : "";
+				const code =
+					version.versionCode !== null && version.versionCode !== undefined && version.versionCode !== 0
+						? ` (${version.versionCode})`
+						: "";
 				md += `- ${label}${code}\n`;
 			}
 		}

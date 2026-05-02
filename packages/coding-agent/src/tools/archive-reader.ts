@@ -40,7 +40,7 @@ interface ArchiveIndexEntry extends ArchiveNode {
 }
 
 function normalizeArchiveLookupPath(rawPath?: string): string | undefined {
-	if (!rawPath) return "";
+	if (rawPath === null || rawPath === undefined || rawPath === "") return "";
 
 	const parts = rawPath.replace(/\\/g, "/").split("/");
 	const normalizedParts: string[] = [];
@@ -136,7 +136,7 @@ async function readTarEntries(bytes: Uint8Array): Promise<ArchiveIndexEntry[]> {
 	const entries: ArchiveIndexEntry[] = [];
 	for (const [rawPath, file] of files) {
 		const normalizedPath = normalizeArchiveEntryPath(rawPath);
-		if (!normalizedPath) continue;
+		if (normalizedPath === null || normalizedPath === undefined || normalizedPath === "") continue;
 		const mtimeMs = file.lastModified > 0 ? file.lastModified : undefined;
 		entries.push({
 			path: normalizedPath,
@@ -161,7 +161,7 @@ function readZipEntries(bytes: Uint8Array): ArchiveIndexEntry[] {
 	const entries: ArchiveIndexEntry[] = [];
 	for (const [rawPath, fileBytes] of Object.entries(files)) {
 		const normalizedPath = normalizeArchiveEntryPath(rawPath);
-		if (!normalizedPath) continue;
+		if (normalizedPath === null || normalizedPath === undefined || normalizedPath === "") continue;
 		const isDirectory = isArchiveDirectoryName(rawPath);
 		entries.push({
 			path: normalizedPath,
@@ -276,7 +276,7 @@ export class ArchiveReader {
 
 	async readFile(subPath: string): Promise<ExtractedArchiveFile> {
 		const normalizedPath = normalizeArchiveLookupPath(subPath);
-		if (!normalizedPath) {
+		if (normalizedPath === null || normalizedPath === undefined || normalizedPath === "") {
 			throw new ToolError("Archive file path is required");
 		}
 

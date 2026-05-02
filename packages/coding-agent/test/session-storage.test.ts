@@ -35,7 +35,7 @@ describe("FileSessionStorage.deleteSessionWithArtifacts", () => {
 		expect(fs.existsSync(sessionPath)).toBe(true);
 		expect(fs.existsSync(artifactsDir)).toBe(false);
 
-		await expect(storage.deleteSessionWithArtifacts(sessionPath)).resolves.toBeUndefined();
+		expect(storage.deleteSessionWithArtifacts(sessionPath)).resolves.toBeUndefined();
 		expect(fs.existsSync(sessionPath)).toBe(false);
 		expect(fs.existsSync(artifactsDir)).toBe(false);
 	});
@@ -49,7 +49,7 @@ describe("FileSessionStorage.deleteSessionWithArtifacts", () => {
 		const rmError = new Error("permission denied");
 		const rmSpy = vi.spyOn(fsp, "rm").mockRejectedValueOnce(rmError);
 
-		await expect(storage.deleteSessionWithArtifacts(sessionPath)).rejects.toThrow(
+		expect(storage.deleteSessionWithArtifacts(sessionPath)).rejects.toThrow(
 			`Session file deleted but failed to remove artifacts directory ${artifactsDir}: permission denied`,
 		);
 		expect(rmSpy).toHaveBeenCalledWith(artifactsDir, { recursive: true, force: true });

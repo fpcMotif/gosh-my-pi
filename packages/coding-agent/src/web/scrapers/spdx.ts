@@ -79,7 +79,7 @@ export const handleSpdx: SpecialHandler = async (
 		md += `**FSF Libre:** ${formatYesNo(license.isFsfLibre)}\n`;
 
 		const description = license.licenseComments ?? license.comment;
-		if (description) {
+		if (description !== null && description !== undefined && description !== "") {
 			md += `\n## Description\n\n${description}\n`;
 		}
 
@@ -91,13 +91,16 @@ export const handleSpdx: SpecialHandler = async (
 			}
 		}
 
-		const licenseText = license.licenseText
-			? license.licenseText
-			: license.licenseTextHtml
-				? htmlToBasicMarkdown(license.licenseTextHtml)
-				: null;
+		const licenseText =
+			license.licenseText !== null && license.licenseText !== undefined && license.licenseText !== ""
+				? license.licenseText
+				: (license.licenseTextHtml !== null &&
+					  license.licenseTextHtml !== undefined &&
+					  license.licenseTextHtml !== ""
+					? htmlToBasicMarkdown(license.licenseTextHtml)
+					: null);
 
-		if (licenseText) {
+		if (licenseText !== null && licenseText !== undefined && licenseText !== "") {
 			md += `\n## License Text\n\n\`\`\`\n${licenseText}\n\`\`\`\n`;
 		}
 

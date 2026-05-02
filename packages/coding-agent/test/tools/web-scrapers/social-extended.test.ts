@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { handleBluesky } from "@oh-my-pi/pi-coding-agent/web/scrapers/bluesky";
 import { handleMastodon } from "@oh-my-pi/pi-coding-agent/web/scrapers/mastodon";
 
-const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
+const SKIP =
+	Bun.env.WEB_FETCH_INTEGRATION === null ||
+	Bun.env.WEB_FETCH_INTEGRATION === undefined ||
+	Bun.env.WEB_FETCH_INTEGRATION === "";
 
 describe.skipIf(SKIP)("handleMastodon", () => {
 	it("returns null for non-Mastodon URLs", async () => {
@@ -79,7 +82,7 @@ describe.skipIf(SKIP)("handleMastodon", () => {
 			const result = await handleMastodon("https://mastodon.social/@Gargron", 20);
 			expect(result).not.toBeNull();
 			// May include recent posts section
-			if (result?.content?.includes("## Recent Posts")) {
+			if (result?.content?.includes("## Recent Posts") === true) {
 				expect(result.content).toMatch(/###\s+\w+/); // Date header
 			}
 		},
@@ -165,7 +168,7 @@ describe.skipIf(SKIP)("handleBluesky", () => {
 		async () => {
 			const result = await handleBluesky("https://bsky.app/profile/bsky.app/post/3juzlwllznd24", 20);
 			// Stats include likes, reposts, replies
-			if (result?.content) {
+			if (result?.content !== null && result?.content !== undefined && result?.content !== "") {
 				// Should have some engagement markers
 				const hasStats =
 					result.content.includes("❤️") || result.content.includes("🔁") || result.content.includes("💬");

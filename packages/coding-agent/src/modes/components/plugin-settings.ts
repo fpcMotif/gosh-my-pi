@@ -157,7 +157,7 @@ export class PluginDetailComponent extends Container {
 		// Header
 		this.addChild(new DynamicBorder());
 		this.addChild(new Text(theme.bold(theme.fg("accent", `  ${plugin.name}`)), 0, 0));
-		if (manifest.description) {
+		if (manifest.description !== null && manifest.description !== undefined && manifest.description !== "") {
 			this.addChild(new Text(theme.fg("muted", `  ${manifest.description}`), 0, 0));
 		}
 		this.addChild(new Spacer(1));
@@ -188,7 +188,7 @@ export class PluginDetailComponent extends Container {
 				items.push({
 					id: `feature:${featName}`,
 					label: `  ${featName}`,
-					description: feat.description || `Enable ${featName} feature`,
+					description: feat.description ?? `Enable ${featName} feature`,
 					currentValue: isEnabled ? "true" : "false",
 					values: ["true", "false"],
 				});
@@ -201,13 +201,14 @@ export class PluginDetailComponent extends Container {
 
 			for (const [key, schema] of Object.entries(manifest.settings)) {
 				const currentValue = settings[key] ?? schema.default;
-				const displayValue = schema.secret && currentValue ? "••••••••" : String(currentValue ?? "(not set)");
+				const displayValue =
+					schema.secret === true && currentValue ? "••••••••" : String(currentValue ?? "(not set)");
 
 				if (schema.type === "boolean") {
 					items.push({
 						id: `config:${key}`,
 						label: `  ${key}`,
-						description: schema.description || `Configure ${key}`,
+						description: schema.description ?? `Configure ${key}`,
 						currentValue: currentValue ? "true" : "false",
 						values: ["true", "false"],
 					});
@@ -215,12 +216,12 @@ export class PluginDetailComponent extends Container {
 					items.push({
 						id: `config:${key}`,
 						label: `  ${key}`,
-						description: schema.description || `Configure ${key}`,
+						description: schema.description ?? `Configure ${key}`,
 						currentValue: String(currentValue ?? schema.default ?? ""),
 						submenu: (cv, done) =>
 							new ConfigEnumSubmenu(
 								key,
-								schema.description || `Select value for ${key}`,
+								schema.description ?? `Select value for ${key}`,
 								schema.values,
 								cv,
 								value => {
@@ -235,7 +236,7 @@ export class PluginDetailComponent extends Container {
 					items.push({
 						id: `config:${key}`,
 						label: `  ${key}`,
-						description: schema.description || `Configure ${key}`,
+						description: schema.description ?? `Configure ${key}`,
 						currentValue: displayValue,
 						submenu: (cv, done) =>
 							new ConfigInputSubmenu(
@@ -360,7 +361,7 @@ class ConfigInputSubmenu extends Container {
 		super();
 
 		this.addChild(new Text(theme.bold(theme.fg("accent", key)), 0, 0));
-		if (schema.description) {
+		if (schema.description !== null && schema.description !== undefined && schema.description !== "") {
 			this.addChild(new Spacer(1));
 			this.addChild(new Text(theme.fg("muted", schema.description), 0, 0));
 		}
@@ -380,7 +381,7 @@ class ConfigInputSubmenu extends Container {
 
 		// Input field
 		this.#input = new Input();
-		if (!schema.secret && currentValue) {
+		if (schema.secret !== true && currentValue) {
 			this.#input.setValue(currentValue);
 		}
 
@@ -434,7 +435,7 @@ export class PluginSettingsComponent extends Container {
 	) {
 		super();
 		this.#manager = new PluginManager(cwd);
-		this.#showPluginList();
+		void this.#showPluginList();
 	}
 
 	async #showPluginList(): Promise<void> {

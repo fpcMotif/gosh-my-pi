@@ -202,7 +202,7 @@ export type { ReportFindingDetails };
 // Register report_finding handler
 subprocessToolRegistry.register<ReportFindingDetails>("report_finding", {
 	extractData: event => {
-		if (event.isError) return undefined;
+		if (event.isError === true) return undefined;
 		return parseReportFindingDetails(event.result?.details);
 	},
 

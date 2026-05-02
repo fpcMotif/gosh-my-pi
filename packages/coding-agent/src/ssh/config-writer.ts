@@ -85,7 +85,7 @@ export function validateHostName(name: string): string | undefined {
 export async function addSSHHost(filePath: string, name: string, hostConfig: SSHHostConfig): Promise<void> {
 	// Validate host name
 	const nameError = validateHostName(name);
-	if (nameError) {
+	if (nameError !== null && nameError !== undefined && nameError !== "") {
 		throw new Error(nameError);
 	}
 
@@ -124,7 +124,7 @@ export async function addSSHHost(filePath: string, name: string, hostConfig: SSH
 export async function updateSSHHost(filePath: string, name: string, hostConfig: SSHHostConfig): Promise<void> {
 	// Validate host name
 	const nameError = validateHostName(name);
-	if (nameError) {
+	if (nameError !== null && nameError !== undefined && nameError !== "") {
 		throw new Error(nameError);
 	}
 

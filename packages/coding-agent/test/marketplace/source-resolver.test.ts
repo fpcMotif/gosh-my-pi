@@ -38,20 +38,20 @@ describe("resolvePluginSource", () => {
 	it("throws when source string would escape marketplace root", async () => {
 		// "../../escape" does not start with "./" — hits the non-relative guard
 		const entry = makeEntry("../../escape");
-		await expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow();
+		expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow();
 	});
 
 	it("throws when relative source would escape via path traversal (./../../escape)", async () => {
 		// Starts with "./" but resolves outside marketplace root
 		const entry = makeEntry("./../../escape");
-		await expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow(
+		expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow(
 			/outside marketplace root/,
 		);
 	});
 
 	it("throws when marketplaceClonePath is missing for relative source", async () => {
 		const entry = makeEntry("./plugins/hello-plugin");
-		await expect(resolvePluginSource(entry, { tmpDir })).rejects.toThrow(/marketplaceClonePath/);
+		expect(resolvePluginSource(entry, { tmpDir })).rejects.toThrow(/marketplaceClonePath/);
 	});
 
 	it("prepends catalogMetadata.pluginRoot to the relative source path", async () => {
@@ -69,21 +69,21 @@ describe("resolvePluginSource", () => {
 	// Network-dependent: object sources attempt real git clones
 	it.skip("resolves github object source via git clone", async () => {
 		const entry = makeEntry({ source: "github", repo: "nonexistent-owner/nonexistent-repo" });
-		await expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow(
+		expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow(
 			/git clone failed/,
 		);
 	});
 
 	it.skip("resolves url object source via git clone", async () => {
 		const entry = makeEntry({ source: "url", url: "https://example.com/nonexistent.git" });
-		await expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow(
+		expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow(
 			/git clone failed/,
 		);
 	});
 
 	it("throws when resolved directory does not exist", async () => {
 		const entry = makeEntry("./plugins/nonexistent-plugin");
-		await expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow(
+		expect(resolvePluginSource(entry, { marketplaceClonePath: FIXTURE_DIR, tmpDir })).rejects.toThrow(
 			/does not exist/,
 		);
 	});

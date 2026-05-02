@@ -78,7 +78,7 @@ describe("SessionManager.moveTo", () => {
 	});
 
 	afterEach(async () => {
-		if (originalAgentDir) {
+		if (originalAgentDir !== null && originalAgentDir !== undefined && originalAgentDir !== "") {
 			setAgentDir(originalAgentDir);
 		} else {
 			setAgentDir(fallbackAgentDir);
@@ -208,7 +208,8 @@ describe("SessionManager.moveTo", () => {
 		const session = SessionManager.create(cwdA);
 		// Allocate an artifact — creates dir via ArtifactManager
 		const { path: artifactPath } = await session.allocateArtifactPath("bash");
-		if (!artifactPath) throw new Error("Expected artifact path");
+		if (artifactPath === null || artifactPath === undefined || artifactPath === "")
+			throw new Error("Expected artifact path");
 
 		const oldArtifactDir = path.dirname(artifactPath);
 		expect(fs.existsSync(oldArtifactDir)).toBe(true);

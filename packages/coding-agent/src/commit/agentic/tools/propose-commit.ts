@@ -43,7 +43,7 @@ export function createProposeCommitTool(cwd: string, state: CommitAgentState): C
 		description: "Submit the final conventional commit proposal.",
 		parameters: proposeCommitSchema,
 		async execute(_toolCallId, params) {
-			const scope = params.scope?.trim() || null;
+			const scope = params.scope?.trim() ?? null;
 			const summary = normalizeSummary(params.summary, params.type, scope);
 			const details = normalizeDetails(params.details);
 			const { details: cappedDetails, warnings: detailWarnings } = capDetails(details);

@@ -28,7 +28,7 @@ function normalizePromptBlock(content: string): string {
 
 function splitComparablePromptBlocks(content: string | null | undefined): string[] {
 	const normalized = firstNonEmpty(content);
-	if (!normalized) return [];
+	if (normalized === null || normalized === undefined || normalized === "") return [];
 
 	return normalizePromptBlock(normalized)
 		.split(/\n{2,}/)
@@ -61,7 +61,7 @@ function dedupeAlwaysApplyRules(
 
 function dedupePromptSource(source: string | null | undefined, otherSources: Array<string | null | undefined>): string {
 	const resolvedSource = firstNonEmpty(source);
-	if (!resolvedSource) return "";
+	if (resolvedSource === null || resolvedSource === undefined || resolvedSource === "") return "";
 
 	return otherSources.some(otherSource => promptSourceContainsRule(otherSource, resolvedSource)) ? "" : resolvedSource;
 }
@@ -69,7 +69,7 @@ function dedupePromptSource(source: string | null | undefined, otherSources: Arr
 function firstNonEmpty(...values: (string | undefined | null)[]): string | null {
 	for (const value of values) {
 		const trimmed = value?.trim();
-		if (trimmed) return trimmed;
+		if (trimmed !== null && trimmed !== undefined && trimmed !== "") return trimmed;
 	}
 	return null;
 }
@@ -180,14 +180,14 @@ async function getGpuModel(): Promise<string | null> {
 				.quiet()
 				.text()
 				.catch(() => null);
-			return output ? parseWmicTable(output, "Name") : null;
+			return output !== null && output !== undefined && output !== "" ? parseWmicTable(output, "Name") : null;
 		}
 		case "linux": {
 			const output = await $`lspci`
 				.quiet()
 				.text()
 				.catch(() => null);
-			if (!output) return null;
+			if (output === null || output === undefined || output === "") return null;
 			const gpus: Array<{ name: string; priority: number }> = [];
 			for (const line of output.split("\n")) {
 				if (!/(VGA|3D|Display)/i.test(line)) continue;
@@ -226,11 +226,14 @@ async function getGpuModel(): Promise<string | null> {
 function getTerminalName(): string | undefined {
 	const termProgram = Bun.env.TERM_PROGRAM;
 	const termProgramVersion = Bun.env.TERM_PROGRAM_VERSION;
-	if (termProgram) {
-		return termProgramVersion ? `${termProgram} ${termProgramVersion}` : termProgram;
+	if (termProgram !== null && termProgram !== undefined && termProgram !== "") {
+		return termProgramVersion !== null && termProgramVersion !== undefined && termProgramVersion !== ""
+			? `${termProgram} ${termProgramVersion}`
+			: termProgram;
 	}
 
-	if (Bun.env.WT_SESSION) return "Windows Terminal";
+	if (Bun.env.WT_SESSION !== null && Bun.env.WT_SESSION !== undefined && Bun.env.WT_SESSION !== "")
+		return "Windows Terminal";
 
 	const term = firstNonEmpty(Bun.env.TERM, Bun.env.COLORTERM, Bun.env.TERMINAL_EMULATOR);
 	return term ?? undefined;
@@ -268,7 +271,7 @@ async function getCachedGpu(): Promise<string | undefined> {
 	const cached = await logger.time("getCachedGpu:loadGpuCache", loadGpuCache);
 	if (cached) return cached.gpu;
 	const gpu = await logger.time("getCachedGpu:getGpuModel", getGpuModel);
-	if (gpu) {
+	if (gpu !== null && gpu !== undefined && gpu !== "") {
 		await logger.time("getCachedGpu:saveGpuCache", saveGpuCache, { gpu });
 	}
 	return gpu ?? undefined;
@@ -290,12 +293,14 @@ async function getEnvironmentInfo(): Promise<Array<{ label: string; value: strin
 		{ label: "GPU", value: gpu },
 		{ label: "Terminal", value: getTerminalName() },
 	];
-	return entries.filter((e): e is { label: string; value: string } => !!e.value);
+	return entries.filter(
+		(e): e is { label: string; value: string } => !(e.value === null || e.value === undefined || e.value === ""),
+	);
 }
 
 /** Resolve input as file path or literal string */
 export async function resolvePromptInput(input: string | undefined, description: string): Promise<string | undefined> {
-	if (!input) {
+	if (input === null || input === undefined || input === "") {
 		return undefined;
 	} else if (input.includes("\n")) {
 		return input;
@@ -484,9 +489,9 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		const skillsPromise: Promise<Skill[]> =
 			providedSkills !== undefined
 				? Promise.resolve(providedSkills)
-				: skillsSettings?.enabled !== false
+				: (skillsSettings?.enabled !== false
 					? loadSkills({ ...skillsSettings, cwd: resolvedCwd }).then(result => result.skills)
-					: Promise.resolve([]);
+					: Promise.resolve([]));
 
 		return Promise.all([
 			resolvePromptInput(customPrompt, "system prompt"),
@@ -588,7 +593,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 
 	// Filter skills to only include those with read tool.
 	const hasRead = tools?.has("read");
-	const filteredSkills = hasRead ? skills : [];
+	const filteredSkills = hasRead === true ? skills : [];
 
 	const effectiveSystemPromptCustomization = dedupePromptSource(systemPromptCustomization, [
 		resolvedCustomPrompt,
@@ -616,7 +621,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		date,
 		dateTime,
 		cwd: promptCwd,
-		intentTracing: !!intentField,
+		intentTracing: !(intentField === null || intentField === undefined || intentField === ""),
 		intentField: intentField ?? "",
 		mcpDiscoveryMode,
 		hasMCPDiscoveryServers: mcpDiscoveryServerSummaries.length > 0,
@@ -624,7 +629,12 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		eagerTasks,
 		secretsEnabled,
 	};
-	let rendered = prompt.render(resolvedCustomPrompt ? customSystemPromptTemplate : systemPromptTemplate, data);
+	let rendered = prompt.render(
+		resolvedCustomPrompt !== null && resolvedCustomPrompt !== undefined && resolvedCustomPrompt !== ""
+			? customSystemPromptTemplate
+			: systemPromptTemplate,
+		data,
+	);
 
 	// When autoqa is active the report_tool_issue tool is in the tool set — nudge the agent.
 	if (toolNames.includes("report_tool_issue")) {

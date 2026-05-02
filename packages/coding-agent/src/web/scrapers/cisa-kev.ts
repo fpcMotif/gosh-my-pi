@@ -61,22 +61,26 @@ export const handleCisaKev: SpecialHandler = async (
 		if (!entry) return null;
 
 		let md = `# ${entry.cveID}\n\n`;
-		if (entry.vulnerabilityName) {
+		if (entry.vulnerabilityName !== null && entry.vulnerabilityName !== undefined && entry.vulnerabilityName !== "") {
 			md += `${entry.vulnerabilityName}\n\n`;
 		}
 
 		md += "## Metadata\n\n";
-		if (entry.vendorProject) md += `**Vendor:** ${entry.vendorProject}\n`;
-		if (entry.product) md += `**Product:** ${entry.product}\n`;
-		if (entry.dateAdded) md += `**Date Added:** ${entry.dateAdded}\n`;
-		if (entry.dueDate) md += `**Due Date:** ${entry.dueDate}\n`;
+		if (entry.vendorProject !== null && entry.vendorProject !== undefined && entry.vendorProject !== "")
+			md += `**Vendor:** ${entry.vendorProject}\n`;
+		if (entry.product !== null && entry.product !== undefined && entry.product !== "")
+			md += `**Product:** ${entry.product}\n`;
+		if (entry.dateAdded !== null && entry.dateAdded !== undefined && entry.dateAdded !== "")
+			md += `**Date Added:** ${entry.dateAdded}\n`;
+		if (entry.dueDate !== null && entry.dueDate !== undefined && entry.dueDate !== "")
+			md += `**Due Date:** ${entry.dueDate}\n`;
 		md += "\n";
 
-		if (entry.shortDescription) {
+		if (entry.shortDescription !== null && entry.shortDescription !== undefined && entry.shortDescription !== "") {
 			md += `## Description\n\n${entry.shortDescription}\n\n`;
 		}
 
-		if (entry.requiredAction) {
+		if (entry.requiredAction !== null && entry.requiredAction !== undefined && entry.requiredAction !== "") {
 			md += `## Required Action\n\n${entry.requiredAction}\n\n`;
 		}
 

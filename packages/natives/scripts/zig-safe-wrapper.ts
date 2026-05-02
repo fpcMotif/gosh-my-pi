@@ -9,10 +9,10 @@ export function buildZigArgs(args: string[], overrides: { target?: string; cpu?:
 	const target = overrides.target?.trim();
 	const cpu = overrides.cpu?.trim();
 
-	if (target && !nextArgs.some(arg => arg.startsWith("-Dtarget="))) {
+	if (target !== null && target !== undefined && target !== "" && !nextArgs.some(arg => arg.startsWith("-Dtarget="))) {
 		nextArgs.push(`-Dtarget=${target}`);
 	}
-	if (cpu && !nextArgs.some(arg => arg.startsWith("-Dcpu="))) {
+	if (cpu !== null && cpu !== undefined && cpu !== "" && !nextArgs.some(arg => arg.startsWith("-Dcpu="))) {
 		nextArgs.push(`-Dcpu=${cpu}`);
 	}
 
@@ -24,7 +24,7 @@ export async function main(
 	env: NodeJS.ProcessEnv = process.env,
 ): Promise<number> {
 	const realZigPath = env.PI_NATIVE_REAL_ZIG;
-	if (!realZigPath) {
+	if (realZigPath === null || realZigPath === undefined || realZigPath === "") {
 		throw new Error("PI_NATIVE_REAL_ZIG is required when using zig-safe-wrapper.ts");
 	}
 

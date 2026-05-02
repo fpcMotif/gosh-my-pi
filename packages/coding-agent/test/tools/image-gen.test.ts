@@ -142,7 +142,8 @@ describe("imageGenTool", () => {
 		expect(result.details?.revisedPrompt).toBe("A crisp tabby cat portrait.");
 		expect(result.details?.imagePaths).toHaveLength(1);
 		const savedPath = result.details?.imagePaths[0];
-		if (!savedPath) throw new Error("Expected generated image path");
+		if (savedPath === null || savedPath === undefined || savedPath === "")
+			throw new Error("Expected generated image path");
 		expect(savedPath.endsWith(".webp")).toBe(true);
 		expect(await Bun.file(savedPath).bytes()).toEqual(Buffer.from("fake-webp"));
 	});

@@ -87,9 +87,7 @@ describe("AgentSession MCP discovery", () => {
 	const tempDirs: string[] = [];
 
 	afterEach(async () => {
-		for (const session of sessions.splice(0)) {
-			await session.dispose();
-		}
+		await Promise.all(sessions.splice(0).map(s => s.dispose()));
 		for (const tempDir of tempDirs.splice(0)) {
 			fs.rmSync(tempDir, { recursive: true, force: true });
 		}

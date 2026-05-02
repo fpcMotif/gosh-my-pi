@@ -30,7 +30,7 @@ export async function withEnv(
 }
 
 export async function waitForDelayOrAbort(delayMs: number, signal: AbortSignal | undefined): Promise<void> {
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		const reason = signal.reason;
 		throw reason instanceof Error ? reason : new Error(String(reason ?? "request aborted"));
 	}

@@ -22,8 +22,12 @@ export function StringEnum<const T extends readonly string[]>(
 	return Type.Unsafe<T[number]>({
 		type: "string",
 		enum: values as unknown as string[],
-		...(options?.description && { description: options.description }),
-		...(options?.default && { default: options.default }),
+		...(options?.description !== null &&
+			options?.description !== undefined &&
+			options?.description !== "" && { description: options.description }),
+		...(options?.default !== null &&
+			options?.default !== undefined &&
+			options?.default !== "" && { default: options.default }),
 		...(options?.examples && { examples: options.examples }),
 	});
 }
@@ -292,7 +296,7 @@ export function enforceStrictSchema(
 		result.additionalProperties = false;
 		const propertiesValue = result.properties;
 		const props =
-			propertiesValue != null && typeof propertiesValue === "object" && !Array.isArray(propertiesValue)
+			propertiesValue !== null && typeof propertiesValue === "object" && !Array.isArray(propertiesValue)
 				? (propertiesValue as Record<string, unknown>)
 				: {};
 		const originalRequired = new Set(
@@ -303,7 +307,7 @@ export function enforceStrictSchema(
 		const strictProperties = Object.fromEntries(
 			Object.entries(props).map(([key, value]) => {
 				const processed =
-					value != null && typeof value === "object" && !Array.isArray(value)
+					value !== null && typeof value === "object" && !Array.isArray(value)
 						? enforceStrictSchema(value as Record<string, unknown>, seen, cache)
 						: value;
 				// Optional property — wrap as nullable so strict mode accepts it
@@ -324,10 +328,10 @@ export function enforceStrictSchema(
 		result.properties = strictProperties;
 		result.required = Object.keys(strictProperties);
 	}
-	if (result.items != null && typeof result.items === "object") {
+	if (result.items !== null && typeof result.items === "object") {
 		if (Array.isArray(result.items)) {
 			result.items = result.items.map(entry =>
-				entry != null && typeof entry === "object" && !Array.isArray(entry)
+				entry !== null && typeof entry === "object" && !Array.isArray(entry)
 					? enforceStrictSchema(entry as Record<string, unknown>, seen, cache)
 					: entry,
 			);
@@ -338,19 +342,19 @@ export function enforceStrictSchema(
 	for (const key of COMBINATOR_KEYS) {
 		if (Array.isArray(result[key])) {
 			result[key] = (result[key] as unknown[]).map(entry =>
-				entry != null && typeof entry === "object" && !Array.isArray(entry)
+				entry !== null && typeof entry === "object" && !Array.isArray(entry)
 					? enforceStrictSchema(entry as Record<string, unknown>, seen, cache)
 					: entry,
 			);
 		}
 	}
 	for (const defsKey of ["$defs", "definitions"] as const) {
-		if (result[defsKey] != null && typeof result[defsKey] === "object" && !Array.isArray(result[defsKey])) {
+		if (result[defsKey] !== null && typeof result[defsKey] === "object" && !Array.isArray(result[defsKey])) {
 			const defs = result[defsKey] as Record<string, unknown>;
 			result[defsKey] = Object.fromEntries(
 				Object.entries(defs).map(([name, def]) => [
 					name,
-					def != null && typeof def === "object" && !Array.isArray(def)
+					def !== null && typeof def === "object" && !Array.isArray(def)
 						? enforceStrictSchema(def as Record<string, unknown>, seen, cache)
 						: def,
 				]),

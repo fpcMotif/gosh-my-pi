@@ -60,7 +60,7 @@ export class ExitPlanModeTool implements AgentTool<typeof exitPlanModeSchema, Ex
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<ExitPlanModeDetails>> {
 		const state = this.session.getPlanModeState?.();
-		if (!state?.enabled) {
+		if (state?.enabled !== true) {
 			throw new ToolError("Plan mode is not active.");
 		}
 

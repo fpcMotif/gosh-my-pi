@@ -110,8 +110,8 @@ export default function (pi: HookAPI) {
 
 				doGenerate()
 					.then(done)
-					.catch(err => {
-						console.error("Handoff generation failed:", err);
+					.catch(error => {
+						console.error("Handoff generation failed:", error);
 						done(null);
 					});
 

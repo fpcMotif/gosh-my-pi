@@ -144,12 +144,11 @@ function truncateBytesWindowed(
 			if (end <= 0) return { text: "", bytes: 0 };
 			const slice = buf.subarray(0, end);
 			return { text: slice.toString("utf-8"), bytes: slice.length };
-		} else {
-			const startAt = Math.max(0, buf.length - maxBytes);
-			const start = findUtf8BoundaryForward(buf, startAt);
-			const slice = buf.subarray(start);
-			return { text: slice.toString("utf-8"), bytes: slice.length };
 		}
+		const startAt = Math.max(0, buf.length - maxBytes);
+		const start = findUtf8BoundaryForward(buf, startAt);
+		const slice = buf.subarray(start);
+		return { text: slice.toString("utf-8"), bytes: slice.length };
 	}
 
 	// --------------------------
@@ -163,12 +162,11 @@ function truncateBytesWindowed(
 		if (end <= 0) return { text: "", bytes: 0 };
 		const slice = buf.subarray(0, end);
 		return { text: slice.toString("utf-8"), bytes: slice.length };
-	} else {
-		const startAt = buf.length - maxBytes;
-		const start = findUtf8BoundaryForward(buf, startAt);
-		const slice = buf.subarray(start);
-		return { text: slice.toString("utf-8"), bytes: slice.length };
 	}
+	const startAt = buf.length - maxBytes;
+	const start = findUtf8BoundaryForward(buf, startAt);
+	const slice = buf.subarray(start);
+	return { text: slice.toString("utf-8"), bytes: slice.length };
 }
 
 /**
@@ -208,8 +206,8 @@ export function truncateLine(
 
 /** Shared helper to build a no-truncation result. */
 export function noTruncResult(content: string, totalLines?: number, totalBytes?: number): TruncationResult {
-	if (totalLines == null) totalLines = countNewlines(content) + 1;
-	if (totalBytes == null) totalBytes = Buffer.byteLength(content, "utf-8");
+	if (totalLines === null) totalLines = countNewlines(content) + 1;
+	if (totalBytes === null) totalBytes = Buffer.byteLength(content, "utf-8");
 	return { content, totalLines, totalBytes };
 }
 
@@ -585,7 +583,12 @@ export class OutputSink {
 		const willOverflow = this.#bufferBytes + dataBytes > threshold;
 
 		// Write to artifact file if configured and past the threshold
-		if (this.#artifactPath && (this.#file != null || willOverflow)) {
+		if (
+			this.#artifactPath !== null &&
+			this.#artifactPath !== undefined &&
+			this.#artifactPath !== "" &&
+			(this.#file !== null || willOverflow)
+		) {
 			this.#writeToFile(chunk);
 		}
 
@@ -623,7 +626,7 @@ export class OutputSink {
 	#writeToFile(chunk: string): void {
 		if (this.#fileReady && this.#file) {
 			// Fast path: file sink exists, write synchronously
-			this.#file.sink.write(chunk);
+			void this.#file.sink.write(chunk);
 			return;
 		}
 		// File sink not yet created — queue this chunk and kick off creation
@@ -636,20 +639,26 @@ export class OutputSink {
 	}
 
 	async #createFileSink(): Promise<void> {
-		if (!this.#artifactPath || this.#fileReady) return;
+		if (
+			this.#artifactPath === null ||
+			this.#artifactPath === undefined ||
+			this.#artifactPath === "" ||
+			this.#fileReady
+		)
+			return;
 		try {
 			const sink = Bun.file(this.#artifactPath).writer();
 			this.#file = { path: this.#artifactPath, artifactId: this.#artifactId, sink };
 
 			// Flush existing buffer to file BEFORE it gets trimmed further.
 			if (this.#buffer.length > 0) {
-				sink.write(this.#buffer);
+				void sink.write(this.#buffer);
 			}
 
 			// Drain any chunks that arrived while the sink was being created
 			if (this.#pendingFileWrites) {
 				for (const pending of this.#pendingFileWrites) {
-					sink.write(pending);
+					void sink.write(pending);
 				}
 				this.#pendingFileWrites = undefined;
 			}
@@ -692,7 +701,7 @@ export class OutputSink {
 	}
 
 	async dump(notice?: string): Promise<OutputSummary> {
-		const noticeLine = notice ? `[${notice}]\n` : "";
+		const noticeLine = notice !== null && notice !== undefined && notice !== "" ? `[${notice}]\n` : "";
 		const outputLines = this.#buffer.length > 0 ? countNewlines(this.#buffer) + 1 : 0;
 		const totalLines = this.#sawData ? this.#totalLines + 1 : 0;
 
@@ -722,17 +731,20 @@ export function formatTailTruncationNotice(
 	truncation: TruncationResult,
 	options: TailTruncationNoticeOptions = {},
 ): string {
-	if (!truncation.truncated) return "";
+	if (truncation.truncated !== true) return "";
 
 	const { fullOutputPath, originalContent, suffix = "" } = options;
 	const startLine = truncation.totalLines - (truncation.outputLines ?? truncation.totalLines) + 1;
 	const endLine = truncation.totalLines;
-	const fullOutputPart = fullOutputPath ? `. Full output: ${fullOutputPath}` : "";
+	const fullOutputPart =
+		fullOutputPath !== null && fullOutputPath !== undefined && fullOutputPath !== ""
+			? `. Full output: ${fullOutputPath}`
+			: "";
 
 	let notice: string;
-	if (truncation.lastLinePartial) {
+	if (truncation.lastLinePartial === true) {
 		let lastLineSizePart = "";
-		if (originalContent) {
+		if (originalContent !== null && originalContent !== undefined && originalContent !== "") {
 			const lastNl = originalContent.lastIndexOf(NL);
 			const lastLine = lastNl === -1 ? originalContent : originalContent.substring(lastNl + 1);
 			lastLineSizePart = ` (line is ${formatBytes(Buffer.byteLength(lastLine, "utf-8"))})`;
@@ -753,7 +765,7 @@ export function formatHeadTruncationNotice(
 	truncation: TruncationResult,
 	options: HeadTruncationNoticeOptions = {},
 ): string {
-	if (!truncation.truncated) return "";
+	if (truncation.truncated !== true) return "";
 
 	const startLineDisplay = options.startLine ?? 1;
 	const totalFileLines = options.totalFileLines ?? truncation.totalLines;

@@ -71,7 +71,7 @@ export class HeaderBar implements Component {
 
 		// Trailing horizontal rule fragment to extend the bar visually.
 		const fillWidth = Math.max(0, termWidth - visLen - 1);
-		const fill = " " + theme.fg("dim", theme.boxRound.horizontal.repeat(fillWidth));
+		const fill = ` ${theme.fg("dim", theme.boxRound.horizontal.repeat(fillWidth))}`;
 		return [composed + fill];
 	}
 

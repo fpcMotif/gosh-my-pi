@@ -85,9 +85,9 @@ export class ExtensionUiController {
 				this.ctx.session
 					.sendCustomMessage(message, options)
 					.then(() => this.#applyCustomMessageDisplay(wasStreaming, message.display))
-					.catch((err: unknown) => {
+					.catch((error: unknown) => {
 						this.ctx.showError(
-							`Extension sendMessage failed: ${err instanceof Error ? err.message : String(err)}`,
+							`Extension sendMessage failed: ${error instanceof Error ? error.message : String(error)}`,
 						);
 					});
 			},
@@ -103,7 +103,7 @@ export class ExtensionUiController {
 			setActiveTools: toolNames => this.ctx.session.setActiveToolsByName(toolNames),
 			setModel: async model => {
 				const key = await this.ctx.session.modelRegistry.getApiKey(model);
-				if (!key) return false;
+				if (key === null || key === undefined || key === "") return false;
 				await this.ctx.session.setModel(model);
 				return true;
 			},
@@ -209,7 +209,12 @@ export class ExtensionUiController {
 				this.ctx.chatContainer.clear();
 				this.ctx.renderInitialMessages();
 				await this.ctx.reloadTodos();
-				if (result.editorText && !this.ctx.editor.getText().trim()) {
+				if (
+					result.editorText !== null &&
+					result.editorText !== undefined &&
+					result.editorText !== "" &&
+					!this.ctx.editor.getText().trim()
+				) {
 					this.ctx.editor.setText(result.editorText);
 				}
 				this.ctx.showStatus("Navigated to selected point");
@@ -327,8 +332,8 @@ export class ExtensionUiController {
 				this.ctx.session
 					.sendCustomMessage(message, options)
 					.then(() => this.#applyCustomMessageDisplay(wasStreaming, message.display))
-					.catch((err: unknown) => {
-						const errorText = `Extension sendMessage failed: ${err instanceof Error ? err.message : String(err)}`;
+					.catch((error: unknown) => {
+						const errorText = `Extension sendMessage failed: ${error instanceof Error ? error.message : String(error)}`;
 						if (this.ctx.isBackgrounded) {
 							logger.error(errorText);
 							return;
@@ -348,7 +353,7 @@ export class ExtensionUiController {
 			setActiveTools: toolNames => this.ctx.session.setActiveToolsByName(toolNames),
 			setModel: async model => {
 				const key = await this.ctx.session.modelRegistry.getApiKey(model);
-				if (!key) return false;
+				if (key === null || key === undefined || key === "") return false;
 				await this.ctx.session.setModel(model);
 				return true;
 			},
@@ -455,7 +460,12 @@ export class ExtensionUiController {
 				this.ctx.chatContainer.clear();
 				this.ctx.renderInitialMessages();
 				await this.ctx.reloadTodos();
-				if (result.editorText && !this.ctx.editor.getText().trim()) {
+				if (
+					result.editorText !== null &&
+					result.editorText !== undefined &&
+					result.editorText !== "" &&
+					!this.ctx.editor.getText().trim()
+				) {
 					this.ctx.editor.setText(result.editorText);
 				}
 				this.ctx.showStatus("Navigated to selected point");
@@ -540,15 +550,18 @@ export class ExtensionUiController {
 						hasPendingMessages: () => this.ctx.session.queuedMessageCount > 0,
 						hasQueuedMessages: () => this.ctx.session.queuedMessageCount > 0,
 						abort: () => {
-							this.ctx.session.abort();
+							void this.ctx.session.abort();
 						},
 						shutdown: () => {
 							// Signal shutdown request
 						},
 						getSystemPrompt: () => this.ctx.session.systemPrompt,
 					});
-				} catch (err) {
-					this.showToolError(registeredTool.definition.name, err instanceof Error ? err.message : String(err));
+				} catch (error) {
+					this.showToolError(
+						registeredTool.definition.name,
+						error instanceof Error ? error.message : String(error),
+					);
 				}
 			}
 		}
@@ -789,7 +802,7 @@ export class ExtensionUiController {
 			component?.dispose?.();
 			overlayHandle?.hide();
 			overlayHandle = undefined;
-			if (!options?.overlay) {
+			if (options?.overlay !== true) {
 				this.ctx.editorContainer.clear();
 				this.ctx.editorContainer.addChild(this.ctx.editor);
 				this.ctx.editor.setText(savedText);
@@ -799,13 +812,13 @@ export class ExtensionUiController {
 			resolve(result);
 		};
 
-		Promise.try(() => factory(this.ctx.ui, theme, keybindings, close)).then(c => {
+		void Promise.try(() => factory(this.ctx.ui, theme, keybindings, close)).then(c => {
 			if (closed) {
 				c.dispose?.();
 				return;
 			}
 			component = c;
-			if (options?.overlay) {
+			if (options?.overlay === true) {
 				overlayHandle = this.ctx.ui.showOverlay(component, {
 					anchor: "bottom-center",
 					width: "100%",
@@ -883,15 +896,17 @@ export class ExtensionUiController {
 	}
 
 	#sendExtensionUserMessage: SendUserMessageHandler = (content, options) => {
-		this.ctx.session.sendUserMessage(content, options).catch((err: unknown) => {
-			this.ctx.showError(`Extension sendUserMessage failed: ${err instanceof Error ? err.message : String(err)}`);
+		this.ctx.session.sendUserMessage(content, options).catch((error: unknown) => {
+			this.ctx.showError(
+				`Extension sendUserMessage failed: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		});
 	};
 
 	#applyCustomMessageDisplay(wasStreaming: boolean, shouldDisplay: boolean | undefined): void {
 		// For non-streaming cases with display=true, update UI
 		// (streaming cases update via message_end event)
-		if (!this.ctx.isBackgrounded && !wasStreaming && shouldDisplay) {
+		if (!this.ctx.isBackgrounded && !wasStreaming && shouldDisplay === true) {
 			this.ctx.rebuildChatFromMessages();
 		}
 	}

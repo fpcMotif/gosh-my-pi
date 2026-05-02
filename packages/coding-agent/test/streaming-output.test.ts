@@ -193,7 +193,7 @@ describe("TailBuffer", () => {
 describe("OutputSink", () => {
 	test("tracks totals and adds notice in dump", async () => {
 		const sink = new OutputSink();
-		await sink.push("hello\nworld");
+		sink.push("hello\nworld");
 		const dumped = await sink.dump("notice");
 
 		expect(dumped.output).toBe("[notice]\nhello\nworld");
@@ -206,8 +206,8 @@ describe("OutputSink", () => {
 
 	test("counts lines correctly when chunks contain no newlines", async () => {
 		const sink = new OutputSink();
-		await sink.push("abc");
-		await sink.push("def");
+		sink.push("abc");
+		sink.push("def");
 		const dumped = await sink.dump();
 
 		expect(dumped.totalLines).toBe(1);
@@ -216,9 +216,9 @@ describe("OutputSink", () => {
 
 	test("counts all newline boundaries across chunk splits", async () => {
 		const sink = new OutputSink();
-		await sink.push("a\n");
-		await sink.push("b\n\n");
-		await sink.push("c");
+		sink.push("a\n");
+		sink.push("b\n\n");
+		sink.push("c");
 		const dumped = await sink.dump();
 
 		expect(dumped.output).toBe("a\nb\n\nc");
@@ -228,8 +228,8 @@ describe("OutputSink", () => {
 	test("invokes onChunk callback with sanitized text", async () => {
 		const chunks: string[] = [];
 		const sink = new OutputSink({ onChunk: chunk => chunks.push(chunk) });
-		await sink.push("abc");
-		await sink.push("def");
+		sink.push("abc");
+		sink.push("def");
 		expect(chunks).toEqual(["abc", "def"]);
 	});
 
@@ -239,7 +239,7 @@ describe("OutputSink", () => {
 		Bun.env.PI_ALLOW_SIXEL_PASSTHROUGH = "1";
 		const chunks: string[] = [];
 		const sink = new OutputSink({ onChunk: chunk => chunks.push(chunk) });
-		await sink.push(`before\n${sixel}\nafter`);
+		sink.push(`before\n${sixel}\nafter`);
 		const dumped = await sink.dump();
 		expect(chunks).toHaveLength(1);
 		expect(chunks[0]).toContain(sixel);
@@ -251,7 +251,7 @@ describe("OutputSink", () => {
 		delete Bun.env.PI_FORCE_IMAGE_PROTOCOL;
 		delete Bun.env.PI_ALLOW_SIXEL_PASSTHROUGH;
 		const sink = new OutputSink();
-		await sink.push(sixel);
+		sink.push(sixel);
 		const dumped = await sink.dump();
 		expect(dumped.output).not.toContain("\x1bPq");
 		expect(dumped.output).toBe("");
@@ -259,14 +259,28 @@ describe("OutputSink", () => {
 
 	test("truncates in-memory output when spill threshold is exceeded", async () => {
 		const sink = new OutputSink({ spillThreshold: 5 });
-		await sink.push("abc");
-		await sink.push("def");
+		sink.push("abc");
+		sink.push("def");
 
 		const dumped = await sink.dump();
 		expect(dumped.truncated).toBe(true);
 		expect(dumped.output).toBe("bcdef");
 		expect(dumped.totalBytes).toBe(6);
 		expect(dumped.outputBytes).toBe(5);
+	});
+
+	test("keeps only a bounded tail when a single oversized chunk arrives", async () => {
+		const threshold = 32;
+		const chunk = `prefix-${"x".repeat(256)}-TAIL`;
+		const sink = new OutputSink({ spillThreshold: threshold });
+
+		sink.push(chunk);
+		const dumped = await sink.dump();
+
+		expect(dumped.truncated).toBe(true);
+		expect(dumped.totalBytes).toBe(byteLength(chunk));
+		expect(dumped.outputBytes).toBeLessThanOrEqual(threshold);
+		expect(dumped.output).toBe(chunk.slice(-threshold));
 	});
 
 	test("spills full output to artifact file when artifact path is provided", async () => {
@@ -278,8 +292,8 @@ describe("OutputSink", () => {
 			spillThreshold: 5,
 		});
 
-		await sink.push("abc");
-		await sink.push("def");
+		sink.push("abc");
+		sink.push("def");
 		const dumped = await sink.dump();
 		const artifactText = await Bun.file(artifactPath).text();
 

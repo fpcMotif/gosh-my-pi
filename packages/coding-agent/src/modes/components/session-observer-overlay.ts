@@ -135,7 +135,7 @@ export class SessionObserverOverlayComponent extends Container {
 
 	/** Rebuild content from live registry data */
 	refreshFromRegistry(): void {
-		if (this.#selectedSessionId) {
+		if (this.#selectedSessionId !== null && this.#selectedSessionId !== undefined && this.#selectedSessionId !== "") {
 			// Keep auto-scrolling to bottom unless the user navigated away from the last entry
 			this.#wasAtBottom = this.#selectedEntryIndex >= this.#viewerEntries.length - 1;
 			this.#rebuildViewerContent();
@@ -149,7 +149,7 @@ export class SessionObserverOverlayComponent extends Container {
 
 		// Load transcript first so model info is available for header
 		let messageEntries: SessionMessageEntry[] | null = null;
-		if (session?.sessionFile) {
+		if (session?.sessionFile !== null && session?.sessionFile !== undefined && session?.sessionFile !== "") {
 			messageEntries = this.#loadTranscript(session.sessionFile);
 		}
 
@@ -158,15 +158,21 @@ export class SessionObserverOverlayComponent extends Container {
 		const breadcrumb = this.#buildBreadcrumb(session);
 		this.#viewerHeaderLines.push(theme.fg("accent", breadcrumb));
 		if (session) {
-			const statusColor = session.status === "active" ? "success" : session.status === "failed" ? "error" : "dim";
+			const statusColor = session.status === "active" ? "success" : (session.status === "failed" ? "error" : "dim");
 			const statusText = theme.fg(statusColor, `[${session.status}]`);
-			const agentTag = session.agent ? theme.fg("dim", ` ${session.agent}`) : "";
+			const agentTag =
+				session.agent !== null && session.agent !== undefined && session.agent !== ""
+					? theme.fg("dim", ` ${session.agent}`)
+					: "";
 			const subagentIds = this.#getSubagentSessionIds();
 			const posIdx = subagentIds.indexOf(this.#selectedSessionId ?? "");
 			const posLabel =
 				subagentIds.length > 1 && posIdx >= 0 ? theme.fg("dim", ` (${posIdx + 1}/${subagentIds.length})`) : "";
 			const modelName = this.#transcriptCache?.model;
-			const modelLabel = modelName ? theme.fg("muted", ` · ${modelName}`) : "";
+			const modelLabel =
+				modelName !== null && modelName !== undefined && modelName !== ""
+					? theme.fg("muted", ` · ${modelName}`)
+					: "";
 			this.#viewerHeaderLines.push(`${theme.bold(session.label)} ${statusText}${agentTag}${posLabel}${modelLabel}`);
 		}
 
@@ -176,7 +182,7 @@ export class SessionObserverOverlayComponent extends Container {
 
 		if (!session) {
 			contentLines.push(theme.fg("dim", "Session no longer available."));
-		} else if (!session.sessionFile) {
+		} else if (session.sessionFile === null || session.sessionFile === undefined || session.sessionFile === "") {
 			contentLines.push(theme.fg("dim", "No session file available yet."));
 		} else if (!messageEntries) {
 			contentLines.push(theme.fg("dim", "Unable to read session file."));
@@ -285,7 +291,12 @@ export class SessionObserverOverlayComponent extends Container {
 
 			if (msg.role === "assistant") {
 				// Handle error messages with empty content
-				if (msg.content.length === 0 && msg.errorMessage) {
+				if (
+					msg.content.length === 0 &&
+					msg.errorMessage !== null &&
+					msg.errorMessage !== undefined &&
+					msg.errorMessage !== ""
+				) {
 					const startLine = lines.length;
 					const isSelected = entryIndex === this.#selectedEntryIndex;
 					const cursor = isSelected ? theme.fg("accent", "▶") : " ";
@@ -451,7 +462,10 @@ export class SessionObserverOverlayComponent extends Container {
 		lines.push("");
 
 		// Tool call header
-		const intentStr = call.intent ? theme.fg("dim", ` ${sanitizeLine(call.intent, TRUNCATE_LENGTHS.SHORT)}`) : "";
+		const intentStr =
+			call.intent !== null && call.intent !== undefined && call.intent !== ""
+				? theme.fg("dim", ` ${sanitizeLine(call.intent, TRUNCATE_LENGTHS.SHORT)}`)
+				: "";
 		lines.push(`${cursor} ${theme.fg("accent", "\u25B8")} ${theme.bold(theme.fg("muted", call.name))}${intentStr}`);
 
 		// Key arguments
@@ -517,13 +531,16 @@ export class SessionObserverOverlayComponent extends Container {
 			case "read":
 			case "write":
 			case "edit":
-				return args.path ? `path: ${args.path}` : "";
+				return args.path !== null && args.path !== undefined ? `path: ${String(args.path)}` : "";
 			case "search":
-				return [args.pattern ? `pattern: ${args.pattern}` : "", args.path ? `path: ${args.path}` : ""]
+				return [
+					args.pattern !== null && args.pattern !== undefined ? `pattern: ${String(args.pattern)}` : "",
+					args.path !== null && args.path !== undefined ? `path: ${String(args.path)}` : "",
+				]
 					.filter(Boolean)
 					.join(", ");
 			case "find":
-				return args.pattern ? `pattern: ${args.pattern}` : "";
+				return args.pattern !== null && args.pattern !== undefined ? `pattern: ${String(args.pattern)}` : "";
 			case "bash": {
 				const cmd = args.command;
 				return typeof cmd === "string" ? replaceTabs(cmd) : "";
@@ -532,7 +549,7 @@ export class SessionObserverOverlayComponent extends Container {
 				return [args.action, args.file, args.symbol].filter(Boolean).join(" ");
 			case "ast_grep":
 			case "ast_edit":
-				return args.path ? `path: ${args.path}` : "";
+				return args.path !== null && args.path !== undefined ? `path: ${String(args.path)}` : "";
 			case "task": {
 				const tasks = args.tasks;
 				return Array.isArray(tasks) ? `${tasks.length} task(s)` : "";
@@ -584,7 +601,12 @@ export class SessionObserverOverlayComponent extends Container {
 						this.#transcriptCache.entries.push(entry);
 						// Extract model from first assistant message
 						const msg = entry.message;
-						if (!this.#transcriptCache.model && msg.role === "assistant") {
+						if (
+							(this.#transcriptCache.model === null ||
+								this.#transcriptCache.model === undefined ||
+								this.#transcriptCache.model === "") &&
+							msg.role === "assistant"
+						) {
 							this.#transcriptCache.model = msg.model;
 						}
 					} else if (entry.type === "model_change") {
@@ -727,7 +749,6 @@ export class SessionObserverOverlayComponent extends Container {
 		// [ / ← / Shift+Tab — previous sub-agent session
 		if (keyData === "[" || matchesKey(keyData, "shift+tab") || matchesKey(keyData, "left")) {
 			this.#cycleSession(-1);
-			return;
 		}
 	}
 

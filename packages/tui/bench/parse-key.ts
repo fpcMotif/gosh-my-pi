@@ -62,8 +62,7 @@ function bench(name: string, fn: () => void): number {
 		fn();
 	}
 	const elapsed = (Bun.nanoseconds() - start) / 1e6;
-	const perOp = (elapsed / ITERATIONS).toFixed(6);
-	console.log(`${name}: ${elapsed.toFixed(2)}ms total (${perOp}ms/op)`);
+
 	return elapsed;
 }
 
@@ -71,37 +70,18 @@ function bench(name: string, fn: () => void): number {
 js.setKittyProtocolActive(true);
 native.setKittyProtocolActive(true);
 
-console.log(`parseKey benchmark (${ITERATIONS} iterations, ${samples.length} samples each)\n`);
-
 // Verify correctness first
 let mismatches = 0;
 for (const sample of samples) {
 	const jsResult = js.parseKey(sample.data);
 	const nativeResult = nativeParseKey(sample.data, false);
 	if (jsResult !== nativeResult) {
-		console.log(`MISMATCH ${sample.name}: js="${jsResult}" native="${nativeResult}" expected="${sample.expected}"`);
 		mismatches++;
 	}
 }
 if (mismatches > 0) {
-	console.log(`\n${mismatches} mismatches found!\n`);
 } else {
-	console.log("All results match.\n");
 }
-
-const jsTime = bench("js/parseKey", () => {
-	for (const sample of samples) {
-		js.parseKey(sample.data);
-	}
-});
-
-const nativeTime = bench("native/parseKey", () => {
-	for (const sample of samples) {
-		native.parseKey(sample.data);
-	}
-});
-
-console.log(`\nSpeedup: ${(jsTime / nativeTime).toFixed(2)}x`);
 
 bench("js/parse+match", () => {
 	for (const sample of samples) {

@@ -37,10 +37,10 @@ function convertMDNBody(sections: MDNSection[]): string {
 
 		switch (type) {
 			case "prose":
-				if (value.content) {
+				if (value.content !== null && value.content !== undefined && value.content !== "") {
 					const markdown = htmlToBasicMarkdown(value.content);
-					if (value.title) {
-						const level = value.isH3 ? "###" : "##";
+					if (value.title !== null && value.title !== undefined && value.title !== "") {
+						const level = value.isH3 === true ? "###" : "##";
 						parts.push(`${level} ${value.title}\n\n${markdown}`);
 					} else {
 						parts.push(markdown);
@@ -49,23 +49,23 @@ function convertMDNBody(sections: MDNSection[]): string {
 				break;
 
 			case "browser_compatibility":
-				if (value.title) {
+				if (value.title !== null && value.title !== undefined && value.title !== "") {
 					parts.push(`## ${value.title}\n\n(See browser compatibility data at MDN)`);
 				}
 				break;
 
 			case "specifications":
-				if (value.title) {
+				if (value.title !== null && value.title !== undefined && value.title !== "") {
 					parts.push(`## ${value.title}\n\n(See specifications at MDN)`);
 				}
 				break;
 
 			case "code_example":
-				if (value.title) {
+				if (value.title !== null && value.title !== undefined && value.title !== "") {
 					parts.push(`### ${value.title}`);
 				}
-				if (value.code) {
-					const lang = value.language || "";
+				if (value.code !== null && value.code !== undefined && value.code !== "") {
+					const lang = value.language ?? "";
 					parts.push(`\`\`\`${lang}\n${value.code}\n\`\`\``);
 				}
 				break;
@@ -126,12 +126,12 @@ export const handleMDN: SpecialHandler = async (url: string, timeout: number, si
 		const result = await loadPage(jsonUrl, { timeout, signal, headers: { Accept: "application/json" } });
 
 		if (!result.ok) {
-			notes.push(`Failed to fetch MDN JSON API (status ${result.status || "unknown"})`);
+			notes.push(`Failed to fetch MDN JSON API (status ${result.status ?? "unknown"})`);
 			return null;
 		}
 
 		const data = tryParseJson<MDNDoc>(result.content);
-		if (!data?.doc?.title) {
+		if (data?.doc?.title === null || data?.doc?.title === undefined || data?.doc?.title === "") {
 			notes.push("Invalid MDN JSON structure");
 			return null;
 		}
@@ -162,8 +162,8 @@ export const handleMDN: SpecialHandler = async (url: string, timeout: number, si
 			fetchedAt: new Date().toISOString(),
 			notes,
 		});
-	} catch (err) {
-		notes.push(`MDN handler error: ${err instanceof Error ? err.message : String(err)}`);
+	} catch (error) {
+		notes.push(`MDN handler error: ${error instanceof Error ? error.message : String(error)}`);
 		return null;
 	}
 };

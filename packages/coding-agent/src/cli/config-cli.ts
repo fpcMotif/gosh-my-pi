@@ -260,7 +260,7 @@ export async function runConfigCommand(cmd: ConfigCommandArgs): Promise<void> {
 function handleList(flags: { json?: boolean }): void {
 	const defs = ALL_SETTING_PATHS.map(path => findSettingDef(path)).filter((def): def is CliSettingDef => !!def);
 
-	if (flags.json) {
+	if (flags.json === true) {
 		const result: Record<string, { value: unknown; type: string; description: string }> = {};
 		for (const def of defs) {
 			result[def.path] = {
@@ -302,7 +302,7 @@ function handleList(flags: { json?: boolean }): void {
 }
 
 function handleGet(key: string | undefined, flags: { json?: boolean }): void {
-	if (!key) {
+	if (key === null || key === undefined || key === "") {
 		console.error(chalk.red(`Usage: ${APP_NAME} config get <key>`));
 		console.error(chalk.dim(`\nRun '${APP_NAME} config list' to see available keys`));
 		process.exit(1);
@@ -317,7 +317,7 @@ function handleGet(key: string | undefined, flags: { json?: boolean }): void {
 
 	const value = settings.get(def.path);
 
-	if (flags.json) {
+	if (flags.json === true) {
 		console.log(JSON.stringify({ key: def.path, value, type: def.type, description: def.description }, null, 2));
 		return;
 	}
@@ -326,7 +326,7 @@ function handleGet(key: string | undefined, flags: { json?: boolean }): void {
 }
 
 async function handleSet(key: string | undefined, value: string | undefined, flags: { json?: boolean }): Promise<void> {
-	if (!key || value === undefined) {
+	if (key === null || key === undefined || key === "" || value === undefined) {
 		console.error(chalk.red(`Usage: ${APP_NAME} config set <key> <value>`));
 		console.error(chalk.dim(`\nRun '${APP_NAME} config list' to see available keys`));
 		process.exit(1);
@@ -341,14 +341,14 @@ async function handleSet(key: string | undefined, value: string | undefined, fla
 
 	try {
 		parseAndSetValue(def.path, value);
-	} catch (err) {
-		console.error(chalk.red(String(err)));
+	} catch (error) {
+		console.error(chalk.red(String(error)));
 		process.exit(1);
 	}
 
 	const newValue = settings.get(def.path);
 
-	if (flags.json) {
+	if (flags.json === true) {
 		console.log(JSON.stringify({ key: def.path, value: newValue }));
 	} else {
 		console.log(chalk.green(`${theme.status.success} Set ${def.path} = ${formatValue(newValue)}`));
@@ -356,7 +356,7 @@ async function handleSet(key: string | undefined, value: string | undefined, fla
 }
 
 async function handleReset(key: string | undefined, flags: { json?: boolean }): Promise<void> {
-	if (!key) {
+	if (key === null || key === undefined || key === "") {
 		console.error(chalk.red(`Usage: ${APP_NAME} config reset <key>`));
 		console.error(chalk.dim(`\nRun '${APP_NAME} config list' to see available keys`));
 		process.exit(1);
@@ -373,7 +373,7 @@ async function handleReset(key: string | undefined, flags: { json?: boolean }): 
 	const defaultValue = getDefault(path);
 	settings.set(path, defaultValue as SettingValue<typeof path>);
 
-	if (flags.json) {
+	if (flags.json === true) {
 		console.log(JSON.stringify({ key: def.path, value: defaultValue }));
 	} else {
 		console.log(chalk.green(`${theme.status.success} Reset ${def.path} to ${formatValue(defaultValue)}`));

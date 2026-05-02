@@ -45,7 +45,7 @@ export async function runSSHCommand(cmd: SSHCommandArgs): Promise<void> {
 			await handleList(cmd);
 			break;
 		default:
-			process.stdout.write(chalk.red(`Unknown action: ${cmd.action}\n`));
+			process.stdout.write(chalk.red(`Unknown action: ${String(cmd.action)}\n`));
 			process.stdout.write(`Valid actions: add, remove, list\n`);
 			process.exitCode = 1;
 	}
@@ -67,7 +67,7 @@ async function handleAdd(cmd: SSHCommandArgs): Promise<void> {
 	}
 
 	const host = cmd.flags.host;
-	if (!host) {
+	if (host === null || host === undefined || host === "") {
 		process.stdout.write(chalk.red("Error: --host is required\n"));
 		process.stdout.write(chalk.dim("Usage: omp ssh add <name> --host <address>\n"));
 		process.exitCode = 1;
@@ -85,11 +85,15 @@ async function handleAdd(cmd: SSHCommandArgs): Promise<void> {
 	}
 
 	const hostConfig: SSHHostConfig = { host };
-	if (cmd.flags.user) hostConfig.username = cmd.flags.user;
-	if (cmd.flags.port) hostConfig.port = Number.parseInt(cmd.flags.port, 10);
-	if (cmd.flags.key) hostConfig.keyPath = cmd.flags.key;
-	if (cmd.flags.desc) hostConfig.description = cmd.flags.desc;
-	if (cmd.flags.compat) hostConfig.compat = true;
+	if (cmd.flags.user !== null && cmd.flags.user !== undefined && cmd.flags.user !== "")
+		hostConfig.username = cmd.flags.user;
+	if (cmd.flags.port !== null && cmd.flags.port !== undefined && cmd.flags.port !== "")
+		hostConfig.port = Number.parseInt(cmd.flags.port, 10);
+	if (cmd.flags.key !== null && cmd.flags.key !== undefined && cmd.flags.key !== "")
+		hostConfig.keyPath = cmd.flags.key;
+	if (cmd.flags.desc !== null && cmd.flags.desc !== undefined && cmd.flags.desc !== "")
+		hostConfig.description = cmd.flags.desc;
+	if (cmd.flags.compat === true) hostConfig.compat = true;
 
 	const scope = cmd.flags.scope ?? "project";
 	const filePath = getSSHConfigPath(scope);
@@ -97,8 +101,8 @@ async function handleAdd(cmd: SSHCommandArgs): Promise<void> {
 	try {
 		await addSSHHost(filePath, name, hostConfig);
 		process.stdout.write(chalk.green(`Added SSH host "${name}" to ${scope} config\n`));
-	} catch (err) {
-		process.stdout.write(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}\n`));
+	} catch (error) {
+		process.stdout.write(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}\n`));
 		process.exitCode = 1;
 	}
 }
@@ -118,8 +122,8 @@ async function handleRemove(cmd: SSHCommandArgs): Promise<void> {
 	try {
 		await removeSSHHost(filePath, name);
 		process.stdout.write(chalk.green(`Removed SSH host "${name}" from ${scope} config\n`));
-	} catch (err) {
-		process.stdout.write(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}\n`));
+	} catch (error) {
+		process.stdout.write(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}\n`));
 		process.exitCode = 1;
 	}
 }
@@ -133,7 +137,7 @@ async function handleList(cmd: SSHCommandArgs): Promise<void> {
 	const projectHosts = projectConfig.hosts ?? {};
 	const userHosts = userConfig.hosts ?? {};
 
-	if (cmd.flags.json) {
+	if (cmd.flags.json === true) {
 		process.stdout.write(JSON.stringify({ project: projectHosts, user: userHosts }, null, 2));
 		process.stdout.write("\n");
 		return;
@@ -170,10 +174,14 @@ async function handleList(cmd: SSHCommandArgs): Promise<void> {
 function printHosts(hosts: Record<string, SSHHostConfig>): void {
 	for (const [name, config] of Object.entries(hosts)) {
 		const parts = [chalk.cyan(name), config.host];
-		if (config.username) parts.push(chalk.dim(config.username));
-		if (config.port && config.port !== 22) parts.push(chalk.dim(`port:${config.port}`));
-		if (config.keyPath) parts.push(chalk.dim(config.keyPath));
-		if (config.description) parts.push(chalk.dim(`- ${config.description}`));
+		if (config.username !== null && config.username !== undefined && config.username !== "")
+			parts.push(chalk.dim(config.username));
+		if (config.port !== null && config.port !== undefined && config.port !== 0 && config.port !== 22)
+			parts.push(chalk.dim(`port:${config.port}`));
+		if (config.keyPath !== null && config.keyPath !== undefined && config.keyPath !== "")
+			parts.push(chalk.dim(config.keyPath));
+		if (config.description !== null && config.description !== undefined && config.description !== "")
+			parts.push(chalk.dim(`- ${config.description}`));
 		process.stdout.write(`  ${parts.join("  ")}\n`);
 	}
 }

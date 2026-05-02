@@ -60,17 +60,32 @@ export const handleCratesIo: SpecialHandler = async (
 		const latestVersion = data.versions?.[0];
 
 		let md = `# ${crate.name}\n\n`;
-		if (crate.description) md += `${crate.description}\n\n`;
+		if (crate.description !== null && crate.description !== undefined && crate.description !== "")
+			md += `${crate.description}\n\n`;
 
 		md += `**Latest:** ${crate.max_version}`;
-		if (latestVersion?.license) md += ` · **License:** ${latestVersion.license}`;
-		if (latestVersion?.rust_version) md += ` · **MSRV:** ${latestVersion.rust_version}`;
+		if (latestVersion?.license !== null && latestVersion?.license !== undefined && latestVersion?.license !== "")
+			md += ` · **License:** ${latestVersion.license}`;
+		if (
+			latestVersion?.rust_version !== null &&
+			latestVersion?.rust_version !== undefined &&
+			latestVersion?.rust_version !== ""
+		)
+			md += ` · **MSRV:** ${latestVersion.rust_version}`;
 		md += "\n";
 		md += `**Downloads:** ${formatNumber(crate.downloads)} total · ${formatNumber(crate.recent_downloads)} recent\n\n`;
 
-		if (crate.repository) md += `**Repository:** ${crate.repository}\n`;
-		if (crate.homepage && crate.homepage !== crate.repository) md += `**Homepage:** ${crate.homepage}\n`;
-		if (crate.documentation) md += `**Docs:** ${crate.documentation}\n`;
+		if (crate.repository !== null && crate.repository !== undefined && crate.repository !== "")
+			md += `**Repository:** ${crate.repository}\n`;
+		if (
+			crate.homepage !== null &&
+			crate.homepage !== undefined &&
+			crate.homepage !== "" &&
+			crate.homepage !== crate.repository
+		)
+			md += `**Homepage:** ${crate.homepage}\n`;
+		if (crate.documentation !== null && crate.documentation !== undefined && crate.documentation !== "")
+			md += `**Docs:** ${crate.documentation}\n`;
 		if (crate.keywords?.length) md += `**Keywords:** ${crate.keywords.join(", ")}\n`;
 		if (crate.categories?.length) md += `**Categories:** ${crate.categories.join(", ")}\n`;
 

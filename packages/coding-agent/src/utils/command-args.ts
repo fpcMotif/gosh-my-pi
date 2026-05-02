@@ -6,7 +6,7 @@ export function parseCommandArgs(argsString: string): string[] {
 	for (let i = 0; i < argsString.length; i++) {
 		const char = argsString[i];
 
-		if (inQuote) {
+		if (inQuote !== null && inQuote !== undefined && inQuote !== "") {
 			if (char === inQuote) {
 				inQuote = null;
 			} else {
@@ -54,7 +54,7 @@ export function substituteArgs(content: string, args: string[]): string {
 		const startIndex = start - 1;
 		if (startIndex >= args.length) return "";
 
-		if (lengthRaw === undefined || lengthRaw === "") {
+		if (lengthRaw === null || lengthRaw === undefined || lengthRaw === "") {
 			return args.slice(startIndex).join(" ");
 		}
 

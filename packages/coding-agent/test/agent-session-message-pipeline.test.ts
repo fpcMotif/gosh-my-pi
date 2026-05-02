@@ -20,9 +20,7 @@ describe("AgentSession message pipeline", () => {
 
 	afterEach(async () => {
 		vi.restoreAllMocks();
-		for (const session of sessions.splice(0)) {
-			await session.dispose();
-		}
+		await Promise.all(sessions.splice(0).map(s => s.dispose()));
 	});
 
 	it("applies transformContext before convertToLlm", async () => {

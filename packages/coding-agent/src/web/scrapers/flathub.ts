@@ -140,7 +140,7 @@ export const handleFlathub: SpecialHandler = async (
 		if (parsed.hostname !== "flathub.org" && parsed.hostname !== "www.flathub.org") return null;
 
 		const appId = extractAppId(parsed.pathname);
-		if (!appId) return null;
+		if (appId === null || appId === undefined || appId === "") return null;
 
 		const apiUrl = `https://flathub.org/api/v2/appstream/${encodeURIComponent(appId)}`;
 		const result = await loadPage(apiUrl, { timeout, signal, headers: { Accept: "application/json" } });
@@ -153,23 +153,24 @@ export const handleFlathub: SpecialHandler = async (
 		const name = app.name ?? app.id ?? appId;
 
 		let md = `# ${name}\n\n`;
-		if (app.summary) md += `${app.summary}\n\n`;
+		if (app.summary !== null && app.summary !== undefined && app.summary !== "") md += `${app.summary}\n\n`;
 
 		md += "## Metadata\n\n";
 		md += `**App ID:** ${app.id ?? appId}\n`;
-		if (app.developer_name) md += `**Developer:** ${app.developer_name}\n`;
+		if (app.developer_name !== null && app.developer_name !== undefined && app.developer_name !== "")
+			md += `**Developer:** ${app.developer_name}\n`;
 
 		const installs = extractInstalls(app);
 		if (installs !== null) md += `**Installs:** ${formatNumber(installs)}\n`;
 
-		if (app.categories?.length) {
+		if (app.categories?.length !== null && app.categories?.length !== undefined && app.categories?.length !== 0) {
 			md += "\n## Categories\n\n";
 			for (const category of app.categories) {
 				md += `- ${category}\n`;
 			}
 		}
 
-		if (app.description) {
+		if (app.description !== null && app.description !== undefined && app.description !== "") {
 			const description = htmlToBasicMarkdown(app.description);
 			if (description) md += `\n## Description\n\n${description}\n`;
 		}
@@ -182,28 +183,35 @@ export const handleFlathub: SpecialHandler = async (
 			}
 		}
 
-		if (app.screenshots?.length) {
+		if (app.screenshots?.length !== null && app.screenshots?.length !== undefined && app.screenshots?.length !== 0) {
 			md += "\n## Screenshots\n\n";
 			for (const screenshot of app.screenshots.slice(0, 5)) {
 				const screenshotUrl = bestScreenshotUrl(screenshot.sizes);
-				if (!screenshotUrl) continue;
-				const caption = screenshot.caption ? ` - ${screenshot.caption}` : "";
+				if (screenshotUrl === null || screenshotUrl === undefined || screenshotUrl === "") continue;
+				const caption =
+					screenshot.caption !== null && screenshot.caption !== undefined && screenshot.caption !== ""
+						? ` - ${screenshot.caption}`
+						: "";
 				md += `- ${screenshotUrl}${caption}\n`;
 			}
 		}
 
-		if (app.releases?.length) {
+		if (app.releases?.length !== null && app.releases?.length !== undefined && app.releases?.length !== 0) {
 			md += "\n## Releases\n\n";
 			for (const release of app.releases.slice(0, 5)) {
 				const version = release.version ?? "unknown";
 				let line = `- **${version}**`;
-				const date = release.timestamp ? formatIsoDate(Number(release.timestamp) * 1000) : "";
+				const date =
+					release.timestamp !== null && release.timestamp !== undefined && release.timestamp !== ""
+						? formatIsoDate(Number(release.timestamp) * 1000)
+						: "";
 				if (date) line += ` (${date})`;
-				if (release.type) line += ` · ${release.type}`;
-				if (release.url) line += ` · ${release.url}`;
+				if (release.type !== null && release.type !== undefined && release.type !== "")
+					line += ` · ${release.type}`;
+				if (release.url !== null && release.url !== undefined && release.url !== "") line += ` · ${release.url}`;
 				md += `${line}\n`;
 
-				if (release.description) {
+				if (release.description !== null && release.description !== undefined && release.description !== "") {
 					const releaseDesc = htmlToBasicMarkdown(release.description).replace(/\n+/g, " ").trim();
 					if (releaseDesc) md += `  - ${releaseDesc}\n`;
 				}

@@ -37,14 +37,14 @@ function extractShortname(pathname: string): string | null {
 	if (segments.length >= 3 && /^\d{4}$/.test(segments[1])) {
 		const version = segments[2];
 		const match = version.match(/^[A-Za-z]+-(.+)-\d{8}$/);
-		if (match?.[1]) return decodeURIComponent(match[1]);
+		if (match?.[1] !== undefined && match?.[1] !== "") return decodeURIComponent(match[1]);
 	}
 
 	return null;
 }
 
 function normalizeStatus(status?: string): { code?: string; label?: string } {
-	if (!status) return {};
+	if (status === null || status === undefined || status === "") return {};
 	const lower = status.toLowerCase();
 
 	if (lower.includes("working draft")) return { code: "WD", label: status };
@@ -63,7 +63,7 @@ function extractEditors(editorsPayload: JsonRecord | null): string[] {
 	for (const entry of editors) {
 		const record = asRecord(entry);
 		const title = getString(record, "title");
-		if (title) names.push(title);
+		if (title !== null && title !== undefined && title !== "") names.push(title);
 	}
 
 	return names;
@@ -79,7 +79,7 @@ export const handleW3c: SpecialHandler = async (
 		if (parsed.hostname !== "www.w3.org" && parsed.hostname !== "w3.org") return null;
 
 		const shortname = extractShortname(parsed.pathname);
-		if (!shortname) return null;
+		if (shortname === null || shortname === undefined || shortname === "") return null;
 
 		const fetchedAt = new Date().toISOString();
 
@@ -100,7 +100,10 @@ export const handleW3c: SpecialHandler = async (
 		const title = getString(specPayload, "title");
 		const shortnameValue = getString(specPayload, "shortname") ?? shortname;
 		const description = getString(specPayload, "description") ?? getString(specPayload, "abstract");
-		const abstract = description ? htmlToBasicMarkdown(description) : undefined;
+		const abstract =
+			description !== null && description !== undefined && description !== ""
+				? htmlToBasicMarkdown(description)
+				: undefined;
 
 		const latestVersionUrl =
 			getString(latestPayload, "uri") ??
@@ -117,7 +120,7 @@ export const handleW3c: SpecialHandler = async (
 		const editorsUrl = getString(getRecord(latestLinks, "editors"), "href");
 
 		let editors: string[] = [];
-		if (editorsUrl) {
+		if (editorsUrl !== null && editorsUrl !== undefined && editorsUrl !== "") {
 			const editorsResult = await loadPage(editorsUrl, { timeout: Math.min(timeout, 10), signal });
 			if (editorsResult.ok) {
 				try {
@@ -128,20 +131,26 @@ export const handleW3c: SpecialHandler = async (
 		}
 
 		let md = `# ${title ?? shortnameValue}\n\n`;
-		if (abstract) md += `## Abstract\n\n${abstract}\n\n`;
+		if (abstract !== null && abstract !== undefined && abstract !== "") md += `## Abstract\n\n${abstract}\n\n`;
 
 		md += "## Metadata\n\n";
 		md += `**Shortname:** ${shortnameValue}\n`;
-		if (normalizedStatus.code) {
+		if (normalizedStatus.code !== null && normalizedStatus.code !== undefined && normalizedStatus.code !== "") {
 			md += `**Status:** ${normalizedStatus.code}`;
-			if (normalizedStatus.label) md += ` (${normalizedStatus.label})`;
+			if (normalizedStatus.label !== null && normalizedStatus.label !== undefined && normalizedStatus.label !== "")
+				md += ` (${normalizedStatus.label})`;
 			md += "\n";
-		} else if (normalizedStatus.label) {
+		} else if (
+			normalizedStatus.label !== null &&
+			normalizedStatus.label !== undefined &&
+			normalizedStatus.label !== ""
+		) {
 			md += `**Status:** ${normalizedStatus.label}\n`;
 		}
 		if (editors.length) md += `**Editors:** ${editors.join(", ")}\n`;
-		if (latestVersionUrl) md += `**Latest Version:** ${latestVersionUrl}\n`;
-		if (historyUrl) md += `**History:** ${historyUrl}\n`;
+		if (latestVersionUrl !== null && latestVersionUrl !== undefined && latestVersionUrl !== "")
+			md += `**Latest Version:** ${latestVersionUrl}\n`;
+		if (historyUrl !== null && historyUrl !== undefined && historyUrl !== "") md += `**History:** ${historyUrl}\n`;
 
 		return buildResult(md, {
 			url,

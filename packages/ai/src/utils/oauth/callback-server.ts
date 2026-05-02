@@ -110,7 +110,7 @@ export abstract class OAuthCallbackFlow {
 
 			return await this.exchangeToken(code, state, redirectUri);
 		} finally {
-			server.stop();
+			void server.stop();
 		}
 	}
 
@@ -120,13 +120,13 @@ export abstract class OAuthCallbackFlow {
 	async #startCallbackServer(expectedState: string): Promise<{ server: Bun.Server<unknown>; redirectUri: string }> {
 		try {
 			const server = this.#createServer(this.preferredPort, expectedState);
-			if (this.redirectUri) {
+			if (this.redirectUri !== null && this.redirectUri !== undefined && this.redirectUri !== "") {
 				return { server, redirectUri: this.redirectUri };
 			}
 			const redirectUri = `http://${this.callbackHostname}:${this.preferredPort}${this.callbackPath}`;
 			return { server, redirectUri };
 		} catch {
-			if (this.redirectUri) {
+			if (this.redirectUri !== null && this.redirectUri !== undefined && this.redirectUri !== "") {
 				throw new Error(
 					`OAuth callback port ${this.preferredPort} unavailable; cannot fall back to a random port when oauth.redirectUri is set`,
 				);
@@ -162,9 +162,9 @@ export abstract class OAuthCallbackFlow {
 		}
 
 		const code = url.searchParams.get("code");
-		const state = url.searchParams.get("state") || "";
-		const error = url.searchParams.get("error") || "";
-		const errorDescription = url.searchParams.get("error_description") || error;
+		const state = url.searchParams.get("state") ?? "";
+		const error = url.searchParams.get("error") ?? "";
+		const errorDescription = url.searchParams.get("error_description") ?? error;
 
 		type OkState = { ok: true; code: string; state: string };
 		type ErrorState = { ok?: false; error?: string };
@@ -172,7 +172,7 @@ export abstract class OAuthCallbackFlow {
 
 		if (error) {
 			resultState = { ok: false, error: `Authorization failed: ${errorDescription}` };
-		} else if (!code) {
+		} else if (code === null || code === undefined || code === "") {
 			resultState = { ok: false, error: "Missing authorization code" };
 		} else if (expectedState && state !== expectedState) {
 			resultState = { ok: false, error: "State mismatch - possible CSRF attack" };
@@ -184,7 +184,7 @@ export abstract class OAuthCallbackFlow {
 		const resolve = this.#callbackResolve;
 		const reject = this.#callbackReject;
 		queueMicrotask(() => {
-			if (resultState.ok) {
+			if (resultState.ok === true) {
 				resolve?.({ code: resultState.code, state: resultState.state });
 			} else {
 				reject?.(resultState.error ?? "Unknown error");
@@ -194,7 +194,7 @@ export abstract class OAuthCallbackFlow {
 		return new Response(
 			(templateHtml as unknown as string).replaceAll("__OAUTH_STATE__", JSON.stringify(resultState)),
 			{
-				status: resultState.ok ? 200 : 500,
+				status: resultState.ok === true ? 200 : 500,
 				headers: { "Content-Type": "text/html" },
 			},
 		);
@@ -218,30 +218,38 @@ export abstract class OAuthCallbackFlow {
 			});
 		});
 
-		// Manual input race (if supported)
 		if (this.ctrl.onManualCodeInput) {
-			const requestManualInput = this.ctrl.onManualCodeInput;
-			const manualPromise = (async (): Promise<CallbackResult> => {
-				while (true) {
-					const result = await Promise.race([
-						callbackPromise,
-						requestManualInput()
-							.then((input): CallbackResult | null => {
-								const parsed = parseCallbackInput(input);
-								if (!parsed.code) return null;
-								if (expectedState && parsed.state && parsed.state !== expectedState) return null;
-								return { code: parsed.code, state: parsed.state ?? "" };
-							})
-							.catch((): CallbackResult | null => null),
-					]);
-					if (result) return result;
-				}
-			})();
-
+			const manualPromise = this.#manualInputRace(expectedState, callbackPromise);
 			return Promise.race([callbackPromise, manualPromise]);
 		}
 
 		return callbackPromise;
+	}
+
+	async #manualInputRace(expectedState: string, callbackPromise: Promise<CallbackResult>): Promise<CallbackResult> {
+		const requestManualInput = this.ctrl.onManualCodeInput!;
+		while (true) {
+			/* eslint-disable-line no-await-in-loop */
+			const result = await Promise.race([
+				callbackPromise,
+				requestManualInput()
+					.then((input): CallbackResult | null => {
+						const parsed = parseCallbackInput(input);
+						if (parsed.code === null || parsed.code === undefined || parsed.code === "") return null;
+						if (
+							expectedState &&
+							parsed.state !== null &&
+							parsed.state !== undefined &&
+							parsed.state !== "" &&
+							parsed.state !== expectedState
+						)
+							return null;
+						return { code: parsed.code, state: parsed.state ?? "" };
+					})
+					.catch((): CallbackResult | null => null),
+			]);
+			if (result) return result;
+		}
 	}
 }
 

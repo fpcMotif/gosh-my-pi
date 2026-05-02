@@ -222,8 +222,7 @@ function buildLegendLines(breakdown: ContextBreakdown, theme: typeof Theme): str
 	lines.push(theme.bold(`${modelName}`) + theme.fg("dim", ` (${windowLabel} context)`));
 	lines.push(theme.fg("muted", `${modelId}[${windowLabel}]`));
 	lines.push(
-		`${theme.bold(formatNumber(usedTokens))}${theme.fg("dim", `/${windowLabel} tokens`)}` +
-			theme.fg("muted", ` (${percentString(usedTokens, contextWindow)})`),
+		`${theme.bold(formatNumber(usedTokens))}${theme.fg("dim", `/${windowLabel} tokens`)}${theme.fg("muted", ` (${percentString(usedTokens, contextWindow)})`)}`,
 	);
 	lines.push("");
 	lines.push(theme.fg("muted", "Estimated usage by category"));

@@ -53,7 +53,7 @@ const projectEnv = parseEnvFile(path.join(process.cwd(), ".env"));
 
 for (const file of [projectEnv, agentEnv, piEnv, homeEnv]) {
 	for (const [key, value] of Object.entries(file)) {
-		if (!Bun.env[key]) {
+		if (Bun.env[key] === null || Bun.env[key] === undefined || Bun.env[key] === "") {
 			Bun.env[key] = value;
 		}
 	}
@@ -76,7 +76,7 @@ export const $env: Record<string, string> = Bun.env as Record<string, string>;
 export function $pickenv(...keys: string[]): string | undefined {
 	for (const key of keys) {
 		const value = Bun.env[key]?.trim();
-		if (value) {
+		if (value !== null && value !== undefined && value !== "") {
 			return value;
 		}
 	}

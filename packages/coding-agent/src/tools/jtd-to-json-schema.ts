@@ -107,7 +107,7 @@ function convertSchema(schema: unknown): unknown {
 		for (const [tag, props] of Object.entries(schema.mapping)) {
 			const converted = convertSchema(props) as Record<string, unknown>;
 			// Add the discriminator property
-			const properties = (converted.properties || {}) as Record<string, unknown>;
+			const properties = (converted.properties ?? {}) as Record<string, unknown>;
 			properties[schema.discriminator] = { const: tag };
 
 			const required = ((converted.required as string[]) || []).slice();
@@ -207,8 +207,8 @@ export function normalizeSchema(schema: unknown): { normalized?: unknown; error?
 	if (typeof schema === "string") {
 		try {
 			return { normalized: JSON.parse(schema) };
-		} catch (err) {
-			return { error: err instanceof Error ? err.message : String(err) };
+		} catch (error) {
+			return { error: error instanceof Error ? error.message : String(error) };
 		}
 	}
 	return { normalized: schema };

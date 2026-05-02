@@ -187,16 +187,18 @@ async function askSingleQuestion(
 			outline: true,
 			onTimeout,
 			helpText,
-			onLeft: navigation?.allowBack
-				? () => {
-						navigationAction = "back";
-					}
-				: undefined,
-			onRight: navigation?.allowForward
-				? () => {
-						navigationAction = "forward";
-					}
-				: undefined,
+			onLeft:
+				navigation?.allowBack === true
+					? () => {
+							navigationAction = "back";
+						}
+					: undefined,
+			onRight:
+				navigation?.allowForward === true
+					? () => {
+							navigationAction = "forward";
+						}
+					: undefined,
 		};
 		const startMs = Date.now();
 		const choice = signal
@@ -215,7 +217,10 @@ async function askSingleQuestion(
 		return { input };
 	};
 
-	const promptWithProgress = navigation?.progressText ? `${question} (${navigation.progressText})` : question;
+	const promptWithProgress =
+		navigation?.progressText !== null && navigation?.progressText !== undefined && navigation?.progressText !== ""
+			? `${question} (${navigation.progressText})`
+			: question;
 	if (multi) {
 		const selected = new Set<string>(selectedOptions);
 		let cursorIndex = Math.min(Math.max(recommended ?? 0, 0), Math.max(optionLabels.length - 1, 0));
@@ -232,7 +237,7 @@ async function askSingleQuestion(
 				opts.push(`${checkbox} ${opt}`);
 			}
 
-			if (!navigation?.allowForward && selected.size > 0) {
+			if (navigation?.allowForward !== true && selected.size > 0) {
 				opts.push(doneLabel);
 			}
 			opts.push(OTHER_OPTION);
@@ -282,7 +287,7 @@ async function askSingleQuestion(
 			} else if (choice.startsWith(uncheckedPrefix)) {
 				opt = choice.slice(uncheckedPrefix.length);
 			}
-			if (opt) {
+			if (opt !== null && opt !== undefined && opt !== "") {
 				if (selected.has(opt)) {
 					selected.delete(opt);
 				} else {
@@ -340,7 +345,7 @@ async function askSingleQuestion(
 			selectedOptions = [stripRecommendedSuffix(choice)];
 			customInput = undefined;
 		}
-		if (navigation?.allowForward) {
+		if (navigation?.allowForward === true) {
 			return { selectedOptions, customInput, timedOut, navigation: "forward" };
 		}
 	}
@@ -406,7 +411,7 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 		context?: AgentToolContext,
 	): Promise<AgentToolResult<AskToolDetails>> {
 		// Headless fallback
-		if (!context?.hasUI || !context.ui) {
+		if (context?.hasUI !== true || !context.ui) {
 			context?.abort();
 			throw new ToolAbortError("Ask tool requires interactive mode");
 		}
@@ -467,7 +472,7 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 			const [q] = params.questions;
 			const { optionLabels, selectedOptions, customInput, cancelled, timedOut } = await askQuestion(q);
 
-			if (!timedOut && (cancelled || (selectedOptions.length === 0 && customInput === undefined))) {
+			if (!timedOut && (cancelled ?? (selectedOptions.length === 0 && customInput === undefined))) {
 				context.abort();
 				throw new ToolAbortError("Ask tool was cancelled by the user");
 			}
@@ -482,7 +487,9 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 			const responseParts: string[] = [];
 			if (selectedOptions.length > 0) {
 				responseParts.push(
-					q.multi ? `User selected: ${selectedOptions.join(", ")}` : `User selected: ${selectedOptions[0]}`,
+					q.multi === true
+						? `User selected: ${selectedOptions.join(", ")}`
+						: `User selected: ${selectedOptions[0]}`,
 				);
 			}
 			if (customInput !== undefined) {
@@ -519,7 +526,7 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 				timedOut,
 			} = await askQuestion(q, { previous, navigation });
 
-			if (cancelled && !timedOut) {
+			if (cancelled === true && !timedOut) {
 				context.abort();
 				throw new ToolAbortError("Ask tool was cancelled by the user");
 			}
@@ -614,7 +621,7 @@ export const askToolRenderer = {
 				const continuation = isLastQ ? " " : uiTheme.tree.vertical;
 
 				const meta: string[] = [];
-				if (q.multi) meta.push("multi");
+				if (q.multi === true) meta.push("multi");
 				if (q.options?.length) meta.push(`options:${q.options.length}`);
 				const metaStr = meta.length > 0 ? uiTheme.fg("dim", ` · ${meta.join(" · ")}`) : "";
 
@@ -639,18 +646,19 @@ export const askToolRenderer = {
 		}
 
 		// Single question
-		if (!args.question) {
+		if (args.question === null || args.question === undefined || args.question === "") {
 			return new Text(formatErrorMessage("No question provided", uiTheme), 0, 0);
 		}
 
 		const container = new Container();
 		const meta: string[] = [];
-		if (args.multi) meta.push("multi");
-		if (args.options?.length) meta.push(`options:${args.options.length}`);
+		if (args.multi === true) meta.push("multi");
+		if (args.options?.length !== null && args.options?.length !== undefined && args.options?.length !== 0)
+			meta.push(`options:${args.options.length}`);
 		container.addChild(new Text(`${label}${formatMeta(meta, uiTheme)}`, 0, 0));
 		container.addChild(new Markdown(args.question, 1, 0, mdTheme, accentStyle));
 
-		if (args.options?.length) {
+		if (args.options?.length !== null && args.options?.length !== undefined && args.options?.length !== 0) {
 			let optText = "";
 			for (let i = 0; i < args.options.length; i++) {
 				const opt = args.options[i];
@@ -676,7 +684,8 @@ export const askToolRenderer = {
 
 		if (!details) {
 			const txt = result.content[0];
-			const fallback = txt?.type === "text" && txt.text ? txt.text : "";
+			const fallback =
+				txt?.type === "text" && txt.text !== null && txt.text !== undefined && txt.text !== "" ? txt.text : "";
 			const header = renderStatusLine({ icon: "warning", title: "Ask" }, uiTheme);
 			return new Text(`${header}\n${uiTheme.fg("dim", fallback)}`, 0, 0);
 		}
@@ -742,15 +751,16 @@ export const askToolRenderer = {
 		}
 
 		// Single question result
-		if (!details.question) {
+		if (details.question === null || details.question === undefined || details.question === "") {
 			const txt = result.content[0];
-			const fallback = txt?.type === "text" && txt.text ? txt.text : "";
+			const fallback =
+				txt?.type === "text" && txt.text !== null && txt.text !== undefined && txt.text !== "" ? txt.text : "";
 			return new Text(fallback, 0, 0);
 		}
 
 		const hasSelection =
 			details.customInput !== undefined || (details.selectedOptions && details.selectedOptions.length > 0);
-		const header = renderStatusLine({ icon: hasSelection ? "success" : "warning", title: "Ask" }, uiTheme);
+		const header = renderStatusLine({ icon: hasSelection === true ? "success" : "warning", title: "Ask" }, uiTheme);
 		const container = new Container();
 		container.addChild(new Text(header, 0, 0));
 		container.addChild(new Markdown(details.question, 1, 0, mdTheme, accentStyle));

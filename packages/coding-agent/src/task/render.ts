@@ -153,13 +153,15 @@ function renderJsonTreeLines(
 		const scalar = formatJsonScalar(val, theme);
 
 		if (scalar) {
-			const label = key ? theme.fg("muted", key) : theme.fg("muted", "value");
+			const label =
+				key !== null && key !== undefined && key !== "" ? theme.fg("muted", key) : theme.fg("muted", "value");
 			pushLine(`${prefix}${iconScalar} ${label}: ${theme.fg("dim", scalar)}`);
 			return;
 		}
 
 		if (Array.isArray(val)) {
-			const header = key ? theme.fg("muted", key) : theme.fg("muted", "array");
+			const header =
+				key !== null && key !== undefined && key !== "" ? theme.fg("muted", key) : theme.fg("muted", "array");
 			pushLine(`${prefix}${iconArray} ${header}`);
 			if (val.length === 0) {
 				pushLine(
@@ -190,8 +192,9 @@ function renderJsonTreeLines(
 			return;
 		}
 
-		if (val && typeof val === "object") {
-			const header = key ? theme.fg("muted", key) : theme.fg("muted", "object");
+		if (val !== null && val !== undefined && typeof val === "object") {
+			const header =
+				key !== null && key !== undefined && key !== "" ? theme.fg("muted", key) : theme.fg("muted", "object");
 			pushLine(`${prefix}${iconObject} ${header}`);
 			const entries = Object.entries(val as Record<string, unknown>);
 			if (entries.length === 0) {
@@ -224,7 +227,8 @@ function renderJsonTreeLines(
 			return;
 		}
 
-		const label = key ? theme.fg("muted", key) : theme.fg("muted", "value");
+		const label =
+			key !== null && key !== undefined && key !== "" ? theme.fg("muted", key) : theme.fg("muted", "value");
 		pushLine(`${prefix}${iconScalar} ${label}: ${theme.fg("dim", String(val))}`);
 	};
 
@@ -239,7 +243,7 @@ function renderJsonTreeLines(
 			}
 			return;
 		}
-		if (val && typeof val === "object") {
+		if (val !== null && val !== undefined && typeof val === "object") {
 			const entries = Object.entries(val as Record<string, unknown>);
 			for (let i = 0; i < entries.length; i++) {
 				const [childKey, child] = entries[i];
@@ -270,9 +274,9 @@ function renderOutputSection(
 ): string[] {
 	const lines: string[] = [];
 	const trimmedOutput = output.trimEnd();
-	if (!trimmedOutput && !warning) return lines;
+	if (!trimmedOutput && (warning === null || warning === undefined || warning === "")) return lines;
 
-	if (warning) {
+	if (warning !== null && warning !== undefined && warning !== "") {
 		lines.push(`${continuePrefix}${theme.fg("dim", "Output")}`);
 		lines.push(
 			`${continuePrefix}  ${theme.fg("warning", theme.status.warning)} ${theme.fg(
@@ -503,14 +507,17 @@ function renderAgentProgress(
 	const iconColor =
 		progress.status === "completed"
 			? "success"
-			: progress.status === "failed" || progress.status === "aborted"
+			: (progress.status === "failed" || progress.status === "aborted"
 				? "error"
-				: "accent";
+				: "accent");
 
 	// Main status line: id: description [status] · stats · ⟨agent⟩
 	const description = progress.description?.trim();
 	const displayId = formatTaskId(progress.id);
-	const titlePart = description ? `${theme.bold(displayId)}: ${description}` : displayId;
+	const titlePart =
+		description !== null && description !== undefined && description !== ""
+			? `${theme.bold(displayId)}: ${description}`
+			: displayId;
 	let statusLine = `${prefix} ${theme.fg(iconColor, icon)} ${theme.fg("accent", titlePart)}`;
 
 	// Only show badge for non-running states (spinner already indicates running)
@@ -520,7 +527,7 @@ function renderAgentProgress(
 	}
 
 	if (progress.status === "running") {
-		if (!description) {
+		if (description === null || description === undefined || description === "") {
 			const taskPreview = truncateToWidth(progress.assignment ?? progress.task, 40);
 			statusLine += ` ${theme.fg("muted", taskPreview)}`;
 		}
@@ -545,13 +552,17 @@ function renderAgentProgress(
 
 	// Current tool (if running) or most recent completed tool
 	if (progress.status === "running") {
-		if (progress.currentTool) {
+		if (progress.currentTool !== null && progress.currentTool !== undefined && progress.currentTool !== "") {
 			let toolLine = `${continuePrefix}${theme.tree.hook} ${theme.fg("muted", progress.currentTool)}`;
 			const toolDetail = progress.lastIntent ?? progress.currentToolArgs;
-			if (toolDetail) {
+			if (toolDetail !== null && toolDetail !== undefined && toolDetail !== "") {
 				toolLine += `: ${theme.fg("dim", truncateToWidth(replaceTabs(toolDetail), 40))}`;
 			}
-			if (progress.currentToolStartMs) {
+			if (
+				progress.currentToolStartMs !== null &&
+				progress.currentToolStartMs !== undefined &&
+				progress.currentToolStartMs !== 0
+			) {
 				const elapsed = Date.now() - progress.currentToolStartMs;
 				if (elapsed > 5000) {
 					toolLine += `${theme.sep.dot}${theme.fg("warning", formatDuration(elapsed))}`;
@@ -733,8 +744,12 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 
 	const { warning: missingCompleteWarning, rest: outputWithoutWarning } = extractMissingYieldWarning(result.output);
 	const aborted = result.aborted ?? false;
-	const mergeFailed = !aborted && result.exitCode === 0 && !!result.error;
-	const success = !aborted && result.exitCode === 0 && !result.error;
+	const mergeFailed =
+		!aborted &&
+		result.exitCode === 0 &&
+		!(result.error === null || result.error === undefined || result.error === "");
+	const success =
+		!aborted && result.exitCode === 0 && (result.error === null || result.error === undefined || result.error === "");
 	const needsWarning = Boolean(missingCompleteWarning) && success;
 	const icon = aborted
 		? theme.status.aborted
@@ -757,7 +772,10 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	// Main status line: id: description [status] · stats · ⟨agent⟩
 	const description = result.description?.trim();
 	const displayId = formatTaskId(result.id);
-	const titlePart = description ? `${theme.bold(displayId)}: ${description}` : displayId;
+	const titlePart =
+		description !== null && description !== undefined && description !== ""
+			? `${theme.bold(displayId)}: ${description}`
+			: displayId;
 	let statusLine = `${prefix} ${theme.fg(iconColor, icon)} ${theme.fg("accent", titlePart)} ${formatBadge(
 		statusText,
 		iconColor,
@@ -776,7 +794,7 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 
 	lines.push(...renderTaskSection(result.assignment ?? result.task, continuePrefix, expanded, theme));
 
-	if (aborted && result.abortReason) {
+	if (aborted && result.abortReason !== null && result.abortReason !== undefined && result.abortReason !== "") {
 		lines.push(
 			`${continuePrefix}${theme.fg("error", theme.status.aborted)} ${theme.fg("dim", truncateToWidth(replaceTabs(result.abortReason), 80))}`,
 		);
@@ -800,9 +818,8 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	}
 	if (reportFindingData.length > 0) {
 		const hasCompleteData = completeData && completeData.length > 0;
-		const message = hasCompleteData
-			? "Review verdict missing expected fields"
-			: "Review incomplete (yield not called)";
+		const message =
+			hasCompleteData === true ? "Review verdict missing expected fields" : "Review incomplete (yield not called)";
 		lines.push(`${continuePrefix}${theme.fg("warning", theme.status.warning)} ${theme.fg("dim", message)}`);
 		lines.push(`${continuePrefix}${formatFindingSummary(reportFindingData, theme)}`);
 		lines.push(...renderFindings(reportFindingData, continuePrefix, expanded, theme));
@@ -844,7 +861,12 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 		}
 	}
 
-	if (hasCustomRendering && missingCompleteWarning) {
+	if (
+		hasCustomRendering &&
+		missingCompleteWarning !== null &&
+		missingCompleteWarning !== undefined &&
+		missingCompleteWarning !== ""
+	) {
 		lines.push(
 			`${continuePrefix}${theme.fg("warning", theme.status.warning)} ${theme.fg(
 				"dim",
@@ -864,14 +886,32 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 		lines.push(...deferredToolLines);
 	}
 
-	if (result.patchPath && !aborted && result.exitCode === 0) {
+	if (
+		result.patchPath !== null &&
+		result.patchPath !== undefined &&
+		result.patchPath !== "" &&
+		!aborted &&
+		result.exitCode === 0
+	) {
 		lines.push(`${continuePrefix}${theme.fg("dim", `Patch: ${result.patchPath}`)}`);
-	} else if (result.branchName && !aborted && result.exitCode === 0) {
+	} else if (
+		result.branchName !== null &&
+		result.branchName !== undefined &&
+		result.branchName !== "" &&
+		!aborted &&
+		result.exitCode === 0
+	) {
 		lines.push(`${continuePrefix}${theme.fg("dim", `Branch: ${result.branchName}`)}`);
 	}
 
 	// Error message
-	if (result.error && (!success || mergeFailed) && (!aborted || result.error !== result.abortReason)) {
+	if (
+		result.error !== null &&
+		result.error !== undefined &&
+		result.error !== "" &&
+		(!success || mergeFailed) &&
+		(!aborted || result.error !== result.abortReason)
+	) {
 		lines.push(
 			`${continuePrefix}${theme.fg(mergeFailed ? "warning" : "error", truncateToWidth(replaceTabs(result.error), 70))}`,
 		);
@@ -924,9 +964,16 @@ export function renderResult(
 					lines.push(...renderAgentResult(res, isLast, expanded, theme));
 				});
 
-				const abortedCount = details.results.filter(r => r.aborted).length;
-				const mergeFailedCount = details.results.filter(r => !r.aborted && r.exitCode === 0 && r.error).length;
-				const successCount = details.results.filter(r => !r.aborted && r.exitCode === 0 && !r.error).length;
+				const abortedCount = details.results.filter(r => r.aborted === true).length;
+				const mergeFailedCount = details.results.filter(
+					r => r.aborted !== true && r.exitCode === 0 && r.error,
+				).length;
+				const successCount = details.results.filter(
+					r =>
+						r.aborted !== true &&
+						r.exitCode === 0 &&
+						(r.error === null || r.error === undefined || r.error === ""),
+				).length;
 				const failCount = details.results.length - successCount - mergeFailedCount - abortedCount;
 				let summary = `${theme.fg("dim", "Total:")} `;
 				if (abortedCount > 0) {

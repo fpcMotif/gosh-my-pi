@@ -214,7 +214,7 @@ describe("InspectImageTool", () => {
 		const settings = Settings.isolated({ "images.blockImages": true });
 		const tool = new InspectImageTool(createSession(testDir, visionModel, "test-key", settings), stub.fn);
 
-		await expect(tool.execute("call-blocked", { path: imagePath, question: "What is visible?" })).rejects.toThrow(
+		expect(tool.execute("call-blocked", { path: imagePath, question: "What is visible?" })).rejects.toThrow(
 			/Image submission is disabled/i,
 		);
 		expect(stub.calls).toHaveLength(0);
@@ -251,7 +251,7 @@ describe("InspectImageTool", () => {
 		const stub = createCompleteSimpleForbiddenStub();
 		const tool = new InspectImageTool(createSession(testDir, textOnlyModel), stub.fn);
 
-		await expect(tool.execute("call-2", { path: imagePath, question: "What is visible?" })).rejects.toThrow(
+		expect(tool.execute("call-2", { path: imagePath, question: "What is visible?" })).rejects.toThrow(
 			/does not support image input/i,
 		);
 		expect(stub.calls).toHaveLength(0);
@@ -264,7 +264,7 @@ describe("InspectImageTool", () => {
 		const stub = createCompleteSimpleForbiddenStub();
 		const tool = new InspectImageTool(createSession(testDir, visionModel, ""), stub.fn);
 
-		await expect(tool.execute("call-3", { path: imagePath, question: "What is visible?" })).rejects.toThrow(
+		expect(tool.execute("call-3", { path: imagePath, question: "What is visible?" })).rejects.toThrow(
 			/No API key available/i,
 		);
 		expect(stub.calls).toHaveLength(0);

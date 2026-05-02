@@ -72,7 +72,7 @@ function writeAutoresearchWorkspace(
 			].join("\n"),
 	);
 	fs.chmodSync(path.join(dir, "autoresearch.sh"), 0o755);
-	if (options?.checksScript) {
+	if (options?.checksScript !== null && options?.checksScript !== undefined && options?.checksScript !== "") {
 		fs.writeFileSync(path.join(dir, "autoresearch.checks.sh"), options.checksScript);
 		fs.chmodSync(path.join(dir, "autoresearch.checks.sh"), 0o755);
 	}
@@ -138,7 +138,7 @@ function createManagedGitApi(options?: { activeTools?: string[] }) {
 }
 
 function expectRunDetails(details: unknown): RunDetails {
-	if (!details || typeof details !== "object" || !("benchmarkLogPath" in details)) {
+	if (details === null || details === undefined || typeof details !== "object" || !("benchmarkLogPath" in details)) {
 		throw new Error("Expected run details");
 	}
 	return details as RunDetails;
@@ -499,7 +499,7 @@ describe("autoresearch tools", () => {
 		const controller = new AbortController();
 		setTimeout(() => controller.abort(), 100);
 
-		await expect(
+		expect(
 			tool.execute(
 				"call-4",
 				{ command: "bash autoresearch.sh", timeout_seconds: 10 },

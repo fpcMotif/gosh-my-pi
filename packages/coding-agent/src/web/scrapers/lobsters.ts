@@ -96,9 +96,9 @@ export const handleLobsters: SpecialHandler = async (url: string, timeout: numbe
 			md += `\n`;
 			md += `*${formatIsoDate(story.created_at)}*\n\n`;
 
-			if (story.description) {
+			if (story.description !== null && story.description !== undefined && story.description !== "") {
 				md += `---\n\n${story.description}\n\n`;
-			} else if (story.url) {
+			} else if (story.url !== null && story.url !== undefined && story.url !== "") {
 				md += `**Link:** ${story.url}\n\n`;
 			}
 
@@ -142,9 +142,9 @@ export const handleLobsters: SpecialHandler = async (url: string, timeout: numbe
 			const title =
 				parsed.pathname === "/"
 					? "Lobste.rs Front Page"
-					: parsed.pathname === "/newest"
+					: (parsed.pathname === "/newest"
 						? "Lobste.rs Newest"
-						: `Lobste.rs Tag: ${parsed.pathname.split("/")[2]}`;
+						: `Lobste.rs Tag: ${parsed.pathname.split("/")[2]}`);
 
 			md = `# ${title}\n\n`;
 
@@ -155,7 +155,7 @@ export const handleLobsters: SpecialHandler = async (url: string, timeout: numbe
 					md += ` · [${story.tags.join(", ")}]`;
 				}
 				md += `\n`;
-				if (story.url) {
+				if (story.url !== null && story.url !== undefined && story.url !== "") {
 					md += `  ${story.url}\n`;
 				}
 				md += `  https://lobste.rs/s/${story.short_id}\n\n`;

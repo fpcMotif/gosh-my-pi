@@ -591,7 +591,7 @@ export class DebugLogViewerComponent implements Component {
 		}
 
 		const printableText = extractPrintableText(keyData);
-		if (printableText) {
+		if (printableText !== null && printableText !== undefined && printableText !== "") {
 			this.#statusMessage = undefined;
 			this.#model.setFilterQuery(this.#model.filterQuery + printableText);
 			this.#ensureCursorVisible();
@@ -643,7 +643,7 @@ export class DebugLogViewerComponent implements Component {
 
 	#statusText(): string {
 		const base = ` Selected: ${this.#model.getSelectedCount()}  Expanded: ${this.#model.expandedCount}`;
-		if (this.#statusMessage) {
+		if (this.#statusMessage !== null && this.#statusMessage !== undefined && this.#statusMessage !== "") {
 			return `${base}  ${this.#statusMessage}`;
 		}
 		return base;
@@ -756,7 +756,7 @@ export class DebugLogViewerComponent implements Component {
 			const cursorLogIndex = this.#model.cursorLogIndex;
 			const active = cursorLogIndex !== undefined && cursorLogIndex === logIndex;
 			const expanded = this.#model.isExpanded(logIndex);
-			const marker = active ? theme.fg("accent", "❯") : selected ? theme.fg("accent", "•") : " ";
+			const marker = active ? theme.fg("accent", "❯") : (selected ? theme.fg("accent", "•") : " ");
 			const fold = expanded ? theme.fg("accent", "▾") : theme.fg("muted", "▸");
 			const prefix = `${marker}${fold} `;
 			const contentWidth = Math.max(1, innerWidth - visibleWidth(prefix));
@@ -895,7 +895,7 @@ export class DebugLogViewerComponent implements Component {
 		}
 
 		try {
-			copyToClipboard(selectedPayload);
+			void copyToClipboard(selectedPayload);
 			const message = `Copied ${selected.length} log ${selected.length === 1 ? "entry" : "entries"}`;
 			this.#statusMessage = message;
 			this.#onStatus?.(message);

@@ -50,7 +50,7 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 
 	// User-level: ~/.gemini/settings.json → mcpServers
 	const userPath = getUserPath(ctx, "gemini", "settings.json");
-	if (userPath) {
+	if (userPath !== null && userPath !== undefined && userPath !== "") {
 		const result = await loadMCPFromSettings(ctx, userPath, "user");
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
@@ -58,7 +58,7 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 
 	// Project-level: .gemini/settings.json → mcpServers
 	const projectPath = getProjectPath(ctx, "gemini", "settings.json");
-	if (projectPath) {
+	if (projectPath !== null && projectPath !== undefined && projectPath !== "") {
 		const result = await loadMCPFromSettings(ctx, projectPath, "project");
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
@@ -76,7 +76,7 @@ async function loadMCPFromSettings(
 	const warnings: string[] = [];
 
 	const content = await readFile(path);
-	if (!content) {
+	if (content === null || content === undefined || content === "") {
 		return { items, warnings };
 	}
 
@@ -93,7 +93,7 @@ async function loadMCPFromSettings(
 	const servers = expandEnvVarsDeep(parsed.mcpServers);
 
 	for (const [name, config] of Object.entries(servers)) {
-		if (!config || typeof config !== "object") {
+		if (config === null || config === undefined || typeof config !== "object") {
 			warnings.push(`Invalid config for server "${name}" in ${path}`);
 			continue;
 		}
@@ -104,9 +104,15 @@ async function loadMCPFromSettings(
 			name,
 			command: typeof raw.command === "string" ? raw.command : undefined,
 			args: Array.isArray(raw.args) ? (raw.args as string[]) : undefined,
-			env: raw.env && typeof raw.env === "object" ? (raw.env as Record<string, string>) : undefined,
+			env:
+				raw.env !== null && raw.env !== undefined && typeof raw.env === "object"
+					? (raw.env as Record<string, string>)
+					: undefined,
 			url: typeof raw.url === "string" ? raw.url : undefined,
-			headers: raw.headers && typeof raw.headers === "object" ? (raw.headers as Record<string, string>) : undefined,
+			headers:
+				raw.headers !== null && raw.headers !== undefined && typeof raw.headers === "object"
+					? (raw.headers as Record<string, string>)
+					: undefined,
 			transport: ["stdio", "sse", "http"].includes(raw.type as string)
 				? (raw.type as "stdio" | "sse" | "http")
 				: undefined,
@@ -128,9 +134,9 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 
 	// User-level: ~/.gemini/GEMINI.md
 	const userGeminiMd = getUserPath(ctx, "gemini", "GEMINI.md");
-	if (userGeminiMd) {
+	if (userGeminiMd !== null && userGeminiMd !== undefined && userGeminiMd !== "") {
 		const content = await readFile(userGeminiMd);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			items.push({
 				path: userGeminiMd,
 				content,
@@ -142,11 +148,14 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 
 	// Project-level: .gemini/GEMINI.md
 	const projectGeminiMd = getProjectPath(ctx, "gemini", "GEMINI.md");
-	if (projectGeminiMd) {
+	if (projectGeminiMd !== null && projectGeminiMd !== undefined && projectGeminiMd !== "") {
 		const content = await readFile(projectGeminiMd);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			const projectBase = getProjectPath(ctx, "gemini", "");
-			const depth = projectBase ? calculateDepth(ctx.cwd, projectBase, path.sep) : 0;
+			const depth =
+				projectBase !== null && projectBase !== undefined && projectBase !== ""
+					? calculateDepth(ctx.cwd, projectBase, path.sep)
+					: 0;
 
 			items.push({
 				path: projectGeminiMd,
@@ -171,7 +180,7 @@ async function loadExtensions(ctx: LoadContext): Promise<LoadResult<Extension>> 
 
 	// User-level: ~/.gemini/extensions/*/gemini-extension.json
 	const userExtPath = getUserPath(ctx, "gemini", "extensions");
-	if (userExtPath) {
+	if (userExtPath !== null && userExtPath !== undefined && userExtPath !== "") {
 		const result = await loadExtensionsFromDir(userExtPath, "user");
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
@@ -179,7 +188,7 @@ async function loadExtensions(ctx: LoadContext): Promise<LoadResult<Extension>> 
 
 	// Project-level: .gemini/extensions/*/gemini-extension.json
 	const projectExtPath = getProjectPath(ctx, "gemini", "extensions");
-	if (projectExtPath) {
+	if (projectExtPath !== null && projectExtPath !== undefined && projectExtPath !== "") {
 		const result = await loadExtensionsFromDir(projectExtPath, "project");
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
@@ -205,7 +214,7 @@ async function loadExtensionsFromDir(extensionsDir: string, level: "user" | "pro
 	const warnings: string[] = [];
 
 	for (const { entry, extPath, manifestPath, content } of results) {
-		if (!content) continue;
+		if (content === null || content === undefined || content === "") continue;
 
 		const manifest = tryParseJson<ExtensionManifest>(content);
 		if (!manifest) {
@@ -234,8 +243,12 @@ async function loadExtensionModules(ctx: LoadContext): Promise<LoadResult<Extens
 	const projectExtensionsDir = getProjectPath(ctx, "gemini", "extensions");
 
 	const [userPaths, projectPaths] = await Promise.all([
-		userExtensionsDir ? discoverExtensionModulePaths(ctx, userExtensionsDir) : Promise.resolve([]),
-		projectExtensionsDir ? discoverExtensionModulePaths(ctx, projectExtensionsDir) : Promise.resolve([]),
+		userExtensionsDir !== null && userExtensionsDir !== undefined && userExtensionsDir !== ""
+			? discoverExtensionModulePaths(ctx, userExtensionsDir)
+			: Promise.resolve([]),
+		projectExtensionsDir !== null && projectExtensionsDir !== undefined && projectExtensionsDir !== ""
+			? discoverExtensionModulePaths(ctx, projectExtensionsDir)
+			: Promise.resolve([]),
 	]);
 
 	const items = buildExtensionModuleItems(PROVIDER_ID, userPaths, projectPaths);
@@ -253,9 +266,9 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 
 	// User-level: ~/.gemini/settings.json
 	const userPath = getUserPath(ctx, "gemini", "settings.json");
-	if (userPath) {
+	if (userPath !== null && userPath !== undefined && userPath !== "") {
 		const content = await readFile(userPath);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			const parsed = tryParseJson<Record<string, unknown>>(content);
 			if (parsed) {
 				items.push({
@@ -272,9 +285,9 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 
 	// Project-level: .gemini/settings.json
 	const projectPath = getProjectPath(ctx, "gemini", "settings.json");
-	if (projectPath) {
+	if (projectPath !== null && projectPath !== undefined && projectPath !== "") {
 		const content = await readFile(projectPath);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			const parsed = tryParseJson<Record<string, unknown>>(content);
 			if (parsed) {
 				items.push({
@@ -321,9 +334,9 @@ async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemProm
 
 	// User-level: ~/.gemini/system.md
 	const userSystemMd = getUserPath(ctx, "gemini", "system.md");
-	if (userSystemMd) {
+	if (userSystemMd !== null && userSystemMd !== undefined && userSystemMd !== "") {
 		const content = await readFile(userSystemMd);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			items.push({
 				path: userSystemMd,
 				content,
@@ -335,9 +348,9 @@ async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemProm
 
 	// Project-level: .gemini/system.md
 	const projectSystemMd = getProjectPath(ctx, "gemini", "system.md");
-	if (projectSystemMd) {
+	if (projectSystemMd !== null && projectSystemMd !== undefined && projectSystemMd !== "") {
 		const content = await readFile(projectSystemMd);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			items.push({
 				path: projectSystemMd,
 				content,

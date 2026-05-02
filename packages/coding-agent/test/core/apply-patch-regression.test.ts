@@ -109,7 +109,7 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 		const filePath = path.join(tempDir, "dupe.txt");
 		await Bun.write(filePath, "foo\nbar\nfoo\nbaz\n");
 
-		await expect(
+		expect(
 			applyPatch(
 				{
 					path: "dupe.txt",
@@ -127,7 +127,7 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 		await Bun.write(filePath, "aaa\nbbb\naaa\nccc\nbbb\nddd\n");
 
 		// First hunk for "aaa" is ambiguous (appears at lines 1 and 3)
-		await expect(
+		expect(
 			applyPatch(
 				{
 					path: "multi-dupe.txt",

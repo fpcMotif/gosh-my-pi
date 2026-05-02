@@ -99,25 +99,25 @@ export async function executeSwarmAgent(
 		});
 		await stateTracker.appendLog(
 			agent.name,
-			`Iteration ${iteration} ${status}${result.error ? `: ${result.error}` : ""}`,
+			`Iteration ${iteration} ${status}${result.error !== undefined && result.error !== "" ? `: ${result.error}` : ""}`,
 		);
 
 		return result;
-	} catch (err) {
-		const error = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		await stateTracker.updateAgent(agent.name, {
 			status: "failed",
 			completedAt: Date.now(),
-			error,
+			error: message,
 		});
-		await stateTracker.appendLog(agent.name, `Iteration ${iteration} error: ${error}`);
-		throw err;
+		await stateTracker.appendLog(agent.name, `Iteration ${iteration} error: ${message}`);
+		throw error;
 	}
 }
 
 function buildSystemPrompt(agent: SwarmAgent): string {
 	const parts = [`You are a ${agent.role}.`];
-	if (agent.extraContext) {
+	if (agent.extraContext !== null && agent.extraContext !== undefined && agent.extraContext !== "") {
 		parts.push(agent.extraContext);
 	}
 	return parts.join("\n\n");

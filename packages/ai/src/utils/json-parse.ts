@@ -7,8 +7,8 @@ import { parse as partialParse } from "partial-json";
  * @param partialJson The partial JSON string from streaming
  * @returns Parsed object or empty object if parsing fails
  */
-export function parseStreamingJson<T = any>(partialJson: string | undefined): T {
-	if (!partialJson || partialJson.trim() === "") {
+export function parseStreamingJson<T = unknown>(partialJson: string | undefined): T {
+	if (partialJson === null || partialJson === undefined || partialJson === "" || partialJson.trim() === "") {
 		return {} as T;
 	}
 

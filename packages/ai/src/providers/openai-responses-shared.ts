@@ -5,7 +5,6 @@ import type {
 	ResponseFunctionToolCall,
 	ResponseInput,
 	ResponseInputContent,
-	ResponseInputImage,
 	ResponseInputText,
 	ResponseOutputItem,
 	ResponseOutputMessage,
@@ -17,6 +16,7 @@ import type {
 	AssistantMessage,
 	ImageContent,
 	Model,
+	ProviderSessionState,
 	StopReason,
 	TextContent,
 	TextSignatureV1,
@@ -24,20 +24,26 @@ import type {
 	ToolCall,
 	ToolResultMessage,
 } from "../types";
-import { normalizeResponsesToolCallId } from "../utils";
+import {
+	getOpenAIResponsesHistoryItems,
+	getOpenAIResponsesHistoryPayload,
+	normalizeResponsesToolCallId,
+	sanitizeOpenAIResponsesHistoryItemsForReplay,
+} from "../utils";
 import type { AssistantMessageEventStream } from "../utils/event-stream";
 import { parseStreamingJson } from "../utils/json-parse";
+import { transformMessages } from "./transform-messages";
 
 export function encodeTextSignatureV1(id: string, phase?: TextSignatureV1["phase"]): string {
 	const payload: TextSignatureV1 = { v: 1, id };
-	if (phase) payload.phase = phase;
+	if (phase !== undefined && phase !== null) payload.phase = phase;
 	return JSON.stringify(payload);
 }
 
 export function parseTextSignature(
 	signature: string | undefined,
 ): { id: string; phase?: TextSignatureV1["phase"] } | undefined {
-	if (!signature) return undefined;
+	if (signature === null || signature === undefined || signature === "") return undefined;
 	if (signature.startsWith("{")) {
 		try {
 			const parsed = JSON.parse(signature) as Partial<TextSignatureV1>;
@@ -55,7 +61,10 @@ export function parseTextSignature(
 }
 
 export function encodeResponsesToolCallId(callId: string, itemId: string | null | undefined): string {
-	const stableItemId = itemId && itemId.length > 0 ? itemId : `fc_${Bun.hash(callId).toString(36)}`;
+	const stableItemId =
+		itemId !== null && itemId !== undefined && itemId !== "" && itemId.length > 0
+			? itemId
+			: `fc_${Bun.hash(callId).toString(36)}`;
 	return `${callId}|${stableItemId}`;
 }
 
@@ -66,7 +75,11 @@ export function normalizeResponsesToolCallIdForTransform(
 ): string {
 	if (!id.includes("|")) return id;
 	const isForeignToolCall =
-		source != null && model != null && (source.provider !== model.provider || source.api !== model.api);
+		source !== null &&
+		source !== undefined &&
+		model !== null &&
+		model !== undefined &&
+		(source.provider !== model.provider || source.api !== model.api);
 	if (isForeignToolCall) {
 		const [callId, itemId] = id.split("|");
 		const normalizeIdPart = (part: string): string => {
@@ -112,6 +125,81 @@ export function collectCustomCallIds(messages: ResponseInput): Set<string> {
 	return customCallIds;
 }
 
+export function convertMessages(
+	model: Model<Api>,
+	context: Context,
+	strictResponsesPairing = false,
+	providerSessionState?: ProviderSessionState,
+): ResponseInput {
+	const messages: ResponseInput = [];
+	let knownCallIds = new Set<string>();
+	const customCallIds = new Set<string>();
+	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+	const shouldReplayNativeHistory = (providerSessionState as any)?.nativeHistoryReplayWarmed ?? true;
+	const transformedMessages = transformMessages(context.messages, model, normalizeResponsesToolCallIdForTransform);
+
+	let msgIndex = 0;
+	for (const msg of transformedMessages) {
+		if (msg.role === "user" || msg.role === "developer") {
+			const providerPayload = (msg as { providerPayload?: AssistantMessage["providerPayload"] }).providerPayload;
+			const historyItems = getOpenAIResponsesHistoryItems(providerPayload, model.provider);
+			const shouldReplayPayloadItems =
+				shouldReplayNativeHistory ||
+				(historyItems !== undefined &&
+					historyItems !== null &&
+					historyItems.some(item => {
+						if (item === null || item === undefined || typeof item !== "object") return false;
+						const candidate = item as { type?: unknown };
+						return candidate.type === "compaction" || candidate.type === "compaction_summary";
+					}) === true);
+			if (historyItems !== undefined && historyItems !== null && shouldReplayPayloadItems) {
+				messages.push(...sanitizeOpenAIResponsesHistoryItemsForReplay(historyItems));
+				knownCallIds = collectKnownCallIds(messages);
+				for (const id of collectCustomCallIds(messages)) customCallIds.add(id);
+				msgIndex++;
+				continue;
+			}
+			const content = convertResponsesInputContent(msg.content, model.input.includes("image"));
+			if (content === undefined || content === null) continue;
+			messages.push({ role: "user", content });
+		} else if (msg.role === "assistant") {
+			const assistantMsg = msg as AssistantMessage;
+			const providerPayload = shouldReplayNativeHistory
+				? getOpenAIResponsesHistoryPayload(assistantMsg.providerPayload, model.provider, assistantMsg.provider)
+				: undefined;
+			const historyItems = providerPayload?.items;
+			if (historyItems !== undefined && historyItems !== null) {
+				const sanitizedHistoryItems = sanitizeOpenAIResponsesHistoryItemsForReplay(historyItems);
+				if (providerPayload?.dt === true) {
+					messages.push(...sanitizedHistoryItems);
+				} else {
+					messages.splice(0, messages.length, ...sanitizedHistoryItems);
+				}
+				knownCallIds = collectKnownCallIds(messages);
+				for (const id of collectCustomCallIds(messages)) customCallIds.add(id);
+				msgIndex++;
+				continue;
+			}
+
+			const outputItems = convertResponsesAssistantMessage(
+				assistantMsg,
+				model,
+				msgIndex,
+				knownCallIds,
+				shouldReplayNativeHistory,
+				customCallIds,
+			);
+			if (outputItems.length === 0) continue;
+			messages.push(...outputItems);
+		} else if (msg.role === "toolResult") {
+			appendResponsesToolResultMessages(messages, msg, model, strictResponsesPairing, knownCallIds, customCallIds);
+		}
+		msgIndex++;
+	}
+
+	return messages;
+}
+
 export function convertResponsesInputContent(
 	content: string | Array<TextContent | ImageContent>,
 	supportsImages: boolean,
@@ -131,12 +219,11 @@ export function convertResponsesInputContent(
 			}
 			return {
 				type: "input_image",
-				detail: "auto",
-				image_url: `data:${item.mimeType};base64,${item.data}`,
-			} satisfies ResponseInputImage;
+				image_url: { url: `data:${item.mimeType};base64,${item.data}` },
+			} as any;
 		})
 		.filter(item => supportsImages || item.type !== "input_image")
-		.filter(item => item.type !== "input_text" || item.text.trim().length > 0);
+		.filter(item => item.type !== "input_text" || (item as ResponseInputText).text.trim().length > 0);
 
 	return normalizedContent.length > 0 ? normalizedContent : undefined;
 }
@@ -158,7 +245,11 @@ export function convertResponsesAssistantMessage<TApi extends Api>(
 			if (!includeThinkingSignatures) {
 				continue;
 			}
-			if (block.thinkingSignature) {
+			if (
+				block.thinkingSignature !== null &&
+				block.thinkingSignature !== undefined &&
+				block.thinkingSignature !== ""
+			) {
 				outputItems.push(JSON.parse(block.thinkingSignature) as ResponseReasoningItem);
 			}
 			continue;
@@ -167,7 +258,7 @@ export function convertResponsesAssistantMessage<TApi extends Api>(
 		if (block.type === "text") {
 			const parsedSignature = parseTextSignature(block.textSignature);
 			let msgId = parsedSignature?.id;
-			if (!msgId) {
+			if (msgId === null || msgId === undefined || msgId === "") {
 				msgId = `msg_${msgIndex}`;
 			} else if (msgId.length > 64) {
 				msgId = `msg_${Bun.hash(msgId).toString(36)}`;
@@ -193,7 +284,7 @@ export function convertResponsesAssistantMessage<TApi extends Api>(
 			itemId = undefined;
 		}
 		knownCallIds.add(normalized.callId);
-		if (block.customWireName) {
+		if (block.customWireName !== null && block.customWireName !== undefined && block.customWireName !== "") {
 			const rawInput = typeof block.arguments?.input === "string" ? block.arguments.input : "";
 			customCallIds?.add(normalized.callId);
 			outputItems.push({
@@ -236,7 +327,7 @@ export function appendResponsesToolResultMessages<TApi extends Api>(
 	}
 
 	const output = (textResult.length > 0 ? textResult : "(see attached image)").toWellFormed();
-	if (customCallIds?.has(normalized.callId)) {
+	if (customCallIds?.has(normalized.callId) === true) {
 		messages.push({
 			type: "custom_tool_call_output",
 			call_id: normalized.callId,
@@ -261,9 +352,8 @@ export function appendResponsesToolResultMessages<TApi extends Api>(
 		if (block.type === "image") {
 			contentParts.push({
 				type: "input_image",
-				detail: "auto",
-				image_url: `data:${block.mimeType};base64,${block.data}`,
-			} satisfies ResponseInputImage);
+				image_url: { url: `data:${block.mimeType};base64,${block.data}` },
+			} as any);
 		}
 	}
 	messages.push({ role: "user", content: contentParts });
@@ -296,7 +386,7 @@ export async function processResponsesStream<TApi extends Api>(
 		if (event.type === "response.created") {
 			output.responseId = event.response.id;
 		} else if (event.type === "response.output_item.added") {
-			if (!sawFirstToken) {
+			if (sawFirstToken === false) {
 				sawFirstToken = true;
 				options?.onFirstToken?.();
 			}
@@ -327,15 +417,9 @@ export async function processResponsesStream<TApi extends Api>(
 				currentBlock = {
 					type: "toolCall",
 					id: encodeResponsesToolCallId(item.call_id, item.id),
-					// Preserve the raw wire name (e.g. `apply_patch`). The agent-loop
-					// dispatcher matches it against both `Tool.name` and
-					// `Tool.customWireName`, so this stays wire-accurate through
-					// history replay while still routing to the right handler.
 					name: item.name,
 					arguments: { input: item.input ?? "" },
 					customWireName: item.name,
-					// Custom tools stream a raw string, but we reuse `partialJson` as the
-					// accumulation buffer so later code that inspects the field still works.
 					partialJson: item.input ?? "",
 				};
 				output.content.push(currentBlock);
@@ -343,14 +427,18 @@ export async function processResponsesStream<TApi extends Api>(
 			}
 		} else if (event.type === "response.reasoning_summary_part.added") {
 			if (currentItem?.type === "reasoning") {
-				currentItem.summary = currentItem.summary || [];
+				if (currentItem.summary === undefined || currentItem.summary === null) {
+					currentItem.summary = [];
+				}
 				currentItem.summary.push(event.part);
 			}
 		} else if (event.type === "response.reasoning_summary_text.delta") {
 			if (currentItem?.type === "reasoning" && currentBlock?.type === "thinking") {
-				currentItem.summary = currentItem.summary || [];
+				if (currentItem.summary === undefined || currentItem.summary === null) {
+					currentItem.summary = [];
+				}
 				const lastPart = currentItem.summary[currentItem.summary.length - 1];
-				if (lastPart) {
+				if (lastPart !== undefined && lastPart !== null) {
 					currentBlock.thinking += event.delta;
 					lastPart.text += event.delta;
 					stream.push({
@@ -363,9 +451,11 @@ export async function processResponsesStream<TApi extends Api>(
 			}
 		} else if (event.type === "response.reasoning_summary_part.done") {
 			if (currentItem?.type === "reasoning" && currentBlock?.type === "thinking") {
-				currentItem.summary = currentItem.summary || [];
+				if (currentItem.summary === undefined || currentItem.summary === null) {
+					currentItem.summary = [];
+				}
 				const lastPart = currentItem.summary[currentItem.summary.length - 1];
-				if (lastPart) {
+				if (lastPart !== undefined && lastPart !== null) {
 					currentBlock.thinking += "\n\n";
 					lastPart.text += "\n\n";
 					stream.push({
@@ -377,8 +467,6 @@ export async function processResponsesStream<TApi extends Api>(
 				}
 			}
 		} else if (event.type === "response.reasoning_text.delta") {
-			// Raw reasoning text delta from local providers that stream thinking
-			// directly rather than via the OpenAI summary tracking protocol.
 			if (currentItem?.type === "reasoning" && currentBlock?.type === "thinking") {
 				currentBlock.thinking += event.delta;
 				stream.push({
@@ -390,7 +478,9 @@ export async function processResponsesStream<TApi extends Api>(
 			}
 		} else if (event.type === "response.content_part.added") {
 			if (currentItem?.type === "message") {
-				currentItem.content = currentItem.content || [];
+				if (currentItem.content === undefined || currentItem.content === null) {
+					currentItem.content = [];
+				}
 				if (event.part.type === "output_text" || event.part.type === "refusal") {
 					currentItem.content.push(event.part);
 				}
@@ -426,7 +516,7 @@ export async function processResponsesStream<TApi extends Api>(
 		} else if (event.type === "response.function_call_arguments.delta") {
 			if (currentItem?.type === "function_call" && currentBlock?.type === "toolCall") {
 				currentBlock.partialJson += event.delta;
-				currentBlock.arguments = parseStreamingJson(currentBlock.partialJson);
+				currentBlock.arguments = (parseStreamingJson(currentBlock.partialJson) ?? {}) as Record<string, unknown>;
 				stream.push({
 					type: "toolcall_delta",
 					contentIndex: blockIndex(),
@@ -437,7 +527,7 @@ export async function processResponsesStream<TApi extends Api>(
 		} else if (event.type === "response.function_call_arguments.done") {
 			if (currentItem?.type === "function_call" && currentBlock?.type === "toolCall") {
 				currentBlock.partialJson = event.arguments;
-				currentBlock.arguments = parseStreamingJson(currentBlock.partialJson);
+				currentBlock.arguments = (parseStreamingJson(currentBlock.partialJson) ?? {}) as Record<string, unknown>;
 			}
 		} else if (event.type === "response.custom_tool_call_input.delta") {
 			if (currentItem?.type === "custom_tool_call" && currentBlock?.type === "toolCall") {
@@ -462,13 +552,13 @@ export async function processResponsesStream<TApi extends Api>(
 				const thinking =
 					item.summary?.length > 0
 						? item.summary.map(part => part.text).join("\n\n")
-						: item.content?.[0]?.type === "reasoning_text"
+						: (item.content?.[0]?.type === "reasoning_text"
 							? (item.content[0].text ?? "")
-							: "";
+							: "");
 				const reasoningBlock = output.content.find(
 					b => b.type === "thinking" && (b as ThinkingContent).itemId === item.id,
 				) as ThinkingContent | undefined;
-				if (reasoningBlock) {
+				if (reasoningBlock !== undefined && reasoningBlock !== null) {
 					reasoningBlock.thinking = thinking;
 					reasoningBlock.thinkingSignature = JSON.stringify(item);
 					const reasoningBlockIndex = output.content.indexOf(reasoningBlock);
@@ -495,8 +585,8 @@ export async function processResponsesStream<TApi extends Api>(
 			} else if (item.type === "function_call") {
 				const args =
 					currentBlock?.type === "toolCall" && currentBlock.partialJson
-						? parseStreamingJson(currentBlock.partialJson)
-						: parseStreamingJson(item.arguments || "{}");
+						? ((parseStreamingJson(currentBlock.partialJson) ?? {}) as Record<string, unknown>)
+						: ((parseStreamingJson(item.arguments || "{}") ?? {}) as Record<string, unknown>);
 				const toolCall: ToolCall = {
 					type: "toolCall",
 					id: encodeResponsesToolCallId(item.call_id, item.id),
@@ -522,10 +612,10 @@ export async function processResponsesStream<TApi extends Api>(
 			}
 		} else if (event.type === "response.completed") {
 			const response = event.response;
-			if (response?.id) {
+			if (response?.id !== undefined && response.id !== null && response.id !== "") {
 				output.responseId = response.id;
 			}
-			if (response?.usage) {
+			if (response?.usage !== undefined && response.usage !== null) {
 				const cachedTokens = response.usage.input_tokens_details?.cached_tokens || 0;
 				const reasoningTokens = response.usage.output_tokens_details?.reasoning_tokens || 0;
 				output.usage = {
@@ -550,16 +640,16 @@ export async function processResponsesStream<TApi extends Api>(
 			const details = event.response?.incomplete_details;
 			const message = error
 				? `${error.code || "unknown"}: ${error.message || "no message"}`
-				: details?.reason
+				: (details?.reason
 					? `incomplete: ${details.reason}`
-					: "Unknown error (no error details in response)";
+					: "Unknown error (no error details in response)");
 			throw new Error(message);
 		}
 	}
 }
 
 export function mapOpenAIResponsesStopReason(status: OpenAI.Responses.ResponseStatus | undefined): StopReason {
-	if (!status) return "stop";
+	if (status === undefined || status === null) return "stop";
 	switch (status) {
 		case "completed":
 			return "stop";
@@ -573,7 +663,7 @@ export function mapOpenAIResponsesStopReason(status: OpenAI.Responses.ResponseSt
 			return "stop";
 		default: {
 			const exhaustive: never = status;
-			throw new Error(`Unhandled stop reason: ${exhaustive}`);
+			throw new Error(`Unhandled stop reason: ${String(exhaustive)}`);
 		}
 	}
 }

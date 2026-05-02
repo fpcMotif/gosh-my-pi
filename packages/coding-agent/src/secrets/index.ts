@@ -37,7 +37,7 @@ export function collectEnvSecrets(): SecretEntry[] {
 	const entries: SecretEntry[] = [];
 	const seen = new Set<string>();
 	for (const [name, value] of Object.entries(process.env)) {
-		if (!value || value.length < MIN_ENV_VALUE_LENGTH) continue;
+		if (value === null || value === undefined || value === "" || value.length < MIN_ENV_VALUE_LENGTH) continue;
 		if (!SECRET_ENV_PATTERNS.test(name)) continue;
 		if (seen.has(value)) continue;
 		seen.add(value);
@@ -67,9 +67,9 @@ async function loadSecretsFile(filePath: string): Promise<SecretEntry[]> {
 			});
 		}
 		return entries;
-	} catch (err) {
-		if (isEnoent(err)) return [];
-		logger.warn("Failed to load secrets.yml", { path: filePath, error: String(err) });
+	} catch (error) {
+		if (isEnoent(error)) return [];
+		logger.warn("Failed to load secrets.yml", { path: filePath, error: String(error) });
 		return [];
 	}
 }

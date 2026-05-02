@@ -55,7 +55,7 @@ export async function finalizeErrorMessage(
 ): Promise<string> {
 	let message = formatErrorMessageWithRetryAfter(error, capturedErrorResponse?.headers);
 	const capturedMessage = formatCapturedHttpError(capturedErrorResponse);
-	if (capturedMessage) {
+	if (capturedMessage !== null && capturedMessage !== undefined && capturedMessage !== "") {
 		if (/\bstatus code\s*\(no body\)/i.test(message)) {
 			message = `${capturedErrorResponse?.status ?? "HTTP"} status code: ${capturedMessage}`;
 		} else if (!message.includes(capturedMessage)) {
@@ -124,7 +124,7 @@ function redactHeaders(headers: Record<string, string> | undefined): Record<stri
 function formatCapturedHttpError(captured: CapturedHttpErrorResponse | undefined): string | undefined {
 	if (!captured) return undefined;
 	const bodyText = captured.bodyText?.trim();
-	if (!bodyText) return undefined;
+	if (bodyText === null || bodyText === undefined || bodyText === "") return undefined;
 	const payload = parseCapturedErrorPayload(captured);
 	if (!payload) return bodyText;
 
@@ -148,7 +148,7 @@ function parseCapturedErrorPayload(captured: CapturedHttpErrorResponse): Record<
 	if (isObject(captured.bodyJson)) {
 		return captured.bodyJson;
 	}
-	if (!captured.bodyText) return undefined;
+	if (captured.bodyText === null || captured.bodyText === undefined || captured.bodyText === "") return undefined;
 	try {
 		const parsed = JSON.parse(captured.bodyText);
 		return isObject(parsed) ? parsed : undefined;

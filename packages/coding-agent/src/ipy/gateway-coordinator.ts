@@ -137,15 +137,18 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 					// Ignore lock cleanup errors
 				}
 			}
-		} catch (err) {
-			const error = err as NodeJS.ErrnoException;
+		} catch (error) {
+			const error = error as NodeJS.ErrnoException;
 			if (error.code === "EEXIST") {
 				let removedStale = false;
 				try {
 					const lockStat = await fs.promises.stat(lockPath);
 					const lockInfo = await readLockInfo(lockPath);
 					const lockPid = lockInfo?.pid;
-					const lockAgeMs = lockInfo?.startedAt ? Date.now() - lockInfo.startedAt : Date.now() - lockStat.mtimeMs;
+					const lockAgeMs =
+						lockInfo?.startedAt !== null && lockInfo?.startedAt !== undefined && lockInfo?.startedAt !== 0
+							? Date.now() - lockInfo.startedAt
+							: Date.now() - lockStat.mtimeMs;
 					const staleByTime = lockAgeMs > GATEWAY_LOCK_STALE_MS;
 					const staleByPid = lockPid !== undefined && !procmgr.isPidRunning(lockPid);
 					const staleByMissingPid = lockPid === undefined && staleByTime;
@@ -165,7 +168,7 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 				}
 				continue;
 			}
-			throw err;
+			throw error;
 		}
 	}
 }
@@ -186,8 +189,8 @@ async function readGatewayInfo(): Promise<GatewayInfo | null> {
 			pythonPath: typeof parsed.pythonPath === "string" ? parsed.pythonPath : undefined,
 			venvPath: typeof parsed.venvPath === "string" || parsed.venvPath === null ? parsed.venvPath : undefined,
 		};
-	} catch (err) {
-		if (isEnoent(err)) return null;
+	} catch (error) {
+		if (isEnoent(error)) return null;
 		return null;
 	}
 }
@@ -231,9 +234,9 @@ async function startGatewayProcess(
 	const { shell, env } = settings.getShellConfig();
 	const filteredEnv = filterEnv(env);
 	const runtime = resolvePythonRuntime(cwd, filteredEnv);
-	const snapshotPath = await getOrCreateSnapshot(shell, env).catch((err: unknown) => {
+	const snapshotPath = await getOrCreateSnapshot(shell, env).catch((error: unknown) => {
 		logger.warn("Failed to resolve shell snapshot for shared Python gateway", {
-			error: err instanceof Error ? err.message : String(err),
+			error: error instanceof Error ? error.message : String(error),
 		});
 		return null;
 	});
@@ -270,7 +273,7 @@ async function startGatewayProcess(
 	);
 
 	let exited = false;
-	gatewayProcess.exited
+	void gatewayProcess.exited
 		.catch(() => {})
 		.then(() => {
 			exited = true;
@@ -301,9 +304,9 @@ async function startGatewayProcess(
 async function killGateway(pid: number, context: string): Promise<void> {
 	try {
 		await procmgr.terminate({ target: pid });
-	} catch (err) {
+	} catch (error) {
 		logger.warn("Failed to kill shared gateway process", {
-			error: err instanceof Error ? err.message : String(err),
+			error: error instanceof Error ? error.message : String(error),
 			pid,
 			context,
 		});
@@ -346,9 +349,9 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 			logger.debug("Started global Python gateway", { url, pid });
 			return { url, isShared: true };
 		});
-	} catch (err) {
+	} catch (error) {
 		logger.warn("Failed to acquire shared gateway, falling back to local", {
-			error: err instanceof Error ? err.message : String(err),
+			error: error instanceof Error ? error.message : String(error),
 		});
 		return null;
 	}
@@ -359,7 +362,7 @@ export async function releaseSharedGateway(): Promise<void> {
 }
 
 export async function getSharedGatewayUrl(): Promise<string | null> {
-	if (localGatewayUrl) return localGatewayUrl;
+	if (localGatewayUrl !== null && localGatewayUrl !== undefined && localGatewayUrl !== "") return localGatewayUrl;
 	return (await readGatewayInfo())?.url ?? null;
 }
 
@@ -409,9 +412,9 @@ export async function shutdownSharedGateway(): Promise<void> {
 			}
 			await clearGatewayInfo();
 		});
-	} catch (err) {
+	} catch (error) {
 		logger.warn("Failed to shutdown shared gateway", {
-			error: err instanceof Error ? err.message : String(err),
+			error: error instanceof Error ? error.message : String(error),
 		});
 	} finally {
 		if (localGatewayProcess) {

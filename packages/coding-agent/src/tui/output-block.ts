@@ -75,7 +75,7 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 
 	for (let i = 0; i < normalizedSections.length; i++) {
 		const section = normalizedSections[i];
-		if (section.label) {
+		if (section.label !== null && section.label !== undefined && section.label !== "") {
 			lines.push(
 				padToWidth(buildBarLine(theme.boxSharp.teeRight, theme.boxSharp.teeLeft, section.label), lineWidth, bgFn),
 			);
@@ -84,7 +84,7 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 		const sixelLineMask = TERMINAL.imageProtocol === ImageProtocol.Sixel ? getSixelLineMask(allLines) : undefined;
 		for (let lineIndex = 0; lineIndex < allLines.length; lineIndex++) {
 			const line = allLines[lineIndex]!;
-			if (sixelLineMask?.[lineIndex]) {
+			if (sixelLineMask?.[lineIndex] === true) {
 				lines.push(line);
 				continue;
 			}

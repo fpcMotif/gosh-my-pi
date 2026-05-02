@@ -62,14 +62,17 @@ function buildSubcommandInlineHint(subcommands: SubcommandDef[]): (argumentText:
 			const match = subcommands.find(s => s.name.startsWith(prefix));
 			if (!match) return null;
 			const remaining = match.name.slice(prefix.length);
-			return remaining + (match.usage ? ` ${match.usage}` : "");
+			return (
+				remaining +
+				(match.usage !== null && match.usage !== undefined && match.usage !== "" ? ` ${match.usage}` : "")
+			);
 		}
 
 		// Subcommand typed — show remaining usage params
 		const subName = trimmed.slice(0, spaceIndex).toLowerCase();
 		const afterSub = trimmed.slice(spaceIndex + 1);
 		const sub = subcommands.find(s => s.name === subName);
-		if (!sub?.usage) return null;
+		if (sub?.usage === null || sub?.usage === undefined || sub?.usage === "") return null;
 
 		if (afterSub.length > 0) {
 			const usageParts = sub.usage.split(" ");
@@ -107,7 +110,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<
 			getInlineHint: buildSubcommandInlineHint(cmd.subcommands),
 		};
 	}
-	if (cmd.inlineHint) {
+	if (cmd.inlineHint !== null && cmd.inlineHint !== undefined && cmd.inlineHint !== "") {
 		return {
 			...cmd,
 			getInlineHint: buildStaticInlineHint(cmd.inlineHint),
@@ -141,7 +144,7 @@ function parseCommandTemplate(
 	let description = frontmatterDesc;
 	if (!description) {
 		const firstLine = body.split("\n").find(line => line.trim());
-		if (firstLine) {
+		if (firstLine !== null && firstLine !== undefined && firstLine !== "") {
 			description = firstLine.slice(0, 60);
 			if (firstLine.length > 60) description += "...";
 		}

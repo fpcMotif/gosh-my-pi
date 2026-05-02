@@ -8,62 +8,17 @@
  */
 import type { Spawn, Subprocess } from "bun";
 import { terminate } from "./procmgr";
+import { AbortError } from "./ptree-abort-error";
+import { Exception } from "./ptree-errors";
+import { NonZeroExitError } from "./ptree-nonzero-error";
+import { TimeoutError } from "./ptree-timeout-error";
+
+export { AbortError, Exception, NonZeroExitError, TimeoutError };
 
 type InMask = "pipe" | "ignore" | Buffer | Uint8Array | null;
 
 /** A Bun subprocess with stdout/stderr always piped (stdin may vary). */
 type PipedSubprocess<In extends InMask = InMask> = Subprocess<In, "pipe", "pipe">;
-
-// ── Exceptions ───────────────────────────────────────────────────────────────
-
-/**
- * Base for all exceptions representing child process nonzero exit, killed, or
- * cancellation.
- */
-export abstract class Exception extends Error {
-	constructor(
-		message: string,
-		public readonly exitCode: number,
-		public readonly stderr: string,
-	) {
-		super(message);
-		this.name = this.constructor.name;
-	}
-	abstract readonly aborted: boolean;
-}
-
-/** Exception for nonzero exit codes (not cancellation). */
-export class NonZeroExitError extends Exception {
-	static readonly MAX_TRACE = 32 * 1024;
-
-	constructor(exitCode: number, stderr: string) {
-		super(`Process exited with code ${exitCode}:\n${stderr}`, exitCode, stderr);
-	}
-	get aborted() {
-		return false;
-	}
-}
-
-/** Exception for explicit process abortion (via signal). */
-export class AbortError extends Exception {
-	constructor(
-		public readonly reason: unknown,
-		stderr: string,
-	) {
-		const msg = reason instanceof Error ? reason.message : String(reason ?? "aborted");
-		super(`Operation cancelled: ${msg}`, -1, stderr);
-	}
-	get aborted() {
-		return true;
-	}
-}
-
-/** Exception for process timeout. */
-export class TimeoutError extends AbortError {
-	constructor(timeout: number, stderr: string) {
-		super(new Error(`Timed out after ${Math.round(timeout / 1000)}s`), stderr);
-	}
-}
 
 // ── Wait / Exec types ────────────────────────────────────────────────────────
 
@@ -135,7 +90,7 @@ export class ChildProcess<In extends InMask = InMask> {
 		const { promise, resolve, reject } = Promise.withResolvers<number>();
 		this.#exited = promise;
 
-		proc.exited
+		void proc.exited
 			.catch(() => null)
 			.then(async exitCode => {
 				if (this.#exitReasonPending) {
@@ -251,49 +206,57 @@ export class ChildProcess<In extends InMask = InMask> {
 	async wait(opts?: WaitOptions): Promise<ExecResult> {
 		const { allowNonZero = false, allowAbort = false, stderr: stderrMode = "buffer" } = opts ?? {};
 
-		const stdoutP = new Response(this.stdout).text();
-		const stderrP =
-			stderrMode === "full"
-				? this.#stderrDone.then(() => new TextDecoder().decode(Buffer.concat(this.#stderrChunks)))
-				: this.#stderrDone.then(() => this.#stderrTail);
+		const [stdout, stderr] = await Promise.all([new Response(this.stdout).text(), this.#readStderr(stderrMode)]);
 
-		const [stdout, stderr] = await Promise.all([stdoutP, stderrP]);
+		const exitError = await this.#captureExitError();
+		const exitCode = this.exitCode ?? (exitError !== undefined && !exitError.aborted ? exitError.exitCode : null);
+		const ok = exitCode === 0;
 
+		this.#throwIfDisallowed(exitError, allowAbort, allowNonZero);
+
+		return { stdout, stderr, exitCode, ok, exitError };
+	}
+
+	#readStderr(mode: "full" | "buffer"): Promise<string> {
+		return mode === "full"
+			? this.#stderrDone.then(() => new TextDecoder().decode(Buffer.concat(this.#stderrChunks)))
+			: this.#stderrDone.then(() => this.#stderrTail);
+	}
+
+	async #captureExitError(): Promise<Exception | undefined> {
 		let exitError: Exception | undefined;
 		try {
 			await this.#exited;
-		} catch (err) {
-			if (err instanceof Exception) exitError = err;
-			else throw err;
+		} catch (error) {
+			if (error instanceof Exception) exitError = error;
+			else throw error;
 		}
-
-		if (!exitError) exitError = this.exitReason;
-		if (!exitError && this.exitCode !== null && this.exitCode !== 0) {
+		if (exitError === undefined) exitError = this.exitReason;
+		if (exitError === undefined && this.exitCode !== null && this.exitCode !== 0) {
 			exitError = new NonZeroExitError(this.exitCode, this.#stderrTail);
 		}
+		return exitError;
+	}
 
-		const exitCode = this.exitCode ?? (exitError && !exitError.aborted ? exitError.exitCode : null);
-		const ok = exitCode === 0;
-
-		if (exitError) {
-			if ((exitError.aborted && !allowAbort) || (!exitError.aborted && !allowNonZero)) throw exitError;
-		}
-
-		return { stdout, stderr, exitCode, ok, exitError };
+	#throwIfDisallowed(exitError: Exception | undefined, allowAbort: boolean, allowNonZero: boolean): void {
+		if (exitError === undefined) return;
+		const isAbortViolation = exitError.aborted && !allowAbort;
+		const isNonZeroViolation = !exitError.aborted && !allowNonZero;
+		if (isAbortViolation || isNonZeroViolation) throw exitError;
 	}
 
 	// ── Signal / timeout ─────────────────────────────────────────────────
 
 	attachSignal(signal: AbortSignal): void {
 		const onAbort = () => this.kill(new AbortError(signal.reason, "<cancelled>"));
-		if (signal.aborted) return void onAbort();
+		if (signal.aborted) return onAbort();
 		signal.addEventListener("abort", onAbort, { once: true });
 		this.#exited.catch(() => {}).finally(() => signal.removeEventListener("abort", onAbort));
 	}
 
 	attachTimeout(ms: number): void {
 		if (ms <= 0 || this.proc.killed) return;
-		Promise.race([
+		void Promise.race([
 			Bun.sleep(ms).then(() => true),
 			this.proc.exited.then(
 				() => false,

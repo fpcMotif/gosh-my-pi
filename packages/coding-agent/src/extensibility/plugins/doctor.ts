@@ -16,8 +16,11 @@ export async function runDoctorChecks(): Promise<DoctorCheck[]> {
 		const path = $which(tool.name);
 		checks.push({
 			name: tool.name,
-			status: path ? "ok" : "warning",
-			message: path ? `Found at ${path}` : `${tool.description} not found - some features may be limited`,
+			status: path !== null && path !== undefined && path !== "" ? "ok" : "warning",
+			message:
+				path !== null && path !== undefined && path !== ""
+					? `Found at ${path}`
+					: `${tool.description} not found - some features may be limited`,
 		});
 	}
 
@@ -30,7 +33,7 @@ export async function runDoctorChecks(): Promise<DoctorCheck[]> {
 	];
 
 	for (const key of apiKeys) {
-		const hasKey = !!Bun.env[key.name];
+		const hasKey = !(Bun.env[key.name] === null || Bun.env[key.name] === undefined || Bun.env[key.name] === "");
 		checks.push({
 			name: key.name,
 			status: hasKey ? "ok" : "warning",
@@ -50,9 +53,9 @@ export function formatDoctorResults(checks: DoctorCheck[]): string {
 		const icon =
 			check.status === "ok"
 				? theme.status.success
-				: check.status === "warning"
+				: (check.status === "warning"
 					? theme.status.warning
-					: theme.status.error;
+					: theme.status.error);
 		lines.push(`${icon} ${check.name}: ${check.message}`);
 	}
 

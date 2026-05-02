@@ -28,13 +28,14 @@ export async function generateEnumExports(): Promise<void> {
 		if (match === null) break;
 
 		const name = match[1];
-		const body = match[2];
+		const body = match[2] ?? "";
 		const entries: string[] = [];
 
-		for (const line of body!.split("\n")) {
+		for (const line of body.split("\n")) {
 			const m = line.match(/^\s*(\w+)\s*=\s*'([^']*)'/) ?? line.match(/^\s*(\w+)\s*=\s*(\d+)/);
 			if (m) {
-				const value = m[2]!.match(/^\d+$/) ? m[2] : `'${m[2]}'`;
+				const raw = m[2] ?? "";
+				const value = /^\d+$/.test(raw) ? raw : `'${raw}'`;
 				entries.push(`  ${m[1]}: ${value},`);
 			}
 		}
@@ -58,11 +59,7 @@ export async function generateEnumExports(): Promise<void> {
 	const startIdx = js.indexOf(MARKER_START);
 	const endIdx = js.indexOf(MARKER_END);
 
-	if (startIdx !== -1 && endIdx !== -1) {
-		js = js.slice(0, startIdx) + enumBlock;
-	} else {
-		js = `${js.trimEnd()}\n\n${enumBlock}`;
-	}
+	js = startIdx !== -1 && endIdx !== -1 ? js.slice(0, startIdx) + enumBlock : `${js.trimEnd()}\n\n${enumBlock}`;
 
 	await Bun.write(jsPath, js);
 

@@ -98,7 +98,7 @@ describe("python modules", () => {
 		const executor: PythonModuleExecutor = { execute };
 		vi.spyOn(Date, "now").mockReturnValueOnce(10_000).mockReturnValueOnce(10_300);
 
-		await expect(loadPythonModules(executor, { cwd, agentDir, signal, deadlineMs: 10_250 })).rejects.toMatchObject({
+		expect(loadPythonModules(executor, { cwd, agentDir, signal, deadlineMs: 10_250 })).rejects.toMatchObject({
 			name: "TimeoutError",
 			message: "Python module loading timed out",
 		});
@@ -121,7 +121,7 @@ describe("python modules", () => {
 		const execute = vi.fn(async () => ({ status: "ok" as const, cancelled: true, timedOut: true }));
 		const executor: PythonModuleExecutor = { execute };
 
-		await expect(loadPythonModules(executor, { cwd, agentDir })).rejects.toMatchObject({
+		expect(loadPythonModules(executor, { cwd, agentDir })).rejects.toMatchObject({
 			name: "TimeoutError",
 			message: expect.stringContaining("Failed to load Python module"),
 		});
@@ -149,6 +149,6 @@ describe("python modules", () => {
 			},
 		};
 
-		await expect(loadPythonModules(executor, { cwd, agentDir })).rejects.toThrow("Failed to load Python module");
+		expect(loadPythonModules(executor, { cwd, agentDir })).rejects.toThrow("Failed to load Python module");
 	});
 });

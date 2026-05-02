@@ -36,8 +36,8 @@ export interface MessageStats {
  * Full details of a request, including content.
  */
 export interface RequestDetails extends MessageStats {
-	messages: any[]; // The full conversation history or just the last turn
-	output: any; // The model's response
+	messages: unknown[]; // The full conversation history or just the last turn
+	output: unknown; // The model's response
 }
 
 /**

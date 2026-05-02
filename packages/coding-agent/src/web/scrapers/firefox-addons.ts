@@ -107,12 +107,15 @@ export const handleFirefoxAddons: SpecialHandler = async (
 		if (!data) return null;
 
 		const fetchedAt = new Date().toISOString();
-		const defaultLocale = data.default_locale || "en-US";
+		const defaultLocale = data.default_locale ?? "en-US";
 
 		const name = getLocalizedText(data.name, defaultLocale) ?? slug;
 		const summary = getLocalizedText(data.summary, defaultLocale);
 		const descriptionRaw = getLocalizedText(data.description, defaultLocale);
-		const description = descriptionRaw ? htmlToBasicMarkdown(descriptionRaw) : undefined;
+		const description =
+			descriptionRaw !== null && descriptionRaw !== undefined && descriptionRaw !== ""
+				? htmlToBasicMarkdown(descriptionRaw)
+				: undefined;
 
 		const authors = (data.authors ?? [])
 			.map(author => author.name ?? "")
@@ -136,7 +139,7 @@ export const handleFirefoxAddons: SpecialHandler = async (
 		const permissions = collectPermissions(data.current_version?.file);
 
 		let md = `# ${name}\n\n`;
-		if (summary) md += `${summary}\n\n`;
+		if (summary !== null && summary !== undefined && summary !== "") md += `${summary}\n\n`;
 
 		if (authors.length > 0) {
 			md += `**Author${authors.length > 1 ? "s" : ""}:** ${authors.join(", ")}\n`;
@@ -149,20 +152,27 @@ export const handleFirefoxAddons: SpecialHandler = async (
 		}
 
 		if (users !== undefined) md += `**Users:** ${formatNumber(users)}\n`;
-		if (version) md += `**Version:** ${version}\n`;
+		if (version !== null && version !== undefined && version !== "") md += `**Version:** ${version}\n`;
 		if (categories.length > 0) md += `**Categories:** ${categories.join(", ")}\n`;
 
-		if (licenseName && licenseUrl) {
+		if (
+			licenseName !== null &&
+			licenseName !== undefined &&
+			licenseName !== "" &&
+			licenseUrl !== null &&
+			licenseUrl !== undefined &&
+			licenseUrl !== ""
+		) {
 			md += `**License:** [${licenseName}](${licenseUrl})\n`;
-		} else if (licenseName) {
+		} else if (licenseName !== null && licenseName !== undefined && licenseName !== "") {
 			md += `**License:** ${licenseName}\n`;
-		} else if (licenseUrl) {
+		} else if (licenseUrl !== null && licenseUrl !== undefined && licenseUrl !== "") {
 			md += `**License:** ${licenseUrl}\n`;
 		}
 
-		if (homepage) md += `**Homepage:** ${homepage}\n`;
+		if (homepage !== null && homepage !== undefined && homepage !== "") md += `**Homepage:** ${homepage}\n`;
 
-		if (description) {
+		if (description !== null && description !== undefined && description !== "") {
 			md += `\n## Description\n\n${description}\n`;
 		}
 

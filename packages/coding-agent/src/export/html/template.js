@@ -383,11 +383,11 @@
         if (typeof p !== 'string') return '';
         if (p.startsWith('/Users/')) {
           const parts = p.split('/');
-          if (parts.length > 2) return '~' + p.slice(('/Users/' + parts[2]).length);
+          if (parts.length > 2) return `~${  p.slice(('/Users/' + parts[2]).length)}`;
         }
         if (p.startsWith('/home/')) {
           const parts = p.split('/');
-          if (parts.length > 2) return '~' + p.slice(('/home/' + parts[2]).length);
+          if (parts.length > 2) return `~${  p.slice(('/home/' + parts[2]).length)}`;
         }
         return p;
       }
@@ -439,7 +439,7 @@
        */
       function truncate(s, maxLen = 100) {
         if (s.length <= maxLen) return s;
-        return s.slice(0, maxLen) + '...';
+        return `${s.slice(0, maxLen)  }...`;
       }
 
       /**
@@ -454,56 +454,56 @@
             const msg = entry.message;
             if (msg.role === 'user') {
               const content = truncate(normalize(extractContent(msg.content)));
-              return labelHtml + `<span class="tree-role-user">user:</span> ${escapeHtml(content)}`;
+              return `${labelHtml  }<span class="tree-role-user">user:</span> ${escapeHtml(content)}`;
             }
             if (msg.role === 'assistant') {
               const textContent = truncate(normalize(extractContent(msg.content)));
               if (textContent) {
-                return labelHtml + `<span class="tree-role-assistant">assistant:</span> ${escapeHtml(textContent)}`;
+                return `${labelHtml  }<span class="tree-role-assistant">assistant:</span> ${escapeHtml(textContent)}`;
               }
               if (msg.stopReason === 'aborted') {
-                return labelHtml + `<span class="tree-role-assistant">assistant:</span> <span class="tree-muted">(aborted)</span>`;
+                return `${labelHtml  }<span class="tree-role-assistant">assistant:</span> <span class="tree-muted">(aborted)</span>`;
               }
               if (msg.errorMessage) {
-                return labelHtml + `<span class="tree-role-assistant">assistant:</span> <span class="tree-error">${escapeHtml(truncate(msg.errorMessage))}</span>`;
+                return `${labelHtml  }<span class="tree-role-assistant">assistant:</span> <span class="tree-error">${escapeHtml(truncate(msg.errorMessage))}</span>`;
               }
-              return labelHtml + `<span class="tree-role-assistant">assistant:</span> <span class="tree-muted">(no text)</span>`;
+              return `${labelHtml  }<span class="tree-role-assistant">assistant:</span> <span class="tree-muted">(no text)</span>`;
             }
             if (msg.role === 'toolResult') {
               const toolCall = msg.toolCallId ? toolCallMap.get(msg.toolCallId) : null;
               if (toolCall) {
-                return labelHtml + `<span class="tree-role-tool">${escapeHtml(formatToolCall(toolCall.name, toolCall.arguments))}</span>`;
+                return `${labelHtml  }<span class="tree-role-tool">${escapeHtml(formatToolCall(toolCall.name, toolCall.arguments))}</span>`;
               }
-              return labelHtml + `<span class="tree-role-tool">[${msg.toolName || 'tool'}]</span>`;
+              return `${labelHtml  }<span class="tree-role-tool">[${msg.toolName || 'tool'}]</span>`;
             }
             if (msg.role === 'bashExecution') {
               const cmd = truncate(normalize(msg.command || ''));
-              return labelHtml + `<span class="tree-role-tool">[bash]:</span> ${escapeHtml(cmd)}`;
+              return `${labelHtml  }<span class="tree-role-tool">[bash]:</span> ${escapeHtml(cmd)}`;
             }
             if (msg.role === 'jsExecution') {
               const code = truncate(normalize(msg.code || ''));
-              return labelHtml + `<span class="tree-role-tool">[js]:</span> ${escapeHtml(code)}`;
+              return `${labelHtml  }<span class="tree-role-tool">[js]:</span> ${escapeHtml(code)}`;
             }
-            return labelHtml + `<span class="tree-muted">[${msg.role}]</span>`;
+            return `${labelHtml  }<span class="tree-muted">[${msg.role}]</span>`;
           }
           case 'compaction':
-            return labelHtml + `<span class="tree-compaction">[compaction: ${Math.round(entry.tokensBefore/1000)}k tokens]</span>`;
+            return `${labelHtml  }<span class="tree-compaction">[compaction: ${Math.round(entry.tokensBefore/1000)}k tokens]</span>`;
           case 'branch_summary': {
             const summary = truncate(normalize(entry.summary || ''));
-            return labelHtml + `<span class="tree-branch-summary">[branch summary]:</span> ${escapeHtml(summary)}`;
+            return `${labelHtml  }<span class="tree-branch-summary">[branch summary]:</span> ${escapeHtml(summary)}`;
           }
           case 'custom_message': {
             const content = typeof entry.content === 'string' ? entry.content : extractContent(entry.content);
-            return labelHtml + `<span class="tree-custom">[${escapeHtml(entry.customType)}]:</span> ${escapeHtml(truncate(normalize(content)))}`;
+            return `${labelHtml  }<span class="tree-custom">[${escapeHtml(entry.customType)}]:</span> ${escapeHtml(truncate(normalize(content)))}`;
           }
           case 'model_change':
-            return labelHtml + `<span class="tree-muted">[model: ${escapeHtml(entry.model)}]</span>`;
+            return `${labelHtml  }<span class="tree-muted">[model: ${escapeHtml(entry.model)}]</span>`;
           case 'thinking_level_change':
-            return labelHtml + `<span class="tree-muted">[thinking: ${entry.thinkingLevel}]</span>`;
+            return `${labelHtml  }<span class="tree-muted">[thinking: ${entry.thinkingLevel}]</span>`;
           case 'mode_change':
-            return labelHtml + `<span class="tree-muted">[mode: ${escapeHtml(entry.mode)}]</span>`;
+            return `${labelHtml  }<span class="tree-muted">[mode: ${escapeHtml(entry.mode)}]</span>`;
           default:
-            return labelHtml + `<span class="tree-muted">[${entry.type}]</span>`;
+            return `${labelHtml  }<span class="tree-muted">[${entry.type}]</span>`;
         }
       }
 
@@ -599,9 +599,9 @@
 
       function formatTokens(count) {
         if (count < 1000) return count.toString();
-        if (count < 10000) return (count / 1000).toFixed(1) + 'k';
-        if (count < 1000000) return Math.round(count / 1000) + 'k';
-        return (count / 1000000).toFixed(1) + 'M';
+        if (count < 10000) return `${(count / 1000).toFixed(1)  }k`;
+        if (count < 1000000) return `${Math.round(count / 1000)  }k`;
+        return `${(count / 1000000).toFixed(1)  }M`;
       }
 
       function formatTimestamp(ts) {
@@ -617,7 +617,7 @@
       /** Safely coerce value to string for display. Returns null if invalid type. */
       function str(value) {
         if (typeof value === 'string') return value;
-        if (value == null) return '';
+        if (value === null) return '';
         return null;
       }
 
@@ -708,12 +708,12 @@
 
       // Shared helpers for per-tool renderers.
       function toolHead(label, pathHtml, badges) {
-        let html = '<div class="tool-header"><span class="tool-name">' + escapeHtml(label) + '</span>';
-        if (pathHtml) html += ' <span class="tool-path">' + pathHtml + '</span>';
+        let html = `<div class="tool-header"><span class="tool-name">${  escapeHtml(label)  }</span>`;
+        if (pathHtml) html += ` <span class="tool-path">${  pathHtml  }</span>`;
         if (badges) {
           for (const badge of badges) {
-            if (badge != null && badge !== '') {
-              html += ' <span class="tool-badge">' + escapeHtml(String(badge)) + '</span>';
+            if (badge !== null && badge !== '') {
+              html += ` <span class="tool-badge">${  escapeHtml(String(badge))  }</span>`;
             }
           }
         }
@@ -726,18 +726,18 @@
       }
 
       function pathDisplay(filePath, offset, limit) {
-        if (filePath == null) return invalidArgHtml();
+        if (filePath === null) return invalidArgHtml();
         let html = escapeHtml(shortenPath(filePath || ''));
         if (offset !== undefined || limit !== undefined) {
-          const start = offset == null ? 1 : offset;
+          const start = offset === null ? 1 : offset;
           const end = limit !== undefined ? start + limit - 1 : '';
-          html += '<span class="line-numbers">:' + start + (end ? '-' + end : '') + '</span>';
+          html += `<span class="line-numbers">:${  start  }${end ? '-' + end : ''  }</span>`;
         }
         return html;
       }
 
       function codeBlock(code, lang) {
-        if (code == null || code === '') return '';
+        if (code === null || code === '') return '';
         const text = String(code);
         let highlighted;
         try {
@@ -745,7 +745,7 @@
         } catch {
           highlighted = escapeHtml(text);
         }
-        return '<div class="tool-output"><pre><code class="hljs">' + highlighted + '</code></pre></div>';
+        return `<div class="tool-output"><pre><code class="hljs">${  highlighted  }</code></pre></div>`;
       }
 
       // Per-tool renderers. Each accepts (name, args, result, ctx) and returns the inner HTML.
@@ -757,18 +757,18 @@
         let prefix = '';
         if (env) {
           for (const [k, v] of Object.entries(env)) {
-            prefix += escapeHtml(k) + '=' + escapeHtml(String(v)) + ' ';
+            prefix += `${escapeHtml(k)  }=${  escapeHtml(String(v))  } `;
           }
         }
-        let html = '<div class="tool-command">$ ' + prefix + cmdDisplay + '</div>';
+        let html = `<div class="tool-command">$ ${  prefix  }${cmdDisplay  }</div>`;
         const badges = [];
-        if (cwd) badges.push('cwd=' + shortenPath(cwd));
-        if (args.timeout) badges.push('timeout=' + args.timeout + 's');
+        if (cwd) badges.push(`cwd=${  shortenPath(cwd)}`);
+        if (args.timeout) badges.push(`timeout=${  args.timeout  }s`);
         if (args.pty) badges.push('pty');
-        if (args.head) badges.push('head=' + args.head);
-        if (args.tail) badges.push('tail=' + args.tail);
+        if (args.head) badges.push(`head=${  args.head}`);
+        if (args.tail) badges.push(`tail=${  args.tail}`);
         if (badges.length) {
-          html += '<div class="tool-meta">' + badges.map(b => '<span class="tool-badge">' + escapeHtml(b) + '</span>').join(' ') + '</div>';
+          html += `<div class="tool-meta">${  badges.map(b => '<span class="tool-badge">' + escapeHtml(b) + '</span>').join(' ')  }</div>`;
         }
         if (result) {
           html += ctx.renderResultImages();
@@ -781,8 +781,8 @@
       function renderJsLike(name, args, result, ctx) {
         const lang = name === 'python' ? 'python' : 'javascript';
         const badges = [];
-        if (args.cwd) badges.push('cwd=' + shortenPath(String(args.cwd)));
-        if (args.timeout) badges.push('timeout=' + args.timeout + 's');
+        if (args.cwd) badges.push(`cwd=${  shortenPath(String(args.cwd))}`);
+        if (args.timeout) badges.push(`timeout=${  args.timeout  }s`);
         if (args.reset) badges.push('reset');
         let html = toolHead(name, '', badges);
         const cells = Array.isArray(args.cells) ? args.cells : null;
@@ -791,7 +791,7 @@
         } else {
           for (const cell of cells) {
             html += '<div class="tool-cell">';
-            if (cell && cell.title) html += '<div class="tool-cell-title">' + escapeHtml(String(cell.title)) + '</div>';
+            if (cell && cell.title) html += `<div class="tool-cell-title">${  escapeHtml(String(cell.title))  }</div>`;
             const code = cell && typeof cell.code === 'string' ? cell.code : '';
             html += codeBlock(code, lang);
             html += '</div>';
@@ -806,9 +806,9 @@
       }
 
       function renderRead(name, args, result, ctx) {
-        const filePath = str(args.file_path == null ? args.path : args.file_path);
+        const filePath = str(args.file_path === null ? args.path : args.file_path);
         let pathHtml = pathDisplay(filePath, args.offset, args.limit);
-        if (args.sel) pathHtml += '<span class="line-numbers">:' + escapeHtml(String(args.sel)) + '</span>';
+        if (args.sel) pathHtml += `<span class="line-numbers">:${  escapeHtml(String(args.sel))  }</span>`;
         let html = toolHead('read', pathHtml);
         if (result) {
           html += ctx.renderResultImages();
@@ -820,11 +820,11 @@
       }
 
       function renderWrite(name, args, result, ctx) {
-        const filePath = str(args.file_path == null ? args.path : args.file_path);
+        const filePath = str(args.file_path === null ? args.path : args.file_path);
         const content = str(args.content);
         const pathHtml = filePath === null ? invalidArgHtml() : escapeHtml(shortenPath(filePath || ''));
-        const lineCount = (content != null && content !== '') ? content.split('\n').length : 0;
-        const badges = lineCount > 10 ? ['(' + lineCount + ' lines)'] : null;
+        const lineCount = (content !== null && content !== '') ? content.split('\n').length : 0;
+        const badges = lineCount > 10 ? [`(${  lineCount  } lines)`] : null;
         let html = toolHead('write', pathHtml, badges);
         if (content === null) {
           html += '<div class="tool-error">[invalid content arg - expected string]</div>';
@@ -834,13 +834,13 @@
         }
         if (result) {
           const output = ctx.getResultText().trim();
-          if (output) html += '<div class="tool-output"><div>' + escapeHtml(output) + '</div></div>';
+          if (output) html += `<div class="tool-output"><div>${  escapeHtml(output)  }</div></div>`;
         }
         return html;
       }
 
       function renderEdit(name, args, result, ctx) {
-        const filePath = str(args.file_path == null ? args.path : args.file_path);
+        const filePath = str(args.file_path === null ? args.path : args.file_path);
         const pathHtml = filePath === null ? invalidArgHtml() : escapeHtml(shortenPath(filePath || ''));
         let html = toolHead('edit', pathHtml);
         if (Array.isArray(args.edits)) {
@@ -848,7 +848,7 @@
           for (const e of args.edits) {
             const op = e && typeof e.op === 'string' ? e.op : '?';
             const sel = e && typeof e.sel === 'string' ? e.sel : '?';
-            html += '<div class="tool-arg"><span class="tool-arg-key">' + escapeHtml(op) + '</span> <span class="tool-arg-val">' + escapeHtml(sel) + '</span></div>';
+            html += `<div class="tool-arg"><span class="tool-arg-key">${  escapeHtml(op)  }</span> <span class="tool-arg-val">${  escapeHtml(sel)  }</span></div>`;
           }
           html += '</div>';
         }
@@ -856,13 +856,13 @@
           const diffLines = String(result.details.diff).split('\n');
           html += '<div class="tool-diff">';
           for (const line of diffLines) {
-            const cls = line.match(/^\+/) ? 'diff-added' : line.match(/^-/) ? 'diff-removed' : 'diff-context';
-            html += '<div class="' + cls + '">' + escapeHtml(replaceTabs(line)) + '</div>';
+            const cls = line.match(/^\+/) ? 'diff-added' : (line.match(/^-/) ? 'diff-removed' : 'diff-context');
+            html += `<div class="${  cls  }">${  escapeHtml(replaceTabs(line))  }</div>`;
           }
           html += '</div>';
         } else if (result) {
           const output = ctx.getResultText().trim();
-          if (output) html += '<div class="tool-output"><pre>' + escapeHtml(output) + '</pre></div>';
+          if (output) html += `<div class="tool-output"><pre>${  escapeHtml(output)  }</pre></div>`;
         }
         return html;
       }
@@ -872,16 +872,16 @@
         const pathHtml = args.path ? escapeHtml(shortenPath(String(args.path))) : '';
         const badges = [];
         if (lang) badges.push(lang);
-        if (args.glob) badges.push('glob=' + args.glob);
-        if (args.sel) badges.push('sel=' + args.sel);
+        if (args.glob) badges.push(`glob=${  args.glob}`);
+        if (args.sel) badges.push(`sel=${  args.sel}`);
         let html = toolHead('ast_edit', pathHtml, badges);
         if (Array.isArray(args.ops)) {
           for (const op of args.ops) {
             html += '<div class="tool-cell">';
             html += '<div class="tool-cell-title">pattern</div>';
-            html += codeBlock(String(op?.pat == null ? '' : op.pat), lang);
+            html += codeBlock(String(op?.pat === null ? '' : op.pat), lang);
             html += '<div class="tool-cell-title">replacement</div>';
-            html += codeBlock(String(op?.out == null ? '' : op.out), lang);
+            html += codeBlock(String(op?.out === null ? '' : op.out), lang);
             html += '</div>';
           }
         }
@@ -897,12 +897,12 @@
         const pathHtml = args.path ? escapeHtml(shortenPath(String(args.path))) : '';
         const badges = [];
         if (lang) badges.push(lang);
-        if (args.glob) badges.push('glob=' + args.glob);
-        if (args.sel) badges.push('sel=' + args.sel);
+        if (args.glob) badges.push(`glob=${  args.glob}`);
+        if (args.sel) badges.push(`sel=${  args.sel}`);
         let html = toolHead('ast_grep', pathHtml, badges);
         if (Array.isArray(args.pat)) {
           for (const pat of args.pat) {
-            html += '<div class="tool-cell">' + codeBlock(String(pat == null ? '' : pat), lang) + '</div>';
+            html += `<div class="tool-cell">${  codeBlock(String(pat == null ? '' : pat), lang)  }</div>`;
           }
         }
         if (result) {
@@ -916,15 +916,15 @@
         const pattern = str(args.pattern);
         const pathHtml = args.path ? escapeHtml(shortenPath(String(args.path))) : escapeHtml('.');
         const patHtml = pattern === null ? invalidArgHtml() : escapeHtml(pattern);
-        let head = '<span class="tool-name">grep</span> <span class="tool-pattern">/' + patHtml + '/</span>';
-        head += ' <span class="tool-arg-key">in</span> <span class="tool-path">' + pathHtml + '</span>';
+        let head = `<span class="tool-name">grep</span> <span class="tool-pattern">/${  patHtml  }/</span>`;
+        head += ` <span class="tool-arg-key">in</span> <span class="tool-path">${  pathHtml  }</span>`;
         const badges = [];
-        if (args.glob) badges.push('glob=' + args.glob);
-        if (args.type) badges.push('type=' + args.type);
+        if (args.glob) badges.push(`glob=${  args.glob}`);
+        if (args.type) badges.push(`type=${  args.type}`);
         if (args.i) badges.push('i');
         if (args.multiline) badges.push('multiline');
-        for (const b of badges) head += ' <span class="tool-badge">' + escapeHtml(b) + '</span>';
-        let html = '<div class="tool-header">' + head + '</div>';
+        for (const b of badges) head += ` <span class="tool-badge">${  escapeHtml(b)  }</span>`;
+        let html = `<div class="tool-header">${  head  }</div>`;
         if (result) {
           const output = ctx.getResultText();
           if (output) html += formatExpandableOutput(output, 10);
@@ -935,8 +935,8 @@
       function renderFind(name, args, result, ctx) {
         const pattern = str(args.pattern);
         const patHtml = pattern === null ? invalidArgHtml() : escapeHtml(pattern);
-        const badges = args.limit ? ['limit=' + args.limit] : null;
-        let html = toolHead('find', '<span class="tool-pattern">' + patHtml + '</span>', badges);
+        const badges = args.limit ? [`limit=${  args.limit}`] : null;
+        let html = toolHead('find', `<span class="tool-pattern">${  patHtml  }</span>`, badges);
         if (result) {
           const output = ctx.getResultText();
           if (output) html += formatExpandableOutput(output, 10);
@@ -946,17 +946,17 @@
 
       function renderLsp(name, args, result, ctx) {
         const action = str(args.action) || '?';
-        let head = '<span class="tool-name">lsp</span> <span class="tool-badge">' + escapeHtml(action) + '</span>';
+        let head = `<span class="tool-name">lsp</span> <span class="tool-badge">${  escapeHtml(action)  }</span>`;
         if (args.file && args.file !== '*') {
-          head += ' <span class="tool-path">' + escapeHtml(shortenPath(String(args.file))) + '</span>';
+          head += ` <span class="tool-path">${  escapeHtml(shortenPath(String(args.file)))  }</span>`;
         } else if (args.file === '*') {
           head += ' <span class="tool-badge">workspace</span>';
         }
-        if (args.line) head += '<span class="line-numbers">:' + args.line + '</span>';
-        if (args.symbol) head += ' <span class="tool-arg-val">' + escapeHtml(String(args.symbol)) + '</span>';
-        if (args.query) head += ' <span class="tool-arg-key">query=</span><span class="tool-arg-val">' + escapeHtml(String(args.query)) + '</span>';
-        if (args.new_name) head += ' <span class="tool-arg-key">→</span> <span class="tool-arg-val">' + escapeHtml(String(args.new_name)) + '</span>';
-        let html = '<div class="tool-header">' + head + '</div>';
+        if (args.line) head += `<span class="line-numbers">:${  args.line  }</span>`;
+        if (args.symbol) head += ` <span class="tool-arg-val">${  escapeHtml(String(args.symbol))  }</span>`;
+        if (args.query) head += ` <span class="tool-arg-key">query=</span><span class="tool-arg-val">${  escapeHtml(String(args.query))  }</span>`;
+        if (args.new_name) head += ` <span class="tool-arg-key">→</span> <span class="tool-arg-val">${  escapeHtml(String(args.new_name))  }</span>`;
+        let html = `<div class="tool-header">${  head  }</div>`;
         if (result) {
           const output = ctx.getResultText();
           if (output) html += formatExpandableOutput(output, 12);
@@ -981,12 +981,12 @@
           html += '<div class="tool-args">';
           for (const op of ops) {
             const t = op && op.op ? op.op : '?';
-            let line = '<span class="tool-arg-key">' + escapeHtml(t) + '</span>';
-            if (op?.id) line += ' <span class="tool-arg-val">' + escapeHtml(String(op.id)) + '</span>';
-            if (op?.status) line += ' <span class="tool-badge">' + escapeHtml(String(op.status)) + '</span>';
-            if (op?.content) line += ' ' + escapeHtml(truncate(String(op.content), 80));
-            if (op?.task && typeof op.task === 'object' && op.task.content) line += ' ' + escapeHtml(truncate(String(op.task.content), 80));
-            html += '<div class="tool-arg">' + line + '</div>';
+            let line = `<span class="tool-arg-key">${  escapeHtml(t)  }</span>`;
+            if (op?.id) line += ` <span class="tool-arg-val">${  escapeHtml(String(op.id))  }</span>`;
+            if (op?.status) line += ` <span class="tool-badge">${  escapeHtml(String(op.status))  }</span>`;
+            if (op?.content) line += ` ${  escapeHtml(truncate(String(op.content), 80))}`;
+            if (op?.task && typeof op.task === 'object' && op.task.content) line += ` ${  escapeHtml(truncate(String(op.task.content), 80))}`;
+            html += `<div class="tool-arg">${  line  }</div>`;
           }
           html += '</div>';
         }
@@ -995,13 +995,13 @@
           html += '<div class="todo-tree">';
           for (var __i = 0; __i < phases.length; __i++) {
             var phase = phases[__i];
-            var phaseLabel = todoRoman(__i + 1) + '. ' + String(phase.name || '');
-            html += '<div class="todo-phase">' + escapeHtml(phaseLabel) + '</div>';
+            var phaseLabel = `${todoRoman(__i + 1)  }. ${  String(phase.name || '')}`;
+            html += `<div class="todo-phase">${  escapeHtml(phaseLabel)  }</div>`;
             if (Array.isArray(phase.tasks)) {
               for (const task of phase.tasks) {
                 const status = task.status || 'pending';
                 const icon = status === 'completed' ? '✓' : status === 'in_progress' ? '→' : status === 'abandoned' ? '✕' : '○';
-                html += '<div class="todo-task todo-' + status + '"><span class="todo-icon">' + icon + '</span> ' + escapeHtml(String(task.content || '')) + '</div>';
+                html += `<div class="todo-task todo-${  status  }"><span class="todo-icon">${  icon  }</span> ${  escapeHtml(String(task.content || ''))  }</div>`;
               }
             }
           }
@@ -1016,7 +1016,7 @@
       function renderTask(name, args, result, ctx) {
         const agent = str(args.agent) || '?';
         const tasks = Array.isArray(args.tasks) ? args.tasks : [];
-        const badges = ['agent=' + agent, tasks.length + ' subtask' + (tasks.length === 1 ? '' : 's')];
+        const badges = [`agent=${  agent}`, `${tasks.length  } subtask${  tasks.length === 1 ? '' : 's'}`];
         if (args.isolated) badges.push('isolated');
         let html = toolHead('task', '', badges);
         if (tasks.length) {
@@ -1024,7 +1024,7 @@
           for (const t of tasks) {
             const id = t?.id ? escapeHtml(String(t.id)) : '?';
             const desc = t?.description ? escapeHtml(String(t.description)) : '';
-            html += '<div class="tool-arg"><span class="tool-arg-key">' + id + '</span> ' + desc + '</div>';
+            html += `<div class="tool-arg"><span class="tool-arg-key">${  id  }</span> ${  desc  }</div>`;
           }
           html += '</div>';
         }
@@ -1039,9 +1039,9 @@
         const query = str(args.query);
         const queryHtml = query === null ? invalidArgHtml() : escapeHtml(query);
         const badges = [];
-        if (args.recency) badges.push('recency=' + args.recency);
-        if (args.limit) badges.push('limit=' + args.limit);
-        let html = toolHead('web_search', '<span class="tool-pattern">' + queryHtml + '</span>', badges);
+        if (args.recency) badges.push(`recency=${  args.recency}`);
+        if (args.limit) badges.push(`limit=${  args.limit}`);
+        let html = toolHead('web_search', `<span class="tool-pattern">${  queryHtml  }</span>`, badges);
         if (result) {
           const output = ctx.getResultText();
           if (output) html += formatExpandableOutput(output, 12, 'markdown');
@@ -1052,7 +1052,7 @@
       function renderFetch(name, args, result, ctx) {
         const url = str(args.url) || '';
         const badges = args.method ? [String(args.method)] : null;
-        let html = toolHead('fetch', '<span class="tool-path">' + escapeHtml(url) + '</span>', badges);
+        let html = toolHead('fetch', `<span class="tool-path">${  escapeHtml(url)  }</span>`, badges);
         if (result) {
           const output = ctx.getResultText();
           if (output) html += formatExpandableOutput(output, 10);
@@ -1064,12 +1064,12 @@
         const action = str(args.action) || '?';
         const badges = [];
         if (args.adapter) badges.push(args.adapter);
-        if (args.program) badges.push('program=' + shortenPath(String(args.program)));
-        if (args.file) badges.push('file=' + shortenPath(String(args.file)));
-        if (args.line) badges.push('line=' + args.line);
-        let head = '<span class="tool-name">debug</span> <span class="tool-badge">' + escapeHtml(action) + '</span>';
-        for (const b of badges) head += ' <span class="tool-badge">' + escapeHtml(String(b)) + '</span>';
-        let html = '<div class="tool-header">' + head + '</div>';
+        if (args.program) badges.push(`program=${  shortenPath(String(args.program))}`);
+        if (args.file) badges.push(`file=${  shortenPath(String(args.file))}`);
+        if (args.line) badges.push(`line=${  args.line}`);
+        let head = `<span class="tool-name">debug</span> <span class="tool-badge">${  escapeHtml(action)  }</span>`;
+        for (const b of badges) head += ` <span class="tool-badge">${  escapeHtml(String(b))  }</span>`;
+        let html = `<div class="tool-header">${  head  }</div>`;
         if (args.expression) html += codeBlock(String(args.expression));
         if (result) {
           const output = ctx.getResultText();
@@ -1082,13 +1082,13 @@
         const action = str(args.action) || '?';
         const badges = [];
         if (args.url) badges.push(String(args.url));
-        if (args.selector) badges.push('selector=' + args.selector);
-        if (args.element_id != null) badges.push('id=' + args.element_id);
-        let head = '<span class="tool-name">puppeteer</span> <span class="tool-badge">' + escapeHtml(action) + '</span>';
-        for (const b of badges) head += ' <span class="tool-badge">' + escapeHtml(String(b)) + '</span>';
-        let html = '<div class="tool-header">' + head + '</div>';
+        if (args.selector) badges.push(`selector=${  args.selector}`);
+        if (args.element_id !== null) badges.push(`id=${  args.element_id}`);
+        let head = `<span class="tool-name">puppeteer</span> <span class="tool-badge">${  escapeHtml(action)  }</span>`;
+        for (const b of badges) head += ` <span class="tool-badge">${  escapeHtml(String(b))  }</span>`;
+        let html = `<div class="tool-header">${  head  }</div>`;
         if (args.script) html += codeBlock(String(args.script), 'javascript');
-        if (args.text) html += '<div class="tool-output"><div>' + escapeHtml(String(args.text)) + '</div></div>';
+        if (args.text) html += `<div class="tool-output"><div>${  escapeHtml(String(args.text))  }</div></div>`;
         if (result) {
           html += ctx.renderResultImages();
           const output = ctx.getResultText();
@@ -1098,7 +1098,7 @@
       }
 
       function renderInspectImage(name, args, result, ctx) {
-        const p = str(args.path == null ? args.url : args.path) || '';
+        const p = str(args.path === null ? args.url : args.path) || '';
         let html = toolHead('inspect_image', escapeHtml(shortenPath(p)));
         if (result) {
           html += ctx.renderResultImages();
@@ -1112,7 +1112,7 @@
         const subject = str(args.subject) || '';
         const badges = args.aspect_ratio ? [String(args.aspect_ratio)] : null;
         let html = toolHead('generate_image', '', badges);
-        if (subject) html += '<div class="tool-output"><div>' + escapeHtml(subject) + '</div></div>';
+        if (subject) html += `<div class="tool-output"><div>${  escapeHtml(subject)  }</div></div>`;
         if (result) {
           html += ctx.renderResultImages();
         }
@@ -1125,10 +1125,10 @@
         if (questions) {
           html += '<div class="tool-args">';
           for (const q of questions) {
-            html += '<div class="tool-arg"><span class="tool-arg-key">Q:</span> ' + escapeHtml(String(q?.question || '')) + '</div>';
+            html += `<div class="tool-arg"><span class="tool-arg-key">Q:</span> ${  escapeHtml(String(q?.question || ''))  }</div>`;
             if (Array.isArray(q?.options)) {
               for (const opt of q.options) {
-                html += '<div class="tool-arg"><span class="tool-arg-key">  -</span> ' + escapeHtml(String(opt?.label || '')) + '</div>';
+                html += `<div class="tool-arg"><span class="tool-arg-key">  -</span> ${  escapeHtml(String(opt?.label || ''))  }</div>`;
               }
             }
           }
@@ -1154,7 +1154,7 @@
       function renderResolve(name, args, result, ctx) {
         const action = str(args.action) || '?';
         let html = toolHead('resolve', '', [action]);
-        if (args.reason) html += '<div class="tool-output"><div>' + escapeHtml(String(args.reason)) + '</div></div>';
+        if (args.reason) html += `<div class="tool-output"><div>${  escapeHtml(String(args.reason))  }</div></div>`;
         if (result) {
           const output = ctx.getResultText();
           if (output) html += formatExpandableOutput(output, 6);
@@ -1165,11 +1165,11 @@
       function renderGh(name, args, result, ctx) {
         const badges = [];
         if (args.repo) badges.push(String(args.repo));
-        if (args.issue) badges.push('#' + args.issue);
-        if (args.pr) badges.push('PR ' + args.pr);
-        if (args.branch) badges.push('branch=' + args.branch);
-        if (args.query) badges.push('query=' + args.query);
-        if (args.run) badges.push('run=' + args.run);
+        if (args.issue) badges.push(`#${  args.issue}`);
+        if (args.pr) badges.push(`PR ${  args.pr}`);
+        if (args.branch) badges.push(`branch=${  args.branch}`);
+        if (args.query) badges.push(`query=${  args.query}`);
+        if (args.run) badges.push(`run=${  args.run}`);
         let html = toolHead(name, '', badges);
         if (result) {
           const output = ctx.getResultText();
@@ -1193,7 +1193,7 @@
       function renderYield(name, args, result, ctx) {
         let html = toolHead('yield');
         if (args.data !== undefined) {
-          html += '<div class="tool-output"><pre>' + escapeHtml(JSON.stringify(args.data, null, 2)) + '</pre></div>';
+          html += `<div class="tool-output"><pre>${  escapeHtml(JSON.stringify(args.data, null, 2))  }</pre></div>`;
         }
         if (result) {
           const output = ctx.getResultText();
@@ -1204,18 +1204,18 @@
 
       function renderReportFinding(name, args, result, ctx) {
         const badges = [];
-        if (args.priority) badges.push('priority=' + args.priority);
-        if (args.confidence != null) badges.push('confidence=' + args.confidence);
+        if (args.priority) badges.push(`priority=${  args.priority}`);
+        if (args.confidence !== null) badges.push(`confidence=${  args.confidence}`);
         if (args.file_path) badges.push(shortenPath(String(args.file_path)));
         let html = toolHead('report_finding', args.title ? escapeHtml(String(args.title)) : '', badges);
-        if (args.body) html += '<div class="tool-output"><div>' + escapeHtml(String(args.body)) + '</div></div>';
+        if (args.body) html += `<div class="tool-output"><div>${  escapeHtml(String(args.body))  }</div></div>`;
         return html;
       }
 
       function renderReportToolIssue(name, args, result, ctx) {
-        const pathHtml = args.tool ? '<span class="tool-badge">' + escapeHtml(String(args.tool)) + '</span>' : '';
+        const pathHtml = args.tool ? `<span class="tool-badge">${  escapeHtml(String(args.tool))  }</span>` : '';
         let html = toolHead('report_tool_issue', pathHtml);
-        if (args.report) html += '<div class="tool-output"><div>' + escapeHtml(String(args.report)) + '</div></div>';
+        if (args.report) html += `<div class="tool-output"><div>${  escapeHtml(String(args.report))  }</div></div>`;
         return html;
       }
 
@@ -1233,9 +1233,9 @@
       function renderJob(name, args, result, ctx) {
         const badges = [];
         const pollIds = Array.isArray(args.poll) ? args.poll : Array.isArray(args.jobs) ? args.jobs : Array.isArray(args.jobIds) ? args.jobIds : [];
-        const cancelIds = Array.isArray(args.cancel) ? args.cancel : args.jobId ? [String(args.jobId)] : [];
-        if (cancelIds.length > 0) badges.push('cancel ' + cancelIds.length);
-        if (pollIds.length > 0) badges.push('poll ' + pollIds.length);
+        const cancelIds = Array.isArray(args.cancel) ? args.cancel : (args.jobId ? [String(args.jobId)] : []);
+        if (cancelIds.length > 0) badges.push(`cancel ${  cancelIds.length}`);
+        if (pollIds.length > 0) badges.push(`poll ${  pollIds.length}`);
         let html = toolHead('job', '', badges);
         if (result) {
           const output = ctx.getResultText();
@@ -1249,7 +1249,7 @@
         let html = toolHead(name);
         const argText = JSON.stringify(args, null, 2);
         if (argText && argText !== '{}') {
-          html += '<div class="tool-output"><pre>' + escapeHtml(argText) + '</pre></div>';
+          html += `<div class="tool-output"><pre>${  escapeHtml(argText)  }</pre></div>`;
         }
         if (result) {
           html += ctx.renderResultImages();
@@ -1317,17 +1317,17 @@
             if (!result) return '';
             const images = result.content.filter(c => c.type === 'image');
             if (images.length === 0) return '';
-            return '<div class="tool-images">' +
-              images.map(img => '<img src="data:' + img.mimeType + ';base64,' + img.data + '" class="tool-image" />').join('') +
-              '</div>';
+            return `<div class="tool-images">${ 
+              images.map(img => '<img src="data:' + img.mimeType + ';base64,' + img.data + '" class="tool-image" />').join('') 
+              }</div>`;
           },
         };
 
         const renderer = TOOL_RENDERERS[name] || renderGenericTool;
-        let html = '<div class="tool-execution ' + statusClass + '">';
+        let html = `<div class="tool-execution ${  statusClass  }">`;
         try {
           html += renderer(name, args, result, ctx);
-        } catch (err) {
+        } catch  {
           html += renderGenericTool(name, args, result, ctx);
         }
         html += '</div>';
@@ -1700,7 +1700,7 @@
             e.stopPropagation();
             const entryId = btn.dataset.entryId;
             const shareUrl = buildShareUrl(entryId);
-            copyToClipboard(shareUrl, btn);
+            void copyToClipboard(shareUrl, btn);
           });
         });
 
@@ -1729,7 +1729,7 @@
 
       // Escape HTML tags in text (but not code blocks)
       function escapeHtmlTags(text) {
-        return text.replace(/<(?=[a-zA-Z\/])/g, '&lt;');
+        return text.replace(/<(?=[a-zA-Z/])/g, '&lt;');
       }
 
       // Configure marked with syntax highlighting and HTML escaping for text

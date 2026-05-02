@@ -124,7 +124,7 @@ describe("executePython session lifecycle", () => {
 		kernel.execute = async (code, options) => {
 			kernel.executeCalls.push(code);
 			if (kernel.executeCalls.length === 1) {
-				options?.onChunk?.("first\n");
+				void options?.onChunk?.("first\n");
 				firstStarted.resolve();
 				await releaseFirst.promise;
 			}

@@ -1,6 +1,6 @@
 import * as os from "node:os";
 import * as path from "node:path";
-import { getAntigravityHeaders, getEnvApiKey, type Model, StringEnum } from "@oh-my-pi/pi-ai";
+import { getEnvApiKey, type Model, StringEnum } from "@oh-my-pi/pi-ai";
 import {
 	CODEX_BASE_URL,
 	getCodexAccountId,
@@ -138,25 +138,26 @@ function assemblePrompt(params: ImageGenParams): string {
 
 	// Core subject line: subject + action + scene
 	const subjectParts = [params.subject];
-	if (params.action) subjectParts.push(params.action);
-	if (params.scene) subjectParts.push(params.scene);
+	if (params.action !== null && params.action !== undefined && params.action !== "") subjectParts.push(params.action);
+	if (params.scene !== null && params.scene !== undefined && params.scene !== "") subjectParts.push(params.scene);
 	parts.push(subjectParts.join(", "));
 
 	// Technical details as separate sentences
-	if (params.composition) parts.push(params.composition);
-	if (params.lighting) parts.push(params.lighting);
-	if (params.style) parts.push(params.style);
+	if (params.composition !== null && params.composition !== undefined && params.composition !== "")
+		parts.push(params.composition);
+	if (params.lighting !== null && params.lighting !== undefined && params.lighting !== "") parts.push(params.lighting);
+	if (params.style !== null && params.style !== undefined && params.style !== "") parts.push(params.style);
 
 	// Join with periods for sentence structure
 	let prompt = `${parts.map(p => p.replace(/[.!,;:]+$/, "")).join(". ")}.`;
 
 	// Text rendering specs
-	if (params.text) {
+	if (params.text !== null && params.text !== undefined && params.text !== "") {
 		prompt += `\n\nText: ${params.text}`;
 	}
 
 	// Edit mode: changes and preserve directives
-	if (params.changes?.length) {
+	if (params.changes?.length !== null && params.changes?.length !== undefined && params.changes?.length !== 0) {
 		prompt += `\n\nChanges:\n${params.changes.map(c => `- ${c}`).join("\n")}`;
 	}
 
@@ -379,7 +380,7 @@ function toDataUrl(image: InlineImageData): string {
 async function loadImageFromUrl(imageUrl: string, signal?: AbortSignal): Promise<InlineImageData> {
 	if (imageUrl.startsWith("data:")) {
 		const normalized = normalizeDataUrl(imageUrl.trim());
-		if (!normalized.mimeType) {
+		if (normalized.mimeType === null || normalized.mimeType === undefined || normalized.mimeType === "") {
 			throw new Error("mime_type is required when providing raw base64 data.");
 		}
 		if (!normalized.data) {
@@ -394,7 +395,7 @@ async function loadImageFromUrl(imageUrl: string, signal?: AbortSignal): Promise
 		throw new Error(`Image download failed (${response.status}): ${rawText}`);
 	}
 	const contentType = response.headers.get("content-type")?.split(";")[0];
-	if (!contentType?.startsWith("image/")) {
+	if (contentType?.startsWith("image/") !== true) {
 		throw new Error(`Unsupported image type from URL: ${imageUrl}`);
 	}
 	const buffer = await response.bytes();
@@ -426,13 +427,18 @@ function extractOpenRouterImageUrls(message: OpenRouterMessage | undefined): str
 			urls.push(image);
 			continue;
 		}
-		if (image.image_url?.url) {
+		if (image.image_url?.url !== null && image.image_url?.url !== undefined && image.image_url?.url !== "") {
 			urls.push(image.image_url.url);
 		}
 	}
 	if (Array.isArray(message.content)) {
 		for (const part of message.content) {
-			if (part.type === "image_url" && part.image_url?.url) {
+			if (
+				part.type === "image_url" &&
+				part.image_url?.url !== null &&
+				part.image_url?.url !== undefined &&
+				part.image_url?.url !== ""
+			) {
 				urls.push(part.image_url.url);
 			}
 		}
@@ -456,7 +462,14 @@ interface ParsedAntigravityCredentials {
 function parseAntigravityCredentials(raw: string): ParsedAntigravityCredentials | null {
 	try {
 		const parsed = JSON.parse(raw) as { token?: string; projectId?: string };
-		if (parsed.token && parsed.projectId) {
+		if (
+			parsed.token !== null &&
+			parsed.token !== undefined &&
+			parsed.token !== "" &&
+			parsed.projectId !== null &&
+			parsed.projectId !== undefined &&
+			parsed.projectId !== ""
+		) {
 			return { accessToken: parsed.token, projectId: parsed.projectId };
 		}
 	} catch {
@@ -467,7 +480,7 @@ function parseAntigravityCredentials(raw: string): ParsedAntigravityCredentials 
 
 async function findAntigravityCredentials(modelRegistry: ModelRegistry): Promise<ImageApiKey | null> {
 	const apiKey = await modelRegistry.getApiKeyForProvider("google-antigravity");
-	if (!apiKey) return null;
+	if (apiKey === null || apiKey === undefined || apiKey === "") return null;
 
 	const parsed = parseAntigravityCredentials(apiKey);
 	if (!parsed) return null;
@@ -510,13 +523,15 @@ async function findImageApiKey(
 		// Fall through to auto-detect if preferred provider key not found.
 	} else if (preferredImageProvider === "gemini") {
 		const geminiKey = getEnvApiKey("google");
-		if (geminiKey) return { provider: "gemini", apiKey: geminiKey };
+		if (geminiKey !== null && geminiKey !== undefined && geminiKey !== "")
+			return { provider: "gemini", apiKey: geminiKey };
 		const googleKey = $env.GOOGLE_API_KEY;
 		if (googleKey) return { provider: "gemini", apiKey: googleKey };
 		// Fall through to auto-detect if preferred provider key not found.
 	} else if (preferredImageProvider === "openrouter") {
 		const openRouterKey = getEnvApiKey("openrouter");
-		if (openRouterKey) return { provider: "openrouter", apiKey: openRouterKey };
+		if (openRouterKey !== null && openRouterKey !== undefined && openRouterKey !== "")
+			return { provider: "openrouter", apiKey: openRouterKey };
 		// Fall through to auto-detect if preferred provider key not found.
 	}
 
@@ -530,10 +545,12 @@ async function findImageApiKey(
 	}
 
 	const openRouterKey = getEnvApiKey("openrouter");
-	if (openRouterKey) return { provider: "openrouter", apiKey: openRouterKey };
+	if (openRouterKey !== null && openRouterKey !== undefined && openRouterKey !== "")
+		return { provider: "openrouter", apiKey: openRouterKey };
 
 	const geminiKey = getEnvApiKey("google");
-	if (geminiKey) return { provider: "gemini", apiKey: geminiKey };
+	if (geminiKey !== null && geminiKey !== undefined && geminiKey !== "")
+		return { provider: "gemini", apiKey: geminiKey };
 
 	const googleKey = $env.GOOGLE_API_KEY;
 	if (googleKey) return { provider: "gemini", apiKey: googleKey };
@@ -556,21 +573,21 @@ async function loadImageFromPath(imagePath: string, cwd: string): Promise<Inline
 		}
 
 		return { data: buffer.toBase64(), mimeType };
-	} catch (err) {
-		if (isEnoent(err)) throw new Error(`Image file not found: ${imagePath}`);
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) throw new Error(`Image file not found: ${imagePath}`);
+		throw error;
 	}
 }
 
 async function resolveInputImage(input: ImageInput, cwd: string): Promise<InlineImageData> {
-	if (input.path) {
+	if (input.path !== null && input.path !== undefined && input.path !== "") {
 		return loadImageFromPath(input.path, cwd);
 	}
 
-	if (input.data) {
+	if (input.data !== null && input.data !== undefined && input.data !== "") {
 		const normalized = normalizeDataUrl(input.data.trim());
 		const mimeType = normalized.mimeType ?? input.mime_type;
-		if (!mimeType) {
+		if (mimeType === null || mimeType === undefined || mimeType === "") {
 			throw new Error("mime_type is required when providing raw base64 data.");
 		}
 		if (!normalized.data) {
@@ -614,7 +631,7 @@ function buildResponseSummary(
 	for (const p of imagePaths) {
 		lines.push(`  ${p}`);
 	}
-	if (responseText) {
+	if (responseText !== null && responseText !== undefined && responseText !== "") {
 		lines.push("", responseText.trim());
 	}
 	return lines.join("\n");
@@ -631,7 +648,15 @@ function collectInlineImages(parts: GeminiPart[]): InlineImageData[] {
 	for (const part of parts) {
 		const data = part.inlineData?.data;
 		const mimeType = part.inlineData?.mimeType;
-		if (!data || !mimeType) continue;
+		if (
+			data === null ||
+			data === undefined ||
+			data === "" ||
+			mimeType === null ||
+			mimeType === undefined ||
+			mimeType === ""
+		)
+			continue;
 		images.push({ data, mimeType });
 	}
 	return images;
@@ -650,7 +675,7 @@ function getOpenAIHostedImageProvider(model: Model): ImageProvider {
 }
 
 function resolveOpenAIImageSize(aspectRatio: string | undefined, imageSize: string | undefined): string | undefined {
-	if (imageSize) return imageSize;
+	if (imageSize !== null && imageSize !== undefined && imageSize !== "") return imageSize;
 	switch (aspectRatio) {
 		case "1:1":
 			return "1024x1024";
@@ -682,7 +707,7 @@ function buildOpenAIHostedImageRequest(
 		type: "image_generation",
 		action: inputImages.length > 0 ? "edit" : "generate",
 		output_format: OPENAI_IMAGE_OUTPUT_FORMAT,
-		...(size ? { size } : {}),
+		...(size !== null && size !== undefined && size !== "" ? { size } : {}),
 	};
 
 	return {
@@ -714,19 +739,24 @@ function collectOpenAIHostedImageResult(response: OpenAIHostedImageResponse): Op
 
 	for (const output of response.output ?? []) {
 		if (output.type === "image_generation_call") {
-			if (output.result) {
+			if (output.result !== null && output.result !== undefined && output.result !== "") {
 				images.push(createOpenAIInlineImage(output.result));
 			}
-			if (output.revised_prompt) {
+			if (output.revised_prompt !== null && output.revised_prompt !== undefined && output.revised_prompt !== "") {
 				revisedPrompt = output.revised_prompt;
 			}
 			continue;
 		}
 
 		for (const part of output.content ?? []) {
-			if (part.type === "output_text" && part.text) {
+			if (part.type === "output_text" && part.text !== null && part.text !== undefined && part.text !== "") {
 				textParts.push(part.text);
-			} else if (part.type === "refusal" && part.refusal) {
+			} else if (
+				part.type === "refusal" &&
+				part.refusal !== null &&
+				part.refusal !== undefined &&
+				part.refusal !== ""
+			) {
 				textParts.push(part.refusal);
 			}
 		}
@@ -776,7 +806,7 @@ function buildOpenAIImageHeaders(model: Model, apiKey: string, sessionId: string
 
 	if (model.api === "openai-codex-responses" || model.provider === "openai-codex") {
 		const accountId = getCodexAccountId(apiKey);
-		if (!accountId) {
+		if (accountId === null || accountId === undefined || accountId === "") {
 			throw new Error("Failed to extract accountId from OpenAI Codex token");
 		}
 		headers.delete("x-api-key");
@@ -784,7 +814,7 @@ function buildOpenAIImageHeaders(model: Model, apiKey: string, sessionId: string
 		headers.set(OPENAI_HEADERS.BETA, OPENAI_HEADER_VALUES.BETA_RESPONSES);
 		headers.set(OPENAI_HEADERS.ORIGINATOR, OPENAI_HEADER_VALUES.ORIGINATOR_CODEX);
 		headers.set("User-Agent", `pi/${packageJson.version} (${os.platform()} ${os.release()}; ${os.arch()})`);
-		if (sessionId) {
+		if (sessionId !== null && sessionId !== undefined && sessionId !== "") {
 			headers.set(OPENAI_HEADERS.CONVERSATION_ID, sessionId);
 			headers.set(OPENAI_HEADERS.SESSION_ID, sessionId);
 		}
@@ -819,7 +849,9 @@ async function parseOpenAIHostedImageSse(response: Response, signal?: AbortSigna
 	}
 
 	return collectOpenAIHostedImageResult(
-		completedResponse?.output?.length
+		completedResponse?.output?.length !== null &&
+			completedResponse?.output?.length !== undefined &&
+			completedResponse?.output?.length !== 0
 			? completedResponse
 			: { output: fallbackOutput, usage: completedResponse?.usage },
 	);
@@ -880,7 +912,10 @@ function buildAntigravityRequest(
 	}
 	parts.push({ text: prompt });
 
-	const imageConfig = aspectRatio || imageSize ? { aspectRatio: aspectRatio, imageSize: imageSize } : undefined;
+	const imageConfig =
+		(aspectRatio ?? (imageSize !== null && imageSize !== undefined && imageSize !== ""))
+			? { aspectRatio, imageSize }
+			: undefined;
 
 	return {
 		project: projectId,
@@ -930,11 +965,18 @@ async function parseAntigravitySseForImage(response: Response, signal?: AbortSig
 			const parts = candidate.content?.parts;
 			if (!parts) continue;
 			for (const part of parts) {
-				if (part.text) {
+				if (part.text !== null && part.text !== undefined && part.text !== "") {
 					textParts.push(part.text);
 				}
 				const inlineData = part.inlineData;
-				if (inlineData?.data && inlineData.mimeType) {
+				if (
+					inlineData?.data !== null &&
+					inlineData?.data !== undefined &&
+					inlineData?.data !== "" &&
+					inlineData.mimeType !== null &&
+					inlineData.mimeType !== undefined &&
+					inlineData.mimeType !== ""
+				) {
 					images.push({ data: inlineData.data, mimeType: inlineData.mimeType });
 				}
 			}
@@ -976,7 +1018,7 @@ export const imageGenTool: CustomTool<typeof imageGenSchema, ImageGenToolDetails
 			const cwd = ctx.sessionManager.getCwd();
 
 			const resolvedImages: InlineImageData[] = [];
-			if (params.input?.length) {
+			if (params.input?.length !== null && params.input?.length !== undefined && params.input?.length !== 0) {
 				for (const input of params.input) {
 					resolvedImages.push(await resolveInputImage(input, cwd));
 				}
@@ -999,7 +1041,10 @@ export const imageGenTool: CustomTool<typeof imageGenSchema, ImageGenToolDetails
 				);
 
 				if (parsed.images.length === 0) {
-					const messageText = parsed.responseText ? `\n\n${parsed.responseText}` : "";
+					const messageText =
+						parsed.responseText !== null && parsed.responseText !== undefined && parsed.responseText !== ""
+							? `\n\n${parsed.responseText}`
+							: "";
 					return {
 						content: [{ type: "text", text: `No image data returned.${messageText}` }],
 						details: {
@@ -1035,7 +1080,7 @@ export const imageGenTool: CustomTool<typeof imageGenSchema, ImageGenToolDetails
 			}
 
 			if (provider === "antigravity") {
-				if (!apiKey.projectId) {
+				if (apiKey.projectId === null || apiKey.projectId === undefined || apiKey.projectId === "") {
 					throw new Error("Missing projectId in antigravity credentials");
 				}
 
@@ -1055,7 +1100,6 @@ export const imageGenTool: CustomTool<typeof imageGenSchema, ImageGenToolDetails
 						Authorization: `Bearer ${apiKey.apiKey}`,
 						"Content-Type": "application/json",
 						Accept: "text/event-stream",
-						...getAntigravityHeaders(),
 					},
 					body: JSON.stringify(requestBody),
 					signal: requestSignal,
@@ -1077,7 +1121,10 @@ export const imageGenTool: CustomTool<typeof imageGenSchema, ImageGenToolDetails
 				const responseText = parsed.text.length > 0 ? parsed.text.join(" ") : undefined;
 
 				if (parsed.images.length === 0) {
-					const messageText = responseText ? `\n\n${responseText}` : "";
+					const messageText =
+						responseText !== null && responseText !== undefined && responseText !== ""
+							? `\n\n${responseText}`
+							: "";
 					return {
 						content: [{ type: "text", text: `No image data returned.${messageText}` }],
 						details: {
@@ -1153,7 +1200,10 @@ export const imageGenTool: CustomTool<typeof imageGenSchema, ImageGenToolDetails
 				}
 
 				if (inlineImages.length === 0) {
-					const messageText = responseText ? `\n\n${responseText}` : "";
+					const messageText =
+						responseText !== null && responseText !== undefined && responseText !== ""
+							? `\n\n${responseText}`
+							: "";
 					return {
 						content: [{ type: "text", text: `No image data returned.${messageText}` }],
 						details: {
@@ -1240,11 +1290,19 @@ export const imageGenTool: CustomTool<typeof imageGenSchema, ImageGenToolDetails
 			const inlineImages = collectInlineImages(responseParts);
 
 			if (inlineImages.length === 0) {
-				const blocked = data.promptFeedback?.blockReason
-					? `Blocked: ${data.promptFeedback.blockReason}`
-					: "No image data returned.";
+				const blocked =
+					data.promptFeedback?.blockReason !== null &&
+					data.promptFeedback?.blockReason !== undefined &&
+					data.promptFeedback?.blockReason !== ""
+						? `Blocked: ${data.promptFeedback.blockReason}`
+						: "No image data returned.";
 				return {
-					content: [{ type: "text", text: `${blocked}${responseText ? `\n\n${responseText}` : ""}` }],
+					content: [
+						{
+							type: "text",
+							text: `${blocked}${responseText !== null && responseText !== undefined && responseText !== "" ? `\n\n${responseText}` : ""}`,
+						},
+					],
 					details: {
 						provider,
 						model,

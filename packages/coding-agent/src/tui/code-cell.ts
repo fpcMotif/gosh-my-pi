@@ -63,7 +63,7 @@ function formatHeader(options: CodeCellOptions, theme: Theme): { title: string; 
 	if (index !== undefined && total !== undefined) {
 		parts.push(theme.fg("accent", `[${index + 1}/${total}]`));
 	}
-	if (title) {
+	if (title !== null && title !== undefined && title !== "") {
 		parts.push(theme.fg("toolTitle", title));
 	}
 	const headerTitle = parts.length > 0 ? parts.join(" ") : theme.fg("toolTitle", "Code");
@@ -94,7 +94,7 @@ export function renderCodeCell(options: CodeCellOptions, theme: Theme): string[]
 	}
 
 	const outputLines: string[] = [];
-	if (output?.trim()) {
+	if (output?.trim() !== undefined && output?.trim() !== "") {
 		const rawLines = output.split("\n");
 		const maxLines = expanded ? rawLines.length : Math.min(rawLines.length, outputMaxLines);
 		const displayLines = rawLines

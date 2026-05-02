@@ -149,7 +149,8 @@ export interface ParsedReadUrlTarget {
 }
 
 export function parseReadUrlTarget(readPath: string, sel?: string): ParsedReadUrlTarget | null {
-	const embedded = sel ? undefined : tryExtractEmbeddedUrlSelector(readPath);
+	const embedded =
+		sel !== null && sel !== undefined && sel !== "" ? undefined : tryExtractEmbeddedUrlSelector(readPath);
 	const urlPath = embedded?.path ?? readPath;
 	if (!isReadableUrlPath(urlPath)) {
 		return null;
@@ -157,7 +158,8 @@ export function parseReadUrlTarget(readPath: string, sel?: string): ParsedReadUr
 
 	const selector = sel ?? embedded?.sel;
 	const raw = selector === "raw";
-	const lineMatch = selector ? URL_LINE_RANGE_RE.exec(selector) : null;
+	const lineMatch =
+		selector !== null && selector !== undefined && selector !== "" ? URL_LINE_RANGE_RE.exec(selector) : null;
 	if (lineMatch) {
 		const startLine = Number.parseInt(lineMatch[1]!, 10);
 		if (startLine < 1) {
@@ -225,7 +227,7 @@ function normalizeMime(contentType: string): string {
  */
 function getExtensionHint(url: string, contentDisposition?: string): string {
 	// Try Content-Disposition filename first
-	if (contentDisposition) {
+	if (contentDisposition !== null && contentDisposition !== undefined && contentDisposition !== "") {
 		const match = contentDisposition.match(/filename[*]?=["']?([^"';\n]+)/i);
 		if (match) {
 			const ext = path.extname(match[1]).toLowerCase();
@@ -289,12 +291,12 @@ async function tryMdSuffix(url: string, timeout: number, signal?: AbortSignal): 
 		return null;
 	}
 
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		return null;
 	}
 
 	for (const candidate of candidates) {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			return null;
 		}
 		const result = await loadPage(candidate, { timeout, signal });
@@ -316,12 +318,12 @@ async function tryLlmEndpoints(
 ): Promise<{ content: string; endpoint: string } | null> {
 	const endpoints = buildLlmEndpointCandidates(url);
 
-	if (signal?.aborted || endpoints.length === 0) {
+	if (signal?.aborted ?? endpoints.length === 0) {
 		return null;
 	}
 
 	for (const endpoint of endpoints) {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			return null;
 		}
 		const result = await loadPage(endpoint, { timeout: Math.min(timeout, 5), signal });
@@ -340,7 +342,7 @@ async function tryContentNegotiation(
 	timeout: number,
 	signal?: AbortSignal,
 ): Promise<{ content: string; type: string } | null> {
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		return null;
 	}
 
@@ -408,7 +410,7 @@ function parseAlternateLinks(html: string, pageUrl: string): string[] {
 
 			const href = getHtmlAttribute(tag, "href");
 			const type = getHtmlAttribute(tag, "type")?.toLowerCase() ?? "";
-			if (!href) continue;
+			if (href === null || href === undefined || href === "") continue;
 
 			// Skip site-wide feeds
 			if (
@@ -445,7 +447,7 @@ function extractDocumentLinks(html: string, baseUrl: string): string[] {
 		const anchorTags = html.slice(0, 512 * 1024).match(/<a\b[^>]*>/gi) ?? [];
 		for (const tag of anchorTags) {
 			const href = getHtmlAttribute(tag, "href");
-			if (!href) continue;
+			if (href === null || href === undefined || href === "") continue;
 
 			const ext = path.extname(href).toLowerCase();
 			if (!CONVERTIBLE_EXTENSIONS.has(ext)) continue;
@@ -485,7 +487,7 @@ function parseFeedToMarkdown(content: string, maxItems = 10): string {
 
 		// Try RSS
 		const channel = doc.querySelector("channel");
-		if (channel) {
+		if (channel !== null && channel !== undefined) {
 			const title = cleanFeedText(channel.querySelector("title")?.text || "RSS Feed");
 			const items = channel.querySelectorAll("item").slice(0, maxItems);
 
@@ -507,7 +509,7 @@ function parseFeedToMarkdown(content: string, maxItems = 10): string {
 
 		// Try Atom
 		const feed = doc.querySelector("feed");
-		if (feed) {
+		if (feed !== null && feed !== undefined) {
 			const title = cleanFeedText(feed.querySelector("title")?.text || "Atom Feed");
 			const entries = feed.querySelectorAll("entry").slice(0, maxItems);
 
@@ -523,7 +525,7 @@ function parseFeedToMarkdown(content: string, maxItems = 10): string {
 				md += `## ${entryTitle}\n`;
 				if (updated) md += `*${updated}*\n\n`;
 				if (summary) md += `${summary.slice(0, 500)}${summary.length > 500 ? "..." : ""}\n\n`;
-				if (link) md += `[Read more](${link})\n\n`;
+				if (link !== null && link !== undefined) md += `[Read more](${link})\n\n`;
 				md += "---\n\n";
 			}
 			return md;
@@ -594,7 +596,7 @@ async function renderHtmlToText(
 
 	// Try trafilatura (auto-install via uv/pip)
 	const trafilatura = await ensureTool("trafilatura", { signal, silent: true });
-	if (trafilatura) {
+	if (trafilatura !== null && trafilatura !== undefined && trafilatura !== "") {
 		const result = await ptree.exec([trafilatura, "-u", url, "--output-format", "markdown"], execOptions);
 		if (result.ok && result.stdout.trim().length > 100) {
 			return { content: result.stdout, ok: true, method: "trafilatura" };
@@ -684,7 +686,7 @@ async function handleSpecialUrls(
 	signal?: AbortSignal,
 ): Promise<FetchRenderResult | null> {
 	for (const handler of specialHandlers) {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			throw new ToolAbortError();
 		}
 		const result = await handler(url, timeout, signal);
@@ -709,7 +711,7 @@ async function renderUrl(
 ): Promise<FetchRenderResult> {
 	const notes: string[] = [];
 	const fetchedAt = new Date().toISOString();
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		throw new ToolAbortError();
 	}
 
@@ -738,7 +740,7 @@ async function renderUrl(
 
 	// Step 2: Fetch page
 	const response = await loadPage(url, { timeout, signal });
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		throw new ToolAbortError();
 	}
 	if (!response.ok) {
@@ -750,7 +752,11 @@ async function renderUrl(
 			content: "",
 			fetchedAt,
 			truncated: false,
-			notes: [response.status ? `Failed to fetch URL (HTTP ${response.status})` : "Failed to fetch URL"],
+			notes: [
+				response.status !== null && response.status !== undefined && response.status !== 0
+					? `Failed to fetch URL (HTTP ${response.status})`
+					: "Failed to fetch URL",
+			],
 		};
 	}
 
@@ -760,7 +766,7 @@ async function renderUrl(
 
 	const imageMimeType = resolveImageMimeType(mime, extHint);
 	let skipConvertibleBinaryRetry = false;
-	if (imageMimeType) {
+	if (imageMimeType !== null && imageMimeType !== undefined && imageMimeType !== "") {
 		if (!isInlineImageMimeTypeSupported(imageMimeType)) {
 			notes.push(
 				`Image MIME type ${imageMimeType} is unsupported for inline model serialization; returning text metadata only`,
@@ -786,7 +792,7 @@ async function renderUrl(
 					} else {
 						notes.push("markit conversion produced no usable output");
 					}
-				} else if (converted.error) {
+				} else if (converted.error !== null && converted.error !== undefined && converted.error !== "") {
 					notes.push(`markit conversion failed: ${converted.error}`);
 				} else {
 					notes.push("markit conversion failed");
@@ -803,7 +809,10 @@ async function renderUrl(
 						url,
 						finalUrl,
 						contentType: imageMimeType,
-						method: convertedText ? "markit" : "image-too-large",
+						method:
+							convertedText !== null && convertedText !== undefined && convertedText !== ""
+								? "markit"
+								: "image-too-large",
 						content: output.content,
 						fetchedAt,
 						truncated: output.truncated,
@@ -828,7 +837,10 @@ async function renderUrl(
 						url,
 						finalUrl,
 						contentType: imageMimeType,
-						method: convertedText ? "markit" : "image-invalid",
+						method:
+							convertedText !== null && convertedText !== undefined && convertedText !== ""
+								? "markit"
+								: "image-invalid",
 						content: output.content,
 						fetchedAt,
 						truncated: output.truncated,
@@ -846,7 +858,10 @@ async function renderUrl(
 						url,
 						finalUrl,
 						contentType: imageMimeType,
-						method: convertedText ? "markit" : "image-too-large",
+						method:
+							convertedText !== null && convertedText !== undefined && convertedText !== ""
+								? "markit"
+								: "image-too-large",
 						content: output.content,
 						fetchedAt,
 						truncated: output.truncated,
@@ -856,7 +871,7 @@ async function renderUrl(
 
 				const dimensionNote = formatDimensionNote(resized);
 				let imageSummary = convertedText ?? `Fetched image content (${resized.mimeType}).`;
-				if (dimensionNote) {
+				if (dimensionNote !== null && dimensionNote !== undefined && dimensionNote !== "") {
 					imageSummary += `\n${dimensionNote}`;
 				}
 				const output = finalizeOutput(imageSummary);
@@ -875,7 +890,11 @@ async function renderUrl(
 					},
 				};
 			}
-			notes.push(binary.error ? `Binary fetch failed: ${binary.error}` : "Binary fetch failed");
+			notes.push(
+				binary.error !== null && binary.error !== undefined && binary.error !== ""
+					? `Binary fetch failed: ${binary.error}`
+					: "Binary fetch failed",
+			);
 			notes.push("Falling back to textual rendering from initial response");
 			skipConvertibleBinaryRetry = true;
 		}
@@ -903,12 +922,12 @@ async function renderUrl(
 					};
 				}
 				notes.push("markit conversion produced no usable output");
-			} else if (converted.error) {
+			} else if (converted.error !== null && converted.error !== undefined && converted.error !== "") {
 				notes.push(`markit conversion failed: ${converted.error}`);
 			} else {
 				notes.push("markit conversion failed");
 			}
-		} else if (binary.error) {
+		} else if (binary.error !== null && binary.error !== undefined && binary.error !== "") {
 			notes.push(`Binary fetch failed: ${binary.error}`);
 		} else {
 			notes.push("Binary fetch failed");
@@ -970,7 +989,7 @@ async function renderUrl(
 		// 5A: Check for page-specific markdown alternate
 		const alternates = parseAlternateLinks(rawContent, finalUrl);
 		const markdownAlt = alternates.find(alt => alt.endsWith(".md") || alt.includes("markdown"));
-		if (markdownAlt) {
+		if (markdownAlt !== null && markdownAlt !== undefined && markdownAlt !== "") {
 			const resolved = markdownAlt.startsWith("http") ? markdownAlt : new URL(markdownAlt, finalUrl).href;
 			const altResult = await loadPage(resolved, { timeout, signal });
 			if (altResult.ok && altResult.content.trim().length > 100 && !looksLikeHtml(altResult.content)) {
@@ -991,7 +1010,7 @@ async function renderUrl(
 
 		// 5B: Try URL.md suffix (llms.txt convention)
 		const mdSuffix = await tryMdSuffix(finalUrl, timeout, signal);
-		if (mdSuffix) {
+		if (mdSuffix !== null && mdSuffix !== undefined && mdSuffix !== "") {
 			notes.push("Found .md suffix version");
 			const output = finalizeOutput(mdSuffix);
 			return {
@@ -1045,7 +1064,7 @@ async function renderUrl(
 			}
 		}
 
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			throw new ToolAbortError();
 		}
 
@@ -1089,10 +1108,15 @@ async function renderUrl(
 							notes,
 						};
 					}
-					if (!converted.ok && converted.error) {
+					if (
+						!converted.ok &&
+						converted.error !== null &&
+						converted.error !== undefined &&
+						converted.error !== ""
+					) {
 						notes.push(`markit conversion failed: ${converted.error}`);
 					}
-				} else if (binary.error) {
+				} else if (binary.error !== null && binary.error !== undefined && binary.error !== "") {
 					notes.push(`Binary fetch failed: ${binary.error}`);
 				}
 			}
@@ -1174,12 +1198,12 @@ function getReadUrlCacheKey(session: ToolSession, requestedUrl: string, raw: boo
 
 async function readArtifactOutput(session: ToolSession, artifactId: string): Promise<string | null> {
 	const artifactsDir = session.getArtifactsDir?.();
-	if (!artifactsDir) return null;
+	if (artifactsDir === null || artifactsDir === undefined || artifactsDir === "") return null;
 
 	try {
 		const files = await fs.readdir(artifactsDir);
 		const match = files.find(file => file.startsWith(`${artifactId}.`));
-		if (!match) return null;
+		if (match === null || match === undefined || match === "") return null;
 		return await Bun.file(path.join(artifactsDir, match)).text();
 	} catch {
 		return null;
@@ -1190,7 +1214,7 @@ async function materializeReadUrlCacheEntry(
 	session: ToolSession,
 	entry: ReadUrlCacheEntry,
 ): Promise<ReadUrlCacheEntry | null> {
-	if (entry.artifactId) {
+	if (entry.artifactId !== null && entry.artifactId !== undefined && entry.artifactId !== "") {
 		const artifactOutput = await readArtifactOutput(session, entry.artifactId);
 		if (artifactOutput !== null) {
 			return { ...entry, output: artifactOutput };
@@ -1202,15 +1226,15 @@ async function materializeReadUrlCacheEntry(
 
 async function persistReadUrlArtifact(session: ToolSession, output: string): Promise<string | undefined> {
 	const { path: artifactPath, id } = (await session.allocateOutputArtifact?.("read")) ?? {};
-	if (!artifactPath) return undefined;
+	if (artifactPath === null || artifactPath === undefined || artifactPath === "") return undefined;
 	await Bun.write(artifactPath, output);
 	return id;
 }
 
 async function ensureReadUrlCacheArtifact(session: ToolSession, entry: ReadUrlCacheEntry): Promise<ReadUrlCacheEntry> {
-	if (entry.artifactId) return entry;
+	if (entry.artifactId !== null && entry.artifactId !== undefined && entry.artifactId !== "") return entry;
 	const artifactId = await persistReadUrlArtifact(session, entry.output);
-	return artifactId ? { ...entry, artifactId } : entry;
+	return artifactId !== null && artifactId !== undefined && artifactId !== "" ? { ...entry, artifactId } : entry;
 }
 
 function cacheReadUrlEntry(session: ToolSession, requestedUrl: string, raw: boolean, entry: ReadUrlCacheEntry): void {
@@ -1228,13 +1252,13 @@ async function buildReadUrlCacheEntry(
 
 	const effectiveTimeout = clampTimeout("fetch", rawTimeout);
 
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		throw new ToolAbortError();
 	}
 
 	const result = await renderUrl(url, effectiveTimeout, raw, session.settings, signal);
 	const output = buildUrlReadOutput(result, result.content);
-	const artifactId = options?.ensureArtifact ? await persistReadUrlArtifact(session, output) : undefined;
+	const artifactId = options?.ensureArtifact === true ? await persistReadUrlArtifact(session, output) : undefined;
 
 	return {
 		artifactId,
@@ -1260,8 +1284,8 @@ export async function loadReadUrlCacheEntry(
 ): Promise<ReadUrlCacheEntry> {
 	const raw = params.raw ?? false;
 	const cached = readUrlCache.get(getReadUrlCacheKey(session, params.path, raw));
-	if (options?.preferCached && cached) {
-		const prepared = options.ensureArtifact ? await ensureReadUrlCacheArtifact(session, cached) : cached;
+	if (options?.preferCached === true && cached) {
+		const prepared = options.ensureArtifact === true ? await ensureReadUrlCacheArtifact(session, cached) : cached;
 		const materialized = await materializeReadUrlCacheEntry(session, prepared);
 		if (materialized) {
 			cacheReadUrlEntry(session, params.path, raw, materialized);
@@ -1300,11 +1324,14 @@ export async function executeReadUrl(
 		maxLines: FETCH_DEFAULT_MAX_LINES,
 	});
 	const needsArtifact = truncation.truncated;
-	if (needsArtifact && !cacheEntry.artifactId) {
+	if (
+		needsArtifact === true &&
+		(cacheEntry.artifactId === null || cacheEntry.artifactId === undefined || cacheEntry.artifactId === "")
+	) {
 		cacheEntry = await ensureReadUrlCacheArtifact(session, cacheEntry);
 		cacheReadUrlEntry(session, params.path, params.raw ?? false, cacheEntry);
 	}
-	const output = needsArtifact ? truncation.content : cacheEntry.output;
+	const output = needsArtifact === true ? truncation.content : cacheEntry.output;
 	const details: ReadUrlToolDetails = {
 		...cacheEntry.details,
 		truncated: Boolean(cacheEntry.details.truncated || needsArtifact),
@@ -1316,7 +1343,7 @@ export async function executeReadUrl(
 	}
 
 	const resultBuilder = toolResult(details).content(contentBlocks).sourceUrl(details.finalUrl);
-	if (needsArtifact) {
+	if (needsArtifact === true) {
 		resultBuilder.truncation(truncation, { direction: "head", artifactId: cacheEntry.artifactId });
 	} else if (cacheEntry.details.truncated) {
 		const outputLines = cacheEntry.output.split("\n").length;
@@ -1354,7 +1381,7 @@ export function renderReadUrlCall(
 	const path = truncate(url.replace(/^https?:\/\/[^/]+/, ""), 50, "\u2026");
 	const description = `${domain}${path ? ` ${path}` : ""}`.trim();
 	const meta: string[] = [];
-	if (args.raw) meta.push("raw");
+	if (args.raw === true) meta.push("raw");
 	if (args.timeout !== undefined) meta.push(`timeout:${args.timeout}s`);
 	const text = renderStatusLine({ icon: "pending", title: "Read", description, meta }, uiTheme);
 	return new Text(text, 0, 0);
@@ -1408,7 +1435,8 @@ export function renderReadUrlResult(
 	metadataLines.push(`${uiTheme.fg("muted", "Chars:")} ${charCount}`);
 	if (truncated) {
 		metadataLines.push(uiTheme.fg("warning", `${uiTheme.status.warning} Output truncated`));
-		if (truncation?.artifactId) metadataLines.push(formatStyledArtifactReference(truncation.artifactId, uiTheme));
+		if (truncation?.artifactId !== null && truncation?.artifactId !== undefined && truncation?.artifactId !== "")
+			metadataLines.push(formatStyledArtifactReference(truncation.artifactId, uiTheme));
 	}
 	if (hasNotes) {
 		metadataLines.push(`${uiTheme.fg("muted", "Notes:")} ${details.notes.join("; ")}`);

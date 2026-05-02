@@ -1,13 +1,11 @@
-const FIREWORKS_WIRE_PREFIX = "accounts/fireworks/models/";
-const VERSION_SEPARATOR_PATTERN = /(?<=\d)p(?=\d)/g;
-const VERSION_DOT_PATTERN = /(?<=\d)\.(?=\d)/g;
-
-export function toFireworksPublicModelId(modelId: string): string {
-	const stripped = modelId.startsWith(FIREWORKS_WIRE_PREFIX) ? modelId.slice(FIREWORKS_WIRE_PREFIX.length) : modelId;
-	return stripped.replace(VERSION_SEPARATOR_PATTERN, ".");
-}
-
+/**
+ * Stub for Fireworks model id translation.
+ *
+ * The original helper rewrote model ids into Fireworks' wire format (e.g.
+ * `accounts/fireworks/models/<id>`). The migration removed it; this stub keeps
+ * the call site loadable by passing the id through unchanged. Anyone using
+ * Fireworks should restore the real translation.
+ */
 export function toFireworksWireModelId(modelId: string): string {
-	const stripped = modelId.startsWith(FIREWORKS_WIRE_PREFIX) ? modelId.slice(FIREWORKS_WIRE_PREFIX.length) : modelId;
-	return `${FIREWORKS_WIRE_PREFIX}${stripped.replace(VERSION_DOT_PATTERN, "p")}`;
+	return modelId;
 }

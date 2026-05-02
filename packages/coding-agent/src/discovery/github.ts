@@ -34,9 +34,9 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	const warnings: string[] = [];
 
 	const copilotInstructionsPath = getProjectPath(ctx, "github", "copilot-instructions.md");
-	if (copilotInstructionsPath) {
+	if (copilotInstructionsPath !== null && copilotInstructionsPath !== undefined && copilotInstructionsPath !== "") {
 		const content = await readFile(copilotInstructionsPath);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			const fileDir = path.dirname(copilotInstructionsPath);
 			const depth = calculateDepth(ctx.cwd, fileDir, path.sep);
 
@@ -62,7 +62,7 @@ async function loadInstructions(ctx: LoadContext): Promise<LoadResult<Instructio
 	const warnings: string[] = [];
 
 	const instructionsDir = getProjectPath(ctx, "github", "instructions");
-	if (instructionsDir) {
+	if (instructionsDir !== null && instructionsDir !== undefined && instructionsDir !== "") {
 		const result = await loadFilesFromDir<Instruction>(ctx, instructionsDir, PROVIDER_ID, "project", {
 			extensions: ["md"],
 			transform: transformInstruction,

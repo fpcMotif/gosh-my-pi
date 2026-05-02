@@ -173,7 +173,7 @@ export class Input implements Component, Focusable {
 
 		// Regular character input, including Kitty CSI-u text-producing sequences.
 		const printableText = extractPrintableText(data);
-		if (printableText) {
+		if (printableText !== null && printableText !== undefined && printableText !== "") {
 			this.#insertCharacter(printableText);
 		}
 	}
@@ -295,7 +295,7 @@ export class Input implements Component, Focusable {
 
 	#yank(): void {
 		const text = this.#killRing.peek();
-		if (!text) {
+		if (text === null || text === undefined || text === "") {
 			return;
 		}
 

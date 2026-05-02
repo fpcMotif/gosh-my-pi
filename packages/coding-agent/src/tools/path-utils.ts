@@ -172,7 +172,7 @@ export function formatPathRelativeToCwd(
 	const relative = path.relative(resolvedCwd, resolvedPath);
 	const isWithinCwd = relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 	let displayPath = normalizePosixPath(isWithinCwd ? relative || "." : resolvedPath);
-	if (options.trailingSlash && displayPath !== "." && !displayPath.endsWith("/")) {
+	if (options.trailingSlash === true && displayPath !== "." && !displayPath.endsWith("/")) {
 		displayPath += "/";
 	}
 	return displayPath;
@@ -285,8 +285,8 @@ export function parseFindPattern(pattern: string): ParsedFindPattern {
 }
 
 export function combineSearchGlobs(prefixGlob?: string, suffixGlob?: string): string | undefined {
-	if (!prefixGlob) return suffixGlob;
-	if (!suffixGlob) return prefixGlob;
+	if (prefixGlob === null || prefixGlob === undefined || prefixGlob === "") return suffixGlob;
+	if (suffixGlob === null || suffixGlob === undefined || suffixGlob === "") return prefixGlob;
 
 	const normalizedPrefix = prefixGlob.replace(/\/+$/, "");
 	const normalizedSuffix = suffixGlob.replace(/^\/+/, "");
@@ -370,7 +370,8 @@ function normalizePosixPath(filePath: string): string {
 }
 
 function joinRelativeGlob(basePath: string | undefined, globPattern: string): string {
-	if (!basePath || basePath === ".") return normalizePosixPath(globPattern).replace(/^\/+/, "");
+	if (basePath === null || basePath === undefined || basePath === "" || basePath === ".")
+		return normalizePosixPath(globPattern).replace(/^\/+/, "");
 	const normalizedBase = normalizePosixPath(basePath).replace(/\/+$/, "");
 	const normalizedGlob = normalizePosixPath(globPattern).replace(/^\/+/, "");
 	return `${normalizedBase}/${normalizedGlob}`;
@@ -539,15 +540,21 @@ export async function resolveMultiSearchPath(
 		}),
 	);
 
-	const allExactFiles = !suffixGlob && parsedItems.every(item => !item.parsedPath.glob && item.stat.isFile());
+	const allExactFiles =
+		(suffixGlob === null || suffixGlob === undefined || suffixGlob === "") &&
+		parsedItems.every(
+			item =>
+				(item.parsedPath.glob === null || item.parsedPath.glob === undefined || item.parsedPath.glob === "") &&
+				item.stat.isFile(),
+		);
 	const commonBasePath = findCommonBasePath(parsedItems.map(item => item.absoluteBasePath));
 	const combinedPatterns = parsedItems.map(item => {
 		const relativeBasePath = normalizePosixPath(path.relative(commonBasePath, item.absoluteBasePath)) || ".";
-		if (item.parsedPath.glob) {
+		if (item.parsedPath.glob !== null && item.parsedPath.glob !== undefined && item.parsedPath.glob !== "") {
 			const pathGlob = joinRelativeGlob(relativeBasePath, item.parsedPath.glob);
 			return combineSearchGlobs(pathGlob, suffixGlob) ?? pathGlob;
 		}
-		if (suffixGlob) {
+		if (suffixGlob !== null && suffixGlob !== undefined && suffixGlob !== "") {
 			const pathPrefix = relativeBasePath === "." ? undefined : relativeBasePath;
 			return combineSearchGlobs(pathPrefix, suffixGlob) ?? suffixGlob;
 		}

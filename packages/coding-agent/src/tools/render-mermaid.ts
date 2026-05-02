@@ -53,11 +53,14 @@ export class RenderMermaidTool implements AgentTool<typeof renderMermaidSchema, 
 		const ascii = renderMermaidAscii(params.mermaid, sanitizeRenderConfig(params.config));
 		const { path: artifactPath, id: artifactId } =
 			(await this.session.allocateOutputArtifact?.("render_mermaid")) ?? {};
-		if (artifactPath) {
+		if (artifactPath !== null && artifactPath !== undefined && artifactPath !== "") {
 			await Bun.write(artifactPath, ascii);
 		}
 
-		const artifactLine = artifactId ? `\n\nSaved artifact: artifact://${artifactId}` : "";
+		const artifactLine =
+			artifactId !== null && artifactId !== undefined && artifactId !== ""
+				? `\n\nSaved artifact: artifact://${artifactId}`
+				: "";
 		return {
 			content: [{ type: "text", text: `${ascii}${artifactLine}` }],
 			details: { artifactId },

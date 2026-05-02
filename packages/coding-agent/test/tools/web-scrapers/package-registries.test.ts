@@ -6,7 +6,10 @@ import { handleNpm } from "@oh-my-pi/pi-coding-agent/web/scrapers/npm";
 import { handlePubDev } from "@oh-my-pi/pi-coding-agent/web/scrapers/pub-dev";
 import { handlePyPI } from "@oh-my-pi/pi-coding-agent/web/scrapers/pypi";
 
-const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
+const SKIP =
+	Bun.env.WEB_FETCH_INTEGRATION === null ||
+	Bun.env.WEB_FETCH_INTEGRATION === undefined ||
+	Bun.env.WEB_FETCH_INTEGRATION === "";
 
 describe.skipIf(SKIP)("handlePyPI", () => {
 	it("returns null for non-PyPI URLs", async () => {

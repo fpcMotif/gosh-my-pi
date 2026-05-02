@@ -61,7 +61,15 @@ export const handleMaven: SpecialHandler = async (
 			version = match[3] || null;
 		}
 
-		if (!groupId || !artifactId) return null;
+		if (
+			groupId === null ||
+			groupId === undefined ||
+			groupId === "" ||
+			artifactId === null ||
+			artifactId === undefined ||
+			artifactId === ""
+		)
+			return null;
 
 		const fetchedAt = new Date().toISOString();
 
@@ -81,13 +89,13 @@ export const handleMaven: SpecialHandler = async (
 		if (data.response.numFound === 0) return null;
 
 		const doc = data.response.docs[0];
-		const displayVersion = version || doc.latestVersion;
+		const displayVersion = version ?? doc.latestVersion;
 
 		let md = `# ${doc.g}:${doc.a}\n\n`;
 		md += `**Group ID:** ${doc.g}\n`;
 		md += `**Artifact ID:** ${doc.a}\n`;
 		md += `**Latest Version:** ${doc.latestVersion}`;
-		if (version && version !== doc.latestVersion) {
+		if (version !== null && version !== undefined && version !== "" && version !== doc.latestVersion) {
 			md += ` (viewing ${version})`;
 		}
 		md += "\n";

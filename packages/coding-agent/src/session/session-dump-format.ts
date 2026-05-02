@@ -35,7 +35,7 @@ function stripTypeBoxFields(obj: unknown): unknown {
 	if (Array.isArray(obj)) {
 		return obj.map(stripTypeBoxFields);
 	}
-	if (obj && typeof obj === "object") {
+	if (obj !== null && obj !== undefined && typeof obj === "object") {
 		const result: Record<string, unknown> = {};
 		for (const [k, v] of Object.entries(obj)) {
 			if (!k.startsWith("TypeBox.")) {
@@ -65,7 +65,7 @@ export function formatSessionDumpText(options: FormatSessionDumpTextOptions): st
 	const lines: string[] = [];
 
 	const systemPrompt = options.systemPrompt;
-	if (systemPrompt) {
+	if (systemPrompt !== null && systemPrompt !== undefined && systemPrompt !== "") {
 		lines.push("## System Prompt\n");
 		lines.push(systemPrompt);
 		lines.push("\n");
@@ -144,14 +144,14 @@ export function formatSessionDumpText(options: FormatSessionDumpTextOptions): st
 			lines.push("");
 		} else if (msg.role === "bashExecution") {
 			const bashMsg = msg as BashExecutionMessage;
-			if (!bashMsg.excludeFromContext) {
+			if (bashMsg.excludeFromContext !== true) {
 				lines.push("## Bash Execution\n");
 				lines.push(bashExecutionToText(bashMsg));
 				lines.push("\n");
 			}
 		} else if (msg.role === "pythonExecution") {
 			const pythonMsg = msg as PythonExecutionMessage;
-			if (!pythonMsg.excludeFromContext) {
+			if (pythonMsg.excludeFromContext !== true) {
 				lines.push("## Python Execution\n");
 				lines.push(pythonExecutionToText(pythonMsg));
 				lines.push("\n");

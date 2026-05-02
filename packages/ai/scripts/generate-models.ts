@@ -32,10 +32,8 @@ import {
 	UNK_CONTEXT_WINDOW,
 	UNK_MAX_TOKENS,
 } from "../src/provider-models/openai-compat";
-import { getGitLabDuoModels } from "../src/providers/gitlab-duo";
 import { JWT_CLAIM_PATH } from "../src/providers/openai-codex/constants";
 import type { Model } from "../src/types";
-import { fetchAntigravityDiscoveryModels } from "../src/utils/discovery/antigravity";
 import { fetchCodexModels } from "../src/utils/discovery/codex";
 import { getOAuthApiKey } from "../src/utils/oauth";
 import type { OAuthCredentials, OAuthProvider } from "../src/utils/oauth/types";
@@ -54,7 +52,7 @@ async function resolveProviderApiKey(providerId: string, catalog: CatalogDiscove
 		const storage = await AuthCredentialStore.open();
 		try {
 			const storedApiKey = storage.getApiKey(providerId);
-			if (storedApiKey) {
+			if (storedApiKey !== null && storedApiKey !== undefined && storedApiKey !== "") {
 				return storedApiKey;
 			}
 			if (catalog.oauthProvider) {
@@ -80,7 +78,10 @@ async function resolveProviderApiKey(providerId: string, catalog: CatalogDiscove
 async function fetchProviderModelsFromCatalog(descriptor: CatalogProviderDescriptor): Promise<Model[]> {
 	const apiKey = await resolveProviderApiKey(descriptor.providerId, descriptor.catalogDiscovery);
 
-	if (!apiKey && !allowsUnauthenticatedCatalogDiscovery(descriptor)) {
+	if (
+		(apiKey === null || apiKey === undefined || apiKey === "") &&
+		!allowsUnauthenticatedCatalogDiscovery(descriptor)
+	) {
 		console.log(`No ${descriptor.catalogDiscovery.label} credentials found (env or agent.db), using fallback models`);
 		return [];
 	}
@@ -210,8 +211,6 @@ function applyCodexPricingFallback(models: readonly Model[]): Model[] {
 	});
 }
 
-const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
-
 async function getOAuthCredentialsFromStorage(provider: OAuthProvider): Promise<OAuthCredentials | null> {
 	try {
 		const storage = await AuthCredentialStore.open();
@@ -231,38 +230,6 @@ async function getOAuthCredentialsFromStorage(provider: OAuthProvider): Promise<
 		}
 	} catch {
 		return null;
-	}
-}
-
-/**
- * Fetch available Antigravity models from the API using the discovery module.
- * Returns empty array if no auth is available (previous models used as fallback).
- */
-async function fetchAntigravityModels(): Promise<Model<"google-gemini-cli">[]> {
-	const credentials = await getOAuthCredentialsFromStorage("google-antigravity");
-	if (!credentials) {
-		console.log("No Antigravity credentials found, will use previous models");
-		return [];
-	}
-	try {
-		console.log("Fetching models from Antigravity API...");
-		const discovered = await fetchAntigravityDiscoveryModels({
-			token: credentials.access,
-			endpoint: ANTIGRAVITY_ENDPOINT,
-		});
-		if (discovered === null) {
-			console.warn("Antigravity API fetch failed, will use previous models");
-			return [];
-		}
-		if (discovered.length > 0) {
-			console.log(`Fetched ${discovered.length} models from Antigravity API`);
-			return discovered;
-		}
-		console.warn("Antigravity API returned no models, will use previous models");
-		return [];
-	} catch (error) {
-		console.error("Failed to fetch Antigravity models:", error);
-		return [];
 	}
 }
 
@@ -318,21 +285,14 @@ async function generateModels() {
 			PROVIDER_DESCRIPTORS.filter(isCatalogDescriptor).map(descriptor => fetchProviderModelsFromCatalog(descriptor)),
 		)
 	).flat();
-	const gitLabDuoModels = getGitLabDuoModels();
 	// Combine models (models.dev has priority)
-	let allModels = applyGlobalModelsDevFallback(
-		[...modelsDevModels, ...catalogProviderModels, ...gitLabDuoModels],
-		modelsDevModels,
-	);
+	let allModels = applyGlobalModelsDevFallback([...modelsDevModels, ...catalogProviderModels], modelsDevModels);
 
 	if (!allModels.some(model => model.provider === "cloudflare-ai-gateway")) {
 		allModels.push(CLOUDFLARE_FALLBACK_MODEL);
 	}
 
-	const specialDiscoverySources = [
-		{ label: "Antigravity", fetch: fetchAntigravityModels },
-		{ label: "Codex", fetch: fetchCodexDiscoveryModels },
-	] as const;
+	const specialDiscoverySources = [{ label: "Codex", fetch: fetchCodexDiscoveryModels }] as const;
 	const specialDiscoveries = await Promise.all(
 		specialDiscoverySources.map(async source => ({
 			label: source.label,
@@ -372,13 +332,13 @@ async function generateModels() {
 	// Group by provider and sort each provider's models
 	const providers: Record<string, Record<string, Model>> = {};
 	for (const model of allModels) {
-		if (discoveryOnlyProviders.has(model.provider)) continue;
-		if (!providers[model.provider]) {
+		if (discoveryOnlyProviders.has(model.provider) === true) continue;
+		if (providers[model.provider] === undefined || providers[model.provider] === null) {
 			providers[model.provider] = {};
 		}
 		// Use model ID as key to automatically deduplicate
 		// Only add if not already present (models.dev takes priority over endpoint discovery)
-		if (!providers[model.provider][model.id]) {
+		if (providers[model.provider][model.id] === undefined || providers[model.provider][model.id] === null) {
 			providers[model.provider][model.id] = model;
 		}
 	}

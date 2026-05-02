@@ -3,7 +3,10 @@ import { handleArtifactHub } from "@oh-my-pi/pi-coding-agent/web/scrapers/artifa
 import { handleCoinGecko } from "@oh-my-pi/pi-coding-agent/web/scrapers/coingecko";
 import { handleDiscogs } from "@oh-my-pi/pi-coding-agent/web/scrapers/discogs";
 
-const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
+const SKIP =
+	Bun.env.WEB_FETCH_INTEGRATION === null ||
+	Bun.env.WEB_FETCH_INTEGRATION === undefined ||
+	Bun.env.WEB_FETCH_INTEGRATION === "";
 
 describe.skipIf(SKIP)("handleCoinGecko", () => {
 	it("returns null for non-CoinGecko URLs", async () => {
@@ -26,7 +29,7 @@ describe.skipIf(SKIP)("handleCoinGecko", () => {
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("coingecko");
 		expect(result?.content).toMatch(/bitcoin/i);
-		if (!result?.content.includes("currently unavailable")) {
+		if (result?.content.includes("currently unavailable") !== true) {
 			expect(result?.content).toContain("BTC");
 			expect(result?.content).toContain("Price");
 		}
@@ -40,7 +43,7 @@ describe.skipIf(SKIP)("handleCoinGecko", () => {
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("coingecko");
 		expect(result?.content).toMatch(/ethereum/i);
-		if (!result?.content.includes("currently unavailable")) {
+		if (result?.content.includes("currently unavailable") !== true) {
 			expect(result?.content).toContain("ETH");
 			expect(result?.content).toContain("Market Cap");
 		}

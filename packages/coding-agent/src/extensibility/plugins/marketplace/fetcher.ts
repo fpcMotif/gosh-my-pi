@@ -103,11 +103,11 @@ export function parseMarketplaceCatalog(content: string, filePath: string): Mark
 	let raw: unknown;
 	try {
 		raw = JSON.parse(content);
-	} catch (err) {
-		throw new Error(`Failed to parse marketplace catalog at ${filePath}: ${(err as Error).message}`);
+	} catch (error) {
+		throw new Error(`Failed to parse marketplace catalog at ${filePath}: ${(error as Error).message}`);
 	}
 
-	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+	if (raw === null || raw === undefined || typeof raw !== "object" || Array.isArray(raw)) {
 		throw new Error(`Marketplace catalog at ${filePath} must be a JSON object`);
 	}
 
@@ -173,14 +173,14 @@ export function parseMarketplaceCatalog(content: string, filePath: string): Mark
 				}
 			}
 			validPlugins.push(entry);
-		} catch (err) {
+		} catch (error) {
 			// Warn and skip invalid plugin entries instead of failing the entire catalog.
 			// This lets the rest of the marketplace load even if one entry has a bad name/source.
 			const name =
 				typeof plugins[i] === "object" && plugins[i] !== null
 					? ((plugins[i] as Record<string, unknown>).name ?? `[${i}]`)
 					: `[${i}]`;
-			logger.warn(`Skipping invalid plugin ${name}: ${(err as Error).message}`);
+			logger.warn(`Skipping invalid plugin ${String(name)}: ${(error as Error).message}`);
 		}
 	}
 	// Replace the plugins array with only valid entries
@@ -225,14 +225,14 @@ export async function fetchMarketplace(source: string, cacheDir: string): Promis
 		let content: string;
 		try {
 			content = await Bun.file(catalogPath).text();
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				throw new Error(
 					`Marketplace catalog not found at "${catalogPath}". ` +
 						`Ensure the directory exists and contains a .claude-plugin/marketplace.json file.`,
 				);
 			}
-			throw err;
+			throw error;
 		}
 
 		const catalog = parseMarketplaceCatalog(content, catalogPath);
@@ -284,20 +284,20 @@ async function cloneAndReadCatalog(url: string, cacheDir: string): Promise<Fetch
 	let content: string;
 	try {
 		content = await Bun.file(catalogPath).text();
-	} catch (err) {
+	} catch (error) {
 		await fs.rm(tmpDir, { recursive: true, force: true });
-		if (isEnoent(err)) {
+		if (isEnoent(error)) {
 			throw new Error(`Cloned repository has no marketplace catalog at ${CATALOG_RELATIVE_PATH}`);
 		}
-		throw err;
+		throw error;
 	}
 
 	let catalog: MarketplaceCatalog;
 	try {
 		catalog = parseMarketplaceCatalog(content, catalogPath);
-	} catch (err) {
+	} catch (error) {
 		await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
-		throw err;
+		throw error;
 	}
 
 	return { catalog, clonePath: tmpDir };

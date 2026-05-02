@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { editToolRenderer } from "@oh-my-pi/pi-coding-agent/edit/renderer";
 import * as themeModule from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { visibleWidth } from "@oh-my-pi/pi-tui";
 
 async function getUiTheme() {
 	await themeModule.initTheme(false, undefined, undefined, "dark", "light");
@@ -84,5 +85,42 @@ describe("editToolRenderer", () => {
 		const rendered = Bun.stripANSI(component.render(160).join("\n"));
 		expect(rendered).toContain("packages/coding-agent/src/edit/renderer.ts");
 		expect(rendered).not.toContain(" …");
+	});
+
+	it("sanitizes rendered error text and keeps UI lines width-bounded", async () => {
+		const uiTheme = await getUiTheme();
+		const component = editToolRenderer.renderResult(
+			{
+				content: [
+					{
+						type: "text",
+						text: `Failed\tto apply patch\nbad\u0007control\n${"x".repeat(80)}`,
+					},
+				],
+				details: {
+					diff: "",
+					op: "update",
+				},
+				isError: true,
+			},
+			{ expanded: true, isPartial: false, renderContext: { editMode: "replace" } },
+			uiTheme,
+			{
+				path: "/tmp/example.ts",
+				oldText: "before",
+				newText: "after",
+			},
+		);
+
+		const lines = component.render(40);
+		const rendered = Bun.stripANSI(lines.join("\n"));
+
+		expect(rendered).toContain("Failed   to apply patch");
+		expect(rendered).toContain("badcontrol");
+		expect(rendered).not.toContain("\t");
+		expect(rendered).not.toContain("\u0007");
+		for (const line of lines) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(40);
+		}
 	});
 });

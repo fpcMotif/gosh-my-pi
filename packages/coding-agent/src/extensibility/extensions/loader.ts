@@ -117,11 +117,11 @@ class ConcreteExtensionAPI implements ExtensionAPI, IExtensionRuntime {
 	}> = [];
 
 	constructor(
-		public readonly pi: typeof import("@oh-my-pi/pi-coding-agent"),
+		readonly pi: typeof import("@oh-my-pi/pi-coding-agent"),
 		private readonly extension: Extension,
 		private readonly runtime: IExtensionRuntime,
 		private readonly cwd: string,
-		public readonly events: EventBus,
+		readonly events: EventBus,
 	) {}
 
 	on<F extends HandlerFn>(event: string, handler: F): void {
@@ -290,8 +290,8 @@ async function loadExtension(
 		await factory(api);
 
 		return { extension, error: null };
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		return { extension: null, error: `Failed to load extension: ${message}` };
 	}
 }
@@ -324,7 +324,7 @@ export async function loadExtensions(paths: string[], cwd: string, eventBus?: Ev
 	for (const extPath of paths) {
 		const { extension, error } = await loadExtension(extPath, cwd, resolvedEventBus, runtime);
 
-		if (error) {
+		if (error !== null && error !== undefined && error !== "") {
 			errors.push({ path: extPath, error });
 			continue;
 		}
@@ -374,16 +374,20 @@ function isExtensionFile(name: string): boolean {
 async function resolveExtensionEntries(dir: string): Promise<string[] | null> {
 	const packageJsonPath = path.join(dir, "package.json");
 	const manifest = await readExtensionManifest(packageJsonPath);
-	if (manifest?.extensions?.length) {
+	if (
+		manifest?.extensions?.length !== null &&
+		manifest?.extensions?.length !== undefined &&
+		manifest?.extensions?.length !== 0
+	) {
 		const entries: string[] = [];
 		for (const extPath of manifest.extensions) {
 			const resolvedExtPath = path.resolve(dir, extPath);
 			try {
 				await fs.stat(resolvedExtPath);
 				entries.push(resolvedExtPath);
-			} catch (err) {
-				if (isEnoent(err) || isEacces(err) || hasFsCode(err, "EPERM")) continue;
-				throw err;
+			} catch (error) {
+				if (isEnoent(error) || isEacces(error) || hasFsCode(error, "EPERM")) continue;
+				throw error;
 			}
 		}
 		if (entries.length > 0) {
@@ -396,21 +400,21 @@ async function resolveExtensionEntries(dir: string): Promise<string[] | null> {
 	try {
 		await fs.stat(indexTs);
 		return [indexTs];
-	} catch (err) {
-		if (isEnoent(err) || isEacces(err) || hasFsCode(err, "EPERM")) {
+	} catch (error) {
+		if (isEnoent(error) || isEacces(error) || hasFsCode(error, "EPERM")) {
 			// Ignore
 		} else {
-			throw err;
+			throw error;
 		}
 	}
 	try {
 		await fs.stat(indexJs);
 		return [indexJs];
-	} catch (err) {
-		if (isEnoent(err) || isEacces(err) || hasFsCode(err, "EPERM")) {
+	} catch (error) {
+		if (isEnoent(error) || isEacces(error) || hasFsCode(error, "EPERM")) {
 			// Ignore
 		} else {
-			throw err;
+			throw error;
 		}
 	}
 
@@ -440,9 +444,9 @@ async function discoverExtensionsInDir(dir: string): Promise<string[]> {
 	let entries: fs1.Dirent[];
 	try {
 		entries = await fs.readdir(dir, { withFileTypes: true });
-	} catch (err) {
-		if (isEnoent(err)) return [];
-		logger.warn("Failed to discover extensions in directory", { path: dir, error: String(err) });
+	} catch (error) {
+		if (isEnoent(error)) return [];
+		logger.warn("Failed to discover extensions in directory", { path: dir, error: String(error) });
 		return [];
 	}
 
@@ -513,11 +517,11 @@ export async function discoverAndLoadExtensions(
 		let stat: fs1.Stats | null = null;
 		try {
 			stat = await fs.stat(resolved);
-		} catch (err) {
-			if (!isEnoent(err)) throw err;
+		} catch (error) {
+			if (!isEnoent(error)) throw error;
 		}
 
-		if (stat?.isDirectory()) {
+		if (stat?.isDirectory() === true) {
 			const entries = await resolveExtensionEntries(resolved);
 			if (entries) {
 				addPaths(entries);

@@ -43,13 +43,13 @@ async function fileExists(filePath: string): Promise<boolean> {
 	try {
 		await fs.stat(filePath);
 		return true;
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
-		throw err;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		throw error;
 	}
 }
-const targetPlatform = Bun.env.TARGET_PLATFORM || process.platform;
-const targetArch = Bun.env.TARGET_ARCH || process.arch;
+const targetPlatform = Bun.env.TARGET_PLATFORM ?? process.platform;
+const targetArch = Bun.env.TARGET_ARCH ?? process.arch;
 const platformTag = `${targetPlatform}-${targetArch}`;
 const candidates: CandidateAddon[] =
 	targetArch === "x64"
@@ -59,13 +59,13 @@ const candidates: CandidateAddon[] =
 			]
 		: [{ variant: "default", filename: `pi_natives.${platformTag}.node` }];
 
-const available: CandidateAddon[] = [];
-for (const candidate of candidates) {
-	const candidatePath = path.join(nativeDir, candidate.filename);
-	if (await fileExists(candidatePath)) {
-		available.push(candidate);
-	}
-}
+const existence = await Promise.all(
+	candidates.map(async candidate => ({
+		candidate,
+		exists: await fileExists(path.join(nativeDir, candidate.filename)),
+	})),
+);
+const available: CandidateAddon[] = existence.filter(e => e.exists).map(e => e.candidate);
 
 if (available.length === 0) {
 	const expected = candidates.map(candidate => `  - ${candidate.filename}`).join("\n");

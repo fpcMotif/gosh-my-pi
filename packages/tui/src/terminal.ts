@@ -577,10 +577,10 @@ export class ProcessTerminal implements Terminal {
 		if (this.#dead) return;
 		try {
 			process.stdout.write(data);
-		} catch (err) {
+		} catch (error) {
 			// Any write failure means terminal is dead - no recovery possible
 			this.#dead = true;
-			logger.warn("terminal is dead - no recovery possible", { error: err, data });
+			logger.warn("terminal is dead - no recovery possible", { error, data });
 		}
 	}
 

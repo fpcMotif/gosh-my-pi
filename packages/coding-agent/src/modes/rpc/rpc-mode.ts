@@ -72,7 +72,7 @@ function parseValueDialogResponse(
 	dialogOptions: ExtensionUIDialogOptions | undefined,
 ): string | undefined {
 	if ("cancelled" in response && response.cancelled) {
-		if (response.timedOut) dialogOptions?.onTimeout?.();
+		if (response.timedOut === true) dialogOptions?.onTimeout?.();
 		return undefined;
 	}
 	if ("value" in response) return response.value;
@@ -94,7 +94,7 @@ export function requestRpcEditor(
 	dialogOptions?: ExtensionUIDialogOptions,
 	editorOptions?: { promptStyle?: boolean },
 ): Promise<string | undefined> {
-	if (dialogOptions?.signal?.aborted) return Promise.resolve(undefined);
+	if (dialogOptions?.signal !== undefined && dialogOptions?.signal.aborted) return Promise.resolve(undefined);
 
 	const id = Snowflake.next() as string;
 	const { promise, resolve, reject } = Promise.withResolvers<string | undefined>();
@@ -199,7 +199,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			request: Record<string, unknown>,
 			parseResponse: (response: RpcExtensionUIResponse) => T,
 		): Promise<T> {
-			if (opts?.signal?.aborted) return Promise.resolve(defaultValue);
+			if (opts?.signal !== undefined && opts?.signal.aborted) return Promise.resolve(defaultValue);
 
 			const id = Snowflake.next() as string;
 			const { promise, resolve, reject } = Promise.withResolvers<T>();
@@ -252,7 +252,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				{ method: "confirm", title, message, timeout: dialogOptions?.timeout },
 				response => {
 					if ("cancelled" in response && response.cancelled) {
-						if (response.timedOut) dialogOptions?.onTimeout?.();
+						if (response.timedOut === true) dialogOptions?.onTimeout?.();
 						return false;
 					}
 					if ("confirmed" in response) return response.confirmed;
@@ -412,13 +412,13 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			// ExtensionActions
 			{
 				sendMessage: (message, options) => {
-					session.sendCustomMessage(message, options).catch(e => {
-						output(error(undefined, "extension_send", e.message));
+					session.sendCustomMessage(message, options).catch(error => {
+						output(error(undefined, "extension_send", error.message));
 					});
 				},
 				sendUserMessage: (content, options) => {
-					session.sendUserMessage(content, options).catch(e => {
-						output(error(undefined, "extension_send_user", e.message));
+					session.sendUserMessage(content, options).catch(error => {
+						output(error(undefined, "extension_send_user", error.message));
 					});
 				},
 				appendEntry: (customType, data) => {
@@ -515,7 +515,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 						images: command.images,
 						streamingBehavior: command.streamingBehavior,
 					})
-					.catch(e => output(error(id, "prompt", e.message)));
+					.catch(error => output(error(id, "prompt", error.message)));
 				return success(id, "prompt");
 			}
 
@@ -538,12 +538,15 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				await session.abort();
 				session
 					.prompt(command.message, { images: command.images })
-					.catch(e => output(error(id, "abort_and_prompt", e.message)));
+					.catch(error => output(error(id, "abort_and_prompt", error.message)));
 				return success(id, "abort_and_prompt");
 			}
 
 			case "new_session": {
-				const options = command.parentSession ? { parentSession: command.parentSession } : undefined;
+				const options =
+					command.parentSession !== null && command.parentSession !== undefined && command.parentSession !== ""
+						? { parentSession: command.parentSession }
+						: undefined;
 				const cancelled = !(await session.newSession(options));
 				return success(id, "new_session", { cancelled });
 			}
@@ -628,7 +631,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			case "cycle_thinking_level": {
 				const level = session.cycleThinkingLevel();
-				if (!level) {
+				if (level === undefined) {
 					return success(id, "cycle_thinking_level", null);
 				}
 				return success(id, "cycle_thinking_level", { level });
@@ -763,7 +766,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	async function checkShutdownRequested(): Promise<void> {
 		if (!shutdownState.requested) return;
 
-		if (extensionRunner?.hasHandlers("session_shutdown")) {
+		if (extensionRunner?.hasHandlers("session_shutdown") === true) {
 			await extensionRunner.emit({ type: "session_shutdown" });
 		}
 
@@ -800,8 +803,8 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			// Check for deferred shutdown request (idle between commands)
 			await checkShutdownRequested();
-		} catch (e: any) {
-			output(error(undefined, "parse", `Failed to parse command: ${e.message}`));
+		} catch (error: any) {
+			output(error(undefined, "parse", `Failed to parse command: ${error.message}`));
 		}
 	}
 

@@ -41,7 +41,7 @@ export class ToolAbortError extends Error {
  * Use this instead of signal?.throwIfAborted() to get consistent error types.
  */
 export function throwIfAborted(signal?: AbortSignal): void {
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		const reason = signal.reason instanceof Error ? signal.reason : undefined;
 		throw reason instanceof ToolAbortError ? reason : new ToolAbortError();
 	}

@@ -40,7 +40,7 @@ export function streamKimi(
 	const format = options?.format ?? "anthropic";
 
 	// Async IIFE to handle header fetching and stream piping
-	(async () => {
+	void (async () => {
 		try {
 			const kimiHeaders = await getKimiCommonHeaders();
 			const mergedHeaders = { ...kimiHeaders, ...options?.headers };
@@ -64,10 +64,11 @@ export function streamKimi(
 				// Calculate thinking budget from reasoning level
 				const reasoning = options?.reasoning;
 				const reasoningEffort = reasoning;
-				const thinkingEnabled = !!reasoningEffort && model.reasoning;
-				const thinkingBudget = reasoningEffort
-					? (options?.thinkingBudgets?.[reasoningEffort] ?? ANTHROPIC_THINKING[reasoningEffort])
-					: undefined;
+				const thinkingEnabled = !(reasoningEffort === undefined) && model.reasoning;
+				const thinkingBudget =
+					reasoningEffort !== undefined
+						? (options?.thinkingBudgets?.[reasoningEffort] ?? ANTHROPIC_THINKING[reasoningEffort])
+						: undefined;
 
 				const innerStream = streamAnthropic(anthropicModel, context, {
 					apiKey: options?.apiKey,
@@ -112,11 +113,11 @@ export function streamKimi(
 					stream.push(event);
 				}
 			}
-		} catch (err) {
+		} catch (error) {
 			stream.push({
 				type: "error",
 				reason: "error",
-				error: createProviderErrorMessage(model, err),
+				error: createProviderErrorMessage(model, error),
 			});
 		}
 	})();

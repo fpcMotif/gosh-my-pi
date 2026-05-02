@@ -41,7 +41,7 @@ export class AgentOutputManager {
 		this.#initialized = true;
 
 		const dir = this.#getArtifactsDir();
-		if (!dir) return;
+		if (dir === null || dir === undefined || dir === "") return;
 
 		let files: string[];
 		try {
@@ -50,9 +50,10 @@ export class AgentOutputManager {
 			return; // Directory doesn't exist yet
 		}
 
-		const pattern = this.#parentPrefix
-			? new RegExp(`^${escapeRegExp(this.#parentPrefix)}\\.(\\d+)-.*\\.md$`)
-			: /^(\d+)-.*\.md$/;
+		const pattern =
+			this.#parentPrefix !== null && this.#parentPrefix !== undefined && this.#parentPrefix !== ""
+				? new RegExp(`^${escapeRegExp(this.#parentPrefix)}\\.(\\d+)-.*\\.md$`)
+				: /^(\d+)-.*\.md$/;
 
 		let maxId = -1;
 		for (const file of files) {
@@ -73,7 +74,10 @@ export class AgentOutputManager {
 	 */
 	async allocate(id: string): Promise<string> {
 		await this.#ensureInitialized();
-		const prefix = this.#parentPrefix ? `${this.#parentPrefix}.` : "";
+		const prefix =
+			this.#parentPrefix !== null && this.#parentPrefix !== undefined && this.#parentPrefix !== ""
+				? `${this.#parentPrefix}.`
+				: "";
 		return `${prefix}${this.#nextId++}-${id}`;
 	}
 
@@ -85,7 +89,10 @@ export class AgentOutputManager {
 	 */
 	async allocateBatch(ids: string[]): Promise<string[]> {
 		await this.#ensureInitialized();
-		const prefix = this.#parentPrefix ? `${this.#parentPrefix}.` : "";
+		const prefix =
+			this.#parentPrefix !== null && this.#parentPrefix !== undefined && this.#parentPrefix !== ""
+				? `${this.#parentPrefix}.`
+				: "";
 		return ids.map(id => `${prefix}${this.#nextId++}-${id}`);
 	}
 

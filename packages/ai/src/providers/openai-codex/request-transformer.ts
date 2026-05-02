@@ -60,16 +60,16 @@ function getReasoningConfig(model: Model<Api>, options: CodexRequestOptions): Re
 }
 
 function filterInput(input: InputItem[] | undefined): InputItem[] | undefined {
-	if (!Array.isArray(input)) return input;
+	if (Array.isArray(input) === false) return input;
 
-	return input
+	return (input as InputItem[])
 		.filter(item => item.type !== "item_reference")
 		.map(item => {
-			if (item.id != null) {
-				const { id: _id, ...rest } = item;
-				return rest as InputItem;
+			if (item.id === null) {
+				return item;
 			}
-			return item;
+			const { id: _id, ...rest } = item;
+			return rest as InputItem;
 		});
 }
 
@@ -82,10 +82,10 @@ export async function transformRequestBody(
 	body.store = false;
 	body.stream = true;
 
-	if (body.input && Array.isArray(body.input)) {
+	if (body.input !== undefined && body.input !== null && Array.isArray(body.input)) {
 		body.input = filterInput(body.input);
 
-		if (body.input) {
+		if (body.input !== undefined && body.input !== null) {
 			const functionCallIds = new Set(
 				body.input
 					.filter(item => item.type === "function_call" && typeof item.call_id === "string")
@@ -95,7 +95,7 @@ export async function transformRequestBody(
 			body.input = body.input.map(item => {
 				if (item.type === "function_call_output" && typeof item.call_id === "string") {
 					const callId = item.call_id as string;
-					if (!functionCallIds.has(callId)) {
+					if (functionCallIds.has(callId) === false) {
 						const itemRecord = item as unknown as Record<string, unknown>;
 						const toolName = typeof itemRecord.name === "string" ? itemRecord.name : "tool";
 						let text = "";
@@ -103,7 +103,7 @@ export async function transformRequestBody(
 							const output = itemRecord.output;
 							text = typeof output === "string" ? output : JSON.stringify(output);
 						} catch {
-							text = String(itemRecord.output ?? "");
+							text = JSON.stringify(itemRecord.output ?? "");
 						}
 						if (text.length > 16000) {
 							text = `${text.slice(0, 16000)}\n...[truncated]`;
@@ -120,7 +120,12 @@ export async function transformRequestBody(
 		}
 	}
 
-	if (prompt?.developerMessages && prompt.developerMessages.length > 0 && Array.isArray(body.input)) {
+	if (
+		prompt?.developerMessages !== undefined &&
+		prompt.developerMessages !== null &&
+		prompt.developerMessages.length > 0 &&
+		Array.isArray(body.input)
+	) {
 		const developerMessages = prompt.developerMessages.map(
 			text =>
 				({
@@ -132,19 +137,19 @@ export async function transformRequestBody(
 		body.input = [...developerMessages, ...body.input];
 	}
 
-	if (options.reasoningEffort !== undefined) {
+	if (options.reasoningEffort === undefined) {
+		delete body.reasoning;
+	} else {
 		const reasoningConfig = getReasoningConfig(model, options);
 		body.reasoning = {
 			...body.reasoning,
 			...reasoningConfig,
 		};
-	} else {
-		delete body.reasoning;
 	}
 
 	body.text = {
 		...body.text,
-		verbosity: options.textVerbosity || "medium",
+		verbosity: options.textVerbosity ?? "medium",
 	};
 
 	const include = Array.isArray(options.include) ? [...options.include] : [];

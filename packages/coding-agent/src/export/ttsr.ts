@@ -131,7 +131,7 @@ export class TtsrManager {
 		const toolName = (groups?.tool ?? (hasToolPrefix ? undefined : groups?.bare))?.trim().toLowerCase();
 		const pathPattern = groups?.path?.trim();
 
-		if (!pathPattern) {
+		if (pathPattern === null || pathPattern === undefined || pathPattern === "") {
 			return { toolName };
 		}
 
@@ -190,7 +190,10 @@ export class TtsrManager {
 				continue;
 			}
 
-			if (!toolScope.toolName && !toolScope.pathGlob) {
+			if (
+				(toolScope.toolName === null || toolScope.toolName === undefined || toolScope.toolName === "") &&
+				!toolScope.pathGlob
+			) {
 				scope.allowAnyTool = true;
 				continue;
 			}
@@ -206,14 +209,19 @@ export class TtsrManager {
 	}
 
 	#bufferKey(context: TtsrMatchContext): string {
-		if (context.streamKey && context.streamKey.trim().length > 0) {
+		if (
+			context.streamKey !== null &&
+			context.streamKey !== undefined &&
+			context.streamKey !== "" &&
+			context.streamKey.trim().length > 0
+		) {
 			return context.streamKey;
 		}
 		if (context.source !== "tool") {
 			return context.source;
 		}
 		const toolName = context.toolName?.trim().toLowerCase();
-		return toolName ? `tool:${toolName}` : "tool";
+		return toolName !== null && toolName !== undefined && toolName !== "" ? `tool:${toolName}` : "tool";
 	}
 
 	#normalizePath(pathValue: string): string {
@@ -268,7 +276,12 @@ export class TtsrManager {
 
 		const toolName = context.toolName?.trim().toLowerCase();
 		for (const toolScope of entry.scope.toolScopes) {
-			if (toolScope.toolName && toolScope.toolName !== toolName) {
+			if (
+				toolScope.toolName !== null &&
+				toolScope.toolName !== undefined &&
+				toolScope.toolName !== "" &&
+				toolScope.toolName !== toolName
+			) {
 				continue;
 			}
 			if (toolScope.pathGlob && !this.#matchesGlob(toolScope.pathGlob, context.filePaths)) {

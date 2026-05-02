@@ -179,14 +179,17 @@ export function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string
 	const env = { ...baseEnv };
 	const venvPath = env.VIRTUAL_ENV ?? resolveVenvPath(cwd);
 
-	if (venvPath) {
+	if (venvPath !== null && venvPath !== undefined && venvPath !== "") {
 		env.VIRTUAL_ENV = venvPath;
 		const binDir = process.platform === "win32" ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
 		const pythonCandidate = path.join(binDir, process.platform === "win32" ? "python.exe" : "python");
 		if (fs.existsSync(pythonCandidate)) {
 			const pathKey = resolvePathKey(env);
 			const currentPath = env[pathKey];
-			env[pathKey] = currentPath ? `${binDir}${path.delimiter}${currentPath}` : binDir;
+			env[pathKey] =
+				currentPath !== null && currentPath !== undefined && currentPath !== ""
+					? `${binDir}${path.delimiter}${currentPath}`
+					: binDir;
 			return {
 				pythonPath: resolveWindowlessPython(pythonCandidate),
 				env,
@@ -202,7 +205,10 @@ export function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string
 		const currentPath = env[pathKey];
 		const managedBin =
 			process.platform === "win32" ? path.join(managed.venvPath, "Scripts") : path.join(managed.venvPath, "bin");
-		env[pathKey] = currentPath ? `${managedBin}${path.delimiter}${currentPath}` : managedBin;
+		env[pathKey] =
+			currentPath !== null && currentPath !== undefined && currentPath !== ""
+				? `${managedBin}${path.delimiter}${currentPath}`
+				: managedBin;
 		return {
 			pythonPath: resolveWindowlessPython(managed.pythonPath),
 			env,
@@ -211,7 +217,7 @@ export function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string
 	}
 
 	const pythonPath = $which("python") ?? $which("python3");
-	if (!pythonPath) {
+	if (pythonPath === null || pythonPath === undefined || pythonPath === "") {
 		throw new Error("Python executable not found on PATH");
 	}
 	return {

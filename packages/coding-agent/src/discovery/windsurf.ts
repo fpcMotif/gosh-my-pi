@@ -66,11 +66,12 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 
 	const userPath = getUserPath(ctx, "windsurf", "mcp_config.json");
 	const [userContent, projectPath] = await Promise.all([
-		userPath ? readFile(userPath) : Promise.resolve(null),
+		userPath !== null && userPath !== undefined && userPath !== "" ? readFile(userPath) : Promise.resolve(null),
 		getProjectPath(ctx, "windsurf", "mcp_config.json"),
 	]);
 
-	const projectContent = projectPath ? await readFile(projectPath) : null;
+	const projectContent =
+		projectPath !== null && projectPath !== undefined && projectPath !== "" ? await readFile(projectPath) : null;
 
 	const configs: Array<{ content: string | null; path: string | null; scope: "user" | "project" }> = [
 		{ content: userContent, path: userPath, scope: "user" },
@@ -78,14 +79,23 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 	];
 
 	for (const { content, path, scope } of configs) {
-		if (!content || !path) continue;
+		if (
+			content === null ||
+			content === undefined ||
+			content === "" ||
+			path === null ||
+			path === undefined ||
+			path === ""
+		)
+			continue;
 
 		const config = tryParseJson<{ mcpServers?: Record<string, unknown> }>(content);
 		if (!config?.mcpServers) continue;
 
 		for (const [name, serverConfig] of Object.entries(config.mcpServers)) {
 			const result = parseServerConfig(name, serverConfig, path, scope);
-			if (result.warning) warnings.push(result.warning);
+			if (result.warning !== null && result.warning !== undefined && result.warning !== "")
+				warnings.push(result.warning);
 			if (result.server) items.push(result.server);
 		}
 	}
@@ -103,9 +113,9 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 
 	// User-level: ~/.codeium/windsurf/memories/global_rules.md
 	const userPath = getUserPath(ctx, "windsurf", "memories/global_rules.md");
-	if (userPath) {
+	if (userPath !== null && userPath !== undefined && userPath !== "") {
 		const content = await readFile(userPath);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			const source = createSourceMeta(PROVIDER_ID, userPath, "user");
 			items.push(buildRuleFromMarkdown("global_rules.md", content, userPath, source, { ruleName: "global_rules" }));
 		}
@@ -113,7 +123,7 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 
 	// Project-level: .windsurf/rules/*.md
 	const projectRulesDir = getProjectPath(ctx, "windsurf", "rules");
-	if (projectRulesDir) {
+	if (projectRulesDir !== null && projectRulesDir !== undefined && projectRulesDir !== "") {
 		const result = await loadFilesFromDir<Rule>(ctx, projectRulesDir, PROVIDER_ID, "project", {
 			extensions: ["md"],
 			transform: (name, content, path, source) =>

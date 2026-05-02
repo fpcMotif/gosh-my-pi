@@ -351,7 +351,7 @@ describe("pi-natives", () => {
 
 	describe("pty", () => {
 		it("should time out detached background workloads without hanging", async () => {
-			if (process.platform === "win32" || !Bun.which("bash")) {
+			if (process.platform === "win32" || Bun.which("bash") === undefined || Bun.which("bash") === "") {
 				return;
 			}
 

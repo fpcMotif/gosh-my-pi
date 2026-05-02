@@ -29,16 +29,16 @@ export function getRetryAfterMsFromHeaders(headers: HeadersLike): number | undef
 }
 
 function getHeadersFromError(error: unknown): HeadersLike {
-	if (!error || typeof error !== "object") return undefined;
+	if (error === null || error === undefined || typeof error !== "object") return undefined;
 	const record = error as { headers?: unknown; response?: { headers?: unknown }; cause?: unknown };
 	const direct = extractHeaders(record.headers) ?? extractHeaders(record.response?.headers);
 	if (direct) return direct;
-	if (record.cause) return getHeadersFromError(record.cause);
+	if (record.cause !== null && record.cause !== undefined) return getHeadersFromError(record.cause);
 	return undefined;
 }
 
 function extractHeaders(value: unknown): HeadersLike {
-	if (!value) return undefined;
+	if (value === null || value === undefined) return undefined;
 	if (value instanceof Headers) return value;
 	if (typeof value === "object") return value as Record<string, string | undefined>;
 	return undefined;
@@ -60,7 +60,7 @@ function getHeaderValue(headers: Headers | Record<string, string | undefined>, n
 }
 
 function parseRetryAfterHeader(value: string | undefined): number | undefined {
-	if (!value) return undefined;
+	if (value === null || value === undefined || value === "") return undefined;
 	const trimmed = value.trim();
 	if (!trimmed) return undefined;
 
@@ -80,7 +80,7 @@ function parseRetryAfterHeader(value: string | undefined): number | undefined {
 }
 
 function parseResetHeader(value: string | undefined, unit: "ms" | "s"): number | undefined {
-	if (!value) return undefined;
+	if (value === null || value === undefined || value === "") return undefined;
 	const numeric = Number(value);
 	if (!Number.isFinite(numeric) || numeric <= 0) return undefined;
 

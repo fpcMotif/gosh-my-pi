@@ -25,7 +25,7 @@ function createTestSession(cwd = "/tmp/test", overrides: Partial<ToolSession> = 
 }
 
 function asSchemaObject(value: unknown): Record<string, unknown> {
-	if (!value || typeof value !== "object" || Array.isArray(value)) {
+	if (value === null || value === undefined || typeof value !== "object" || Array.isArray(value)) {
 		throw new Error("Expected object schema");
 	}
 	return value as Record<string, unknown>;

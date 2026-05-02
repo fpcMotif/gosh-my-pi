@@ -29,7 +29,7 @@ describe("ResolveTool", () => {
 
 	it("errors when there is no pending action", async () => {
 		const tool = new ResolveTool(createSession());
-		await expect(tool.execute("call-none", { action: "apply", reason: "looks correct" })).rejects.toThrow(
+		expect(tool.execute("call-none", { action: "apply", reason: "looks correct" })).rejects.toThrow(
 			"No pending action to resolve. Nothing to apply or discard.",
 		);
 	});

@@ -25,8 +25,8 @@ function parseYouTubeUrl(url: string): YouTubeUrl | null {
 		// youtube.com/watch?v=VIDEO_ID
 		if ((hostname === "youtube.com" || hostname === "m.youtube.com") && parsed.pathname === "/watch") {
 			const videoId = parsed.searchParams.get("v");
-			const playlistId = parsed.searchParams.get("list") || undefined;
-			if (videoId) return { videoId, playlistId };
+			const playlistId = parsed.searchParams.get("list") ?? undefined;
+			if (videoId !== null && videoId !== undefined && videoId !== "") return { videoId, playlistId };
 		}
 
 		// youtube.com/v/VIDEO_ID or youtube.com/embed/VIDEO_ID
@@ -140,7 +140,7 @@ export const handleYouTube: SpecialHandler = async (
 
 	// Ensure yt-dlp is available (auto-download if missing)
 	const ytdlp = await ensureTool("yt-dlp", { signal, silent: true });
-	if (!ytdlp) {
+	if (ytdlp === null || ytdlp === undefined || ytdlp === "") {
 		return {
 			url,
 			finalUrl: url,
@@ -185,12 +185,12 @@ export const handleYouTube: SpecialHandler = async (
 				upload_date?: string;
 				view_count?: number;
 			};
-			title = meta.title || title;
-			channel = meta.channel || meta.uploader || "";
-			description = meta.description || "";
-			duration = meta.duration || 0;
-			uploadDate = meta.upload_date || "";
-			viewCount = meta.view_count || 0;
+			title = meta.title ?? title;
+			channel = meta.channel ?? meta.uploader ?? "";
+			description = meta.description ?? "";
+			duration = meta.duration ?? 0;
+			uploadDate = meta.upload_date ?? "";
+			viewCount = meta.view_count ?? 0;
 		} catch {}
 	}
 

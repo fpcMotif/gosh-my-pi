@@ -14,7 +14,7 @@ function renderLastLine(container: Container, width = 120): string {
 describe("InteractiveMode.showStatus", () => {
 	beforeAll(() => {
 		// showStatus uses the global theme instance
-		initTheme();
+		void initTheme();
 	});
 
 	test("coalesces immediately-sequential status messages", () => {

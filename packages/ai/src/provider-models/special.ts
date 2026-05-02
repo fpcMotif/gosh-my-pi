@@ -1,6 +1,5 @@
 import type { ModelManagerOptions } from "../model-manager";
 import { fetchCodexModels } from "../utils/discovery/codex";
-import { fetchCursorUsableModels } from "../utils/discovery/cursor";
 
 // ---------------------------------------------------------------------------
 // OpenAI Codex
@@ -18,7 +17,7 @@ export function openaiCodexModelManagerOptions(
 	const { accessToken, accountId, clientVersion } = config;
 	return {
 		providerId: "openai-codex",
-		...(accessToken
+		...(accessToken !== null && accessToken !== undefined && accessToken !== ""
 			? {
 					fetchDynamicModels: async () => {
 						const result = await fetchCodexModels({ accessToken, accountId, clientVersion });
@@ -27,42 +26,6 @@ export function openaiCodexModelManagerOptions(
 				}
 			: undefined),
 	};
-}
-
-// ---------------------------------------------------------------------------
-// Cursor
-// ---------------------------------------------------------------------------
-
-export interface CursorModelManagerConfig {
-	apiKey?: string;
-	baseUrl?: string;
-	clientVersion?: string;
-}
-
-export function cursorModelManagerOptions(config: CursorModelManagerConfig = {}): ModelManagerOptions<"cursor-agent"> {
-	const { apiKey, baseUrl, clientVersion } = config;
-	return {
-		providerId: "cursor",
-		...(apiKey
-			? {
-					fetchDynamicModels: () => fetchCursorUsableModels({ apiKey, baseUrl, clientVersion }),
-				}
-			: undefined),
-	};
-}
-
-// ---------------------------------------------------------------------------
-// Amazon Bedrock
-// ---------------------------------------------------------------------------
-
-// Dynamic discovery requires AWS SDK auth (ListFoundationModels). Not yet implemented.
-
-export interface AmazonBedrockModelManagerConfig {}
-
-export function amazonBedrockModelManagerOptions(
-	_config: AmazonBedrockModelManagerConfig = {},
-): ModelManagerOptions<"bedrock-converse-stream"> {
-	return { providerId: "amazon-bedrock" };
 }
 
 // ---------------------------------------------------------------------------
@@ -104,3 +67,42 @@ export interface ZaiModelManagerConfig {}
 export function zaiModelManagerOptions(_config: ZaiModelManagerConfig = {}): ModelManagerOptions<"anthropic-messages"> {
 	return { providerId: "zai" };
 }
+
+// ---------------------------------------------------------------------------
+// Google providers (stubbed during the in-progress migration)
+//
+// The dedicated Google provider modules were removed; these stubs preserve
+// the option-builder contract so callers in coding-agent (and tests) compile
+// and load. Restore the real implementations when re-introducing Google
+// provider support.
+// ---------------------------------------------------------------------------
+
+export interface GoogleAntigravityModelManagerConfig {
+	oauthToken?: string;
+	endpoint?: string;
+}
+
+export function googleAntigravityModelManagerOptions(
+	_config: GoogleAntigravityModelManagerConfig = {},
+): ModelManagerOptions<"openai-responses"> {
+	return { providerId: "google-antigravity" };
+}
+
+export interface GoogleGeminiCliModelManagerConfig {
+	oauthToken?: string;
+	endpoint?: string;
+}
+
+export function googleGeminiCliModelManagerOptions(
+	_config: GoogleGeminiCliModelManagerConfig = {},
+): ModelManagerOptions<"openai-completions"> {
+	return { providerId: "google-gemini-cli" };
+}
+
+// ---------------------------------------------------------------------------
+// Local-token sentinel previously exported by the removed Ollama provider.
+// Treated as a placeholder string; consumers compare against it to decide
+// whether to send authentication credentials.
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_LOCAL_TOKEN = "local-no-auth";

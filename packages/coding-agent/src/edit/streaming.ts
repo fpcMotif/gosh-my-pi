@@ -68,7 +68,7 @@ export interface EditStreamingStrategy<Args = unknown> {
  */
 export function dropIncompleteLastEdit<T>(edits: readonly T[], partialJson: string | undefined, listKey: string): T[] {
 	if (!Array.isArray(edits) || edits.length === 0) return [...(edits ?? [])];
-	if (!partialJson) return [...edits];
+	if (partialJson === null || partialJson === undefined || partialJson === "") return [...edits];
 
 	const keyMarker = `"${listKey}"`;
 	const keyIdx = partialJson.indexOf(keyMarker);
@@ -116,7 +116,7 @@ export function dropIncompleteLastEdit<T>(edits: readonly T[], partialJson: stri
 	// or there is trailing non-whitespace after the last `}` before the list
 	// ended (i.e. a new object has opened), drop the trailing entry.
 	const tail = lastClose === -1 ? partialJson.slice(i) : partialJson.slice(lastClose + 1);
-	const sawNewObjectAfterLastClose = /\{/.test(tail);
+	const sawNewObjectAfterLastClose = tail.includes("{");
 	const listIsStillOpen = depth >= 0;
 
 	if (lastClose === -1 || (listIsStillOpen && sawNewObjectAfterLastClose)) {
@@ -159,7 +159,7 @@ const replaceStrategy: EditStreamingStrategy<ReplaceArgs> = {
 		return { ...args, edits: dropIncompleteLastEdit(args.edits, partialJson, "edits") };
 	},
 	async computeDiffPreview(args, ctx) {
-		if (!args.path) return null;
+		if (args.path === null || args.path === undefined || args.path === "") return null;
 		const first = args.edits?.[0];
 		if (!first || first.old_text === undefined || first.new_text === undefined) return null;
 		ctx.signal.throwIfAborted();
@@ -192,7 +192,7 @@ const patchStrategy: EditStreamingStrategy<PatchArgs> = {
 		return { ...args, edits: dropIncompleteLastEdit(args.edits, partialJson, "edits") };
 	},
 	async computeDiffPreview(args, ctx) {
-		if (!args.path) return null;
+		if (args.path === null || args.path === undefined || args.path === "") return null;
 		const first = args.edits?.[0];
 		if (!first) return null;
 		ctx.signal.throwIfAborted();
@@ -221,7 +221,15 @@ const hashlineStrategy: EditStreamingStrategy<HashlineArgs> = {
 		return { ...args, edits: dropIncompleteLastEdit(args.edits, partialJson, "edits") };
 	},
 	async computeDiffPreview(args, ctx) {
-		if (!args.path || !args.edits?.length) return null;
+		if (
+			args.path === null ||
+			args.path === undefined ||
+			args.path === "" ||
+			args.edits?.length === null ||
+			args.edits?.length === undefined ||
+			args.edits?.length === 0
+		)
+			return null;
 		ctx.signal.throwIfAborted();
 		const result = await computeHashlineDiff({ path: args.path, edits: args.edits }, ctx.cwd);
 		ctx.signal.throwIfAborted();
@@ -249,8 +257,8 @@ const applyPatchStrategy: EditStreamingStrategy<ApplyPatchArgs> = {
 		} catch {
 			try {
 				entries = expandApplyPatchToPreviewEntries({ input: args.input });
-			} catch (err) {
-				return [{ path: "", error: err instanceof Error ? err.message : String(err) }];
+			} catch (error) {
+				return [{ path: "", error: error instanceof Error ? error.message : String(error) }];
 			}
 		}
 		const groups = groupApplyPatchEntriesByPath(entries);

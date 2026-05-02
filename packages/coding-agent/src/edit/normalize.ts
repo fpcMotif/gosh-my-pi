@@ -362,7 +362,7 @@ export function adjustIndentation(oldText: string, actualText: string, newText: 
 	}
 
 	const delta = computeUniformIndentDelta(oldProfile, actualProfile);
-	if (delta === undefined || delta === 0) {
+	if (delta === null || delta === undefined || delta === 0) {
 		return newText;
 	}
 

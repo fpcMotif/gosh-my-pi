@@ -547,7 +547,13 @@ export class Editor implements Component, Focusable {
 	}
 
 	#getPromptGutterWidth(width: number, paddingX: number): number {
-		if (this.#borderVisible || !this.#promptGutter) return 0;
+		if (
+			this.#borderVisible ||
+			this.#promptGutter === null ||
+			this.#promptGutter === undefined ||
+			this.#promptGutter === ""
+		)
+			return 0;
 		const chromeWidth = 2 * this.#getHorizontalChromeWidth(paddingX);
 		const availableWidth = Math.max(0, width - chromeWidth);
 		return Math.min(visibleWidth(this.#promptGutter), availableWidth);
@@ -557,7 +563,13 @@ export class Editor implements Component, Focusable {
 		width: number,
 		paddingX: number,
 	): { firstLine: string; continuation: string; width: number } | undefined {
-		if (this.#borderVisible || !this.#promptGutter) return undefined;
+		if (
+			this.#borderVisible ||
+			this.#promptGutter === null ||
+			this.#promptGutter === undefined ||
+			this.#promptGutter === ""
+		)
+			return undefined;
 		const gutterWidth = this.#getPromptGutterWidth(width, paddingX);
 		if (gutterWidth === 0) return undefined;
 		return {
@@ -736,7 +748,7 @@ export class Editor implements Component, Focusable {
 			let cursorInPadding = false;
 			const showPromptGutter = promptGutter !== undefined && visibleIndex === 0;
 			const gutterText =
-				promptGutter === undefined ? "" : showPromptGutter ? promptGutter.firstLine : promptGutter.continuation;
+				promptGutter === undefined ? "" : (showPromptGutter ? promptGutter.firstLine : promptGutter.continuation);
 
 			// Add cursor if this line has it
 			const hasCursor = layoutLine.hasCursor && layoutLine.cursorPos !== undefined;
@@ -750,9 +762,10 @@ export class Editor implements Component, Focusable {
 			if (!borderVisible && lineContentWidth === 0) {
 				if (hasCursor && !this.#useTerminalCursor) {
 					const zeroWidthCursorBudget = visibleWidth(gutterText);
-					const zeroWidthCursorReplacement = this.cursorOverride
-						? { text: this.cursorOverride, width: this.cursorOverrideWidth ?? 1 }
-						: this.#getStyledInputCursor();
+					const zeroWidthCursorReplacement =
+						this.cursorOverride !== null && this.cursorOverride !== undefined && this.cursorOverride !== ""
+							? { text: this.cursorOverride, width: this.cursorOverrideWidth ?? 1 }
+							: this.#getStyledInputCursor();
 					if (showPromptGutter && zeroWidthCursorBudget > 0) {
 						// Keep the leading prompt glyph visible when the gutter consumes the whole row.
 						const promptGlyph = [...segmenter.segment(gutterText)][0]?.segment ?? "";
@@ -790,7 +803,7 @@ export class Editor implements Component, Focusable {
 				if (marker) {
 					const before = displayText.slice(0, layoutLine.cursorPos);
 					const after = displayText.slice(layoutLine.cursorPos);
-					if (after.length === 0 && inlineHint) {
+					if (after.length === 0 && inlineHint !== null && inlineHint !== undefined && inlineHint !== "") {
 						const hintText = hintStyle(truncateToWidth(inlineHint, Math.max(0, lineContentWidth - displayWidth)));
 						displayText = before + marker + hintText;
 						displayWidth += visibleWidth(inlineHint);
@@ -813,7 +826,11 @@ export class Editor implements Component, Focusable {
 					const cursor = `\x1b[7m${firstGrapheme}\x1b[0m`;
 					displayText = before + marker + cursor + restAfter;
 					// displayWidth stays the same - we're replacing, not adding
-				} else if (this.cursorOverride) {
+				} else if (
+					this.cursorOverride !== null &&
+					this.cursorOverride !== undefined &&
+					this.cursorOverride !== ""
+				) {
 					// Cursor override replaces the normal end-of-text cursor glyph
 					const overrideWidth = this.cursorOverrideWidth ?? 1;
 					if (!borderVisible && displayWidth + overrideWidth > lineContentWidth) {
@@ -825,7 +842,7 @@ export class Editor implements Component, Focusable {
 						});
 						displayText = widthLimitedCursor.text;
 						displayWidth = widthLimitedCursor.width;
-					} else if (inlineHint) {
+					} else if (inlineHint !== null && inlineHint !== undefined && inlineHint !== "") {
 						const availWidth = Math.max(0, lineContentWidth - displayWidth - overrideWidth);
 						const hintText = hintStyle(truncateToWidth(inlineHint, availWidth));
 						displayText = before + marker + this.cursorOverride + hintText;
@@ -843,7 +860,7 @@ export class Editor implements Component, Focusable {
 						const widthLimitedCursor = this.#renderEndOfLineCursorAtWidthLimit(before, marker, lineContentWidth);
 						displayText = widthLimitedCursor.text;
 						displayWidth = widthLimitedCursor.width;
-					} else if (inlineHint) {
+					} else if (inlineHint !== null && inlineHint !== undefined && inlineHint !== "") {
 						const availWidth = Math.max(0, lineContentWidth - displayWidth - cursorWidth);
 						const hintText = hintStyle(truncateToWidth(inlineHint, availWidth));
 						displayText = before + marker + cursor + hintText;
@@ -902,7 +919,7 @@ export class Editor implements Component, Focusable {
 			}
 
 			const printableText = extractPrintableText(data);
-			if (printableText) {
+			if (printableText !== null && printableText !== undefined && printableText !== "") {
 				const direction = this.#jumpMode;
 				this.#jumpMode = null;
 				this.#jumpToChar(printableText, direction);
@@ -1220,7 +1237,7 @@ export class Editor implements Component, Focusable {
 		// Printable keystrokes, including Kitty CSI-u text-producing sequences.
 		else {
 			const printableText = extractPrintableText(data);
-			if (printableText) {
+			if (printableText !== null && printableText !== undefined && printableText !== "") {
 				this.#insertCharacter(printableText);
 			}
 		}
@@ -1467,7 +1484,7 @@ export class Editor implements Component, Focusable {
 		if (!this.#autocompleteState) {
 			// Auto-trigger for "/" at the start of a line (slash commands)
 			if (char === "/" && this.#isAtStartOfMessage()) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			}
 			// Auto-trigger for "@" file reference (fuzzy search)
 			else if (char === "@") {
@@ -1476,12 +1493,12 @@ export class Editor implements Component, Focusable {
 				// Only trigger if @ is after whitespace or at start of line
 				const charBeforeAt = textBeforeCursor[textBeforeCursor.length - 2];
 				if (textBeforeCursor.length === 1 || charBeforeAt === " " || charBeforeAt === "\t") {
-					this.#tryTriggerAutocomplete();
+					void this.#tryTriggerAutocomplete();
 				}
 			}
 			// Auto-trigger for "#" prompt actions anywhere in the current token
 			else if (char === "#") {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			}
 			// Also auto-trigger when typing letters/path chars in a completable context
 			else if (/[a-zA-Z0-9.\-_/]/.test(char)) {
@@ -1489,15 +1506,15 @@ export class Editor implements Component, Focusable {
 				const textBeforeCursor = currentLine.slice(0, this.#state.cursorCol);
 				// Check if we're in a slash command (with or without space for arguments)
 				if (textBeforeCursor.trimStart().startsWith("/")) {
-					this.#tryTriggerAutocomplete();
+					void this.#tryTriggerAutocomplete();
 				}
 				// Check if we're in an @ file reference context
 				else if (textBeforeCursor.match(/(?:^|[\s])@[^\s]*$/)) {
-					this.#tryTriggerAutocomplete();
+					void this.#tryTriggerAutocomplete();
 				}
 				// Check if we're in a # prompt action context
 				else if (textBeforeCursor.match(/#[^\s#]*$/)) {
-					this.#tryTriggerAutocomplete();
+					void this.#tryTriggerAutocomplete();
 				}
 			}
 		} else {
@@ -1662,15 +1679,15 @@ export class Editor implements Component, Focusable {
 			const textBeforeCursor = currentLine.slice(0, this.#state.cursorCol);
 			// Slash command context
 			if (textBeforeCursor.trimStart().startsWith("/")) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			}
 			// @ file reference context
 			else if (textBeforeCursor.match(/(?:^|[\s])@[^\s]*$/)) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			}
 			// # prompt action context
 			else if (textBeforeCursor.match(/#[^\s#]*$/)) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			}
 		}
 	}
@@ -1818,11 +1835,11 @@ export class Editor implements Component, Focusable {
 			const currentLine = this.#state.lines[this.#state.cursorLine] || "";
 			const textBeforeCursor = currentLine.slice(0, this.#state.cursorCol);
 			if (textBeforeCursor.trimStart().startsWith("/")) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			} else if (textBeforeCursor.match(/(?:^|[\s])@[^\s]*$/)) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			} else if (textBeforeCursor.match(/#[^\s#]*$/)) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			}
 		}
 	}
@@ -1903,7 +1920,7 @@ export class Editor implements Component, Focusable {
 
 	#yankFromKillRing(): void {
 		const text = this.#killRing.peek();
-		if (!text) return;
+		if (text === null || text === undefined || text === "") return;
 		this.#insertTextAtCursor(text);
 		this.#lastAction = "yank";
 	}
@@ -1919,7 +1936,7 @@ export class Editor implements Component, Focusable {
 			if (!this.#deleteYankedText()) return;
 			this.#killRing.rotate();
 			const text = this.#killRing.peek();
-			if (text) {
+			if (text !== null && text !== undefined && text !== "") {
 				this.#insertTextAtCursor(text);
 			}
 		});
@@ -1935,7 +1952,7 @@ export class Editor implements Component, Focusable {
 	 */
 	#deleteYankedText(): boolean {
 		const yankedText = this.#killRing.peek();
-		if (!yankedText) return false;
+		if (yankedText === null || yankedText === undefined || yankedText === "") return false;
 
 		const yankLines = yankedText.split("\n");
 		const endLine = this.#state.cursorLine;
@@ -2132,15 +2149,15 @@ export class Editor implements Component, Focusable {
 			const textBeforeCursor = currentLine.slice(0, this.#state.cursorCol);
 			// Slash command context
 			if (textBeforeCursor.trimStart().startsWith("/")) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			}
 			// @ file reference context
 			else if (textBeforeCursor.match(/(?:^|[\s])@[^\s]*$/)) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			}
 			// # prompt action context
 			else if (textBeforeCursor.match(/#[^\s#]*$/)) {
-				this.#tryTriggerAutocomplete();
+				void this.#tryTriggerAutocomplete();
 			}
 		}
 	}
@@ -2296,9 +2313,9 @@ export class Editor implements Component, Focusable {
 
 			// Current line: start after/before cursor; other lines: search full line
 			const searchFrom = isCurrentLine
-				? isForward
+				? (isForward
 					? this.#state.cursorCol + 1
-					: this.#state.cursorCol - 1
+					: this.#state.cursorCol - 1)
 				: undefined;
 
 			const idx = isForward ? line.indexOf(char, searchFrom) : line.lastIndexOf(char, searchFrom);
@@ -2410,12 +2427,12 @@ export class Editor implements Component, Focusable {
 		if (beforeCursor.trimStart().startsWith("/") && !beforeCursor.trimStart().includes(" ")) {
 			this.#handleSlashCommandCompletion();
 		} else {
-			this.#forceFileAutocomplete(true);
+			void this.#forceFileAutocomplete(true);
 		}
 	}
 
 	#handleSlashCommandCompletion(): void {
-		this.#tryTriggerAutocomplete(true);
+		void this.#tryTriggerAutocomplete(true);
 	}
 
 	/*
@@ -2496,7 +2513,7 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 
 		// In force mode, use forceFileAutocomplete to get suggestions
 		if (this.#autocompleteState === "force") {
-			this.#forceFileAutocomplete();
+			void this.#forceFileAutocomplete();
 			return;
 		}
 
@@ -2525,7 +2542,7 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 			clearTimeout(this.#autocompleteTimeout);
 		}
 		this.#autocompleteTimeout = setTimeout(() => {
-			this.#updateAutocomplete();
+			void this.#updateAutocomplete();
 			this.#autocompleteTimeout = undefined;
 		}, 100);
 	}

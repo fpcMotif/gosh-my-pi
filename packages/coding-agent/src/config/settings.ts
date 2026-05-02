@@ -130,8 +130,8 @@ export class Settings {
 	private constructor(options: SettingsOptions = {}) {
 		this.#cwd = path.normalize(options.cwd ?? getProjectDir());
 		this.#agentDir = path.normalize(options.agentDir ?? getAgentDir());
-		this.#configPath = options.inMemory ? null : path.join(this.#agentDir, "config.yml");
-		this.#persist = !options.inMemory;
+		this.#configPath = options.inMemory === true ? null : path.join(this.#agentDir, "config.yml");
+		this.#persist = options.inMemory !== true;
 
 		if (options.overrides) {
 			for (const [key, value] of Object.entries(options.overrides)) {
@@ -329,7 +329,7 @@ export class Settings {
 	 * Returns "patch", "replace", "hashline", "atom", "vim", "apply_patch", or null (use global default).
 	 */
 	getEditVariantForModel(model: string | undefined): EditMode | null {
-		if (!model) return null;
+		if (model === null || model === undefined || model === "") return null;
 		const variants = (this.#merged.edit as { modelVariants?: Record<string, string> })?.modelVariants;
 		if (!variants) return null;
 		for (const pattern in variants) {
@@ -379,7 +379,7 @@ export class Settings {
 	overrideModelRoles(roles: ReadOnlyDict<string>): void {
 		const prev = this.get("modelRoles");
 		for (const [role, modelId] of Object.entries(roles)) {
-			if (modelId) {
+			if (modelId !== null && modelId !== undefined && modelId !== "") {
 				prev[role] = modelId;
 			}
 		}
@@ -422,7 +422,7 @@ export class Settings {
 		try {
 			const content = await Bun.file(filePath).text();
 			const parsed = YAML.parse(content);
-			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+			if (parsed === null || parsed === undefined || typeof parsed !== "object" || Array.isArray(parsed)) {
 				return {};
 			}
 			return this.#migrateRawSettings(parsed as RawSettings);
@@ -449,14 +449,14 @@ export class Settings {
 	}
 
 	async #migrateFromLegacy(): Promise<void> {
-		if (!this.#configPath) return;
+		if (this.#configPath === null || this.#configPath === undefined || this.#configPath === "") return;
 
 		// Check if config.yml already exists
 		try {
 			await Bun.file(this.#configPath).text();
 			return; // Already exists, no migration needed
-		} catch (err) {
-			if (!isEnoent(err)) return;
+		} catch (error) {
+			if (!isEnoent(error)) return;
 		}
 
 		let settings: RawSettings = {};
@@ -466,7 +466,7 @@ export class Settings {
 		const settingsJsonPath = path.join(this.#agentDir, "settings.json");
 		try {
 			const parsed = JSON.parse(await Bun.file(settingsJsonPath).text());
-			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+			if (parsed !== null && parsed !== undefined && typeof parsed === "object" && !Array.isArray(parsed)) {
 				settings = this.#deepMerge(settings, this.#migrateRawSettings(parsed));
 				migrated = true;
 				try {
@@ -502,7 +502,11 @@ export class Settings {
 		}
 
 		// ask.timeout: ms -> seconds (if value > 1000, it's old ms format)
-		if (raw.ask && typeof (raw.ask as Record<string, unknown>).timeout === "number") {
+		if (
+			raw.ask !== null &&
+			raw.ask !== undefined &&
+			typeof (raw.ask as Record<string, unknown>).timeout === "number"
+		) {
 			const oldValue = (raw.ask as Record<string, unknown>).timeout as number;
 			if (oldValue > 1000) {
 				(raw.ask as Record<string, unknown>).timeout = Math.round(oldValue / 1000);
@@ -568,7 +572,8 @@ export class Settings {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	#queueSave(): void {
-		if (!this.#persist || !this.#configPath) return;
+		if (!this.#persist || this.#configPath === null || this.#configPath === undefined || this.#configPath === "")
+			return;
 
 		// Debounce: wait 100ms for more changes
 		if (this.#saveTimer) {
@@ -576,14 +581,21 @@ export class Settings {
 		}
 		this.#saveTimer = setTimeout(() => {
 			this.#saveTimer = undefined;
-			this.#saveNow().catch(err => {
-				logger.warn("Settings: background save failed", { error: String(err) });
+			this.#saveNow().catch(error => {
+				logger.warn("Settings: background save failed", { error: String(error) });
 			});
 		}, 100);
 	}
 
 	async #saveNow(): Promise<void> {
-		if (!this.#persist || !this.#configPath || this.#modified.size === 0) return;
+		if (
+			!this.#persist ||
+			this.#configPath === null ||
+			this.#configPath === undefined ||
+			this.#configPath === "" ||
+			this.#modified.size === 0
+		)
+			return;
 
 		const configPath = this.#configPath;
 		const modifiedPaths = [...this.#modified];
@@ -679,15 +691,15 @@ const SETTING_HOOKS: Partial<Record<SettingPath, SettingHook<any>>> = {
 	},
 	symbolPreset: value => {
 		if (typeof value === "string" && (value === "unicode" || value === "nerd" || value === "ascii")) {
-			setSymbolPreset(value).catch(err => {
-				logger.warn("Settings: symbolPreset hook failed", { preset: value, error: String(err) });
+			setSymbolPreset(value).catch(error => {
+				logger.warn("Settings: symbolPreset hook failed", { preset: value, error: String(error) });
 			});
 		}
 	},
 	colorBlindMode: value => {
 		if (typeof value === "boolean") {
-			setColorBlindMode(value).catch(err => {
-				logger.warn("Settings: colorBlindMode hook failed", { enabled: value, error: String(err) });
+			setColorBlindMode(value).catch(error => {
+				logger.warn("Settings: colorBlindMode hook failed", { enabled: value, error: String(error) });
 			});
 		}
 	},

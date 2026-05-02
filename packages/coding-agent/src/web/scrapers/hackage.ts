@@ -101,7 +101,7 @@ export const handleHackage: SpecialHandler = async (
 		const versionMap = tryParseJson<HackageVersionMap>(versionResult.content);
 		if (!versionMap) return null;
 		const latestVersion = Object.keys(versionMap).sort(compareVersions).at(-1);
-		if (!latestVersion) return null;
+		if (latestVersion === null || latestVersion === undefined || latestVersion === "") return null;
 
 		// Fetch the latest cabal file for package metadata.
 		const cabalUrl = `https://hackage.haskell.org/package/${encodeURIComponent(packageId)}-${latestVersion}/${encodeURIComponent(packageId)}.cabal`;
@@ -115,21 +115,27 @@ export const handleHackage: SpecialHandler = async (
 
 		const pkg = parseCabal(cabalResult.content);
 
-		let md = `# ${pkg.name || packageId}\n\n`;
-		if (pkg.synopsis) md += `${pkg.synopsis}\n\n`;
+		let md = `# ${pkg.name ?? packageId}\n\n`;
+		if (pkg.synopsis !== null && pkg.synopsis !== undefined && pkg.synopsis !== "") md += `${pkg.synopsis}\n\n`;
 
-		md += `**Version:** ${pkg.version || latestVersion}`;
-		if (pkg.license) md += ` · **License:** ${pkg.license}`;
+		md += `**Version:** ${pkg.version ?? latestVersion}`;
+		if (pkg.license !== null && pkg.license !== undefined && pkg.license !== "")
+			md += ` · **License:** ${pkg.license}`;
 		md += "\n";
 
-		if (pkg.author) md += `**Author:** ${pkg.author}\n`;
-		if (pkg.maintainer) md += `**Maintainer:** ${pkg.maintainer}\n`;
-		if (pkg.category) md += `**Category:** ${pkg.category}\n`;
-		if (pkg.stability) md += `**Stability:** ${pkg.stability}\n`;
-		if (pkg.homepage) md += `**Homepage:** ${pkg.homepage}\n`;
-		if (pkg.bugReports) md += `**Bug Reports:** ${pkg.bugReports}\n`;
+		if (pkg.author !== null && pkg.author !== undefined && pkg.author !== "") md += `**Author:** ${pkg.author}\n`;
+		if (pkg.maintainer !== null && pkg.maintainer !== undefined && pkg.maintainer !== "")
+			md += `**Maintainer:** ${pkg.maintainer}\n`;
+		if (pkg.category !== null && pkg.category !== undefined && pkg.category !== "")
+			md += `**Category:** ${pkg.category}\n`;
+		if (pkg.stability !== null && pkg.stability !== undefined && pkg.stability !== "")
+			md += `**Stability:** ${pkg.stability}\n`;
+		if (pkg.homepage !== null && pkg.homepage !== undefined && pkg.homepage !== "")
+			md += `**Homepage:** ${pkg.homepage}\n`;
+		if (pkg.bugReports !== null && pkg.bugReports !== undefined && pkg.bugReports !== "")
+			md += `**Bug Reports:** ${pkg.bugReports}\n`;
 
-		if (pkg.description) {
+		if (pkg.description !== null && pkg.description !== undefined && pkg.description !== "") {
 			md += `\n## Description\n\n${pkg.description}\n`;
 		}
 

@@ -72,16 +72,16 @@ export function queueResolveHandler(
 				...result,
 				details: {
 					...detailsFor(params),
-					...(result.details != null ? { sourceResultDetails: result.details } : {}),
+					...(result.details !== null ? { sourceResultDetails: result.details } : {}),
 				},
 			});
 			if (params.action === "apply") {
 				const result = await options.apply(params.reason);
 				return withResolveDetails(result);
 			}
-			if (params.action === "discard" && options.reject != null) {
+			if (params.action === "discard" && options.reject !== undefined) {
 				const result = await options.reject(params.reason);
-				if (result != null) {
+				if (result !== null && result !== undefined) {
 					return withResolveDetails(result);
 				}
 			}
@@ -165,9 +165,9 @@ export const resolveToolRenderer = {
 		const action = details?.action ?? "apply";
 		const isApply = action === "apply" && !result.isError;
 		const isFailedApply = action === "apply" && result.isError;
-		const bgColor = result.isError ? "error" : isApply ? "success" : "warning";
+		const bgColor = result.isError ? "error" : (isApply ? "success" : "warning");
 		const icon = isApply ? uiTheme.status.success : uiTheme.status.error;
-		const verb = isApply ? "Accept" : isFailedApply ? "Failed" : "Discard";
+		const verb = isApply ? "Accept" : (isFailedApply ? "Failed" : "Discard");
 		const separator = ": ";
 		const separatorIndex = label.indexOf(separator);
 		const sourceLabel = separatorIndex > 0 ? label.slice(0, separatorIndex).trim() : undefined;

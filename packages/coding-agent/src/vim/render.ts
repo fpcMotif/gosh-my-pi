@@ -144,7 +144,10 @@ export function computeViewport(
 	const clampedSize = Math.max(1, Math.min(size, lineCount));
 	const maxStart = Math.max(1, lineCount - clampedSize + 1);
 	const centered = Math.max(1, Math.min(cursorLine - Math.floor(clampedSize / 2), maxStart));
-	let start = preferredStart ? Math.max(1, Math.min(preferredStart, maxStart)) : centered;
+	let start =
+		preferredStart !== null && preferredStart !== undefined && preferredStart !== 0
+			? Math.max(1, Math.min(preferredStart, maxStart))
+			: centered;
 	const end = Math.min(lineCount, start + clampedSize - 1);
 	if (cursorLine < start) {
 		start = cursorLine;
@@ -165,7 +168,7 @@ function formatPendingInput(pending: VimPendingInput | undefined): string | unde
 	if (pending.kind === "insert") {
 		return "Pending: INSERT mode";
 	}
-	const prefix = pending.kind === "command" ? ":" : pending.kind === "search-forward" ? "/" : "?";
+	const prefix = pending.kind === "command" ? ":" : (pending.kind === "search-forward" ? "/" : "?");
 	return `Pending: ${prefix}${truncateToWidth(renderVisibleText(pending.text), 80)}`;
 }
 
@@ -185,10 +188,10 @@ export function renderVimDetails(details: VimToolDetails): string {
 	// Explicit cursor position indicator (models miss it in header)
 	lines.push(`[CURSOR] Line ${details.cursor.line}, Column ${details.cursor.col} (of ${details.totalLines} lines)`);
 
-	if (details.lastCommand) {
+	if (details.lastCommand !== null && details.lastCommand !== undefined && details.lastCommand !== "") {
 		lines.push(`Command: ${truncateToWidth(details.lastCommand, 80)}`);
 	}
-	if (details.statusMessage) {
+	if (details.statusMessage !== null && details.statusMessage !== undefined && details.statusMessage !== "") {
 		lines.push(`Status: ${details.statusMessage}`);
 	}
 	if (details.errorLocation) {
@@ -198,11 +201,11 @@ export function renderVimDetails(details: VimToolDetails): string {
 	}
 
 	const pending = formatPendingInput(details.pendingInput);
-	if (pending) {
+	if (pending !== null && pending !== undefined && pending !== "") {
 		lines.push(pending);
 	}
 
-	if (details.closed) {
+	if (details.closed === true) {
 		return lines.join("\n");
 	}
 
@@ -219,7 +222,7 @@ export function renderVimDetails(details: VimToolDetails): string {
 		const padWidth = String(details.viewport.end).length;
 		lines.push("Viewport:");
 		for (const line of details.viewportLines) {
-			const marker = line.isCursor ? ">" : line.isSelected ? "*" : " ";
+			const marker = line.isCursor ? ">" : (line.isSelected ? "*" : " ");
 			lines.push(formatCodeFrameLine(marker, line.line, renderPlainViewportCursor(line), padWidth));
 		}
 	}
@@ -243,7 +246,7 @@ export function buildDetails(input: ViewportRenderInput): VimToolDetails {
 		closed: input.closed,
 	};
 
-	if (!input.closed) {
+	if (input.closed !== true) {
 		details.focus = buildFocusLine(input.cursor.line, input.lines[input.cursor.line - 1] ?? "", input.cursor.col - 1);
 		details.viewportLines = buildViewportLines(input);
 	}

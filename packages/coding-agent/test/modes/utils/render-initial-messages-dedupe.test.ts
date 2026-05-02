@@ -24,7 +24,7 @@ import type { SessionContext } from "@oh-my-pi/pi-coding-agent/session/session-m
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 
 beforeAll(() => {
-	initTheme();
+	void initTheme();
 });
 
 /** Minimal empty SessionContext (what navigateTree returns when leafId is null). */

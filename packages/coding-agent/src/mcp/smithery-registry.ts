@@ -119,7 +119,7 @@ export class SmitheryRegistryError extends Error {
 }
 
 function clampLimit(limit: number | undefined): number {
-	if (!limit || Number.isNaN(limit)) return 20;
+	if (limit === null || limit === undefined || limit === 0 || Number.isNaN(limit)) return 20;
 	if (limit < 1) return 1;
 	if (limit > 100) return 100;
 	return Math.trunc(limit);
@@ -136,18 +136,25 @@ function matchesIdentityQuery(query: string, entry: SmitherySearchEntry): boolea
 function resolveDetailPathCandidates(entry: SmitherySearchEntry): string[] {
 	const candidates: string[] = [];
 	const pushUnique = (value: string | undefined): void => {
-		if (!value) return;
+		if (value === null || value === undefined || value === "") return;
 		if (!candidates.includes(value)) candidates.push(value);
 	};
 
-	if (entry.namespace && entry.slug) {
+	if (
+		entry.namespace !== null &&
+		entry.namespace !== undefined &&
+		entry.namespace !== "" &&
+		entry.slug !== null &&
+		entry.slug !== undefined &&
+		entry.slug !== ""
+	) {
 		pushUnique(`${entry.namespace}/${entry.slug}`);
 	}
-	if (entry.slug) {
+	if (entry.slug !== null && entry.slug !== undefined && entry.slug !== "") {
 		pushUnique(entry.slug);
 	}
 	const qualifiedName = entry.qualifiedName?.trim();
-	if (qualifiedName) {
+	if (qualifiedName !== null && qualifiedName !== undefined && qualifiedName !== "") {
 		pushUnique(qualifiedName.replace(/^@/, ""));
 	}
 	return candidates;
@@ -158,7 +165,7 @@ function getEntryIdentityKey(entry: SmitherySearchEntry): string | null {
 	if (candidates.length > 0) {
 		return candidates[0] ?? null;
 	}
-	if (entry.id) return `id:${entry.id}`;
+	if (entry.id !== null && entry.id !== undefined && entry.id !== "") return `id:${entry.id}`;
 	return null;
 }
 
@@ -196,7 +203,7 @@ function unknownToString(value: unknown): string | undefined {
 
 function safeMetadataValue(value: unknown): string | undefined {
 	const raw = unknownToString(value);
-	if (!raw) return undefined;
+	if (raw === null || raw === undefined || raw === "") return undefined;
 	const normalized = raw
 		.replace(/[\r\n\t]+/g, " ")
 		.replace(/\s+/g, " ")
@@ -205,7 +212,7 @@ function safeMetadataValue(value: unknown): string | undefined {
 }
 
 function toDateLabel(value: string | undefined): string | undefined {
-	if (!value) return undefined;
+	if (value === null || value === undefined || value === "") return undefined;
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return undefined;
 	return date.toISOString().slice(0, 10);
@@ -217,7 +224,7 @@ function getToolsList(tools: unknown): SmitherySearchResult["display"]["tools"] 
 	for (const item of tools) {
 		const tool = item as SmitheryToolDefinition;
 		const name = safeMetadataValue(tool.name);
-		if (!name) continue;
+		if (name === null || name === undefined || name === "") continue;
 		const description = safeMetadataValue(tool.description);
 		const params = tool.inputSchema?.properties ? Object.keys(tool.inputSchema.properties) : [];
 		output.push({
@@ -269,7 +276,15 @@ function chooseConnection(
 	details: SmitheryServerDetails,
 ): { connection: SmitheryConnection; useDirectHttp: boolean } | null {
 	const connections = details.connections ?? [];
-	const httpConnection = connections.find(connection => connection.type === "http" && !!connection.deploymentUrl);
+	const httpConnection = connections.find(
+		connection =>
+			connection.type === "http" &&
+			!(
+				connection.deploymentUrl === null ||
+				connection.deploymentUrl === undefined ||
+				connection.deploymentUrl === ""
+			),
+	);
 	if (httpConnection) {
 		const hasConfigInputs = getSchemaInputs(httpConnection.configSchema).length > 0;
 		if (!hasConfigInputs) {
@@ -293,7 +308,13 @@ function createConfig(
 	qualifiedName: string,
 	selected: { connection: SmitheryConnection; useDirectHttp: boolean },
 ): MCPServerConfig | null {
-	if (selected.useDirectHttp && selected.connection.type === "http" && selected.connection.deploymentUrl) {
+	if (
+		selected.useDirectHttp &&
+		selected.connection.type === "http" &&
+		selected.connection.deploymentUrl !== null &&
+		selected.connection.deploymentUrl !== undefined &&
+		selected.connection.deploymentUrl !== ""
+	) {
 		return {
 			type: "http",
 			url: selected.connection.deploymentUrl,
@@ -309,7 +330,7 @@ function createConfig(
 
 async function fetchServerDetails(path: string, options?: { apiKey?: string }): Promise<SmitheryServerDetails | null> {
 	const headers = new Headers();
-	if (options?.apiKey) {
+	if (options?.apiKey !== null && options?.apiKey !== undefined && options?.apiKey !== "") {
 		headers.set("Authorization", `Bearer ${options.apiKey}`);
 	}
 	const response = await fetch(`${SMITHERY_REGISTRY_BASE_URL}/servers/${path}`, {
@@ -336,7 +357,7 @@ async function fetchServerDetailsFromEntry(
 }
 
 function toSearchResult(entry: SmitherySearchEntry, details: SmitheryServerDetails): SmitherySearchResult | null {
-	if (!entry.id) return null;
+	if (entry.id === null || entry.id === undefined || entry.id === "") return null;
 	const qualifiedName = normalizeQualifiedName(
 		details.qualifiedName ?? entry.qualifiedName ?? `${entry.namespace}/${entry.slug}`,
 	);
@@ -381,7 +402,7 @@ function toSearchResult(entry: SmitherySearchEntry, details: SmitheryServerDetai
 			homepage,
 			tools,
 		},
-		sourceType: selected.useDirectHttp || details.remote ? "remote" : "package",
+		sourceType: selected.useDirectHttp || details.remote === true ? "remote" : "package",
 		config,
 		requiredInputs,
 		warnings,
@@ -399,7 +420,7 @@ export async function searchSmitheryRegistry(
 	const isSemantic = options?.includeSemantic === true;
 	const pageSize = Math.max(limit * 2, 20);
 	const headers = new Headers();
-	if (options?.apiKey) {
+	if (options?.apiKey !== null && options?.apiKey !== undefined && options?.apiKey !== "") {
 		headers.set("Authorization", `Bearer ${options.apiKey}`);
 	}
 
@@ -435,7 +456,7 @@ export async function searchSmitheryRegistry(
 
 	const uniqueEntries = entries.filter((entry, index) => {
 		const identity = getEntryIdentityKey(entry);
-		if (!identity) return false;
+		if (identity === null || identity === undefined || identity === "") return false;
 		return (
 			entries.findIndex(candidate => {
 				const candidateIdentity = getEntryIdentityKey(candidate);

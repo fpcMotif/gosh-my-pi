@@ -123,7 +123,7 @@ function parseSourcegraphUrl(url: string): SourcegraphTarget | null {
 
 		if (parsed.pathname.startsWith("/search")) {
 			const query = parsed.searchParams.get("q")?.trim();
-			if (!query) return null;
+			if (query === null || query === undefined || query === "") return null;
 			return { type: "search", query };
 		}
 
@@ -178,7 +178,7 @@ async function fetchGraphql<T>(
 	if (!result.ok) return null;
 
 	const parsed = tryParseJson<{ data?: T; errors?: unknown }>(result.content);
-	if (!parsed?.data) return null;
+	if (parsed?.data === null || parsed?.data === undefined) return null;
 	if (Array.isArray(parsed.errors) && parsed.errors.length > 0) return null;
 	return parsed.data;
 }
@@ -193,9 +193,11 @@ function isRepositoryResult(result: SearchResultItem): result is RepositoryResul
 
 function formatRepoMarkdown(repo: SourcegraphRepository): string {
 	let md = `# ${repo.name}\n\n`;
-	if (repo.description) md += `${repo.description}\n\n`;
+	if (repo.description !== null && repo.description !== undefined && repo.description !== "")
+		md += `${repo.description}\n\n`;
 	md += `**URL:** ${repo.url}\n`;
-	if (repo.defaultBranch?.name) md += `**Default branch:** ${repo.defaultBranch.name}\n`;
+	if (repo.defaultBranch?.name !== null && repo.defaultBranch?.name !== undefined && repo.defaultBranch?.name !== "")
+		md += `**Default branch:** ${repo.defaultBranch.name}\n`;
 	return md;
 }
 
@@ -269,8 +271,10 @@ async function renderSearch(
 			const repoName = result.repository?.name ?? "unknown";
 			const filePath = result.file?.path ?? "unknown";
 			md += `### ${repoName}/${filePath}\n\n`;
-			if (result.repository?.url) md += `**Repository:** ${result.repository.url}\n`;
-			if (result.file?.url) md += `**File:** ${result.file.url}\n`;
+			if (result.repository?.url !== null && result.repository?.url !== undefined && result.repository?.url !== "")
+				md += `**Repository:** ${result.repository.url}\n`;
+			if (result.file?.url !== null && result.file?.url !== undefined && result.file?.url !== "")
+				md += `**File:** ${result.file.url}\n`;
 
 			const lineMatches = result.lineMatches ?? [];
 			if (lineMatches.length > 0) {
@@ -288,7 +292,8 @@ async function renderSearch(
 		if (isRepositoryResult(result)) {
 			const name = result.name ?? "unknown";
 			md += `### ${name}\n\n`;
-			if (result.url) md += `**Repository:** ${result.url}\n`;
+			if (result.url !== null && result.url !== undefined && result.url !== "")
+				md += `**Repository:** ${result.url}\n`;
 			md += "\n";
 		}
 	}

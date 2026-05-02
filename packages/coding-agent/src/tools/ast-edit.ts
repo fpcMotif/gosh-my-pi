@@ -116,12 +116,12 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 			}
 			if (rawPath) {
 				const internalRouter = this.session.internalRouter;
-				if (internalRouter?.canHandle(rawPath)) {
+				if (internalRouter?.canHandle(rawPath) === true) {
 					if (hasGlobPathChars(rawPath)) {
 						throw new ToolError(`Glob patterns are not supported for internal URLs: ${rawPath}`);
 					}
 					const resource = await internalRouter.resolve(rawPath);
-					if (!resource.sourcePath) {
+					if (resource.sourcePath === null || resource.sourcePath === undefined || resource.sourcePath === "") {
 						throw new ToolError(`Cannot rewrite internal URL without backing file: ${rawPath}`);
 					}
 					searchPath = resource.sourcePath;
@@ -320,9 +320,9 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 							const text =
 								applyResult.totalReplacements === 0
 									? `Preview is stale / no longer matches; no replacements were applied. Preview expected ${result.totalReplacements} replacement${previewReplacementPlural} in ${result.filesTouched} file${previewFilePlural}.`
-									: applyResult.totalReplacements < result.totalReplacements
+									: (applyResult.totalReplacements < result.totalReplacements
 										? `Preview is stale / no longer matches; only ${applyResult.totalReplacements} of ${result.totalReplacements} replacements were applied in ${applyResult.filesTouched} of ${result.filesTouched} files.`
-										: `Preview is stale / no longer matches; applied ${applyResult.totalReplacements} replacements but preview expected ${result.totalReplacements}.`;
+										: `Preview is stale / no longer matches; applied ${applyResult.totalReplacements} replacements but preview expected ${result.totalReplacements}.`);
 							return { ...toolResult(appliedDetails).text(text).done(), isError: true };
 						}
 						const appliedReplacementPlural = applyResult.totalReplacements !== 1 ? "s" : "";
@@ -358,11 +358,11 @@ export const astEditToolRenderer = {
 	inline: true,
 	renderCall(args: AstEditRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const meta: string[] = [];
-		if (args.path) meta.push(`in ${args.path}`);
+		if (args.path !== null && args.path !== undefined && args.path !== "") meta.push(`in ${args.path}`);
 		const rewriteCount = args.ops?.length ?? 0;
 		if (rewriteCount > 1) meta.push(`${rewriteCount} rewrites`);
 
-		const description = rewriteCount === 1 ? args.ops?.[0]?.pat : rewriteCount ? `${rewriteCount} rewrites` : "?";
+		const description = rewriteCount === 1 ? args.ops?.[0]?.pat : (rewriteCount ? `${rewriteCount} rewrites` : "?");
 		const text = renderStatusLine({ icon: "pending", title: "AST Edit", description, meta }, uiTheme);
 		return new Text(text, 0, 0);
 	},
@@ -375,7 +375,7 @@ export const astEditToolRenderer = {
 	): Component {
 		const details = result.details;
 
-		if (result.isError) {
+		if (result.isError === true) {
 			const errorText = result.content?.find(c => c.type === "text")?.text || "Unknown error";
 			return new Text(formatErrorMessage(errorText, uiTheme), 0, 0);
 		}
@@ -389,11 +389,16 @@ export const astEditToolRenderer = {
 			const rewriteCount = args?.ops?.length ?? 0;
 			const description = rewriteCount === 1 ? args?.ops?.[0]?.pat : undefined;
 			const meta = ["0 replacements"];
-			if (details?.scopePath) meta.push(`in ${details.scopePath}`);
+			if (details?.scopePath !== null && details?.scopePath !== undefined && details?.scopePath !== "")
+				meta.push(`in ${details.scopePath}`);
 			if (filesSearched > 0) meta.push(`searched ${filesSearched}`);
 			const header = renderStatusLine({ icon: "warning", title: "AST Edit", description, meta }, uiTheme);
 			const lines = [header, formatEmptyMessage("No replacements made", uiTheme)];
-			if (details?.parseErrors?.length) {
+			if (
+				details?.parseErrors?.length !== null &&
+				details?.parseErrors?.length !== undefined &&
+				details?.parseErrors?.length !== 0
+			) {
 				const capped = details.parseErrors.slice(0, PARSE_ERRORS_LIMIT);
 				for (const err of capped) {
 					lines.push(uiTheme.fg("warning", `  - ${err}`));
@@ -407,7 +412,8 @@ export const astEditToolRenderer = {
 
 		const summaryParts = [formatCount("replacement", totalReplacements), formatCount("file", filesTouched)];
 		const meta = [...summaryParts];
-		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
+		if (details?.scopePath !== null && details?.scopePath !== undefined && details?.scopePath !== "")
+			meta.push(`in ${details.scopePath}`);
 		meta.push(`searched ${filesSearched}`);
 		if (limitReached) meta.push(uiTheme.fg("warning", "limit reached"));
 		const rewriteCount = args?.ops?.length ?? 0;
@@ -450,7 +456,11 @@ export const astEditToolRenderer = {
 		if (limitReached) {
 			extraLines.push(uiTheme.fg("warning", "limit reached; narrow path"));
 		}
-		if (details?.parseErrors?.length) {
+		if (
+			details?.parseErrors?.length !== null &&
+			details?.parseErrors?.length !== undefined &&
+			details?.parseErrors?.length !== 0
+		) {
 			const total = details.parseErrors.length;
 			const label =
 				total > PARSE_ERRORS_LIMIT

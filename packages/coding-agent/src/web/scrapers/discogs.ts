@@ -75,12 +75,12 @@ interface DiscogsMaster {
  * Format artist names, handling name variations
  */
 function formatArtists(artists: DiscogsArtist[] | undefined): string {
-	if (!artists?.length) return "Unknown Artist";
+	if (artists?.length === null || artists?.length === undefined || artists?.length === 0) return "Unknown Artist";
 	return artists
 		.map(a => {
-			const name = a.anv || a.name;
-			const join = a.join || ", ";
-			return name + (a.join ? ` ${join} ` : "");
+			const name = a.anv ?? a.name;
+			const join = a.join ?? ", ";
+			return name + (a.join !== null && a.join !== undefined && a.join !== "" ? ` ${join} ` : "");
 		})
 		.join("")
 		.replace(/[,&]\s*$/, "")
@@ -93,8 +93,8 @@ function formatArtists(artists: DiscogsArtist[] | undefined): string {
 function formatTrack(track: DiscogsTrack): string {
 	let line = track.position ? `${track.position}. ` : "- ";
 	line += track.title;
-	if (track.duration) line += ` (${track.duration})`;
-	if (track.artists?.length) {
+	if (track.duration !== null && track.duration !== undefined && track.duration !== "") line += ` (${track.duration})`;
+	if (track.artists?.length !== null && track.artists?.length !== undefined && track.artists?.length !== 0) {
 		line += ` - ${formatArtists(track.artists)}`;
 	}
 	return line;
@@ -104,13 +104,13 @@ function formatTrack(track: DiscogsTrack): string {
  * Format credits/extraartists grouped by role
  */
 function formatCredits(extraartists: DiscogsArtist[] | undefined): string {
-	if (!extraartists?.length) return "";
+	if (extraartists?.length === null || extraartists?.length === undefined || extraartists?.length === 0) return "";
 
 	const byRole: Record<string, string[]> = {};
 	for (const artist of extraartists) {
-		const role = artist.role || "Other";
-		if (!byRole[role]) byRole[role] = [];
-		byRole[role].push(artist.anv || artist.name);
+		const role = artist.role ?? "Other";
+		if (byRole[role] === null || byRole[role] === undefined) byRole[role] = [];
+		byRole[role].push(artist.anv ?? artist.name);
 	}
 
 	const lines: string[] = [];
@@ -124,14 +124,15 @@ function formatCredits(extraartists: DiscogsArtist[] | undefined): string {
  * Format formats (e.g., "2×LP, Album, Reissue")
  */
 function formatFormats(formats: DiscogsFormat[] | undefined): string {
-	if (!formats?.length) return "";
+	if (formats?.length === null || formats?.length === undefined || formats?.length === 0) return "";
 
 	return formats
 		.map(f => {
 			const parts: string[] = [];
-			if (f.qty && parseInt(f.qty, 10) > 1) parts.push(`${f.qty}×`);
+			if (f.qty !== null && f.qty !== undefined && f.qty !== "" && parseInt(f.qty, 10) > 1) parts.push(`${f.qty}×`);
 			parts.push(f.name);
-			if (f.descriptions?.length) parts.push(f.descriptions.join(", "));
+			if (f.descriptions?.length !== null && f.descriptions?.length !== undefined && f.descriptions?.length !== 0)
+				parts.push(f.descriptions.join(", "));
 			return parts.join(" ");
 		})
 		.join(" + ");
@@ -141,10 +142,11 @@ function formatFormats(formats: DiscogsFormat[] | undefined): string {
  * Format labels with catalog numbers
  */
 function formatLabels(labels: DiscogsLabel[] | undefined): string {
-	if (!labels?.length) return "";
+	if (labels?.length === null || labels?.length === undefined || labels?.length === 0) return "";
 	return labels
 		.map(l => {
-			if (l.catno && l.catno !== "none") return `${l.name} (${l.catno})`;
+			if (l.catno !== null && l.catno !== undefined && l.catno !== "" && l.catno !== "none")
+				return `${l.name} (${l.catno})`;
 			return l.name;
 		})
 		.join(", ");
@@ -162,8 +164,10 @@ function buildReleaseMarkdown(release: DiscogsRelease): string {
 
 	// Metadata
 	const meta: string[] = [];
-	if (release.year) meta.push(`**Year**: ${release.year}`);
-	if (release.country) meta.push(`**Country**: ${release.country}`);
+	if (release.year !== null && release.year !== undefined && release.year !== 0)
+		meta.push(`**Year**: ${release.year}`);
+	if (release.country !== null && release.country !== undefined && release.country !== "")
+		meta.push(`**Country**: ${release.country}`);
 
 	const format = formatFormats(release.formats);
 	if (format) meta.push(`**Format**: ${format}`);
@@ -171,17 +175,23 @@ function buildReleaseMarkdown(release: DiscogsRelease): string {
 	const labels = formatLabels(release.labels);
 	if (labels) meta.push(`**Label**: ${labels}`);
 
-	if (release.genres?.length) meta.push(`**Genre**: ${release.genres.join(", ")}`);
-	if (release.styles?.length) meta.push(`**Style**: ${release.styles.join(", ")}`);
+	if (release.genres?.length !== null && release.genres?.length !== undefined && release.genres?.length !== 0)
+		meta.push(`**Genre**: ${release.genres.join(", ")}`);
+	if (release.styles?.length !== null && release.styles?.length !== undefined && release.styles?.length !== 0)
+		meta.push(`**Style**: ${release.styles.join(", ")}`);
 
-	if (release.master_id) {
+	if (release.master_id !== null && release.master_id !== undefined && release.master_id !== 0) {
 		meta.push(`**Master Release**: [${release.master_id}](https://www.discogs.com/master/${release.master_id})`);
 	}
 
 	if (meta.length) sections.push(`${meta.join("\n")}\n`);
 
 	// Tracklist
-	if (release.tracklist?.length) {
+	if (
+		release.tracklist?.length !== null &&
+		release.tracklist?.length !== undefined &&
+		release.tracklist?.length !== 0
+	) {
 		sections.push("## Tracklist\n");
 		const tracks = release.tracklist.map(formatTrack);
 		sections.push(`${tracks.join("\n")}\n`);
@@ -195,7 +205,7 @@ function buildReleaseMarkdown(release: DiscogsRelease): string {
 	}
 
 	// Notes
-	if (release.notes) {
+	if (release.notes !== null && release.notes !== undefined && release.notes !== "") {
 		sections.push("## Notes\n");
 		sections.push(`${release.notes}\n`);
 	}
@@ -216,11 +226,13 @@ function buildMasterMarkdown(master: DiscogsMaster): string {
 
 	// Metadata
 	const meta: string[] = [];
-	if (master.year) meta.push(`**Year**: ${master.year}`);
-	if (master.genres?.length) meta.push(`**Genre**: ${master.genres.join(", ")}`);
-	if (master.styles?.length) meta.push(`**Style**: ${master.styles.join(", ")}`);
+	if (master.year !== null && master.year !== undefined && master.year !== 0) meta.push(`**Year**: ${master.year}`);
+	if (master.genres?.length !== null && master.genres?.length !== undefined && master.genres?.length !== 0)
+		meta.push(`**Genre**: ${master.genres.join(", ")}`);
+	if (master.styles?.length !== null && master.styles?.length !== undefined && master.styles?.length !== 0)
+		meta.push(`**Style**: ${master.styles.join(", ")}`);
 
-	if (master.main_release) {
+	if (master.main_release !== null && master.main_release !== undefined && master.main_release !== 0) {
 		meta.push(`**Main Release**: [${master.main_release}](https://www.discogs.com/release/${master.main_release})`);
 	}
 
@@ -234,14 +246,14 @@ function buildMasterMarkdown(master: DiscogsMaster): string {
 	if (meta.length) sections.push(`${meta.join("\n")}\n`);
 
 	// Tracklist
-	if (master.tracklist?.length) {
+	if (master.tracklist?.length !== null && master.tracklist?.length !== undefined && master.tracklist?.length !== 0) {
 		sections.push("## Tracklist\n");
 		const tracks = master.tracklist.map(formatTrack);
 		sections.push(`${tracks.join("\n")}\n`);
 	}
 
 	// Notes
-	if (master.notes) {
+	if (master.notes !== null && master.notes !== undefined && master.notes !== "") {
 		sections.push("## Notes\n");
 		sections.push(`${master.notes}\n`);
 	}

@@ -1,8 +1,11 @@
 {
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
-	"plugins": ["typescript", "oxc"],
+	"plugins": ["typescript", "oxc", "unicorn", "import"],
 	"categories": {
 		"correctness": "error"
+	},
+	"options": {
+		"typeAware": true
 	},
 	"rules": {
 		"no-control-regex": "off",
@@ -13,10 +16,93 @@
 		"no-useless-escape": "warn",
 		"no-constant-binary-expression": "warn",
 		"no-unsafe-optional-chaining": "warn",
-		"no-this-alias": "warn"
+		"no-this-alias": "warn",
+
+		"eqeqeq": "error",
+		"no-else-return": "error",
+		"no-lonely-if": "error",
+		"no-negated-condition": "error",
+		"no-unneeded-ternary": "error",
+		"no-useless-return": "error",
+		"prefer-const": "error",
+		"prefer-template": "error",
+		"prefer-object-spread": "error",
+		"object-shorthand": "error",
+		"unicorn/no-nested-ternary": "error",
+		"unicorn/catch-error-name": "error",
+		"unicorn/prefer-ternary": "warn",
+		"typescript/consistent-type-imports": "error",
+		"typescript/prefer-includes": "error",
+		"typescript/no-confusing-non-null-assertion": "error",
+
+		"max-lines": ["error", { "max": 400, "skipBlankLines": true, "skipComments": true }],
+		"max-lines-per-function": ["error", { "max": 80, "skipBlankLines": true, "skipComments": true }],
+		"max-depth": ["error", 4],
+		"complexity": ["error", 12],
+		"max-nested-callbacks": ["error", 3],
+		"max-classes-per-file": ["error", 1],
+		"oxc/branches-sharing-code": "error",
+
+		"no-unmodified-loop-condition": "error",
+		"no-loop-func": "error",
+		"no-await-in-loop": "error",
+		"no-promise-executor-return": "error",
+		"typescript/no-misused-promises": "error",
+
+		"typescript/no-explicit-any": "error",
+		"typescript/explicit-member-accessibility": ["error", { "accessibility": "no-public" }],
+		"typescript/no-non-null-assertion": "warn",
+		"typescript/no-require-imports": "error",
+		"typescript/strict-boolean-expressions": "error",
+		"unicorn/prefer-node-protocol": "error",
+		"unicorn/prefer-module": "error",
+		"import/no-default-export": "warn"
 	},
+	"overrides": [
+		{
+			"files": [
+				"packages/tui/**/*.ts",
+				"packages/coding-agent/src/tui/**/*.ts",
+				"packages/coding-agent/src/modes/**/*.ts",
+				"packages/coding-agent/src/debug/**/*.ts"
+			],
+			"rules": {
+				"no-console": "error",
+				"no-restricted-globals": ["error", "console"],
+				"unicorn/no-process-exit": "error",
+				"unicorn/prefer-set-has": "error"
+			}
+		},
+		{
+			"files": [
+				"packages/ai/src/providers/**",
+				"packages/coding-agent/src/sdk.ts",
+				"packages/coding-agent/src/modes/interactive-mode.ts",
+				"packages/tui/src/tui.ts"
+			],
+			"rules": {
+				"max-lines": "off",
+				"max-lines-per-function": "warn",
+				"complexity": "warn"
+			}
+		},
+		{
+			"files": ["packages/*/test/**", "packages/*/scripts/**", "packages/*/examples/**"],
+			"rules": {
+				"max-lines": "off",
+				"max-lines-per-function": "off",
+				"complexity": "off",
+				"max-depth": "off",
+				"max-nested-callbacks": "off",
+				"no-console": "off"
+			}
+		}
+	],
 	"ignorePatterns": [
 		"packages/natives/native/index.d.ts",
+		"packages/natives/native/index.js",
+		"packages/natives/native/loader-state.js",
+		"packages/coding-agent/src/export/html/template.js",
 		"**/vendor/**/*",
 		"**/node_modules/**/*",
 		"**/test-sessions.ts",

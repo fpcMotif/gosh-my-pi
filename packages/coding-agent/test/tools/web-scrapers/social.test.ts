@@ -3,7 +3,10 @@ import { handleReddit } from "@oh-my-pi/pi-coding-agent/web/scrapers/reddit";
 import { handleStackOverflow } from "@oh-my-pi/pi-coding-agent/web/scrapers/stackoverflow";
 import { handleTwitter } from "@oh-my-pi/pi-coding-agent/web/scrapers/twitter";
 
-const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
+const SKIP =
+	Bun.env.WEB_FETCH_INTEGRATION === null ||
+	Bun.env.WEB_FETCH_INTEGRATION === undefined ||
+	Bun.env.WEB_FETCH_INTEGRATION === "";
 
 describe.skipIf(SKIP)("handleTwitter", () => {
 	it("returns null for non-Twitter URLs", async () => {
@@ -114,7 +117,7 @@ describe.skipIf(SKIP)("handleReddit", () => {
 	it("includes comments in post when available", async () => {
 		const result = await handleReddit("https://www.reddit.com/r/programming/", 20000);
 		// Comments test - just verify structure if post with comments is found
-		if (result?.content?.includes("## Top Comments")) {
+		if (result?.content?.includes("## Top Comments") === true) {
 			expect(result.content).toContain("### u/");
 			expect(result.content).toContain("points");
 		}
@@ -185,7 +188,7 @@ describe.skipIf(SKIP)("handleStackOverflow", () => {
 			"https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster",
 			20000,
 		);
-		if (result?.content?.includes("## Answers")) {
+		if (result?.content?.includes("## Answers") === true) {
 			expect(result.content).toContain("### Score:");
 		}
 	});

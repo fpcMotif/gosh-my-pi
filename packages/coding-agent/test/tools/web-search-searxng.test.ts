@@ -112,7 +112,7 @@ describe("SearXNG web search provider", () => {
 		process.env.SEARXNG_ENDPOINT = "https://searx.example.org";
 		process.env.SEARXNG_BASIC_USERNAME = "alice";
 
-		await expect(searchSearXNG({ query: "missing password" })).rejects.toThrow(
+		expect(searchSearXNG({ query: "missing password" })).rejects.toThrow(
 			"SearXNG Basic auth requires both searxng.basicUsername and searxng.basicPassword",
 		);
 	});
@@ -121,7 +121,7 @@ describe("SearXNG web search provider", () => {
 		process.env.SEARXNG_ENDPOINT = "https://searx.example.org";
 		process.env.SEARXNG_BASIC_PASSWORD = "s3cret";
 
-		await expect(searchSearXNG({ query: "missing username" })).rejects.toThrow(
+		expect(searchSearXNG({ query: "missing username" })).rejects.toThrow(
 			"SearXNG Basic auth requires both searxng.basicUsername and searxng.basicPassword",
 		);
 	});
@@ -131,7 +131,7 @@ describe("SearXNG web search provider", () => {
 		process.env.SEARXNG_BASIC_USERNAME = "alice:admin";
 		process.env.SEARXNG_BASIC_PASSWORD = "s3cret";
 
-		await expect(searchSearXNG({ query: "invalid username" })).rejects.toThrow(
+		expect(searchSearXNG({ query: "invalid username" })).rejects.toThrow(
 			"SearXNG Basic auth username cannot contain ':'",
 		);
 	});

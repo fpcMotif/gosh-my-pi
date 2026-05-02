@@ -161,13 +161,13 @@ export class RpcClient {
 		const cliPath = this.options.cliPath ?? "dist/cli.js";
 		const args = ["--mode", "rpc"];
 
-		if (this.options.provider) {
+		if (this.options.provider !== null && this.options.provider !== undefined && this.options.provider !== "") {
 			args.push("--provider", this.options.provider);
 		}
-		if (this.options.model) {
+		if (this.options.model !== null && this.options.model !== undefined && this.options.model !== "") {
 			args.push("--model", this.options.model);
 		}
-		if (this.options.sessionDir) {
+		if (this.options.sessionDir !== null && this.options.sessionDir !== undefined && this.options.sessionDir !== "") {
 			args.push("--session-dir", this.options.sessionDir);
 		}
 		if (this.options.args) {
@@ -200,10 +200,10 @@ export class RpcClient {
 				readySettled = true;
 				readyReject(new Error(`Agent process exited before ready. Stderr: ${this.#process?.peekStderr() ?? ""}`));
 			}
-		})().catch((err: Error) => {
+		})().catch((error: Error) => {
 			if (!readySettled) {
 				readySettled = true;
-				readyReject(err);
+				readyReject(error);
 			}
 		});
 
@@ -599,7 +599,7 @@ export class RpcClient {
 		// Check if it's a response to a pending request
 		if (isRpcResponse(data)) {
 			const id = data.id;
-			if (id && this.#pendingRequests.has(id)) {
+			if (id !== null && id !== undefined && id !== "" && this.#pendingRequests.has(id)) {
 				const pending = this.#pendingRequests.get(id)!;
 				this.#pendingRequests.delete(id);
 				pending.resolve(data);
@@ -728,11 +728,11 @@ export class RpcClient {
 			throw new Error("Client not started");
 		}
 		const stdin = this.#process.stdin as import("bun").FileSink;
-		stdin.write(`${JSON.stringify(frame)}\n`);
+		void stdin.write(`${JSON.stringify(frame)}\n`);
 		const flushResult = stdin.flush();
 		if (flushResult instanceof Promise) {
-			flushResult.catch((err: Error) => {
-				onError?.(err);
+			flushResult.catch((error: Error) => {
+				onError?.(error);
 			});
 		}
 	}

@@ -120,12 +120,12 @@ export const handleWikidata: SpecialHandler = async (
 		if (!entity) return null;
 
 		// Get label and description (prefer English)
-		const label = getLocalizedValue(entity.labels, "en") || qid;
+		const label = getLocalizedValue(entity.labels, "en") ?? qid;
 		const description = getLocalizedValue(entity.descriptions, "en");
 		const aliases = getLocalizedAliases(entity.aliases, "en");
 
 		let md = `# ${label} (${qid})\n\n`;
-		if (description) md += `*${description}*\n\n`;
+		if (description !== null && description !== undefined && description !== "") md += `*${description}*\n\n`;
 		if (aliases.length > 0) md += `**Also known as:** ${aliases.join(", ")}\n\n`;
 
 		// Count sitelinks
@@ -161,7 +161,7 @@ export const handleWikidata: SpecialHandler = async (
 				for (const claim of claims) {
 					if (claim.rank === "deprecated") continue;
 					const value = formatClaimValue(claim, entityLabels);
-					if (value && !values.includes(value)) {
+					if (value !== null && value !== undefined && value !== "" && !values.includes(value)) {
 						values.push(value);
 					}
 				}
@@ -270,7 +270,7 @@ async function resolveEntityLabels(
 				};
 				for (const [id, entity] of Object.entries(data.entities)) {
 					const label = entity.labels?.en?.value;
-					if (label) labels[id] = label;
+					if (label !== null && label !== undefined && label !== "") labels[id] = label;
 				}
 			}
 		} catch {}

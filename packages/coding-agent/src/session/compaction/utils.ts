@@ -41,7 +41,7 @@ export function extractFileOpsFromMessage(message: AgentMessage, fileOps: FileOp
 		if (!args) continue;
 
 		const path = typeof args.path === "string" ? args.path : undefined;
-		if (!path) continue;
+		if (path === null || path === undefined || path === "") continue;
 
 		switch (block.name) {
 			case "read":

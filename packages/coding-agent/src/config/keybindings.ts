@@ -415,7 +415,7 @@ export class KeybindingsManager extends TuiKeybindingsManager {
 	 * Reload keybindings from the config file.
 	 */
 	reload(): void {
-		if (!this.#configPath) return;
+		if (this.#configPath === null || this.#configPath === undefined || this.#configPath === "") return;
 		this.setUserBindings(KeybindingsManager.#loadFromFile(this.#configPath));
 	}
 

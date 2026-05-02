@@ -330,7 +330,7 @@ describe("AskTool cancellation", () => {
 			abort,
 		});
 
-		await expect(
+		expect(
 			tool.execute(
 				"call-3",
 				{
@@ -404,9 +404,9 @@ describe("AskTool custom input", () => {
 			abort,
 		});
 
-		await expect(
-			tool.execute("call-editor-cancel", { questions }, undefined, undefined, context),
-		).rejects.toBeInstanceOf(ToolAbortError);
+		expect(tool.execute("call-editor-cancel", { questions }, undefined, undefined, context)).rejects.toBeInstanceOf(
+			ToolAbortError,
+		);
 		expect(editor).toHaveBeenCalledTimes(1);
 		expect(abort).toHaveBeenCalledTimes(1);
 	});
@@ -473,7 +473,7 @@ describe("AskTool custom input", () => {
 			abort,
 		});
 
-		await expect(
+		expect(
 			tool.execute("call-editor-abort", { questions }, controller.signal, undefined, context),
 		).rejects.toBeInstanceOf(ToolAbortError);
 		expect(editor).toHaveBeenCalledTimes(1);
@@ -526,7 +526,8 @@ describe("AskTool custom input", () => {
 				if (step === 0) {
 					step += 1;
 					const alphaOption = options.find(option => option.endsWith("alpha"));
-					if (!alphaOption) throw new Error("Missing alpha option");
+					if (alphaOption === null || alphaOption === undefined || alphaOption === "")
+						throw new Error("Missing alpha option");
 					return alphaOption;
 				}
 				return "Other (type your own)";
@@ -577,7 +578,8 @@ describe("AskTool custom input", () => {
 				if (step === 0) {
 					step += 1;
 					const alphaOption = options.find(option => option.endsWith("alpha"));
-					if (!alphaOption) throw new Error("Missing alpha option");
+					if (alphaOption === null || alphaOption === undefined || alphaOption === "")
+						throw new Error("Missing alpha option");
 					return alphaOption;
 				}
 				return "Other (type your own)";

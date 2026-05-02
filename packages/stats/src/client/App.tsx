@@ -26,8 +26,8 @@ export default function App() {
 			setStats(s);
 			setRecentRequests(r);
 			setRecentErrors(e);
-		} catch (err) {
-			console.error(err);
+		} catch (error) {
+			console.error(error);
 		}
 	}, []);
 

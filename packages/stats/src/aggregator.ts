@@ -62,11 +62,10 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 	await initDb();
 
 	const files = await listAllSessionFiles();
+	const counts = await Promise.all(files.map(file => syncSessionFile(file)));
 	let totalProcessed = 0;
 	let filesProcessed = 0;
-
-	for (const file of files) {
-		const count = await syncSessionFile(file);
+	for (const count of counts) {
 		if (count > 0) {
 			totalProcessed += count;
 			filesProcessed++;
@@ -117,7 +116,7 @@ export async function getRequestDetails(id: number): Promise<RequestDetails | nu
 	return {
 		...msg,
 		messages: [entry],
-		output: (entry as any).message,
+		output: (entry as { message?: unknown }).message,
 	};
 }
 

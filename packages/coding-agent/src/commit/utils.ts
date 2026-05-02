@@ -33,10 +33,10 @@ export function normalizeAnalysis(parsed: {
 }): ConventionalAnalysis {
 	return {
 		type: parsed.type,
-		scope: parsed.scope?.trim() || null,
+		scope: parsed.scope?.trim() ?? null,
 		details: parsed.details.map(detail => ({
 			text: detail.text.trim(),
-			changelogCategory: detail.user_visible ? detail.changelog_category : undefined,
+			changelogCategory: detail.user_visible === true ? detail.changelog_category : undefined,
 			userVisible: detail.user_visible ?? false,
 		})),
 		issueRefs: parsed.issue_refs ?? [],
@@ -52,7 +52,7 @@ export function normalizeDetails(
 ): ConventionalDetail[] {
 	return details.map(detail => ({
 		text: detail.text.trim(),
-		changelogCategory: detail.user_visible ? detail.changelog_category : undefined,
+		changelogCategory: detail.user_visible === true ? detail.changelog_category : undefined,
 		userVisible: detail.user_visible ?? false,
 	}));
 }

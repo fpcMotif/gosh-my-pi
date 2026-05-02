@@ -89,7 +89,7 @@ describe("Tavily web search provider", () => {
 				}),
 		);
 
-		await expect(searchTavily({ query: "bad auth" })).rejects.toEqual(
+		expect(searchTavily({ query: "bad auth" })).rejects.toEqual(
 			expect.objectContaining({
 				provider: "tavily",
 				status: 401,
@@ -103,7 +103,7 @@ describe("Tavily web search provider", () => {
 		vi.spyOn(AgentStorage, "open").mockResolvedValue({
 			listAuthCredentials: () => [],
 		} as unknown as AgentStorage);
-		await expect(searchTavily({ query: "missing creds" })).rejects.toThrow(
+		expect(searchTavily({ query: "missing creds" })).rejects.toThrow(
 			'Tavily credentials not found. Set TAVILY_API_KEY or store an API key for provider "tavily" in agent.db.',
 		);
 	});

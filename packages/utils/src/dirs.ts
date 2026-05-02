@@ -91,7 +91,7 @@ export function setProjectDir(dir: string): void {
 
 /** Get the config directory name relative to home (e.g. ".omp" or PI_CONFIG_DIR override). */
 export function getConfigDirName(): string {
-	return process.env.PI_CONFIG_DIR || CONFIG_DIR_NAME;
+	return process.env.PI_CONFIG_DIR ?? CONFIG_DIR_NAME;
 }
 
 /** Get the config agent directory name relative to home (e.g. ".omp/agent" or PI_CONFIG_DIR + "/agent"). */
@@ -104,6 +104,36 @@ export function getConfigAgentDirName(): string {
 // =============================================================================
 
 type XdgCategory = "data" | "state" | "cache";
+
+function isOverrideSet(s: string | undefined): s is string {
+	return s !== undefined && s !== "";
+}
+
+function resolveXdgEnvDir(envVar: string): string | undefined {
+	const value = process.env[envVar];
+	if (value === undefined || value === "") return undefined;
+	try {
+		const joined = path.join(value, APP_NAME);
+		if (fs.existsSync(joined)) return joined;
+	} catch {}
+	return undefined;
+}
+
+interface XdgDirs {
+	data: string | undefined;
+	state: string | undefined;
+	cache: string | undefined;
+}
+
+function resolveXdgDirs(isDefault: boolean): XdgDirs {
+	const empty: XdgDirs = { data: undefined, state: undefined, cache: undefined };
+	if (!((process.platform === "linux" || process.platform === "darwin") && isDefault)) return empty;
+	return {
+		data: resolveXdgEnvDir("XDG_DATA_HOME"),
+		state: resolveXdgEnvDir("XDG_STATE_HOME"),
+		cache: resolveXdgEnvDir("XDG_CACHE_HOME"),
+	};
+}
 
 /**
  * Resolves and caches all omp directory paths. On Linux, when XDG environment
@@ -125,51 +155,27 @@ class DirResolver {
 
 	constructor(agentDirOverride?: string) {
 		this.configRoot = path.join(os.homedir(), getConfigDirName());
-
 		const defaultAgent = path.join(this.configRoot, "agent");
-		this.agentDir = agentDirOverride ? path.resolve(agentDirOverride) : defaultAgent;
-		const isDefault = this.agentDir === defaultAgent;
-
-		// XDG is a Linux convention. On other platforms, or for non-default
-		// profiles, all categories resolve to the legacy paths.
-		let xdgData: string | undefined;
-		let xdgState: string | undefined;
-		let xdgCache: string | undefined;
-		if ((process.platform === "linux" || process.platform === "darwin") && isDefault) {
-			const resolveIf = (envVar: string) => {
-				const value = process.env[envVar];
-				if (value) {
-					try {
-						const joined = path.join(value, APP_NAME);
-						if (fs.existsSync(joined)) {
-							return joined;
-						}
-					} catch {}
-				}
-				return undefined;
-			};
-			xdgData = resolveIf("XDG_DATA_HOME");
-			xdgState = resolveIf("XDG_STATE_HOME");
-			xdgCache = resolveIf("XDG_CACHE_HOME");
-		}
+		this.agentDir = isOverrideSet(agentDirOverride) ? path.resolve(agentDirOverride) : defaultAgent;
+		const xdg = resolveXdgDirs(this.agentDir === defaultAgent);
 
 		this.#rootDirs = {
-			data: xdgData ?? this.configRoot,
-			state: xdgState ?? this.configRoot,
-			cache: xdgCache ?? this.configRoot,
+			data: xdg.data ?? this.configRoot,
+			state: xdg.state ?? this.configRoot,
+			cache: xdg.cache ?? this.configRoot,
 		};
 		// XDG flattens the agent/ prefix: ~/.omp/agent/sessions → $XDG_DATA_HOME/omp/sessions
 		this.#agentDirs = {
-			data: xdgData ?? this.agentDir,
-			state: xdgState ?? this.agentDir,
-			cache: xdgCache ?? this.agentDir,
+			data: xdg.data ?? this.agentDir,
+			state: xdg.state ?? this.agentDir,
+			cache: xdg.cache ?? this.agentDir,
 		};
 	}
 
 	/** Config-root subdirectory, with optional XDG override. */
 	rootSubdir(subdir: string, xdg?: XdgCategory): string {
 		const cached = this.#rootCache.get(subdir);
-		if (cached) return cached;
+		if (cached !== null && cached !== undefined && cached !== "") return cached;
 		const base = xdg ? this.#rootDirs[xdg] : this.configRoot;
 		const result = path.join(base, subdir);
 		this.#rootCache.set(subdir, result);
@@ -178,9 +184,14 @@ class DirResolver {
 
 	/** Agent subdirectory, with optional XDG override. */
 	agentSubdir(userAgentDir: string | undefined, subdir: string, xdg?: XdgCategory): string {
-		if (!userAgentDir || userAgentDir === this.agentDir) {
+		if (
+			userAgentDir === null ||
+			userAgentDir === undefined ||
+			userAgentDir === "" ||
+			userAgentDir === this.agentDir
+		) {
 			const cached = this.#agentCache.get(subdir);
-			if (cached) return cached;
+			if (cached !== null && cached !== undefined && cached !== "") return cached;
 			const base = xdg ? this.#agentDirs[xdg] : this.agentDir;
 			const result = path.join(base, subdir);
 			this.#agentCache.set(subdir, result);

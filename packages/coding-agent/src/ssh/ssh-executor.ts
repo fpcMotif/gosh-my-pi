@@ -61,13 +61,13 @@ export async function executeSSH(
 	if (hasSshfs()) {
 		try {
 			await mountRemote(host, options?.remotePath ?? "/");
-		} catch (err) {
-			logger.warn("SSHFS mount failed", { host: host.name, error: String(err) });
+		} catch (error) {
+			logger.warn("SSHFS mount failed", { host: host.name, error: String(error) });
 		}
 	}
 
 	let resolvedCommand = command;
-	if (options?.compatEnabled) {
+	if (options?.compatEnabled === true) {
 		const info = await ensureHostInfo(host);
 		if (info.compatShell) {
 			resolvedCommand = buildCompatCommand(info.compatShell, command);
@@ -101,28 +101,28 @@ export async function executeSSH(
 			cancelled: false,
 			...(await sink.dump()),
 		};
-	} catch (err) {
-		if (err instanceof ptree.Exception) {
-			if (err instanceof ptree.TimeoutError) {
+	} catch (error) {
+		if (error instanceof ptree.Exception) {
+			if (error instanceof ptree.TimeoutError) {
 				return {
 					exitCode: undefined,
 					cancelled: true,
-					...(await sink.dump(`SSH: ${err.message}`)),
+					...(await sink.dump(`SSH: ${error.message}`)),
 				};
 			}
-			if (err.aborted) {
+			if (error.aborted) {
 				return {
 					exitCode: undefined,
 					cancelled: true,
-					...(await sink.dump(`Command aborted: ${err.message}`)),
+					...(await sink.dump(`Command aborted: ${error.message}`)),
 				};
 			}
 			return {
-				exitCode: err.exitCode,
+				exitCode: error.exitCode,
 				cancelled: false,
-				...(await sink.dump(`Unexpected error: ${err.message}`)),
+				...(await sink.dump(`Unexpected error: ${error.message}`)),
 			};
 		}
-		throw err;
+		throw error;
 	}
 }

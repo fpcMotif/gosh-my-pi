@@ -127,6 +127,6 @@ export class ArtifactManager {
 	async getPath(id: string): Promise<string | null> {
 		const files = await this.listFiles();
 		const match = files.find(f => f.startsWith(`${id}.`));
-		return match ? path.join(this.#dir, match) : null;
+		return match !== null && match !== undefined && match !== "" ? path.join(this.#dir, match) : null;
 	}
 }

@@ -67,7 +67,7 @@ export class HttpTransport implements MCPTransport {
 			...this.config.headers,
 		};
 
-		if (this.#sessionId) {
+		if (this.#sessionId !== null && this.#sessionId !== undefined && this.#sessionId !== "") {
 			headers["Mcp-Session-Id"] = this.#sessionId;
 		}
 
@@ -122,7 +122,7 @@ export class HttpTransport implements MCPTransport {
 			return;
 		}
 		// Server-to-client request: has both method and id
-		if ("method" in message && "id" in message && message.id != null) {
+		if ("method" in message && "id" in message && message.id !== null) {
 			void this.#handleServerRequest(message as JsonRpcRequest);
 			return;
 		}
@@ -176,7 +176,7 @@ export class HttpTransport implements MCPTransport {
 			...this.config.headers,
 		};
 
-		if (this.#sessionId) {
+		if (this.#sessionId !== null && this.#sessionId !== undefined && this.#sessionId !== "") {
 			headers["Mcp-Session-Id"] = this.#sessionId;
 		}
 
@@ -200,7 +200,7 @@ export class HttpTransport implements MCPTransport {
 
 			// Check for session ID in response
 			const newSessionId = response.headers.get("Mcp-Session-Id");
-			if (newSessionId) {
+			if (newSessionId !== null && newSessionId !== undefined && newSessionId !== "") {
 				this.#sessionId = newSessionId;
 			}
 
@@ -209,8 +209,12 @@ export class HttpTransport implements MCPTransport {
 				const wwwAuthenticate = response.headers.get("WWW-Authenticate");
 				const mcpAuthServer = response.headers.get("Mcp-Auth-Server");
 				const authHints = [
-					wwwAuthenticate ? `WWW-Authenticate: ${wwwAuthenticate}` : null,
-					mcpAuthServer ? `Mcp-Auth-Server: ${mcpAuthServer}` : null,
+					wwwAuthenticate !== null && wwwAuthenticate !== undefined && wwwAuthenticate !== ""
+						? `WWW-Authenticate: ${wwwAuthenticate}`
+						: null,
+					mcpAuthServer !== null && mcpAuthServer !== undefined && mcpAuthServer !== ""
+						? `Mcp-Auth-Server: ${mcpAuthServer}`
+						: null,
 				]
 					.filter(Boolean)
 					.join("; ");
@@ -236,7 +240,7 @@ export class HttpTransport implements MCPTransport {
 		} catch (error) {
 			clearTimeout(timeoutId);
 			if (error instanceof Error && error.name === "AbortError") {
-				if (options?.signal?.aborted) {
+				if (options?.signal !== undefined && options?.signal.aborted) {
 					throw error;
 				}
 				throw new Error(`Request timeout after ${timeout}ms`);
@@ -295,7 +299,7 @@ export class HttpTransport implements MCPTransport {
 			return result as T;
 		} catch (error) {
 			if (error instanceof Error && error.name === "AbortError") {
-				if (options?.signal?.aborted) {
+				if (options?.signal !== undefined && options?.signal.aborted) {
 					throw error;
 				}
 				throw new Error(`SSE response timeout after ${timeout}ms`);
@@ -335,7 +339,7 @@ export class HttpTransport implements MCPTransport {
 			Accept: "application/json, text/event-stream",
 			...this.config.headers,
 		};
-		if (this.#sessionId) {
+		if (this.#sessionId !== null && this.#sessionId !== undefined && this.#sessionId !== "") {
 			headers["Mcp-Session-Id"] = this.#sessionId;
 		}
 		try {
@@ -386,7 +390,7 @@ export class HttpTransport implements MCPTransport {
 			...this.config.headers,
 		};
 
-		if (this.#sessionId) {
+		if (this.#sessionId !== null && this.#sessionId !== undefined && this.#sessionId !== "") {
 			headers["Mcp-Session-Id"] = this.#sessionId;
 		}
 
@@ -441,7 +445,7 @@ export class HttpTransport implements MCPTransport {
 		}
 
 		// Send session termination if we have a session
-		if (this.#sessionId) {
+		if (this.#sessionId !== null && this.#sessionId !== undefined && this.#sessionId !== "") {
 			try {
 				const timeout = this.config.timeout ?? 30000;
 				const headers: Record<string, string> = {

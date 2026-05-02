@@ -49,7 +49,7 @@ export class LspLinterClient implements LinterClient {
 
 		// Check if server supports formatting
 		const caps = client.serverCapabilities;
-		if (!caps?.documentFormattingProvider) {
+		if (caps?.documentFormattingProvider === null || caps?.documentFormattingProvider === undefined) {
 			return content;
 		}
 

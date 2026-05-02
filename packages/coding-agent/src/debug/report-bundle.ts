@@ -28,9 +28,9 @@ async function readLastLines(filePath: string, n: number, maxBytes = MAX_LOG_BYT
 			lines.shift();
 		}
 		return lines.slice(-n).join("\n");
-	} catch (err) {
-		if (isEnoent(err)) return "";
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return "";
+		throw error;
 	}
 }
 
@@ -110,7 +110,7 @@ export async function createReportBundle(options: ReportBundleOptions): Promise<
 	}
 
 	// Session file
-	if (options.sessionFile) {
+	if (options.sessionFile !== null && options.sessionFile !== undefined && options.sessionFile !== "") {
 		try {
 			const sessionContent = await Bun.file(options.sessionFile).text();
 			data["session.jsonl"] = sessionContent;
@@ -149,7 +149,7 @@ export async function createReportBundle(options: ReportBundleOptions): Promise<
 		files.push("work.folded");
 		data["work.md"] = options.workProfile.summary;
 		files.push("work.md");
-		if (options.workProfile.svg) {
+		if (options.workProfile.svg !== null && options.workProfile.svg !== undefined && options.workProfile.svg !== "") {
 			data["work.svg"] = options.workProfile.svg;
 			files.push("work.svg");
 		}
@@ -277,9 +277,9 @@ export async function createDebugLogSource(): Promise<DebugLogSource> {
 				if (content.length > 0) {
 					chunks.push(content);
 				}
-			} catch (err) {
-				if (!isEnoent(err)) {
-					throw err;
+			} catch (error) {
+				if (!isEnoent(error)) {
+					throw error;
 				}
 			}
 		}

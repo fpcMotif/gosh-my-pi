@@ -64,7 +64,7 @@ export function formatGroupedFiles(
 		if (directory === ".") {
 			for (const filePath of dirFiles) {
 				const section = renderFile(filePath);
-				if (section.skip) continue;
+				if (section.skip === true) continue;
 				pushSeparatorIfNeeded();
 				const header = `# ${path.basename(filePath)}${section.headerSuffix ?? ""}`;
 				model.push(header, ...section.modelLines);
@@ -76,7 +76,7 @@ export function formatGroupedFiles(
 		const sections: Array<{ filePath: string; section: GroupedFileSection }> = [];
 		for (const filePath of dirFiles) {
 			const section = renderFile(filePath);
-			if (section.skip) continue;
+			if (section.skip === true) continue;
 			sections.push({ filePath, section });
 		}
 		if (sections.length === 0) continue;

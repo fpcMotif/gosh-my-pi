@@ -49,7 +49,7 @@ const PRIORITY = 55;
 
 async function loadJsonConfig(configPath: string): Promise<Record<string, unknown> | null> {
 	const content = await readFile(configPath);
-	if (!content) return null;
+	if (content === null || content === undefined || content === "") return null;
 
 	const parsed = tryParseJson<Record<string, unknown>>(content);
 	if (!parsed) {
@@ -69,9 +69,9 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 
 	// User-level only: ~/.config/opencode/AGENTS.md
 	const userAgentsMd = getUserPath(ctx, "opencode", "AGENTS.md");
-	if (userAgentsMd) {
+	if (userAgentsMd !== null && userAgentsMd !== undefined && userAgentsMd !== "") {
 		const content = await readFile(userAgentsMd);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			items.push({
 				path: userAgentsMd,
 				content,
@@ -106,7 +106,7 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 
 	// User-level: ~/.config/opencode/opencode.json
 	const userConfigPath = getUserPath(ctx, "opencode", "opencode.json");
-	if (userConfigPath) {
+	if (userConfigPath !== null && userConfigPath !== undefined && userConfigPath !== "") {
 		const config = await loadJsonConfig(userConfigPath);
 		if (config) {
 			const result = extractMCPServers(config, userConfigPath, "user");
@@ -135,14 +135,14 @@ function extractMCPServers(
 	const items: MCPServer[] = [];
 	const warnings: string[] = [];
 
-	if (!config.mcp || typeof config.mcp !== "object") {
+	if (config.mcp === null || config.mcp === undefined || typeof config.mcp !== "object") {
 		return { items, warnings };
 	}
 
 	const servers = expandEnvVarsDeep(config.mcp as Record<string, unknown>);
 
 	for (const [name, raw] of Object.entries(servers)) {
-		if (!raw || typeof raw !== "object") {
+		if (raw === null || raw === undefined || typeof raw !== "object") {
 			warnings.push(`Invalid MCP config for "${name}" in ${configPath}`);
 			continue;
 		}
@@ -155,9 +155,9 @@ function extractMCPServers(
 			transport = "stdio";
 		} else if (serverConfig.type === "remote") {
 			transport = "http";
-		} else if (serverConfig.url) {
+		} else if (serverConfig.url !== null && serverConfig.url !== undefined && serverConfig.url !== "") {
 			transport = "http";
-		} else if (serverConfig.command) {
+		} else if (serverConfig.command !== null && serverConfig.command !== undefined && serverConfig.command !== "") {
 			transport = "stdio";
 		}
 
@@ -188,7 +188,7 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 
 	const promises: Promise<LoadResult<Skill>>[] = [];
 
-	if (userSkillsDir) {
+	if (userSkillsDir !== null && userSkillsDir !== undefined && userSkillsDir !== "") {
 		promises.push(
 			scanSkillsFromDir(ctx, {
 				dir: userSkillsDir,
@@ -198,7 +198,7 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 		);
 	}
 
-	if (projectSkillsDir) {
+	if (projectSkillsDir !== null && projectSkillsDir !== undefined && projectSkillsDir !== "") {
 		promises.push(
 			scanSkillsFromDir(ctx, {
 				dir: projectSkillsDir,
@@ -224,8 +224,12 @@ async function loadExtensionModules(ctx: LoadContext): Promise<LoadResult<Extens
 	const projectPluginsDir = getProjectPath(ctx, "opencode", "plugins");
 
 	const [userPaths, projectPaths] = await Promise.all([
-		userPluginsDir ? discoverExtensionModulePaths(ctx, userPluginsDir) : Promise.resolve([]),
-		projectPluginsDir ? discoverExtensionModulePaths(ctx, projectPluginsDir) : Promise.resolve([]),
+		userPluginsDir !== null && userPluginsDir !== undefined && userPluginsDir !== ""
+			? discoverExtensionModulePaths(ctx, userPluginsDir)
+			: Promise.resolve([]),
+		projectPluginsDir !== null && projectPluginsDir !== undefined && projectPluginsDir !== ""
+			? discoverExtensionModulePaths(ctx, projectPluginsDir)
+			: Promise.resolve([]),
 	]);
 
 	const items = buildExtensionModuleItems(PROVIDER_ID, userPaths, projectPaths);
@@ -261,7 +265,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 	const transformCommand =
 		(level: "user" | "project") => (name: string, content: string, filePath: string, source: SourceMeta) => {
 			const { frontmatter, body } = parseFrontmatter(content, { source: filePath });
-			const commandName = frontmatter.name || name.replace(/\.md$/, "");
+			const commandName = frontmatter.name ?? name.replace(/\.md$/, "");
 			return {
 				name: String(commandName),
 				path: filePath,
@@ -273,7 +277,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 
 	const promises: Promise<LoadResult<SlashCommand>>[] = [];
 
-	if (userCommandsDir) {
+	if (userCommandsDir !== null && userCommandsDir !== undefined && userCommandsDir !== "") {
 		promises.push(
 			loadFilesFromDir(ctx, userCommandsDir, PROVIDER_ID, "user", {
 				extensions: ["md"],
@@ -282,7 +286,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 		);
 	}
 
-	if (projectCommandsDir) {
+	if (projectCommandsDir !== null && projectCommandsDir !== undefined && projectCommandsDir !== "") {
 		promises.push(
 			loadFilesFromDir(ctx, projectCommandsDir, PROVIDER_ID, "project", {
 				extensions: ["md"],
@@ -308,9 +312,9 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 
 	// User-level: ~/.config/opencode/opencode.json
 	const userConfigPath = getUserPath(ctx, "opencode", "opencode.json");
-	if (userConfigPath) {
+	if (userConfigPath !== null && userConfigPath !== undefined && userConfigPath !== "") {
 		const content = await readFile(userConfigPath);
-		if (content) {
+		if (content !== null && content !== undefined && content !== "") {
 			const parsed = tryParseJson<Record<string, unknown>>(content);
 			if (parsed) {
 				items.push({
@@ -328,7 +332,7 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	// Project-level: opencode.json in project root
 	const projectConfigPath = path.join(ctx.cwd, "opencode.json");
 	const content = await readFile(projectConfigPath);
-	if (content) {
+	if (content !== null && content !== undefined && content !== "") {
 		const parsed = tryParseJson<Record<string, unknown>>(content);
 		if (parsed) {
 			items.push({

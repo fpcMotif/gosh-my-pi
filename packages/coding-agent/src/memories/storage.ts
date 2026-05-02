@@ -315,7 +315,7 @@ export function markStage1SucceededWithOutput(
 				"SELECT 1 AS ok FROM jobs WHERE kind = ? AND job_key = ? AND status = 'running' AND ownership_token = ?",
 			)
 			.get(STAGE1_KIND, threadId, ownershipToken) as { ok?: number } | undefined;
-		if (!matched?.ok) return false;
+		if (matched?.ok === null || matched?.ok === undefined || matched?.ok === 0) return false;
 
 		db.prepare(`
 UPDATE jobs
@@ -353,7 +353,7 @@ export function markStage1SucceededNoOutput(
 				"SELECT 1 AS ok FROM jobs WHERE kind = ? AND job_key = ? AND status = 'running' AND ownership_token = ?",
 			)
 			.get(STAGE1_KIND, threadId, ownershipToken) as { ok?: number } | undefined;
-		if (!matched?.ok) return false;
+		if (matched?.ok === null || matched?.ok === undefined || matched?.ok === 0) return false;
 
 		db.prepare(`
 UPDATE jobs

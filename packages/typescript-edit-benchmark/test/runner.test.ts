@@ -202,11 +202,18 @@ describe("writeConversationDump", () => {
 		await sourceSession.close();
 
 		const sourceSessionFile = sourceSession.getSessionFile();
-		if (!sourceSessionFile || !artifactId) {
+		if (
+			sourceSessionFile === null ||
+			sourceSessionFile === undefined ||
+			sourceSessionFile === "" ||
+			artifactId === null ||
+			artifactId === undefined ||
+			artifactId === ""
+		) {
 			throw new Error("Test fixture failed to create source session dump");
 		}
 		const sourceArtifactPath = await sourceSession.getArtifactPath(artifactId);
-		if (!sourceArtifactPath) {
+		if (sourceArtifactPath === null || sourceArtifactPath === undefined || sourceArtifactPath === "") {
 			throw new Error("Test fixture failed to resolve source artifact path");
 		}
 

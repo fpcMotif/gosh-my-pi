@@ -194,8 +194,10 @@ export function reconstructStateFromJsonl(workDir: string): ReconstructedExperim
 			}
 			sawConfig = true;
 			state.currentSegment = segment;
-			if (configEntry.name) state.name = configEntry.name;
-			if (configEntry.metricName) state.metricName = configEntry.metricName;
+			if (configEntry.name !== null && configEntry.name !== undefined && configEntry.name !== "")
+				state.name = configEntry.name;
+			if (configEntry.metricName !== null && configEntry.metricName !== undefined && configEntry.metricName !== "")
+				state.metricName = configEntry.metricName;
 			if (configEntry.metricUnit !== undefined) state.metricUnit = configEntry.metricUnit;
 			if (configEntry.bestDirection) state.bestDirection = configEntry.bestDirection;
 			if (configEntry.benchmarkCommand !== undefined) state.benchmarkCommand = configEntry.benchmarkCommand;

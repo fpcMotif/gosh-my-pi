@@ -50,10 +50,18 @@ export function parseAutoresearchContract(markdown: string): AutoresearchContrac
 
 export function validateAutoresearchContract(contract: AutoresearchContract): string[] {
 	const errors: string[] = [];
-	if (!contract.benchmark.command) {
+	if (
+		contract.benchmark.command === null ||
+		contract.benchmark.command === undefined ||
+		contract.benchmark.command === ""
+	) {
 		errors.push("Benchmark.command is required in autoresearch.md.");
 	}
-	if (!contract.benchmark.primaryMetric) {
+	if (
+		contract.benchmark.primaryMetric === null ||
+		contract.benchmark.primaryMetric === undefined ||
+		contract.benchmark.primaryMetric === ""
+	) {
 		errors.push("Benchmark.primary metric is required in autoresearch.md.");
 	}
 	if (!contract.benchmark.direction) {
@@ -173,19 +181,19 @@ function extractSections(markdown: string): Map<string, string> {
 	for (const line of lines) {
 		const headingMatch = line.match(HEADING_REGEX);
 		if (headingMatch) {
-			if (currentHeading) {
+			if (currentHeading !== null && currentHeading !== undefined && currentHeading !== "") {
 				sections.set(currentHeading, currentLines.join("\n").trim());
 			}
 			currentHeading = headingMatch[1]?.trim().toLowerCase() ?? null;
 			currentLines = [];
 			continue;
 		}
-		if (currentHeading) {
+		if (currentHeading !== null && currentHeading !== undefined && currentHeading !== "") {
 			currentLines.push(line);
 		}
 	}
 
-	if (currentHeading) {
+	if (currentHeading !== null && currentHeading !== undefined && currentHeading !== "") {
 		sections.set(currentHeading, currentLines.join("\n").trim());
 	}
 	return sections;
@@ -238,21 +246,21 @@ function parseListSection(section: string, normalizeItem?: (value: string) => st
 		if (line.trim().length === 0) continue;
 		const match = rawLine.match(LIST_ITEM_REGEX);
 		if (match) {
-			if (activeItem) items.push(activeItem);
+			if (activeItem !== null && activeItem !== undefined && activeItem !== "") items.push(activeItem);
 			activeItem = (match[1] ?? "").trim();
 			continue;
 		}
-		if (activeItem && /^\s{2,}\S/.test(rawLine)) {
+		if (activeItem !== null && activeItem !== undefined && activeItem !== "" && /^\s{2,}\S/.test(rawLine)) {
 			activeItem = `${activeItem} ${line.trim()}`;
 			continue;
 		}
-		if (activeItem) {
+		if (activeItem !== null && activeItem !== undefined && activeItem !== "") {
 			items.push(activeItem);
 			activeItem = null;
 		}
 		items.push(line.trim());
 	}
-	if (activeItem) {
+	if (activeItem !== null && activeItem !== undefined && activeItem !== "") {
 		items.push(activeItem);
 	}
 	const normalizedItems = normalizeAutoresearchList(items);
@@ -274,7 +282,7 @@ function readNullableEntry(value: string | undefined): string | null {
 }
 
 function parseSecondaryMetrics(value: string | undefined): string[] {
-	if (!value) return [];
+	if (value === null || value === undefined || value === "") return [];
 	return normalizeAutoresearchList(
 		value
 			.split(",")

@@ -31,7 +31,7 @@ describe("renameApprovedPlanFile", () => {
 		await Bun.write(path.join(artifactsDir, "local", "PLAN.md"), "draft");
 		await Bun.write(path.join(artifactsDir, "local", "WP_MIGRATION_PLAN.md"), "existing");
 
-		await expect(renameApprovedPlanFile(options("local://PLAN.md", "local://WP_MIGRATION_PLAN.md"))).rejects.toThrow(
+		expect(renameApprovedPlanFile(options("local://PLAN.md", "local://WP_MIGRATION_PLAN.md"))).rejects.toThrow(
 			"Plan destination already exists at local://WP_MIGRATION_PLAN.md",
 		);
 	});
@@ -42,6 +42,6 @@ describe("renameApprovedPlanFile", () => {
 		await renameApprovedPlanFile(options("local://PLAN.md", "local://WP_MIGRATION_PLAN.md"));
 
 		expect(await Bun.file(path.join(artifactsDir, "local", "WP_MIGRATION_PLAN.md")).text()).toBe("draft body");
-		await expect(fs.stat(path.join(artifactsDir, "local", "PLAN.md"))).rejects.toThrow();
+		expect(fs.stat(path.join(artifactsDir, "local", "PLAN.md"))).rejects.toThrow();
 	});
 });

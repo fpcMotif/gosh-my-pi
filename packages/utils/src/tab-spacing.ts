@@ -58,9 +58,17 @@ function parsePositiveInteger(raw: string | undefined): number | undefined {
 	return clampTabWidth(parsed);
 }
 
+function countChar(s: string, target: string): number {
+	let count = 0;
+	for (let i = 0; i < s.length; i++) {
+		if (s[i] === target) count++;
+	}
+	return count;
+}
+
 function fixUnclosedBraces(pattern: string): string {
-	const opens = [...pattern].filter(c => c === "{").length;
-	const closes = [...pattern].filter(c => c === "}").length;
+	const opens = countChar(pattern, "{");
+	const closes = countChar(pattern, "}");
 	if (opens > closes) {
 		return pattern + "}".repeat(opens - closes);
 	}
@@ -108,37 +116,50 @@ function parseEditorConfigFile(content: string): ParsedEditorConfig {
 
 	for (const rawLine of content.split(/\n/)) {
 		const line = rawLine.trim();
-		if (line === "") continue;
-		if (line.startsWith("#") || line.startsWith(";")) continue;
+		if (line === "" || line.startsWith("#") || line.startsWith(";")) continue;
 
-		if (line.startsWith("[") && line.endsWith("]") && line.length >= 2) {
-			const secPattern = line.slice(1, -1).trim();
-			if (secPattern === "") {
-				currentSectionIdx = undefined;
-				continue;
-			}
-			parsed.sections.push({ pattern: secPattern, properties: new Map() });
-			currentSectionIdx = parsed.sections.length - 1;
+		const header = parseSectionHeader(line);
+		if (header.kind !== "skip") {
+			currentSectionIdx = pushSectionIfNamed(parsed, header);
 			continue;
 		}
 
-		const eq = line.indexOf("=");
-		if (eq === -1) continue;
-		const key = line.slice(0, eq).trim().toLowerCase();
-		const value = line
-			.slice(eq + 1)
-			.trim()
-			.toLowerCase();
-		if (key === "") continue;
-
-		if (currentSectionIdx !== undefined) {
-			parsed.sections[currentSectionIdx]!.properties.set(key, value);
-		} else if (key === "root") {
-			parsed.root = value === "true";
-		}
+		applyKeyValue(line, parsed, currentSectionIdx);
 	}
 
 	return parsed;
+}
+
+type SectionHeader = { kind: "skip" } | { kind: "reset" } | { kind: "named"; pattern: string };
+
+function parseSectionHeader(line: string): SectionHeader {
+	if (!(line.startsWith("[") && line.endsWith("]") && line.length >= 2)) return { kind: "skip" };
+	const secPattern = line.slice(1, -1).trim();
+	return secPattern === "" ? { kind: "reset" } : { kind: "named", pattern: secPattern };
+}
+
+function pushSectionIfNamed(parsed: ParsedEditorConfig, header: SectionHeader): number | undefined {
+	if (header.kind !== "named") return undefined;
+	parsed.sections.push({ pattern: header.pattern, properties: new Map() });
+	return parsed.sections.length - 1;
+}
+
+function applyKeyValue(line: string, parsed: ParsedEditorConfig, currentSectionIdx: number | undefined): void {
+	const eq = line.indexOf("=");
+	if (eq === -1) return;
+	const key = line.slice(0, eq).trim().toLowerCase();
+	const value = line
+		.slice(eq + 1)
+		.trim()
+		.toLowerCase();
+	if (key === "") return;
+
+	if (currentSectionIdx !== undefined) {
+		const section = parsed.sections[currentSectionIdx];
+		if (section !== undefined) section.properties.set(key, value);
+	} else if (key === "root") {
+		parsed.root = value === "true";
+	}
 }
 
 function parseCachedEditorConfig(configPath: string): ParsedEditorConfig | undefined {
@@ -151,9 +172,9 @@ function parseCachedEditorConfig(configPath: string): ParsedEditorConfig | undef
 	let content: string;
 	try {
 		content = fs.readFileSync(key, "utf8");
-	} catch (err) {
-		if (isEnoent(err)) return undefined;
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return undefined;
+		throw error;
 	}
 	const parsed = parseEditorConfigFile(content);
 	editorConfigCache.set(key, parsed);
@@ -220,31 +241,8 @@ function resolveEditorConfigMatch(absoluteFile: string): EditorConfigMatch | und
 	for (const { dir, parsed } of chain) {
 		const relativePath = relativePathUnified(dir, absoluteFile);
 		for (const section of parsed.sections) {
-			if (!matchesEditorConfigPattern(section.pattern, relativePath)) {
-				continue;
-			}
-
-			const style = section.properties.get("indent_style");
-			if (style === "space") {
-				match.indentStyle = IndentStyle.Space;
-			} else if (style === "tab") {
-				match.indentStyle = IndentStyle.Tab;
-			}
-
-			const rawSize = section.properties.get("indent_size");
-			if (rawSize === "tab") {
-				match.indentSize = { kind: "tab" };
-			} else if (rawSize !== undefined) {
-				const n = parsePositiveInteger(rawSize);
-				if (n !== undefined) {
-					match.indentSize = { kind: "spaces", n };
-				}
-			}
-
-			const tw = parsePositiveInteger(section.properties.get("tab_width"));
-			if (tw !== undefined) {
-				match.tabWidth = tw;
-			}
+			if (!matchesEditorConfigPattern(section.pattern, relativePath)) continue;
+			applySectionToMatch(match, section);
 		}
 	}
 
@@ -252,6 +250,23 @@ function resolveEditorConfigMatch(absoluteFile: string): EditorConfigMatch | und
 		return undefined;
 	}
 	return match;
+}
+
+function applySectionToMatch(match: EditorConfigMatch, section: EditorConfigSection): void {
+	const style = section.properties.get("indent_style");
+	if (style === "space") match.indentStyle = IndentStyle.Space;
+	else if (style === "tab") match.indentStyle = IndentStyle.Tab;
+
+	const rawSize = section.properties.get("indent_size");
+	if (rawSize === "tab") {
+		match.indentSize = { kind: "tab" };
+	} else if (rawSize !== undefined) {
+		const n = parsePositiveInteger(rawSize);
+		if (n !== undefined) match.indentSize = { kind: "spaces", n };
+	}
+
+	const tw = parsePositiveInteger(section.properties.get("tab_width"));
+	if (tw !== undefined) match.tabWidth = tw;
 }
 
 function resolveEditorConfigTabWidth(match: EditorConfigMatch | undefined, fallback: number): number | undefined {

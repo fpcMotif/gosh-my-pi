@@ -63,8 +63,8 @@ async function readModuleContent(candidate: ModuleCandidate): Promise<PythonModu
 	try {
 		const content = await Bun.file(candidate.path).text();
 		return { path: candidate.path, content, source: candidate.source };
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		throw new Error(`Failed to read Python module ${candidate.path}: ${message}`);
 	}
 }

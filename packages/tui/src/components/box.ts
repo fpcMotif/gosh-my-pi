@@ -1,5 +1,6 @@
+import { Ellipsis } from "@oh-my-pi/pi-natives";
 import type { Component } from "../tui";
-import { applyBackgroundToLine, padding, visibleWidth } from "../utils";
+import { applyBackgroundToLine, padding, truncateToWidth, visibleWidth } from "../utils";
 
 type Cache = {
 	key: bigint | number;
@@ -59,7 +60,7 @@ export class Box implements Component {
 		for (const line of childLines) {
 			h = Bun.hash(line, h);
 		}
-		if (bgSample) {
+		if (bgSample !== null && bgSample !== undefined && bgSample !== "") {
 			h = Bun.hash(bgSample, h);
 		}
 		return h;
@@ -103,8 +104,8 @@ export class Box implements Component {
 		const cacheKey = this.#computeCacheKey(width, childLines, bgSample);
 
 		// Check cache validity
-		if (this.#matchCache(cacheKey)) {
-			return this.#cached!.result;
+		if (this.#matchCache(cacheKey) && this.#cached !== undefined) {
+			return this.#cached.result;
 		}
 
 		// Apply background and padding
@@ -132,13 +133,21 @@ export class Box implements Component {
 	}
 
 	#applyBg(line: string, width: number): string {
+		// Clamp lines to the declared width — child renders use a min content
+		// width of 1, so when `width < paddingX*2 + 1` the composed line can
+		// otherwise overshoot the budget.
 		const visLen = visibleWidth(line);
-		const padNeeded = Math.max(0, width - visLen);
-		const padded = line + padding(padNeeded);
+		let normalized: string;
+		if (visLen > width) {
+			normalized = truncateToWidth(line, width, Ellipsis.Omit, true);
+		} else {
+			const padNeeded = width - visLen;
+			normalized = line + padding(padNeeded);
+		}
 
 		if (this.#bgFn) {
-			return applyBackgroundToLine(padded, width, this.#bgFn);
+			return applyBackgroundToLine(normalized, width, this.#bgFn);
 		}
-		return padded;
+		return normalized;
 	}
 }

@@ -113,7 +113,7 @@ function isTermuxSession(): boolean {
 }
 
 /** Detect terminal multiplexers where scrollback clearing and height-change redraws are hostile. */
-const isMultiplexer = Boolean(Bun.env.TMUX || Bun.env.STY || Bun.env.ZELLIJ);
+const isMultiplexer = Boolean(Bun.env.TMUX ?? Bun.env.STY ?? Bun.env.ZELLIJ);
 
 /**
  * Options for overlay positioning and sizing.
@@ -409,9 +409,9 @@ export class TUI extends Container {
 	}
 
 	#querySixelSupport(): void {
-		if (TERMINAL.imageProtocol) return;
+		if (TERMINAL.imageProtocol !== undefined) return;
 		if (process.platform !== "win32") return;
-		if (!Bun.env.WT_SESSION) return;
+		if (Bun.env.WT_SESSION === null || Bun.env.WT_SESSION === undefined || Bun.env.WT_SESSION === "") return;
 		if (!process.stdin.isTTY || !process.stdout.isTTY) return;
 
 		this.#clearSixelProbeState();
@@ -526,7 +526,7 @@ export class TUI extends Container {
 
 	#finishSixelProbe(supported: boolean): void {
 		this.#clearSixelProbeState();
-		if (!supported || TERMINAL.imageProtocol) return;
+		if (!supported || TERMINAL.imageProtocol !== undefined) return;
 
 		setTerminalImageProtocol(ImageProtocol.Sixel);
 		this.#queryCellSize();
@@ -535,7 +535,7 @@ export class TUI extends Container {
 	}
 	#queryCellSize(): void {
 		// Only query if terminal supports images (cell size is only used for image rendering)
-		if (!TERMINAL.imageProtocol) {
+		if (TERMINAL.imageProtocol === undefined) {
 			return;
 		}
 		// Query terminal for cell size in pixels: CSI 16 t
@@ -586,7 +586,7 @@ export class TUI extends Container {
 			let current = data;
 			for (const listener of this.#inputListeners) {
 				const result = listener(current);
-				if (result?.consume) {
+				if (result?.consume === true) {
 					return;
 				}
 				if (result?.data !== undefined) {
@@ -631,7 +631,7 @@ export class TUI extends Container {
 		// The focused component can decide how to handle Ctrl+C
 		if (this.#focusedComponent?.handleInput) {
 			// Filter out key release events unless component opts in
-			if (isKeyRelease(data) && !this.#focusedComponent.wantsKeyRelease) {
+			if (isKeyRelease(data) && this.#focusedComponent.wantsKeyRelease !== true) {
 				return;
 			}
 			this.#focusedComponent.handleInput(data);

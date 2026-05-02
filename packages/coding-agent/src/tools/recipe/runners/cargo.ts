@@ -25,9 +25,9 @@ async function hasCargoManifest(cwd: string): Promise<boolean> {
 	try {
 		const stat = await fs.stat(path.join(cwd, "Cargo.toml"));
 		return stat.isFile();
-	} catch (err) {
-		if (isEnoent(err)) return false;
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return false;
+		throw error;
 	}
 }
 
@@ -36,9 +36,9 @@ function shellQuote(value: string): string {
 }
 
 function cargoTargetKind(target: CargoMetadataTarget): CargoTargetKind | undefined {
-	if (target.kind?.includes("bin")) return "bin";
-	if (target.kind?.includes("example")) return "example";
-	if (target.kind?.includes("test")) return "test";
+	if (target.kind?.includes("bin") === true) return "bin";
+	if (target.kind?.includes("example") === true) return "example";
+	if (target.kind?.includes("test") === true) return "test";
 	return undefined;
 }
 
@@ -66,16 +66,18 @@ function taskNameForTarget(
 
 export function tasksFromCargoMetadata(metadata: CargoMetadata): RunnerTask[] {
 	const workspaceMembers = new Set(metadata.workspace_members ?? []);
-	const workspacePackages = (metadata.packages ?? []).filter(pkg => pkg.id && workspaceMembers.has(pkg.id));
+	const workspacePackages = (metadata.packages ?? []).filter(
+		pkg => pkg.id !== null && pkg.id !== undefined && pkg.id !== "" && workspaceMembers.has(pkg.id),
+	);
 	const packages = workspacePackages.length > 0 ? workspacePackages : (metadata.packages ?? []);
 	const isWorkspace = packages.length > 1;
 	const tasks: RunnerTask[] = [];
 	const seen = new Set<string>();
 
 	for (const pkg of packages) {
-		if (!pkg.name) continue;
+		if (pkg.name === null || pkg.name === undefined || pkg.name === "") continue;
 		for (const target of pkg.targets ?? []) {
-			if (!target.name) continue;
+			if (target.name === null || target.name === undefined || target.name === "") continue;
 			const kind = cargoTargetKind(target);
 			if (!kind) continue;
 			const name = taskNameForTarget(pkg.name, kind, target.name, isWorkspace);
@@ -105,8 +107,8 @@ async function readCargoMetadata(cwd: string): Promise<CargoMetadata | null> {
 		const [stdout, exit] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
 		if (exit !== 0) return null;
 		return JSON.parse(stdout) as CargoMetadata;
-	} catch (err) {
-		logger.debug("cargo metadata failed", { error: err instanceof Error ? err.message : String(err) });
+	} catch (error) {
+		logger.debug("cargo metadata failed", { error: error instanceof Error ? error.message : String(error) });
 		return null;
 	}
 }
@@ -116,15 +118,15 @@ export const cargoRunner: TaskRunner = {
 	label: "Cargo",
 	async detect(cwd: string): Promise<DetectedRunner | null> {
 		try {
-			if (!$which("cargo")) return null;
+			if ($which("cargo") === undefined || $which("cargo") === "") return null;
 			if (!(await hasCargoManifest(cwd))) return null;
 			const metadata = await readCargoMetadata(cwd);
 			if (!metadata) return null;
 			const tasks = tasksFromCargoMetadata(metadata);
 			if (tasks.length === 0) return null;
 			return { id: "cargo", label: "Cargo", commandPrefix: "cargo", tasks };
-		} catch (err) {
-			logger.debug("cargo runner probe failed", { error: err instanceof Error ? err.message : String(err) });
+		} catch (error) {
+			logger.debug("cargo runner probe failed", { error: error instanceof Error ? error.message : String(error) });
 			return null;
 		}
 	},

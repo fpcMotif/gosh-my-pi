@@ -3,7 +3,10 @@ import { handleCheatSh } from "@oh-my-pi/pi-coding-agent/web/scrapers/cheatsh";
 import { handleRfc } from "@oh-my-pi/pi-coding-agent/web/scrapers/rfc";
 import { handleTldr } from "@oh-my-pi/pi-coding-agent/web/scrapers/tldr";
 
-const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
+const SKIP =
+	Bun.env.WEB_FETCH_INTEGRATION === null ||
+	Bun.env.WEB_FETCH_INTEGRATION === undefined ||
+	Bun.env.WEB_FETCH_INTEGRATION === "";
 
 describe.skipIf(SKIP)("handleRfc", () => {
 	it("returns null for non-RFC URLs", async () => {

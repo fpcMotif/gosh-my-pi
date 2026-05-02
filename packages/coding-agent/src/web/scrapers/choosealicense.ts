@@ -74,7 +74,7 @@ export const handleChooseALicense: SpecialHandler = async (
 		const limitations = normalizeList(frontmatter.limitations);
 
 		let md = `# ${title}\n\n`;
-		if (description) md += `${description}\n\n`;
+		if (description !== null && description !== undefined && description !== "") md += `${description}\n\n`;
 
 		md += `**SPDX ID:** ${spdxId}\n`;
 		md += `**Source:** https://choosealicense.com${isAppendix ? "/appendix" : `/licenses/${licenseSlug}/`}\n\n`;

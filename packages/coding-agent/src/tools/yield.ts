@@ -40,6 +40,119 @@ function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
 		.join("; ");
 }
 
+function isEmptySchemaError(schemaError: string | undefined | null): boolean {
+	return schemaError === null || schemaError === undefined || schemaError === "";
+}
+
+function sanitizeNormalizedSchema(
+	normalizedSchema: unknown,
+	schemaError: string | undefined | null,
+): Record<string, unknown> | undefined {
+	if (!isEmptySchemaError(schemaError)) return undefined;
+	if (normalizedSchema === true) return {};
+	if (normalizedSchema !== null && typeof normalizedSchema === "object" && !Array.isArray(normalizedSchema)) {
+		return sanitizeSchemaForStrictMode(normalizedSchema as Record<string, unknown>);
+	}
+	return undefined;
+}
+
+function buildSchemaDescription(schemaError: string | undefined | null, schemaHint: string): string {
+	return isEmptySchemaError(schemaError)
+		? `Structured output matching the schema:\n${schemaHint}`
+		: `Structured JSON output (output schema invalid; accepting unconstrained object): ${schemaError}`;
+}
+
+function buildDataSchema(
+	sanitizedSchema: Record<string, unknown> | undefined,
+	schemaDescription: string,
+	schemaError: string | undefined | null,
+): TSchema {
+	if (sanitizedSchema === undefined) {
+		return Type.Record(Type.String(), Type.Any(), {
+			description: isEmptySchemaError(schemaError)
+				? "Structured JSON output (no schema specified)"
+				: schemaDescription,
+		});
+	}
+	const resolved = dereferenceJsonSchema({
+		...sanitizedSchema,
+		description: schemaDescription,
+	});
+	return Type.Unsafe(resolved as Record<string, unknown>);
+}
+
+function compileSchemaValidator(
+	normalizedSchema: unknown,
+	schemaError: string | undefined | null,
+): { validate: ValidateFunction | undefined; schemaError: string | undefined | null } {
+	if (normalizedSchema === undefined || normalizedSchema === false || !isEmptySchemaError(schemaError)) {
+		return { validate: undefined, schemaError };
+	}
+	try {
+		const validate = ajv.compile(normalizedSchema as Record<string, unknown> | boolean);
+		return { validate, schemaError };
+	} catch (error) {
+		return { validate: undefined, schemaError: error instanceof Error ? error.message : String(error) };
+	}
+}
+
+function createYieldParameters(dataSchema: TSchema): TSchema {
+	return Type.Object(
+		{
+			result: Type.Union([
+				Type.Object({ data: dataSchema }, { description: "task succeeded" }),
+				Type.Object({
+					error: Type.String({ description: "error message" }),
+				}),
+			]),
+		},
+		{
+			additionalProperties: false,
+			description: "submit data or error",
+		},
+	) as TSchema;
+}
+
+interface ParsedYieldResult {
+	data: unknown;
+	errorMessage: string | undefined;
+}
+
+function parseYieldResult(params: Static<TSchema>): ParsedYieldResult {
+	const raw = params as Record<string, unknown>;
+	const rawResult = raw.result;
+	if (rawResult === null || rawResult === undefined || typeof rawResult !== "object" || Array.isArray(rawResult)) {
+		throw new Error("result must be an object containing either data or error");
+	}
+
+	const resultRecord = rawResult as Record<string, unknown>;
+	const errorMessage = typeof resultRecord.error === "string" ? resultRecord.error : undefined;
+	const data = resultRecord.data;
+
+	if (errorMessage !== undefined && data !== undefined) {
+		throw new Error("result cannot contain both data and error");
+	}
+	if (errorMessage === undefined && data === undefined) {
+		throw new Error(
+			'result must contain either `data` or `error`. Use `{result: {data: <your output>}}` for success or `{result: {error: "message"}}` for failure.',
+		);
+	}
+	return { data, errorMessage };
+}
+
+function buildYieldResponseText(
+	status: "success" | "aborted",
+	errorMessage: string | undefined,
+	schemaValidationOverridden: boolean,
+	failures: number,
+): string {
+	if (status === "aborted") return `Task aborted: ${errorMessage}`;
+	if (schemaValidationOverridden) {
+		return `Result submitted (schema validation overridden after ${failures} failed attempt(s)).`;
+	}
+	return "Result submitted.";
+}
+
 export class YieldTool implements AgentTool<TSchema, YieldDetails> {
 	readonly name = "yield";
 	readonly label = "Submit Result";
@@ -56,22 +169,6 @@ export class YieldTool implements AgentTool<TSchema, YieldDetails> {
 	#schemaValidationFailures = 0;
 
 	constructor(session: ToolSession) {
-		const createParameters = (dataSchema: TSchema): TSchema =>
-			Type.Object(
-				{
-					result: Type.Union([
-						Type.Object({ data: dataSchema }, { description: "task succeeded" }),
-						Type.Object({
-							error: Type.String({ description: "error message" }),
-						}),
-					]),
-				},
-				{
-					additionalProperties: false,
-					description: "submit data or error",
-				},
-			) as TSchema;
-
 		let validate: ValidateFunction | undefined;
 		let dataSchema: TSchema;
 		let parameters: TSchema;
@@ -80,62 +177,49 @@ export class YieldTool implements AgentTool<TSchema, YieldDetails> {
 			const schemaResult = normalizeSchema(session.outputSchema);
 			// Convert JTD to JSON Schema if needed (auto-detected)
 			const normalizedSchema =
-				schemaResult.normalized !== undefined ? jtdToJsonSchema(schemaResult.normalized) : undefined;
+				schemaResult.normalized === undefined ? undefined : jtdToJsonSchema(schemaResult.normalized);
 			let schemaError = schemaResult.error;
 
-			if (!schemaError && normalizedSchema === false) {
+			if (isEmptySchemaError(schemaError) && normalizedSchema === false) {
 				schemaError = "boolean false schema rejects all outputs";
 			}
 
-			if (normalizedSchema !== undefined && normalizedSchema !== false && !schemaError) {
-				try {
-					validate = ajv.compile(normalizedSchema as Record<string, unknown> | boolean);
-				} catch (err) {
-					schemaError = err instanceof Error ? err.message : String(err);
-				}
-			}
+			const compiled = compileSchemaValidator(normalizedSchema, schemaError);
+			validate = compiled.validate;
+			schemaError = compiled.schemaError ?? undefined;
 
 			const schemaHint = formatSchema(normalizedSchema ?? session.outputSchema);
-			const schemaDescription = schemaError
-				? `Structured JSON output (output schema invalid; accepting unconstrained object): ${schemaError}`
-				: `Structured output matching the schema:\n${schemaHint}`;
-			const sanitizedSchema =
-				!schemaError &&
-				normalizedSchema != null &&
-				typeof normalizedSchema === "object" &&
-				!Array.isArray(normalizedSchema)
-					? sanitizeSchemaForStrictMode(normalizedSchema as Record<string, unknown>)
-					: !schemaError && normalizedSchema === true
-						? {}
-						: undefined;
-
-			if (sanitizedSchema !== undefined) {
-				const resolved = dereferenceJsonSchema({
-					...sanitizedSchema,
-					description: schemaDescription,
-				});
-				dataSchema = Type.Unsafe(resolved as Record<string, unknown>);
-			} else {
-				dataSchema = Type.Record(Type.String(), Type.Any(), {
-					description: schemaError ? schemaDescription : "Structured JSON output (no schema specified)",
-				});
-			}
-			parameters = createParameters(dataSchema);
+			const schemaDescription = buildSchemaDescription(schemaError, schemaHint);
+			const sanitizedSchema = sanitizeNormalizedSchema(normalizedSchema, schemaError);
+			dataSchema = buildDataSchema(sanitizedSchema, schemaDescription, schemaError);
+			parameters = createYieldParameters(dataSchema);
 			JSON.stringify(parameters);
 			// Verify the final parameters compile with AJV (catches unresolved $ref, etc.)
 			ajv.compile(parameters as Record<string, unknown>);
-		} catch (err) {
-			const errorMsg = err instanceof Error ? err.message : String(err);
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
 			dataSchema = Type.Record(Type.String(), Type.Any(), {
 				description: `Structured JSON output (schema processing failed: ${errorMsg})`,
 			});
-			parameters = createParameters(dataSchema);
+			parameters = createYieldParameters(dataSchema);
 			validate = undefined;
 			this.strict = false;
 		}
 
 		this.#validate = validate;
 		this.parameters = parameters;
+	}
+
+	#validateSuccessData(data: unknown): boolean {
+		if (data === undefined || data === null) {
+			throw new Error("data is required when yield indicates success");
+		}
+		if (!this.#validate || this.#validate(data)) return false;
+		this.#schemaValidationFailures++;
+		if (this.#schemaValidationFailures <= 1) {
+			throw new Error(`Output does not match schema: ${formatAjvErrors(this.#validate.errors)}`);
+		}
+		return true;
 	}
 
 	async execute(
@@ -145,46 +229,15 @@ export class YieldTool implements AgentTool<TSchema, YieldDetails> {
 		_onUpdate?: AgentToolUpdateCallback<YieldDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<YieldDetails>> {
-		const raw = params as Record<string, unknown>;
-		const rawResult = raw.result;
-		if (!rawResult || typeof rawResult !== "object" || Array.isArray(rawResult)) {
-			throw new Error("result must be an object containing either data or error");
-		}
-
-		const resultRecord = rawResult as Record<string, unknown>;
-		const errorMessage = typeof resultRecord.error === "string" ? resultRecord.error : undefined;
-		const data = resultRecord.data;
-
-		if (errorMessage !== undefined && data !== undefined) {
-			throw new Error("result cannot contain both data and error");
-		}
-		if (errorMessage === undefined && data === undefined) {
-			throw new Error(
-				'result must contain either `data` or `error`. Use `{result: {data: <your output>}}` for success or `{result: {error: "message"}}` for failure.',
-			);
-		}
-
-		const status = errorMessage !== undefined ? "aborted" : "success";
-		let schemaValidationOverridden = false;
-		if (status === "success") {
-			if (data === undefined || data === null) {
-				throw new Error("data is required when yield indicates success");
-			}
-			if (this.#validate && !this.#validate(data)) {
-				this.#schemaValidationFailures++;
-				if (this.#schemaValidationFailures <= 1) {
-					throw new Error(`Output does not match schema: ${formatAjvErrors(this.#validate.errors)}`);
-				}
-				schemaValidationOverridden = true;
-			}
-		}
-
-		const responseText =
-			status === "aborted"
-				? `Task aborted: ${errorMessage}`
-				: schemaValidationOverridden
-					? `Result submitted (schema validation overridden after ${this.#schemaValidationFailures} failed attempt(s)).`
-					: "Result submitted.";
+		const { data, errorMessage } = parseYieldResult(params);
+		const status = errorMessage === undefined ? "success" : "aborted";
+		const schemaValidationOverridden = status === "success" ? this.#validateSuccessData(data) : false;
+		const responseText = buildYieldResponseText(
+			status,
+			errorMessage,
+			schemaValidationOverridden,
+			this.#schemaValidationFailures,
+		);
 		return {
 			content: [{ type: "text", text: responseText }],
 			details: { data, status, error: errorMessage },
@@ -196,7 +249,7 @@ export class YieldTool implements AgentTool<TSchema, YieldDetails> {
 subprocessToolRegistry.register<YieldDetails>("yield", {
 	extractData: event => {
 		const details = event.result?.details;
-		if (!details || typeof details !== "object") return undefined;
+		if (details === null || details === undefined || typeof details !== "object") return undefined;
 		const record = details as Record<string, unknown>;
 		const status = record.status;
 		if (status !== "success" && status !== "aborted") return undefined;
@@ -206,5 +259,5 @@ subprocessToolRegistry.register<YieldDetails>("yield", {
 			error: typeof record.error === "string" ? record.error : undefined,
 		};
 	},
-	shouldTerminate: event => !event.isError,
+	shouldTerminate: event => event.isError !== true,
 });

@@ -45,7 +45,7 @@ export function normalizeResponsesToolCallId(id: string): { callId: string; item
 
 function getIdPrefix(id: string, fallback: string): string {
 	const prefix = id.match(/^([a-zA-Z][a-zA-Z0-9]*)_/)?.[1];
-	return prefix || fallback;
+	return prefix ?? fallback;
 }
 
 function normalizeResponsesItemId(itemId: string): string {
@@ -90,7 +90,7 @@ function sanitizeOpenAIResponsesHistoryItemForReplay(
 
 function normalizeReplayedResponsesHistoryCallId(value: string, normalizedValues: Map<string, string>): string {
 	const normalized = normalizedValues.get(value);
-	if (normalized) return normalized;
+	if (normalized !== null && normalized !== undefined && normalized !== "") return normalized;
 	const next = truncateResponseItemId(value, getIdPrefix(value, "call"));
 	normalizedValues.set(value, next);
 	return next;
@@ -118,7 +118,12 @@ export function getOpenAIResponsesHistoryPayload(
 		return undefined;
 	}
 	const payloadProvider = providerPayload.provider ?? fallbackProvider;
-	if (!payloadProvider || payloadProvider !== currentProvider) {
+	if (
+		payloadProvider === null ||
+		payloadProvider === undefined ||
+		payloadProvider === "" ||
+		payloadProvider !== currentProvider
+	) {
 		return undefined;
 	}
 	return { ...providerPayload, provider: payloadProvider };
@@ -144,4 +149,9 @@ export function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRet
 
 export function isAnthropicOAuthToken(key: string): boolean {
 	return key.includes("sk-ant-oat");
+}
+
+export function normalizeBaseUrl(baseUrl: string | undefined): string | undefined {
+	const trimmed = baseUrl?.trim();
+	return trimmed !== null && trimmed !== undefined && trimmed !== "" ? trimmed.replace(/\/+$/, "") : undefined;
 }

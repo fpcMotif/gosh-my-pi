@@ -21,8 +21,8 @@ async function hasJustfile(cwd: string): Promise<boolean> {
 		try {
 			const stat = await fs.stat(path.join(cwd, name));
 			if (stat.isFile()) return true;
-		} catch (err) {
-			if (!isEnoent(err)) throw err;
+		} catch (error) {
+			if (!isEnoent(error)) throw error;
 		}
 	}
 	return false;
@@ -41,7 +41,8 @@ async function dumpJustTasks(cwd: string): Promise<RunnerTask[] | null> {
 		const dump = JSON.parse(stdout) as JustDump;
 		const tasks: RunnerTask[] = [];
 		for (const recipe of Object.values(dump.recipes ?? {})) {
-			if (!recipe.name || recipe.private) continue;
+			if (recipe.name === null || recipe.name === undefined || recipe.name === "" || recipe.private === true)
+				continue;
 			const parameters = (recipe.parameters ?? [])
 				.map(parameter => parameter.name)
 				.filter((name): name is string => typeof name === "string" && name.length > 0);
@@ -49,8 +50,8 @@ async function dumpJustTasks(cwd: string): Promise<RunnerTask[] | null> {
 			tasks.push({ name: recipe.name, doc, parameters });
 		}
 		return tasks;
-	} catch (err) {
-		logger.debug("just task detection failed", { error: err instanceof Error ? err.message : String(err) });
+	} catch (error) {
+		logger.debug("just task detection failed", { error: error instanceof Error ? error.message : String(error) });
 		return null;
 	}
 }
@@ -60,13 +61,13 @@ export const justRunner: TaskRunner = {
 	label: "Just",
 	async detect(cwd: string): Promise<DetectedRunner | null> {
 		try {
-			if (!$which("just")) return null;
+			if ($which("just") === undefined || $which("just") === "") return null;
 			if (!(await hasJustfile(cwd))) return null;
 			const tasks = await dumpJustTasks(cwd);
 			if (!tasks || tasks.length === 0) return null;
 			return { id: "just", label: "Just", commandPrefix: "just", tasks };
-		} catch (err) {
-			logger.debug("just runner probe failed", { error: err instanceof Error ? err.message : String(err) });
+		} catch (error) {
+			logger.debug("just runner probe failed", { error: error instanceof Error ? error.message : String(error) });
 			return null;
 		}
 	},

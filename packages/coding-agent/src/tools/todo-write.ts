@@ -3,6 +3,27 @@ import { StringEnum } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { prompt } from "@oh-my-pi/pi-utils";
+
+const SUP_DIGITS: Record<string, string> = {
+	"0": "\u2070",
+	"1": "\u00b9",
+	"2": "\u00b2",
+	"3": "\u00b3",
+	"4": "\u2074",
+	"5": "\u2075",
+	"6": "\u2076",
+	"7": "\u2077",
+	"8": "\u2078",
+	"9": "\u2079",
+};
+
+function toSuperscript(n: number): string {
+	return n
+		.toString()
+		.split("")
+		.map(d => SUP_DIGITS[d] ?? d)
+		.join("");
+}
 import { type Static, Type } from "@sinclair/typebox";
 import chalk from "chalk";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
@@ -40,6 +61,8 @@ export interface TodoWriteToolDetails {
 	phases: TodoPhase[];
 	storage: "session" | "memory";
 }
+
+export type TodoWriteRenderArgs = Static<typeof todoWriteSchema>;
 
 // =============================================================================
 // Schema
@@ -108,11 +131,11 @@ function cloneTask(task: TodoItem): TodoItem {
 	return out;
 }
 
-function clonePhases(phases: TodoPhase[]): TodoPhase[] {
+export function cloneTodoPhases(phases: TodoPhase[]): TodoPhase[] {
 	return phases.map(phase => ({ name: phase.name, tasks: phase.tasks.map(cloneTask) }));
 }
 
-function normalizeInProgressTask(phases: TodoPhase[]): void {
+export function normalizeInProgressTask(phases: TodoPhase[]): void {
 	const orderedTasks = phases.flatMap(phase => phase.tasks);
 	if (orderedTasks.length === 0) return;
 
@@ -137,18 +160,18 @@ export function getLatestTodoPhasesFromEntries(entries: SessionEntry[]): TodoPha
 		if (entry.type === "custom" && entry.customType === USER_TODO_EDIT_CUSTOM_TYPE) {
 			const data = entry.data as { phases?: unknown } | undefined;
 			if (data && Array.isArray(data.phases)) {
-				return clonePhases(data.phases as TodoPhase[]);
+				return cloneTodoPhases(data.phases as TodoPhase[]);
 			}
 			continue;
 		}
 		if (entry.type !== "message") continue;
 		const message = entry.message as { role?: string; toolName?: string; details?: unknown; isError?: boolean };
-		if (message.role !== "toolResult" || message.toolName !== "todo_write" || message.isError) continue;
+		if (message.role !== "toolResult" || message.toolName !== "todo_write" || message.isError === true) continue;
 
 		const details = message.details as { phases?: unknown } | undefined;
 		if (!details || !Array.isArray(details.phases)) continue;
 
-		return clonePhases(details.phases as TodoPhase[]);
+		return cloneTodoPhases(details.phases as TodoPhase[]);
 	}
 
 	return [];
@@ -159,7 +182,7 @@ function resolveTaskOrError(
 	content: string | undefined,
 	errors: string[],
 ): { task: TodoItem; phase: TodoPhase } | undefined {
-	if (!content) {
+	if (content === null || content === undefined || content === "") {
 		errors.push("Missing task content");
 		return undefined;
 	}
@@ -173,7 +196,7 @@ function resolveTaskOrError(
 }
 
 function resolvePhaseOrError(phases: TodoPhase[], name: string | undefined, errors: string[]): TodoPhase | undefined {
-	if (!name) {
+	if (name === null || name === undefined || name === "") {
 		errors.push("Missing phase name");
 		return undefined;
 	}
@@ -183,11 +206,11 @@ function resolvePhaseOrError(phases: TodoPhase[], name: string | undefined, erro
 }
 
 function getTaskTargets(phases: TodoPhase[], entry: TodoOpEntryValue, errors: string[]): TodoItem[] {
-	if (entry.task) {
+	if (entry.task !== null && entry.task !== undefined && entry.task !== "") {
 		const hit = resolveTaskOrError(phases, entry.task, errors);
 		return hit ? [hit.task] : [];
 	}
-	if (entry.phase) {
+	if (entry.phase !== null && entry.phase !== undefined && entry.phase !== "") {
 		const phase = resolvePhaseOrError(phases, entry.phase, errors);
 		return phase ? [...phase.tasks] : [];
 	}
@@ -206,7 +229,7 @@ function initPhases(entry: TodoOpEntryValue, errors: string[]): TodoPhase[] {
 }
 
 function appendItems(phases: TodoPhase[], entry: TodoOpEntryValue, errors: string[]): TodoPhase[] {
-	if (!entry.phase) {
+	if (entry.phase === null || entry.phase === undefined || entry.phase === "") {
 		errors.push("Missing phase name for append operation");
 		return phases;
 	}
@@ -232,13 +255,13 @@ function appendItems(phases: TodoPhase[], entry: TodoOpEntryValue, errors: strin
 }
 
 function removeTasks(phases: TodoPhase[], entry: TodoOpEntryValue, errors: string[]): TodoPhase[] {
-	if (entry.task) {
+	if (entry.task !== null && entry.task !== undefined && entry.task !== "") {
 		const hit = resolveTaskOrError(phases, entry.task, errors);
 		if (!hit) return phases;
 		hit.phase.tasks = hit.phase.tasks.filter(candidate => candidate !== hit.task);
 		return phases;
 	}
-	if (entry.phase) {
+	if (entry.phase !== null && entry.phase !== undefined && entry.phase !== "") {
 		const phase = resolvePhaseOrError(phases, entry.phase, errors);
 		if (!phase) return phases;
 		phase.tasks = [];
@@ -250,48 +273,58 @@ function removeTasks(phases: TodoPhase[], entry: TodoOpEntryValue, errors: strin
 	return phases;
 }
 
+function startTask(phases: TodoPhase[], entry: TodoOpEntryValue, errors: string[]): TodoPhase[] {
+	const hit = resolveTaskOrError(phases, entry.task, errors);
+	if (!hit) return phases;
+	for (const phase of phases) {
+		for (const candidate of phase.tasks) {
+			if (candidate.status === "in_progress" && candidate !== hit.task) {
+				candidate.status = "pending";
+			}
+		}
+	}
+	hit.task.status = "in_progress";
+	return phases;
+}
+
+function setTaskStatusForOp(
+	phases: TodoPhase[],
+	entry: TodoOpEntryValue,
+	errors: string[],
+	status: TodoItem["status"],
+): TodoPhase[] {
+	for (const task of getTaskTargets(phases, entry, errors)) {
+		task.status = status;
+	}
+	return phases;
+}
+
+function appendNote(phases: TodoPhase[], entry: TodoOpEntryValue, errors: string[]): TodoPhase[] {
+	const hit = resolveTaskOrError(phases, entry.task, errors);
+	if (!hit) return phases;
+	const text = (entry.text ?? "").replace(/\s+$/u, "");
+	if (!text) {
+		errors.push("Missing text for note operation");
+		return phases;
+	}
+	hit.task.notes = hit.task.notes ? [...hit.task.notes, text] : [text];
+	return phases;
+}
+
 function applyEntry(phases: TodoPhase[], entry: TodoOpEntryValue, errors: string[]): TodoPhase[] {
 	switch (entry.op) {
 		case "init":
 			return initPhases(entry, errors);
-		case "start": {
-			const hit = resolveTaskOrError(phases, entry.task, errors);
-			if (!hit) return phases;
-			for (const phase of phases) {
-				for (const candidate of phase.tasks) {
-					if (candidate.status === "in_progress" && candidate !== hit.task) {
-						candidate.status = "pending";
-					}
-				}
-			}
-			hit.task.status = "in_progress";
-			return phases;
-		}
-		case "done": {
-			for (const task of getTaskTargets(phases, entry, errors)) {
-				task.status = "completed";
-			}
-			return phases;
-		}
-		case "drop": {
-			for (const task of getTaskTargets(phases, entry, errors)) {
-				task.status = "abandoned";
-			}
-			return phases;
-		}
+		case "start":
+			return startTask(phases, entry, errors);
+		case "done":
+			return setTaskStatusForOp(phases, entry, errors, "completed");
+		case "drop":
+			return setTaskStatusForOp(phases, entry, errors, "abandoned");
 		case "rm":
 			return removeTasks(phases, entry, errors);
-		case "note": {
-			const hit = resolveTaskOrError(phases, entry.task, errors);
-			if (!hit) return phases;
-			const text = (entry.text ?? "").replace(/\s+$/u, "");
-			if (!text) {
-				errors.push("Missing text for note operation");
-				return phases;
-			}
-			hit.task.notes = hit.task.notes ? [...hit.task.notes, text] : [text];
-			return phases;
-		}
+		case "note":
+			return appendNote(phases, entry, errors);
 		case "append":
 			return appendItems(phases, entry, errors);
 	}
@@ -312,143 +345,72 @@ export function applyOpsToPhases(
 	currentPhases: TodoPhase[],
 	ops: TodoWriteParams["ops"],
 ): { phases: TodoPhase[]; errors: string[] } {
-	return applyParams(clonePhases(currentPhases), { ops });
+	return applyParams(cloneTodoPhases(currentPhases), { ops });
 }
 
 // =============================================================================
 // Markdown round-trip
 // =============================================================================
 
-const STATUS_TO_MARKER: Record<TodoStatus, string> = {
-	pending: " ",
-	in_progress: "/",
-	completed: "x",
-	abandoned: "-",
-};
+export { markdownToPhases, phasesToMarkdown } from "./todo-write-markdown";
 
-/** Render todo phases as a Markdown checklist suitable for editing/copying. */
-export function phasesToMarkdown(phases: TodoPhase[]): string {
-	if (phases.length === 0) return "# Todos\n";
-	const out: string[] = [];
-	for (let i = 0; i < phases.length; i++) {
-		if (i > 0) out.push("");
-		out.push(`# ${phases[i].name}`);
-		for (const task of phases[i].tasks) {
-			out.push(`- [${STATUS_TO_MARKER[task.status]}] ${task.content}`);
-			if (task.notes && task.notes.length > 0) {
-				for (let j = 0; j < task.notes.length; j++) {
-					if (j > 0) out.push("  >");
-					for (const noteLine of task.notes[j].split("\n")) {
-						out.push(noteLine === "" ? "  >" : `  > ${noteLine}`);
-					}
-				}
-			}
-		}
+function statusSymbol(status: TodoItem["status"]): string {
+	switch (status) {
+		case "completed":
+			return "✓";
+		case "in_progress":
+			return "→";
+		case "abandoned":
+			return "✗";
+		default:
+			return "○";
 	}
-	return `${out.join("\n")}\n`;
 }
 
-const MARKER_TO_STATUS: Record<string, TodoStatus> = {
-	" ": "pending",
-	"": "pending",
-	x: "completed",
-	X: "completed",
-	"/": "in_progress",
-	">": "in_progress",
-	"-": "abandoned",
-	"~": "abandoned",
-};
-
-/** Parse a Markdown checklist back into todo phases. */
-export function markdownToPhases(md: string): { phases: TodoPhase[]; errors: string[] } {
-	const errors: string[] = [];
-	const phases: TodoPhase[] = [];
-	let currentPhase: TodoPhase | undefined;
-	let currentTask: TodoItem | undefined;
-	let noteBuf: string[] = [];
-
-	const flushNote = () => {
-		if (!currentTask || noteBuf.length === 0) {
-			noteBuf = [];
-			return;
+function appendInProgressNotes(lines: string[], notes: string[]): void {
+	for (let j = 0; j < notes.length; j++) {
+		if (j > 0) lines.push("        ---");
+		for (const noteLine of notes[j].split("\n")) {
+			lines.push(`        ${noteLine}`);
 		}
-		while (noteBuf.length > 0 && noteBuf[noteBuf.length - 1] === "") noteBuf.pop();
-		if (noteBuf.length === 0) return;
-		const joined = noteBuf.join("\n");
-		currentTask.notes = currentTask.notes ? [...currentTask.notes, joined] : [joined];
-		noteBuf = [];
-	};
-
-	const lines = md.split(/\r?\n/);
-	for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-		const raw = lines[lineNum];
-
-		// Blockquote line attached to the current task: `  > text` or `  >`
-		const noteMatch = /^\s*>\s?(.*)$/.exec(raw);
-		if (noteMatch && currentTask) {
-			const noteLine = noteMatch[1];
-			if (noteLine === "") {
-				// Blank `>` separates two distinct notes
-				flushNote();
-			} else {
-				noteBuf.push(noteLine);
-			}
-			continue;
-		}
-
-		const trimmed = raw.trim();
-		if (!trimmed) continue;
-
-		const headingMatch = /^#{1,6}\s+(.+?)\s*$/.exec(trimmed);
-		if (headingMatch) {
-			flushNote();
-			currentTask = undefined;
-			currentPhase = { name: headingMatch[1].trim(), tasks: [] };
-			phases.push(currentPhase);
-			continue;
-		}
-
-		const taskMatch = /^[-*+]\s*\[(.?)\]\s+(.+?)\s*$/.exec(trimmed);
-		if (taskMatch) {
-			flushNote();
-			if (!currentPhase) {
-				currentPhase = { name: "Todos", tasks: [] };
-				phases.push(currentPhase);
-			}
-			const marker = taskMatch[1];
-			const status = MARKER_TO_STATUS[marker];
-			if (!status) {
-				errors.push(`Line ${lineNum + 1}: unknown status marker "[${marker}]" (use [ ], [x], [/], [-])`);
-				currentTask = undefined;
-				continue;
-			}
-			currentTask = { content: taskMatch[2].trim(), status };
-			currentPhase.tasks.push(currentTask);
-			continue;
-		}
-
-		flushNote();
-		currentTask = undefined;
-		errors.push(`Line ${lineNum + 1}: unrecognized syntax "${trimmed}"`);
 	}
-	flushNote();
-
-	normalizeInProgressTask(phases);
-	return { phases, errors };
 }
 
-function formatSummary(phases: TodoPhase[], errors: string[]): string {
-	const tasks = phases.flatMap(phase => phase.tasks);
-	if (tasks.length === 0) return errors.length > 0 ? `Errors: ${errors.join("; ")}` : "Todo list cleared.";
+function appendTaskSummary(lines: string[], task: TodoItem): void {
+	const noteCount = task.notes?.length ?? 0;
+	const noteMarker = noteCount > 0 ? ` (+${noteCount} note${noteCount === 1 ? "" : "s"})` : "";
+	lines.push(`    ${statusSymbol(task.status)} ${task.content}${noteMarker}`);
+	if (task.status === "in_progress" && task.notes && task.notes.length > 0) {
+		appendInProgressNotes(lines, task.notes);
+	}
+}
 
+function buildRemainingTasks(phases: TodoPhase[]): Array<TodoItem & { phase: string }> {
 	const remainingByPhase = phases
 		.map(phase => ({
 			name: phase.name,
 			tasks: phase.tasks.filter(task => task.status === "pending" || task.status === "in_progress"),
 		}))
 		.filter(phase => phase.tasks.length > 0);
-	const remainingTasks = remainingByPhase.flatMap(phase => phase.tasks.map(task => ({ ...task, phase: phase.name })));
+	return remainingByPhase.flatMap(phase => phase.tasks.map(task => ({ ...task, phase: phase.name })));
+}
 
+function appendRemainingTasksSummary(lines: string[], remainingTasks: Array<TodoItem & { phase: string }>): void {
+	if (remainingTasks.length === 0) {
+		lines.push("Remaining items: none.");
+		return;
+	}
+	lines.push(`Remaining items (${remainingTasks.length}):`);
+	for (const task of remainingTasks) {
+		lines.push(`  - ${task.content} [${task.status}] (${task.phase})`);
+	}
+}
+
+function formatSummary(phases: TodoPhase[], errors: string[]): string {
+	const tasks = phases.flatMap(phase => phase.tasks);
+	if (tasks.length === 0) return errors.length > 0 ? `Errors: ${errors.join("; ")}` : "Todo list cleared.";
+
+	const remainingTasks = buildRemainingTasks(phases);
 	let currentIdx = phases.findIndex(phase =>
 		phase.tasks.some(task => task.status === "pending" || task.status === "in_progress"),
 	);
@@ -458,39 +420,14 @@ function formatSummary(phases: TodoPhase[], errors: string[]): string {
 
 	const lines: string[] = [];
 	if (errors.length > 0) lines.push(`Errors: ${errors.join("; ")}`);
-	if (remainingTasks.length === 0) {
-		lines.push("Remaining items: none.");
-	} else {
-		lines.push(`Remaining items (${remainingTasks.length}):`);
-		for (const task of remainingTasks) {
-			lines.push(`  - ${task.content} [${task.status}] (${task.phase})`);
-		}
-	}
+	appendRemainingTasksSummary(lines, remainingTasks);
 	lines.push(
 		`Phase ${currentIdx + 1}/${phases.length} "${current.name}" — ${done}/${current.tasks.length} tasks complete`,
 	);
 	for (const phase of phases) {
 		lines.push(`  ${phase.name}:`);
 		for (const task of phase.tasks) {
-			const sym =
-				task.status === "completed"
-					? "✓"
-					: task.status === "in_progress"
-						? "→"
-						: task.status === "abandoned"
-							? "✗"
-							: "○";
-			const noteCount = task.notes?.length ?? 0;
-			const noteMarker = noteCount > 0 ? ` (+${noteCount} note${noteCount === 1 ? "" : "s"})` : "";
-			lines.push(`    ${sym} ${task.content}${noteMarker}`);
-			if (task.status === "in_progress" && task.notes && task.notes.length > 0) {
-				for (let j = 0; j < task.notes.length; j++) {
-					if (j > 0) lines.push("        ---");
-					for (const noteLine of task.notes[j].split("\n")) {
-						lines.push(`        ${noteLine}`);
-					}
-				}
-			}
+			appendTaskSummary(lines, task);
 		}
 	}
 	return lines.join("\n");
@@ -520,50 +457,17 @@ export class TodoWriteTool implements AgentTool<typeof todoWriteSchema, TodoWrit
 		_onUpdate?: AgentToolUpdateCallback<TodoWriteToolDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<TodoWriteToolDetails>> {
-		const previousPhases = clonePhases(this.session.getTodoPhases?.() ?? []);
+		const previousPhases = cloneTodoPhases(this.session.getTodoPhases?.() ?? []);
 		const { phases: updated, errors } = applyParams(previousPhases, params);
 		this.session.setTodoPhases?.(updated);
-		const storage = this.session.getSessionFile() ? "session" : "memory";
+		const storage =
+			this.session.getSessionFile() !== undefined && this.session.getSessionFile() !== "" ? "session" : "memory";
 
 		return {
 			content: [{ type: "text", text: formatSummary(updated, errors) }],
 			details: { phases: updated, storage },
 		};
 	}
-}
-
-// =============================================================================
-// TUI Renderer
-// =============================================================================
-
-type TodoWriteRenderArgs = {
-	ops?: Array<{
-		op?: string;
-		task?: string;
-		phase?: string;
-		items?: string[];
-	}>;
-};
-
-const SUP_DIGITS: Record<string, string> = {
-	"0": "\u2070",
-	"1": "\u00b9",
-	"2": "\u00b2",
-	"3": "\u00b3",
-	"4": "\u2074",
-	"5": "\u2075",
-	"6": "\u2076",
-	"7": "\u2077",
-	"8": "\u2078",
-	"9": "\u2079",
-};
-
-function toSuperscript(n: number): string {
-	return n
-		.toString()
-		.split("")
-		.map(d => SUP_DIGITS[d] ?? d)
-		.join("");
 }
 
 // =============================================================================
@@ -645,15 +549,29 @@ function renderNoteAttachments(phases: TodoPhase[], uiTheme: Theme): string[] {
 	return lines;
 }
 
+function nonEmptyString(value: string | undefined | null): string | undefined {
+	return value !== null && value !== undefined && value !== "" ? value : undefined;
+}
+
+function formatItemCount(count: number | undefined): string | undefined {
+	if (count === undefined || count === 0) return undefined;
+	return `${count} item${count === 1 ? "" : "s"}`;
+}
+
+function formatTodoOpEntry(entry: NonNullable<TodoWriteRenderArgs["ops"]>[number]): string {
+	const parts: string[] = [entry.op ?? "update"];
+	const task = nonEmptyString(entry.task);
+	if (task !== undefined) parts.push(task);
+	const phase = nonEmptyString(entry.phase);
+	if (phase !== undefined) parts.push(phase);
+	const items = formatItemCount(entry.items?.length);
+	if (items !== undefined) parts.push(items);
+	return parts.join(" ");
+}
+
 export const todoWriteToolRenderer = {
 	renderCall(args: TodoWriteRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
-		const ops = args?.ops?.map(entry => {
-			const parts = [entry.op ?? "update"];
-			if (entry.task) parts.push(entry.task);
-			if (entry.phase) parts.push(entry.phase);
-			if (entry.items?.length) parts.push(`${entry.items.length} item${entry.items.length === 1 ? "" : "s"}`);
-			return parts.join(" ");
-		}) ?? ["update"];
+		const ops = args?.ops?.map(formatTodoOpEntry) ?? ["update"];
 		const text = renderStatusLine({ icon: "pending", title: "Todo Write", meta: ops }, uiTheme);
 		return new Text(text, 0, 0);
 	},

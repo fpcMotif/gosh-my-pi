@@ -50,16 +50,16 @@ export class HookToolWrapper<TParameters extends TSchema = TSchema, TDetails = u
 					input: params as Record<string, unknown>,
 				})) as ToolCallEventResult | undefined;
 
-				if (callResult?.block) {
-					const reason = callResult.reason || "Tool execution was blocked by a hook";
+				if (callResult?.block === true) {
+					const reason = callResult.reason ?? "Tool execution was blocked by a hook";
 					throw new Error(reason);
 				}
-			} catch (err) {
+			} catch (error) {
 				// Hook error or block - throw to mark as error
-				if (err instanceof Error) {
-					throw err;
+				if (error instanceof Error) {
+					throw error;
 				}
-				throw new Error(`Hook failed, blocking execution: ${String(err)}`);
+				throw new Error(`Hook failed, blocking execution: ${String(error)}`);
 			}
 		}
 
@@ -89,7 +89,7 @@ export class HookToolWrapper<TParameters extends TSchema = TSchema, TDetails = u
 			}
 
 			return result;
-		} catch (err) {
+		} catch (error) {
 			// Emit tool_result event for errors so hooks can observe failures
 			if (this.hookRunner.hasHandlers("tool_result")) {
 				await this.hookRunner.emit({
@@ -97,12 +97,12 @@ export class HookToolWrapper<TParameters extends TSchema = TSchema, TDetails = u
 					toolName: this.tool.name,
 					toolCallId,
 					input: params as Record<string, unknown>,
-					content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }],
+					content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
 					details: undefined,
 					isError: true,
 				});
 			}
-			throw err; // Re-throw original error for agent-loop
+			throw error; // Re-throw original error for agent-loop
 		}
 	}
 }

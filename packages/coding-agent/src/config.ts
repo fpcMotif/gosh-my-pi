@@ -33,7 +33,7 @@ const priorityList = [
 export function getPackageDir(): string {
 	// Allow override via environment variable (useful for Nix/Guix where store paths tokenize poorly)
 	const envDir = process.env.PI_PACKAGE_DIR;
-	if (envDir) {
+	if (envDir !== null && envDir !== undefined && envDir !== "") {
 		return expandTilde(envDir);
 	}
 
@@ -64,7 +64,7 @@ function migrateJsonToYml(jsonPath: string, ymlPath: string) {
 
 		const content = fs.readFileSync(jsonPath, "utf-8");
 		const parsed = JSON.parse(content);
-		if (!parsed) {
+		if (parsed === null || parsed === undefined) {
 			logger.warn("migrateJsonToYml: invalid json structure", { path: jsonPath });
 			return;
 		}
@@ -85,9 +85,9 @@ export interface IConfigFile<T> {
 export class ConfigError extends Error {
 	readonly #message: string;
 	constructor(
-		public readonly id: string,
-		public readonly schemaErrors: ErrorObject[] | null | undefined,
-		public readonly other?: { err: unknown; stage: string },
+		readonly id: string,
+		readonly schemaErrors: ErrorObject[] | null | undefined,
+		readonly other?: { err: unknown; stage: string },
 	) {
 		let messages: string[] | undefined;
 		let cause: any | undefined;
@@ -169,7 +169,7 @@ export class ConfigFile<T> implements IConfigFile<T> {
 	}
 
 	relocate(path?: string): ConfigFile<T> {
-		if (!path || path === this.#basePath) return this;
+		if (path === null || path === undefined || path === "" || path === this.#basePath) return this;
 		const result = new ConfigFile<T>(this.id, this.schema, path);
 		result.#auxValidate = this.#auxValidate;
 		return result;

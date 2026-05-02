@@ -54,7 +54,7 @@ function normalizeHost(
 	home: string,
 	warnings: string[],
 ): SSHHost | null {
-	if (!raw.host) {
+	if (raw.host === null || raw.host === undefined || raw.host === "") {
 		warnings.push(`Missing host for SSH entry: ${name}`);
 		return null;
 	}
@@ -70,7 +70,8 @@ function normalizeHost(
 	}
 
 	const keyValue = raw.keyPath ?? raw.key;
-	const keyPath = keyValue ? expandTilde(keyValue, home) : undefined;
+	const keyPath =
+		keyValue !== null && keyValue !== undefined && keyValue !== "" ? expandTilde(keyValue, home) : undefined;
 
 	return {
 		name,

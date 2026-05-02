@@ -79,10 +79,10 @@ export async function cachePlugin(
 		await fs.cp(sourcePath, stagingPath, { recursive: true });
 		await fs.rm(targetPath, { recursive: true, force: true });
 		await fs.rename(stagingPath, targetPath);
-	} catch (err) {
+	} catch (error) {
 		// Clean up staging dir on any failure; leave existing targetPath intact
 		await fs.rm(stagingPath, { recursive: true, force: true }).catch(() => {});
-		throw err;
+		throw error;
 	}
 
 	return targetPath;
@@ -118,9 +118,9 @@ export async function cleanOrphanedCache(cacheDir: string, installedPaths: Set<s
 	let entries: string[];
 	try {
 		entries = await fs.readdir(cacheDir);
-	} catch (err) {
-		if (isEnoent(err)) return { removed: 0 };
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return { removed: 0 };
+		throw error;
 	}
 
 	let removed = 0;

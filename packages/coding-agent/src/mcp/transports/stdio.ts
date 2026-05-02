@@ -72,7 +72,7 @@ export class StdioTransport implements MCPTransport {
 		this.#readLoop = this.#startReadLoop();
 
 		// Log stderr for debugging
-		this.#startStderrLoop();
+		void this.#startStderrLoop();
 	}
 
 	async #startReadLoop(): Promise<void> {
@@ -125,13 +125,13 @@ export class StdioTransport implements MCPTransport {
 			return;
 		}
 		// Server-to-client request: has both method and id
-		if ("method" in message && "id" in message && message.id != null) {
+		if ("method" in message && "id" in message && message.id !== null) {
 			void this.#handleServerRequest(message as JsonRpcRequest);
 			return;
 		}
 
 		// Response to our request: has id
-		if ("id" in message && message.id != null) {
+		if ("id" in message && message.id !== null) {
 			const response = message as JsonRpcResponse;
 			const pending = this.#pendingRequests.get(response.id);
 			if (pending) {
@@ -174,8 +174,8 @@ export class StdioTransport implements MCPTransport {
 		const response = error
 			? { jsonrpc: "2.0" as const, id, error }
 			: { jsonrpc: "2.0" as const, id, result: result ?? {} };
-		this.#process.stdin.write(`${JSON.stringify(response)}\n`);
-		this.#process.stdin.flush();
+		void this.#process.stdin.write(`${JSON.stringify(response)}\n`);
+		void this.#process.stdin.flush();
 	}
 
 	#handleClose(): void {
@@ -211,7 +211,7 @@ export class StdioTransport implements MCPTransport {
 		const timeout = this.config.timeout ?? 30000;
 		const signal = options?.signal;
 
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			const reason = signal.reason instanceof Error ? signal.reason : new Error("Aborted");
 			return Promise.reject(reason);
 		}
@@ -262,8 +262,8 @@ export class StdioTransport implements MCPTransport {
 		const message = `${JSON.stringify(request)}\n`;
 		try {
 			// Bun's FileSink has write() method directly
-			this.#process.stdin.write(message);
-			this.#process.stdin.flush();
+			void this.#process.stdin.write(message);
+			void this.#process.stdin.flush();
 		} catch (error: unknown) {
 			cleanup();
 			reject(error instanceof Error ? error : new Error(String(error)));
@@ -285,8 +285,8 @@ export class StdioTransport implements MCPTransport {
 
 		const message = `${JSON.stringify(notification)}\n`;
 		// Bun's FileSink has write() method directly
-		this.#process.stdin.write(message);
-		this.#process.stdin.flush();
+		void this.#process.stdin.write(message);
+		void this.#process.stdin.flush();
 	}
 
 	async close(): Promise<void> {

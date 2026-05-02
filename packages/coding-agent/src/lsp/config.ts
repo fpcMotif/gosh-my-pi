@@ -64,7 +64,7 @@ function normalizeServerConfig(name: string, config: Partial<ServerConfig>): Ser
 	const fileTypes = normalizeStringArray(config.fileTypes);
 	const rootMarkers = normalizeStringArray(config.rootMarkers);
 
-	if (!command || !fileTypes || !rootMarkers) {
+	if (command === null || command === undefined || command === "" || !fileTypes || !rootMarkers) {
 		logger.warn("Ignoring invalid LSP server config (missing required fields).", { name });
 		return null;
 	}
@@ -226,7 +226,7 @@ export function resolveCommand(command: string, cwd: string): string | null {
 		if (hasRootMarkers(cwd, markers)) {
 			const localPath = path.join(cwd, binDir, command);
 			const resolvedLocalPath = resolveLocalCommand(localPath);
-			if (resolvedLocalPath) {
+			if (resolvedLocalPath !== null && resolvedLocalPath !== undefined && resolvedLocalPath !== "") {
 				return resolvedLocalPath;
 			}
 		}
@@ -343,7 +343,7 @@ export function loadConfig(cwd: string): LspConfig {
 
 			// Check if the language server binary is available (local or $PATH)
 			const resolved = resolveCommand(config.command, cwd);
-			if (!resolved) continue;
+			if (resolved === null || resolved === undefined || resolved === "") continue;
 
 			detected[name] = { ...config, resolvedCommand: resolved };
 		}
@@ -356,10 +356,10 @@ export function loadConfig(cwd: string): LspConfig {
 	const available: Record<string, ServerConfig> = {};
 
 	for (const [name, config] of Object.entries(mergedWithRuntime)) {
-		if (config.disabled) continue;
+		if (config.disabled === true) continue;
 		if (!hasRootMarkers(cwd, config.rootMarkers)) continue;
 		const resolved = resolveCommand(config.command, cwd);
-		if (!resolved) continue;
+		if (resolved === null || resolved === undefined || resolved === "") continue;
 		available[name] = { ...config, resolvedCommand: resolved };
 	}
 

@@ -40,7 +40,7 @@ export function renderTreeList<T>(options: TreeListOptions<T>, theme: Theme): st
 			prefix: "",
 			continuePrefix: "",
 		});
-		preRendered.push(Array.isArray(rendered) ? rendered : rendered ? [rendered] : []);
+		preRendered.push(Array.isArray(rendered) ? rendered : (rendered ? [rendered] : []));
 	}
 
 	// Determine how many items fit within the line budget.

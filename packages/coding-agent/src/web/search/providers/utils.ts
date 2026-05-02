@@ -14,7 +14,7 @@ export async function findCredential(
 	envKey: string | null | undefined,
 	...storageProviders: string[]
 ): Promise<string | null> {
-	if (envKey) return envKey;
+	if (envKey !== null && envKey !== undefined && envKey !== "") return envKey;
 
 	try {
 		const storage = await AgentStorage.open(getAgentDbPath());

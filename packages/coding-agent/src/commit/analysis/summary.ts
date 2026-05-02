@@ -72,7 +72,7 @@ function renderSummaryPrompt({
 	scope: string | null;
 	maxChars: number;
 }): string {
-	const scopePrefix = scope ? `(${scope})` : "";
+	const scopePrefix = scope !== null && scope !== undefined && scope !== "" ? `(${scope})` : "";
 	return prompt.render(summarySystemPrompt, {
 		commit_type: commitType,
 		scope_prefix: scopePrefix,
@@ -92,7 +92,7 @@ function parseSummaryFromResponse(message: AssistantMessage, commitType: string,
 
 export function stripTypePrefix(summary: string, commitType: string, scope: string | null): string {
 	const trimmed = summary.trim();
-	const scopePart = scope ? `(${scope})` : "";
+	const scopePart = scope !== null && scope !== undefined && scope !== "" ? `(${scope})` : "";
 	const withScope = `${commitType}${scopePart}: `;
 	if (trimmed.startsWith(withScope)) {
 		return trimmed.slice(withScope.length).trim();

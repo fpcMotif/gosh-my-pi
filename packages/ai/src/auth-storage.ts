@@ -21,54 +21,19 @@ import type {
 	UsageProvider,
 	UsageReport,
 } from "./usage";
-import { claudeRankingStrategy, claudeUsageProvider } from "./usage/claude";
-import { googleGeminiCliUsageProvider } from "./usage/gemini";
-import { githubCopilotUsageProvider } from "./usage/github-copilot";
-import { antigravityUsageProvider } from "./usage/google-antigravity";
 import { kimiUsageProvider } from "./usage/kimi";
+import { minimaxCodeUsageProvider } from "./usage/minimax-code";
 import { codexRankingStrategy, openaiCodexUsageProvider } from "./usage/openai-codex";
 import { zaiUsageProvider } from "./usage/zai";
 import { getOAuthApiKey, getOAuthProvider, refreshOAuthToken } from "./utils/oauth";
 // Re-export login functions so consumers of AuthStorage.login() have access
 // (these are used inside the login() switch-case)
-import { loginAlibabaCodingPlan } from "./utils/oauth/alibaba-coding-plan";
-import { loginAnthropic } from "./utils/oauth/anthropic";
-import { loginCerebras } from "./utils/oauth/cerebras";
-import { loginCloudflareAiGateway } from "./utils/oauth/cloudflare-ai-gateway";
-import { loginCursor } from "./utils/oauth/cursor";
-import { loginFireworks } from "./utils/oauth/fireworks";
-import { loginGitHubCopilot } from "./utils/oauth/github-copilot";
-import { loginGitLabDuo } from "./utils/oauth/gitlab-duo";
-import { loginAntigravity } from "./utils/oauth/google-antigravity";
-import { loginGeminiCli } from "./utils/oauth/google-gemini-cli";
-import { loginHuggingface } from "./utils/oauth/huggingface";
-import { loginKagi } from "./utils/oauth/kagi";
-import { loginKilo } from "./utils/oauth/kilo";
 import { loginKimi } from "./utils/oauth/kimi";
-import { loginLiteLLM } from "./utils/oauth/litellm";
-import { loginLmStudio } from "./utils/oauth/lm-studio";
-import { loginMiniMaxCode, loginMiniMaxCodeCn } from "./utils/oauth/minimax-code";
+import { loginMiniMaxCode } from "./utils/oauth/minimax-code";
 import { loginMoonshot } from "./utils/oauth/moonshot";
-import { loginNanoGPT } from "./utils/oauth/nanogpt";
-import { loginNvidia } from "./utils/oauth/nvidia";
-import { loginOllama } from "./utils/oauth/ollama";
-import { loginOllamaCloud } from "./utils/oauth/ollama-cloud";
 import { loginOpenAICodex } from "./utils/oauth/openai-codex";
-import { loginOpenCode } from "./utils/oauth/opencode";
-import { loginParallel } from "./utils/oauth/parallel";
-import { loginPerplexity } from "./utils/oauth/perplexity";
-import { loginQianfan } from "./utils/oauth/qianfan";
-import { loginQwenPortal } from "./utils/oauth/qwen-portal";
-import { loginSynthetic } from "./utils/oauth/synthetic";
-import { loginTavily } from "./utils/oauth/tavily";
-import { loginTogether } from "./utils/oauth/together";
 import type { OAuthController, OAuthCredentials, OAuthProvider, OAuthProviderId } from "./utils/oauth/types";
-import { loginVenice } from "./utils/oauth/venice";
-import { loginVercelAiGateway } from "./utils/oauth/vercel-ai-gateway";
-import { loginVllm } from "./utils/oauth/vllm";
-import { loginXiaomi } from "./utils/oauth/xiaomi";
 import { loginZai } from "./utils/oauth/zai";
-import { loginZenMux } from "./utils/oauth/zenmux";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Credential Types
@@ -145,7 +110,7 @@ export type AuthStorageOptions = {
  */
 async function defaultConfigValueResolver(config: string): Promise<string | undefined> {
 	const envValue = process.env[config];
-	return envValue || config;
+	return envValue ?? config;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -155,11 +120,8 @@ async function defaultConfigValueResolver(config: string): Promise<string | unde
 const DEFAULT_USAGE_PROVIDERS: UsageProvider[] = [
 	openaiCodexUsageProvider,
 	kimiUsageProvider,
-	antigravityUsageProvider,
-	googleGeminiCliUsageProvider,
-	claudeUsageProvider,
+	minimaxCodeUsageProvider,
 	zaiUsageProvider,
-	githubCopilotUsageProvider,
 ];
 
 const DEFAULT_USAGE_PROVIDER_MAP = new Map<Provider, UsageProvider>(
@@ -206,7 +168,7 @@ function getUsagePlanType(report: UsageReport | null): string | undefined {
 
 function getOpenAICodexPlanPriority(report: UsageReport | null): number {
 	const planType = getUsagePlanType(report);
-	if (!planType) return 1;
+	if (planType === null || planType === undefined || planType === "") return 1;
 	return planType.includes("pro") ? 0 : 2;
 }
 
@@ -220,7 +182,6 @@ function resolveDefaultUsageProvider(provider: Provider): UsageProvider | undefi
 
 const DEFAULT_RANKING_STRATEGIES = new Map<Provider, CredentialRankingStrategy>([
 	["openai-codex", codexRankingStrategy],
-	["anthropic", claudeRankingStrategy],
 ]);
 
 function resolveDefaultRankingStrategy(provider: Provider): CredentialRankingStrategy | undefined {
@@ -231,7 +192,8 @@ function parseUsageCacheEntry<T>(raw: string): UsageCacheEntry<T> | undefined {
 	try {
 		const parsed = JSON.parse(raw) as { value?: T; expiresAt?: unknown };
 		const expiresAt = typeof parsed.expiresAt === "number" ? parsed.expiresAt : undefined;
-		if (!expiresAt || !Number.isFinite(expiresAt)) return undefined;
+		if (expiresAt === null || expiresAt === undefined || expiresAt === 0 || !Number.isFinite(expiresAt))
+			return undefined;
 		return { value: parsed.value as T, expiresAt };
 	} catch {
 		return undefined;
@@ -247,7 +209,7 @@ class AuthStorageUsageCache implements UsageCache {
 
 	get<T>(key: string): UsageCacheEntry<T> | undefined {
 		const raw = this.store.getCache(`${USAGE_CACHE_PREFIX}${key}`);
-		if (!raw) return undefined;
+		if (raw === null || raw === undefined || raw === "") return undefined;
 		return parseUsageCacheEntry<T>(raw);
 	}
 
@@ -420,7 +382,7 @@ export class AuthStorage {
 				continue;
 			}
 			const identityKey = this.#resolveOAuthDedupeIdentityKey(provider, credential);
-			if (!identityKey) {
+			if (identityKey === null || identityKey === undefined || identityKey === "") {
 				deduped.push(credential);
 				continue;
 			}
@@ -445,7 +407,7 @@ export class AuthStorage {
 				continue;
 			}
 			const identityKey = this.#resolveOAuthDedupeIdentityKey(provider, credential);
-			if (!identityKey) {
+			if (identityKey === null || identityKey === undefined || identityKey === "") {
 				kept.push(entry);
 				continue;
 			}
@@ -504,9 +466,10 @@ export class AuthStorage {
 	 */
 	#getCredentialOrder(providerKey: string, sessionId: string | undefined, total: number): number[] {
 		if (total <= 1) return [0];
-		const start = sessionId
-			? this.#getHashedIndex(sessionId, total)
-			: this.#getNextRoundRobinIndex(providerKey, total);
+		const start =
+			sessionId !== null && sessionId !== undefined && sessionId !== ""
+				? this.#getHashedIndex(sessionId, total)
+				: this.#getNextRoundRobinIndex(providerKey, total);
 		const order: number[] = [];
 		for (let i = 0; i < total; i++) {
 			order.push((start + i) % total);
@@ -519,7 +482,7 @@ export class AuthStorage {
 		const backoffMap = this.#credentialBackoff.get(providerKey);
 		if (!backoffMap) return undefined;
 		const blockedUntil = backoffMap.get(credentialIndex);
-		if (!blockedUntil) return undefined;
+		if (blockedUntil === null || blockedUntil === undefined || blockedUntil === 0) return undefined;
 		if (blockedUntil <= Date.now()) {
 			backoffMap.delete(credentialIndex);
 			if (backoffMap.size === 0) {
@@ -550,7 +513,7 @@ export class AuthStorage {
 		type: AuthCredential["type"],
 		index: number,
 	): void {
-		if (!sessionId) return;
+		if (sessionId === null || sessionId === undefined || sessionId === "") return;
 		const sessionMap = this.#sessionLastCredential.get(provider) ?? new Map();
 		sessionMap.set(sessionId, { type, index });
 		this.#sessionLastCredential.set(provider, sessionMap);
@@ -561,7 +524,7 @@ export class AuthStorage {
 		provider: string,
 		sessionId: string | undefined,
 	): { type: AuthCredential["type"]; index: number } | undefined {
-		if (!sessionId) return undefined;
+		if (sessionId === null || sessionId === undefined || sessionId === "") return undefined;
 		return this.#sessionLastCredential.get(provider)?.get(sessionId);
 	}
 
@@ -702,8 +665,8 @@ export class AuthStorage {
 	hasAuth(provider: string): boolean {
 		if (this.#runtimeOverrides.has(provider)) return true;
 		if (this.#getCredentialsForProvider(provider).length > 0) return true;
-		if (getEnvApiKey(provider)) return true;
-		if (this.#fallbackResolver?.(provider)) return true;
+		if (getEnvApiKey(provider) !== undefined && getEnvApiKey(provider) !== "") return true;
+		if (this.#fallbackResolver?.(provider) !== undefined && this.#fallbackResolver?.(provider) !== "") return true;
 		return false;
 	}
 
@@ -752,212 +715,33 @@ export class AuthStorage {
 		},
 	): Promise<void> {
 		let credentials: OAuthCredentials;
-		const saveApiKeyCredential = async (apiKey: string): Promise<void> => {
-			const newCredential: ApiKeyCredential = { type: "api_key", key: apiKey };
-			await this.set(provider, newCredential);
-		};
 		const manualCodeInput = () => ctrl.onPrompt({ message: "Paste the authorization code (or full redirect URL):" });
 		switch (provider) {
-			case "anthropic":
-				credentials = await loginAnthropic({
-					...ctrl,
-					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
-				});
-				break;
-			case "alibaba-coding-plan": {
-				const apiKey = await loginAlibabaCodingPlan(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "github-copilot":
-				credentials = await loginGitHubCopilot({
-					onAuth: (url, instructions) => ctrl.onAuth({ url, instructions }),
-					onPrompt: ctrl.onPrompt,
-					onProgress: ctrl.onProgress,
-					signal: ctrl.signal,
-				});
-				break;
-			case "google-gemini-cli":
-				credentials = await loginGeminiCli({
-					...ctrl,
-					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
-				});
-				break;
-			case "google-antigravity":
-				credentials = await loginAntigravity({
-					...ctrl,
-					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
-				});
-				break;
 			case "openai-codex":
 				credentials = await loginOpenAICodex({
 					...ctrl,
 					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
 				});
 				break;
-			case "gitlab-duo":
-				credentials = await loginGitLabDuo({
-					...ctrl,
-					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
-				});
-				break;
-			case "kimi-code":
+			case "kimi":
 				credentials = await loginKimi(ctrl);
 				break;
-			case "kilo":
-				credentials = await loginKilo(ctrl);
+			case "moonshot":
+				credentials = await loginMoonshot(ctrl);
 				break;
-			case "cursor":
-				credentials = await loginCursor(
-					url => ctrl.onAuth({ url }),
-					ctrl.onProgress ? () => ctrl.onProgress?.("Waiting for browser authentication...") : undefined,
-				);
-				break;
-			case "perplexity":
-				credentials = await loginPerplexity(ctrl);
-				break;
-			case "huggingface": {
-				const apiKey = await loginHuggingface(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "opencode-zen":
-			case "opencode-go": {
-				const apiKey = await loginOpenCode(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "lm-studio": {
-				const apiKey = await loginLmStudio(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "ollama": {
-				const apiKey = await loginOllama(ctrl);
-				if (!apiKey) {
-					return;
-				}
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "ollama-cloud": {
-				const apiKey = await loginOllamaCloud(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "cerebras": {
-				const apiKey = await loginCerebras(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "fireworks": {
-				const apiKey = await loginFireworks(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
 			case "zai": {
 				const apiKey = await loginZai(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "qianfan": {
-				const apiKey = await loginQianfan(ctrl);
-				await saveApiKeyCredential(apiKey);
+				await this.set(provider, { type: "api_key", key: apiKey });
 				return;
 			}
 			case "minimax-code": {
 				const apiKey = await loginMiniMaxCode(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "minimax-code-cn": {
-				const apiKey = await loginMiniMaxCodeCn(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "synthetic": {
-				const apiKey = await loginSynthetic(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "tavily": {
-				const apiKey = await loginTavily(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "venice": {
-				const apiKey = await loginVenice(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "litellm": {
-				const apiKey = await loginLiteLLM(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "moonshot": {
-				const apiKey = await loginMoonshot(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "kagi": {
-				const apiKey = await loginKagi(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "nanogpt": {
-				const apiKey = await loginNanoGPT(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "together": {
-				const apiKey = await loginTogether(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "cloudflare-ai-gateway": {
-				const apiKey = await loginCloudflareAiGateway(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "vercel-ai-gateway": {
-				const apiKey = await loginVercelAiGateway(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "vllm": {
-				const apiKey = await loginVllm(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "parallel": {
-				const apiKey = await loginParallel(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "qwen-portal": {
-				const apiKey = await loginQwenPortal(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "nvidia": {
-				const apiKey = await loginNvidia(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "xiaomi": {
-				const apiKey = await loginXiaomi(ctrl);
-				await saveApiKeyCredential(apiKey);
-				return;
-			}
-			case "zenmux": {
-				const apiKey = await loginZenMux(ctrl);
-				await saveApiKeyCredential(apiKey);
+				await this.set(provider, { type: "api_key", key: apiKey });
 				return;
 			}
 			default: {
 				const customProvider = getOAuthProvider(provider);
-				if (!customProvider) {
+				if (customProvider === null || customProvider === undefined) {
 					throw new Error(`Unknown OAuth provider: ${provider}`);
 				}
 				const customLoginResult = await customProvider.login({
@@ -968,7 +752,7 @@ export class AuthStorage {
 					signal: ctrl.signal,
 				});
 				if (typeof customLoginResult === "string") {
-					await saveApiKeyCredential(customLoginResult);
+					await this.set(provider, { type: "api_key", key: customLoginResult });
 					return;
 				}
 				credentials = customLoginResult;
@@ -1007,20 +791,21 @@ export class AuthStorage {
 	#buildUsageCacheIdentity(credential: UsageCredential): string {
 		const parts: string[] = [credential.type];
 		const accountId = credential.accountId?.trim();
-		if (accountId) parts.push(`account:${accountId}`);
+		if (accountId !== null && accountId !== undefined && accountId !== "") parts.push(`account:${accountId}`);
 		const email = credential.email?.trim().toLowerCase();
-		if (email) parts.push(`email:${email}`);
+		if (email !== null && email !== undefined && email !== "") parts.push(`email:${email}`);
 		const projectId = credential.projectId?.trim();
-		if (projectId) parts.push(`project:${projectId}`);
+		if (projectId !== null && projectId !== undefined && projectId !== "") parts.push(`project:${projectId}`);
 		const enterpriseUrl = credential.enterpriseUrl?.trim().toLowerCase();
-		if (enterpriseUrl) parts.push(`enterprise:${enterpriseUrl}`);
+		if (enterpriseUrl !== null && enterpriseUrl !== undefined && enterpriseUrl !== "")
+			parts.push(`enterprise:${enterpriseUrl}`);
 		// Only fall back to a secret-derived key when a stable account identifier is unavailable.
 		// Including the token hash when accountId/email are present causes cache misses on
 		// every OAuth refresh — usage data is per-account, not per-token.
-		const hasStableIdentifier = Boolean(accountId || email);
+		const hasStableIdentifier = Boolean(accountId ?? email);
 		if (!hasStableIdentifier) {
-			const secret = credential.apiKey?.trim() || credential.refreshToken?.trim() || credential.accessToken?.trim();
-			if (secret) {
+			const secret = credential.apiKey?.trim() ?? credential.refreshToken?.trim() ?? credential.accessToken?.trim();
+			if (secret !== null && secret !== undefined && secret !== "") {
 				parts.push(`secret:${Bun.hash(secret).toString(16)}`);
 			} else {
 				parts.push("anonymous");
@@ -1063,7 +848,15 @@ export class AuthStorage {
 	}
 
 	#buildRefreshableOauthCredential(credential: UsageCredential): OAuthCredential | null {
-		if (!credential.accessToken || !credential.refreshToken || credential.expiresAt === undefined) {
+		if (
+			credential.accessToken === null ||
+			credential.accessToken === undefined ||
+			credential.accessToken === "" ||
+			credential.refreshToken === null ||
+			credential.refreshToken === undefined ||
+			credential.refreshToken === "" ||
+			credential.expiresAt === undefined
+		) {
 			return null;
 		}
 		return {
@@ -1095,8 +888,20 @@ export class AuthStorage {
 		const entries = this.#getStoredCredentials(provider);
 		const index = entries.findIndex(entry => {
 			if (entry.credential.type !== "oauth") return false;
-			if (previous.refreshToken && entry.credential.refresh === previous.refreshToken) return true;
-			if (previous.accessToken && entry.credential.access === previous.accessToken) return true;
+			if (
+				previous.refreshToken !== null &&
+				previous.refreshToken !== undefined &&
+				previous.refreshToken !== "" &&
+				entry.credential.refresh === previous.refreshToken
+			)
+				return true;
+			if (
+				previous.accessToken !== null &&
+				previous.accessToken !== undefined &&
+				previous.accessToken !== "" &&
+				entry.credential.access === previous.accessToken
+			)
+				return true;
 			return (
 				entry.credential.accountId === previous.accountId &&
 				entry.credential.email === previous.email &&
@@ -1104,7 +909,7 @@ export class AuthStorage {
 			);
 		});
 		if (index === -1) return;
-		const existing = entries[index]!.credential;
+		const existing = entries[index]?.credential;
 		if (existing.type !== "oauth") return;
 		this.#replaceCredentialAt(provider, index, {
 			type: "oauth",
@@ -1227,7 +1032,7 @@ export class AuthStorage {
 				const runtimeKey = this.#runtimeOverrides.get(providerId);
 				const envKey = getEnvApiKey(providerId);
 				const apiKey = runtimeKey ?? envKey;
-				if (!apiKey) continue;
+				if (apiKey === null || apiKey === undefined || apiKey === "") continue;
 				const request = this.#buildUsageRequest(provider, { type: "api_key", apiKey }, baseUrl);
 				if (providerImpl.supports && !providerImpl.supports(request)) continue;
 				requests.push(request);
@@ -1259,7 +1064,7 @@ export class AuthStorage {
 		const ids = new Set<string>();
 		for (const limit of report.limits) {
 			const accountId = limit.scope.accountId?.trim();
-			if (accountId) ids.add(accountId);
+			if (accountId !== null && accountId !== undefined && accountId !== "") ids.add(accountId);
 		}
 		if (ids.size === 1) return [...ids][0];
 		return undefined;
@@ -1268,20 +1073,21 @@ export class AuthStorage {
 	#getUsageReportIdentifiers(report: UsageReport): string[] {
 		const identifiers: string[] = [];
 		const email = this.#getUsageReportMetadataValue(report, "email");
-		if (email) identifiers.push(`email:${email.toLowerCase()}`);
-		if (report.provider === "openai-codex" || report.provider === "anthropic") {
+		if (email !== null && email !== undefined && email !== "") identifiers.push(`email:${email.toLowerCase()}`);
+		if (report.provider === "openai-codex") {
 			return identifiers.map(identifier => `${report.provider}:${identifier.toLowerCase()}`);
 		}
 		const accountId = this.#getUsageReportMetadataValue(report, "accountId");
-		if (accountId) identifiers.push(`account:${accountId}`);
+		if (accountId !== null && accountId !== undefined && accountId !== "") identifiers.push(`account:${accountId}`);
 		const account = this.#getUsageReportMetadataValue(report, "account");
-		if (account) identifiers.push(`account:${account}`);
+		if (account !== null && account !== undefined && account !== "") identifiers.push(`account:${account}`);
 		const user = this.#getUsageReportMetadataValue(report, "user");
-		if (user) identifiers.push(`account:${user}`);
+		if (user !== null && user !== undefined && user !== "") identifiers.push(`account:${user}`);
 		const username = this.#getUsageReportMetadataValue(report, "username");
-		if (username) identifiers.push(`account:${username}`);
+		if (username !== null && username !== undefined && username !== "") identifiers.push(`account:${username}`);
 		const scopeAccountId = this.#getUsageReportScopeAccountId(report);
-		if (scopeAccountId) identifiers.push(`account:${scopeAccountId}`);
+		if (scopeAccountId !== null && scopeAccountId !== undefined && scopeAccountId !== "")
+			identifiers.push(`account:${scopeAccountId}`);
 		return identifiers.map(identifier => `${report.provider}:${identifier.toLowerCase()}`);
 	}
 
@@ -1295,7 +1101,7 @@ export class AuthStorage {
 		const base = sorted[0];
 		const mergedLimits = [...base.limits];
 		const limitIds = new Set(mergedLimits.map(limit => limit.id));
-		const mergedMetadata: Record<string, unknown> = { ...(base.metadata ?? {}) };
+		const mergedMetadata: Record<string, unknown> = { ...base.metadata };
 		let fetchedAt = base.fetchedAt;
 
 		for (const report of sorted.slice(1)) {
@@ -1379,7 +1185,12 @@ export class AuthStorage {
 		for (const limit of report.limits) {
 			if (!this.#isUsageLimitExhausted(limit)) continue;
 			const window = limit.window;
-			if (window?.resetsAt && window.resetsAt > nowMs) {
+			if (
+				window?.resetsAt !== null &&
+				window?.resetsAt !== undefined &&
+				window?.resetsAt !== 0 &&
+				window.resetsAt > nowMs
+			) {
 				candidates.push(window.resetsAt);
 			}
 		}
@@ -1488,7 +1299,7 @@ export class AuthStorage {
 				const report = await this.#getUsageReport(provider, credential, options);
 				if (report && this.#isUsageLimitReached(report)) {
 					const resetAtMs = this.#getUsageResetAtMs(report, Date.now());
-					if (resetAtMs && resetAtMs > blockedUntil) {
+					if (resetAtMs !== null && resetAtMs !== undefined && resetAtMs !== 0 && resetAtMs > blockedUntil) {
 						blockedUntil = resetAtMs;
 					}
 				}
@@ -1580,7 +1391,7 @@ export class AuthStorage {
 		const usageResults = await Promise.all(
 			args.order.map(async idx => {
 				const selection = args.credentials[idx];
-				if (!selection) return null;
+				if (selection === undefined) return null;
 				const blockedUntil = this.#getCredentialBlockedUntil(args.providerKey, selection.index);
 				if (blockedUntil !== undefined) return { selection, usage: null, usageChecked: false, blockedUntil };
 				const usage = await this.#getUsageReport(args.provider, selection.credential, {
@@ -1738,10 +1549,10 @@ export class AuthStorage {
 				usagePrechecked: candidate.usageChecked,
 				enforceProRequirement,
 			});
-			if (apiKey) return apiKey;
+			if (apiKey !== null && apiKey !== undefined && apiKey !== "") return apiKey;
 		}
 
-		if (fallback && this.#isCredentialBlocked(providerKey, fallback.selection.index)) {
+		if (fallback !== undefined && this.#isCredentialBlocked(providerKey, fallback.selection.index)) {
 			return this.#tryOAuthCredential(provider, fallback.selection, providerKey, sessionId, options, {
 				checkUsage,
 				allowBlocked: true,
@@ -1758,8 +1569,8 @@ export class AuthStorage {
 		if (Date.now() < credential.expires) return credential;
 		const customProvider = getOAuthProvider(provider);
 		let refreshPromise: Promise<OAuthCredentials>;
-		if (customProvider) {
-			if (!customProvider.refreshToken) {
+		if (customProvider !== null && customProvider !== undefined) {
+			if (customProvider.refreshToken === null || customProvider.refreshToken === undefined) {
 				throw new Error(`OAuth provider "${provider}" does not support token refresh`);
 			}
 			refreshPromise = customProvider.refreshToken(credential);
@@ -1815,14 +1626,14 @@ export class AuthStorage {
 		if ((checkUsage && !allowBlocked) || requiresProModel) {
 			if (usagePrechecked) {
 				usage = prefetchedUsage;
-				usageChecked = true;
 			} else {
 				usage = await this.#getUsageReport(provider, selection.credential, {
 					...options,
 					timeoutMs: this.#usageRequestTimeoutMs,
 				});
-				usageChecked = true;
 			}
+			usageChecked = true;
+
 			if (applyProFilter && !hasOpenAICodexProPlan(usage)) {
 				return undefined;
 			}
@@ -1840,11 +1651,12 @@ export class AuthStorage {
 		try {
 			let result: { newCredentials: OAuthCredentials; apiKey: string } | null;
 			const customProvider = getOAuthProvider(provider);
-			if (customProvider) {
+			if (customProvider !== null && customProvider !== undefined) {
 				const refreshedCredentials = await this.#refreshOAuthCredential(provider, selection.credential);
-				const apiKey = customProvider.getApiKey
-					? customProvider.getApiKey(refreshedCredentials)
-					: refreshedCredentials.access;
+				const apiKey =
+					customProvider.getApiKey === null || customProvider.getApiKey === undefined
+						? refreshedCredentials.access
+						: customProvider.getApiKey(refreshedCredentials);
 				result = { newCredentials: refreshedCredentials, apiKey };
 			} else {
 				const oauthCreds: Record<string, OAuthCredentials> = {
@@ -1921,12 +1733,11 @@ export class AuthStorage {
 	/**
 	 * Peek at API key for a provider without refreshing OAuth tokens.
 	 * Used for model discovery where we only need to know if credentials exist
-	 * and get a best-effort token. For GitHub Copilot we preserve enterprise
-	 * routing metadata so discovery can hit the correct host.
+	 * and get a best-effort token.
 	 */
 	async peekApiKey(provider: string): Promise<string | undefined> {
 		const runtimeKey = this.#runtimeOverrides.get(provider);
-		if (runtimeKey) {
+		if (runtimeKey !== null && runtimeKey !== undefined && runtimeKey !== "") {
 			return runtimeKey;
 		}
 
@@ -1940,18 +1751,12 @@ export class AuthStorage {
 		if (oauthSelection) {
 			const expiresAt = oauthSelection.credential.expires;
 			if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
-				if (provider === "github-copilot") {
-					return JSON.stringify({
-						token: oauthSelection.credential.access,
-						enterpriseUrl: oauthSelection.credential.enterpriseUrl,
-					});
-				}
 				return oauthSelection.credential.access;
 			}
 		}
 
 		const envKey = getEnvApiKey(provider);
-		if (envKey) return envKey;
+		if (envKey !== null && envKey !== undefined && envKey !== "") return envKey;
 
 		return this.#fallbackResolver?.(provider) ?? undefined;
 	}
@@ -1968,7 +1773,7 @@ export class AuthStorage {
 	async getApiKey(provider: string, sessionId?: string, options?: AuthApiKeyOptions): Promise<string | undefined> {
 		// Runtime override takes highest priority
 		const runtimeKey = this.#runtimeOverrides.get(provider);
-		if (runtimeKey) {
+		if (runtimeKey !== null && runtimeKey !== undefined && runtimeKey !== "") {
 			return runtimeKey;
 		}
 
@@ -1979,13 +1784,13 @@ export class AuthStorage {
 		}
 
 		const oauthKey = await this.#resolveOAuthApiKey(provider, sessionId, options);
-		if (oauthKey) {
+		if (oauthKey !== null && oauthKey !== undefined && oauthKey !== "") {
 			return oauthKey;
 		}
 
 		// Fall back to environment variable
 		const envKey = getEnvApiKey(provider);
-		if (envKey) return envKey;
+		if (envKey !== null && envKey !== undefined && envKey !== "") return envKey;
 
 		// Fall back to custom resolver (e.g., models.json custom providers)
 		return this.#fallbackResolver?.(provider) ?? undefined;
@@ -2017,17 +1822,23 @@ const SQLITE_NOW_EPOCH = "CAST(strftime('%s','now') AS INTEGER)";
 
 function normalizeStoredAccountId(accountId: string | null | undefined): string | null {
 	const normalized = accountId?.trim();
-	return normalized && normalized.length > 0 ? normalized : null;
+	return normalized !== null && normalized !== undefined && normalized !== "" && normalized.length > 0
+		? normalized
+		: null;
 }
 
 function normalizeStoredEmail(email: string | null | undefined): string | null {
 	const normalized = email?.trim().toLowerCase();
-	return normalized && normalized.length > 0 ? normalized : null;
+	return normalized !== null && normalized !== undefined && normalized !== "" && normalized.length > 0
+		? normalized
+		: null;
 }
 
 function normalizeStoredIdentityKey(identityKey: string | null | undefined): string | null {
 	const normalized = identityKey?.trim();
-	return normalized && normalized.length > 0 ? normalized : null;
+	return normalized !== null && normalized !== undefined && normalized !== "" && normalized.length > 0
+		? normalized
+		: null;
 }
 
 function serializeCredential(provider: string, credential: AuthCredential): SerializedCredentialRecord | null {
@@ -2056,7 +1867,7 @@ function deserializeCredential(row: AuthRow): AuthCredential | null {
 	} catch {
 		return null;
 	}
-	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+	if (parsed === null || parsed === undefined || typeof parsed !== "object" || Array.isArray(parsed)) {
 		return null;
 	}
 	if (row.credential_type === "api_key") {
@@ -2082,10 +1893,17 @@ function toStoredAuthCredential(row: AuthRow, credential: AuthCredential): Store
 
 function resolveProviderCredentialIdentityKey(provider: string, identifiers: string[]): string | null {
 	const emailIdentifier = identifiers.find(identifier => identifier.startsWith("email:"));
-	if ((provider === "openai-codex" || provider === "anthropic") && emailIdentifier) return emailIdentifier;
+	if (
+		provider === "openai-codex" &&
+		emailIdentifier !== null &&
+		emailIdentifier !== undefined &&
+		emailIdentifier !== ""
+	)
+		return emailIdentifier;
 	const accountIdentifier = identifiers.find(identifier => identifier.startsWith("account:"));
-	if (accountIdentifier) return accountIdentifier;
-	if (emailIdentifier) return emailIdentifier;
+	if (accountIdentifier !== null && accountIdentifier !== undefined && accountIdentifier !== "")
+		return accountIdentifier;
+	if (emailIdentifier !== null && emailIdentifier !== undefined && emailIdentifier !== "") return emailIdentifier;
 	return null;
 }
 
@@ -2096,7 +1914,7 @@ function resolveCredentialIdentityKey(provider: string, credential: AuthCredenti
 
 function resolveRowCredentialIdentityKey(provider: string, row: AuthRow): string | null {
 	const identityKey = normalizeStoredIdentityKey(row.identity_key);
-	if (identityKey) return identityKey;
+	if (identityKey !== null && identityKey !== undefined && identityKey !== "") return identityKey;
 	const credential = deserializeCredential(row);
 	return credential?.type === "oauth" ? resolveCredentialIdentityKey(provider, credential) : null;
 }
@@ -2118,9 +1936,9 @@ function matchesReplacementCredential(
 function extractOAuthCredentialIdentifiers(credential: OAuthCredential): string[] {
 	const identifiers = new Set<string>();
 	const accountId = normalizeStoredAccountId(credential.accountId);
-	if (accountId) identifiers.add(`account:${accountId}`);
+	if (accountId !== null && accountId !== undefined && accountId !== "") identifiers.add(`account:${accountId}`);
 	const email = normalizeStoredEmail(credential.email);
-	if (email) identifiers.add(`email:${email}`);
+	if (email !== null && email !== undefined && email !== "") identifiers.add(`email:${email}`);
 	const accessIdentifiers = extractOAuthTokenIdentifiers(credential.access) ?? [];
 	for (const identifier of accessIdentifiers) {
 		identifiers.add(identifier);
@@ -2133,7 +1951,7 @@ function extractOAuthCredentialIdentifiers(credential: OAuthCredential): string[
 }
 
 function extractOAuthTokenIdentifiers(token: string | undefined): string[] | undefined {
-	if (!token) return undefined;
+	if (token === null || token === undefined || token === "") return undefined;
 	const parts = token.split(".");
 	if (parts.length !== 3) return undefined;
 	try {
@@ -2142,13 +1960,15 @@ function extractOAuthTokenIdentifiers(token: string | undefined): string[] | und
 		) as Record<string, unknown>;
 		const identifiers = new Set<string>();
 		const directEmail = normalizeStoredEmail(typeof payload.email === "string" ? payload.email : undefined);
-		if (directEmail) identifiers.add(`email:${directEmail}`);
+		if (directEmail !== null && directEmail !== undefined && directEmail !== "")
+			identifiers.add(`email:${directEmail}`);
 		const openAiProfile = payload["https://api.openai.com/profile"];
 		if (typeof openAiProfile === "object" && openAiProfile !== null && !Array.isArray(openAiProfile)) {
 			const claimEmail = normalizeStoredEmail(
 				(openAiProfile as Record<string, unknown>).email as string | undefined,
 			);
-			if (claimEmail) identifiers.add(`email:${claimEmail}`);
+			if (claimEmail !== null && claimEmail !== undefined && claimEmail !== "")
+				identifiers.add(`email:${claimEmail}`);
 		}
 		const openAiAuth = payload["https://api.openai.com/auth"];
 		const authClaims =
@@ -2168,12 +1988,13 @@ function extractOAuthTokenIdentifiers(token: string | undefined): string[] | und
 								? authClaims.chatgpt_account_id
 								: undefined,
 		);
-		if (accountId) identifiers.add(`account:${accountId}`);
+		if (accountId !== null && accountId !== undefined && accountId !== "") identifiers.add(`account:${accountId}`);
 		return identifiers.size > 0 ? [...identifiers] : undefined;
 	} catch {
 		return undefined;
 	}
 }
+
 /**
  * Standalone SQLite-backed implementation of AuthCredentialStore interface.
  * Used by the pi-ai CLI and as the default store for AuthStorage.create().
@@ -2190,544 +2011,244 @@ export class AuthCredentialStore {
 	#deleteByProviderStmt: Statement;
 	#hardDeleteStmt: Statement;
 	#getCacheStmt: Statement;
-	#upsertCacheStmt: Statement;
-	#deleteExpiredCacheStmt: Statement;
-	#closed = false;
+	#setCacheStmt: Statement;
+	#cleanCacheStmt: Statement;
 
-	constructor(db: Database) {
+	private constructor(db: Database) {
 		this.#db = db;
-		this.#initializeSchema();
+		this.#db.exec("PRAGMA journal_mode = WAL");
+		this.#db.exec("PRAGMA synchronous = NORMAL");
+		this.#migrate();
 
-		this.#listActiveStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE disabled_cause IS NULL ORDER BY id ASC",
-		);
-		this.#listActiveByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE provider = ? AND disabled_cause IS NULL ORDER BY id ASC",
-		);
-		this.#listDisabledByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE provider = ? AND disabled_cause IS NOT NULL ORDER BY id ASC",
-		);
-		this.#insertStmt = this.#db.prepare(
-			`INSERT INTO auth_credentials (provider, credential_type, data, identity_key, created_at, updated_at) VALUES (?, ?, ?, ?, ${SQLITE_NOW_EPOCH}, ${SQLITE_NOW_EPOCH}) RETURNING id`,
-		);
-		this.#updateStmt = this.#db.prepare(
-			`UPDATE auth_credentials SET credential_type = ?, data = ?, identity_key = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE id = ?`,
-		);
-		this.#deleteStmt = this.#db.prepare(
-			`UPDATE auth_credentials SET disabled_cause = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE id = ?`,
-		);
-		this.#deleteByProviderStmt = this.#db.prepare(
-			`UPDATE auth_credentials SET disabled_cause = ?, updated_at = ${SQLITE_NOW_EPOCH} WHERE provider = ? AND disabled_cause IS NULL`,
-		);
-		this.#hardDeleteStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE id = ?");
-		this.#getCacheStmt = this.#db.prepare(
-			`SELECT value FROM cache WHERE key = ? AND expires_at > ${SQLITE_NOW_EPOCH}`,
-		);
-		this.#upsertCacheStmt = this.#db.prepare(
-			"INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at",
-		);
-		this.#deleteExpiredCacheStmt = this.#db.prepare(`DELETE FROM cache WHERE expires_at <= ${SQLITE_NOW_EPOCH}`);
+		this.#listActiveStmt = this.#db.prepare(`
+			SELECT id, provider, credential_type, data, disabled_cause, identity_key
+			FROM auth_credentials
+			WHERE disabled_cause IS NULL
+			ORDER BY id ASC
+		`);
+		this.#listActiveByProviderStmt = this.#db.prepare(`
+			SELECT id, provider, credential_type, data, disabled_cause, identity_key
+			FROM auth_credentials
+			WHERE provider = ? AND disabled_cause IS NULL
+			ORDER BY id ASC
+		`);
+		this.#listDisabledByProviderStmt = this.#db.prepare(`
+			SELECT id, provider, credential_type, data, disabled_cause, identity_key
+			FROM auth_credentials
+			WHERE provider = ? AND disabled_cause IS NOT NULL
+			ORDER BY id ASC
+		`);
+		this.#insertStmt = this.#db.prepare(`
+			INSERT INTO auth_credentials (provider, credential_type, data, identity_key)
+			VALUES (?, ?, ?, ?)
+		`);
+		this.#updateStmt = this.#db.prepare(`
+			UPDATE auth_credentials SET data = ?, identity_key = ? WHERE id = ?
+		`);
+		this.#deleteStmt = this.#db.prepare(`
+			UPDATE auth_credentials SET disabled_cause = ? WHERE id = ?
+		`);
+		this.#deleteByProviderStmt = this.#db.prepare(`
+			UPDATE auth_credentials SET disabled_cause = ? WHERE provider = ?
+		`);
+		this.#hardDeleteStmt = this.#db.prepare(`
+			DELETE FROM auth_credentials WHERE provider = ?
+		`);
+		this.#getCacheStmt = this.#db.prepare(`
+			SELECT value FROM auth_cache WHERE key = ? AND expires_at > ${SQLITE_NOW_EPOCH}
+		`);
+		this.#setCacheStmt = this.#db.prepare(`
+			INSERT OR REPLACE INTO auth_cache (key, value, expires_at)
+			VALUES (?, ?, ?)
+		`);
+		this.#cleanCacheStmt = this.#db.prepare(`
+			DELETE FROM auth_cache WHERE expires_at <= ${SQLITE_NOW_EPOCH}
+		`);
 	}
 
-	static async open(dbPath: string = getAgentDbPath()): Promise<AuthCredentialStore> {
+	static async open(dbPath: string): Promise<AuthCredentialStore> {
 		const dir = path.dirname(dbPath);
-		const dirExists = await fs
-			.stat(dir)
-			.then(s => s.isDirectory())
-			.catch(() => false);
-		if (!dirExists) {
-			await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-		}
-
+		await fs.mkdir(dir, { recursive: true });
 		const db = new Database(dbPath);
-		try {
-			await fs.chmod(dbPath, 0o600);
-		} catch {
-			// Ignore chmod failures (e.g., Windows)
-		}
-
 		return new AuthCredentialStore(db);
 	}
 
-	#initializeSchema(): void {
-		this.#db.run(`
-			PRAGMA journal_mode=WAL;
-			PRAGMA synchronous=NORMAL;
-			PRAGMA busy_timeout=5000;
-			CREATE TABLE IF NOT EXISTS auth_schema_version (
-				id INTEGER PRIMARY KEY CHECK (id = 1),
-				version INTEGER NOT NULL
-			);
-			CREATE TABLE IF NOT EXISTS cache (
-				key TEXT PRIMARY KEY,
-				value TEXT NOT NULL,
-				expires_at INTEGER NOT NULL
-			);
-			CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
-		`);
-
-		if (!this.#authCredentialsTableExists()) {
-			this.#createAuthCredentialsTable();
-			this.#writeAuthSchemaVersion(AUTH_SCHEMA_VERSION);
-			return;
-		}
-
-		const schemaVersion = this.#readAuthSchemaVersion() ?? this.#inferAuthSchemaVersion();
-		const shouldWriteSchemaVersion = schemaVersion <= AUTH_SCHEMA_VERSION;
-		if (schemaVersion > AUTH_SCHEMA_VERSION) {
-			logger.warn("AuthCredentialStore schema version mismatch", {
-				current: schemaVersion,
-				expected: AUTH_SCHEMA_VERSION,
-			});
-		} else if (schemaVersion < AUTH_SCHEMA_VERSION) {
-			this.#migrateAuthSchema(schemaVersion);
-		}
-
-		this.#createAuthCredentialIndexes();
-		this.#backfillCredentialIdentityKeys();
-		if (shouldWriteSchemaVersion) {
-			this.#writeAuthSchemaVersion(AUTH_SCHEMA_VERSION);
-		}
+	close(): void {
+		this.#db.close();
 	}
 
-	#authCredentialsTableExists(): boolean {
-		const row = this.#db
-			.prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'auth_credentials'")
-			.get() as { present?: number } | undefined;
-		return row?.present === 1;
-	}
-
-	#readAuthSchemaVersion(): number | null {
-		const row = this.#db.prepare("SELECT version FROM auth_schema_version WHERE id = 1").get() as
-			| { version?: number }
-			| undefined;
-		return typeof row?.version === "number" ? row.version : null;
-	}
-
-	#writeAuthSchemaVersion(version: number): void {
-		this.#db.prepare("INSERT OR REPLACE INTO auth_schema_version(id, version) VALUES (1, ?)").run(version);
-	}
-
-	#inferAuthSchemaVersion(): number {
-		const cols = this.#db.prepare("PRAGMA table_info(auth_credentials)").all() as Array<{ name?: string }>;
-		const hasDisabledCause = cols.some(column => column.name === "disabled_cause");
-		const hasIdentityKey = cols.some(column => column.name === "identity_key");
-		const hasAccountId = cols.some(column => column.name === "account_id");
-		const hasEmail = cols.some(column => column.name === "email");
-		if (hasIdentityKey) return 3;
-		if (hasAccountId || hasEmail) return 2;
-		if (hasDisabledCause) return 1;
-		return 0;
-	}
-
-	#createAuthCredentialsTable(): void {
-		this.#db.run(`
+	#migrate(): void {
+		this.#db.exec(`
 			CREATE TABLE IF NOT EXISTS auth_credentials (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				provider TEXT NOT NULL,
 				credential_type TEXT NOT NULL,
 				data TEXT NOT NULL,
-				disabled_cause TEXT DEFAULT NULL,
-				identity_key TEXT DEFAULT NULL,
-				created_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH}),
-				updated_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH})
+				disabled_cause TEXT,
+				identity_key TEXT
+			);
+			CREATE INDEX IF NOT EXISTS idx_auth_credentials_provider ON auth_credentials(provider);
+			CREATE INDEX IF NOT EXISTS idx_auth_credentials_identity ON auth_credentials(identity_key);
+
+			CREATE TABLE IF NOT EXISTS auth_cache (
+				key TEXT PRIMARY KEY,
+				value TEXT NOT NULL,
+				expires_at INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_auth_cache_expires ON auth_cache(expires_at);
+
+			CREATE TABLE IF NOT EXISTS auth_meta (
+				key TEXT PRIMARY KEY,
+				value TEXT NOT NULL
 			);
 		`);
-		this.#createAuthCredentialIndexes();
-	}
 
-	#createAuthCredentialIndexes(): void {
-		this.#db.run(`
-			CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_credentials(provider);
-			CREATE INDEX IF NOT EXISTS idx_auth_provider_identity ON auth_credentials(provider, identity_key) WHERE identity_key IS NOT NULL;
-		`);
-	}
-
-	#migrateAuthSchema(fromVersion: number): void {
-		if (fromVersion < 1) {
-			this.#migrateAuthSchemaV0ToV1();
-		}
-		if (fromVersion < 3) {
-			this.#migrateAuthSchemaV1OrV2ToV3();
-		}
-		if (fromVersion < 4) {
-			this.#migrateAuthSchemaV3ToV4();
-		}
-	}
-
-	#migrateAuthSchemaV0ToV1(): void {
-		const migrate = this.#db.transaction(() => {
-			const v0Cols = this.#db.prepare("PRAGMA table_info(auth_credentials)").all() as Array<{ name?: string }>;
-			const hasDisabled = v0Cols.some(col => col.name === "disabled");
-
-			this.#db.run("ALTER TABLE auth_credentials RENAME TO auth_credentials_v0");
-			this.#db.run(`
-				CREATE TABLE auth_credentials (
-					id INTEGER PRIMARY KEY AUTOINCREMENT,
-					provider TEXT NOT NULL,
-					credential_type TEXT NOT NULL,
-					data TEXT NOT NULL,
-					disabled_cause TEXT DEFAULT NULL,
-					created_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH}),
-					updated_at INTEGER NOT NULL DEFAULT (${SQLITE_NOW_EPOCH})
-				);
-			`);
-			this.#db.run(`
-				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, created_at, updated_at)
-				SELECT
-					id,
-					provider,
-					credential_type,
-					data,
-					${hasDisabled ? "CASE WHEN disabled = 1 THEN 'disabled' ELSE NULL END" : "NULL"},
-					created_at,
-					updated_at
-				FROM auth_credentials_v0
-			`);
-			this.#db.run("DROP TABLE auth_credentials_v0");
-		});
-		migrate();
-	}
-
-	#migrateAuthSchemaV1OrV2ToV3(): void {
-		const migrate = this.#db.transaction(() => {
-			this.#db.run("ALTER TABLE auth_credentials RENAME TO auth_credentials_legacy");
-			this.#createAuthCredentialsTable();
-			this.#db.run(`
-				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, identity_key, created_at, updated_at)
-				SELECT
-					id,
-					provider,
-					credential_type,
-					data,
-					disabled_cause,
-					NULL,
-					created_at,
-					updated_at
-				FROM auth_credentials_legacy
-			`);
-			this.#db.run("DROP TABLE auth_credentials_legacy");
-		});
-		migrate();
-	}
-
-	#migrateAuthSchemaV3ToV4(): void {
-		const migrate = this.#db.transaction(() => {
-			this.#db.run("ALTER TABLE auth_credentials RENAME TO auth_credentials_v3");
-			this.#createAuthCredentialsTable();
-			this.#db.run(`
-				INSERT INTO auth_credentials (id, provider, credential_type, data, disabled_cause, identity_key, created_at, updated_at)
-				SELECT
-					id,
-					provider,
-					credential_type,
-					data,
-					disabled_cause,
-					identity_key,
-					created_at,
-					updated_at
-				FROM auth_credentials_v3
-			`);
-			this.#db.run("DROP TABLE auth_credentials_v3");
-		});
-		migrate();
-	}
-
-	#backfillCredentialIdentityKeys(): void {
-		const rows = this.#db
-			.prepare(
-				"SELECT id, provider, credential_type, data, disabled_cause, identity_key FROM auth_credentials WHERE identity_key IS NULL ORDER BY id ASC",
-			)
-			.all() as AuthRow[];
-		if (rows.length === 0) return;
-
-		const updateIdentity = this.#db.prepare("UPDATE auth_credentials SET identity_key = ? WHERE id = ?");
-		for (const row of rows) {
-			const identityKey = resolveRowCredentialIdentityKey(row.provider, row);
-			updateIdentity.run(identityKey, row.id);
-		}
-	}
-
-	// ─── AuthCredentialStore interface ──────────────────────────────────────
-
-	listAuthCredentials(provider?: string): StoredAuthCredential[] {
-		const rows =
-			(provider
-				? (this.#listActiveByProviderStmt.all(provider) as AuthRow[])
-				: (this.#listActiveStmt.all() as AuthRow[])) ?? [];
-
-		const results: StoredAuthCredential[] = [];
-		for (const row of rows) {
-			const credential = deserializeCredential(row);
-			if (!credential) continue;
-			results.push(toStoredAuthCredential(row, credential));
-		}
-		return results;
-	}
-
-	replaceAuthCredentialsForProvider(provider: string, credentials: AuthCredential[]): StoredAuthCredential[] {
-		const replace = this.#db.transaction((providerName: string, items: AuthCredential[]) => {
-			const existingRows = this.#listActiveByProviderStmt.all(providerName) as AuthRow[];
-			const existing = existingRows.map(row => ({
-				id: row.id,
-				credential: deserializeCredential(row),
-				identityKey: resolveRowCredentialIdentityKey(providerName, row),
-			}));
-
-			const result: StoredAuthCredential[] = [];
-			const matchedExistingIds = new Set<number>();
-
-			for (const credential of items) {
-				const serialized = serializeCredential(providerName, credential);
-				if (!serialized) continue;
-				const match = existing.find(
-					entry =>
-						!matchedExistingIds.has(entry.id) &&
-						matchesReplacementCredential(providerName, entry.credential, entry.identityKey, credential),
-				);
-				if (match) {
-					matchedExistingIds.add(match.id);
-					this.#updateStmt.run(serialized.credentialType, serialized.data, serialized.identityKey, match.id);
-					result.push({ id: match.id, provider: providerName, credential, disabledCause: null });
-				} else {
-					const row = this.#insertStmt.get(
-						providerName,
-						serialized.credentialType,
-						serialized.data,
-						serialized.identityKey,
-					) as { id?: number } | undefined;
-					if (row?.id) {
-						result.push({ id: row.id, provider: providerName, credential, disabledCause: null });
-					}
+		const currentVersion = this.#getVersion();
+		if (currentVersion < AUTH_SCHEMA_VERSION) {
+			this.#db.transaction(() => {
+				if (currentVersion < 1) {
+					// Schema already created above
 				}
-			}
-
-			for (const row of existing) {
-				if (!matchedExistingIds.has(row.id)) {
-					this.#deleteStmt.run("replaced by newer credential", row.id);
-				}
-			}
-
-			return result;
-		});
-
-		const result = replace(provider, credentials);
-		this.#purgeSupersededDisabledRows(provider, result);
-		return result;
-	}
-
-	upsertAuthCredentialForProvider(provider: string, credential: AuthCredential): StoredAuthCredential[] {
-		const upsert = this.#db.transaction((providerName: string, item: AuthCredential) => {
-			const serialized = serializeCredential(providerName, item);
-			if (!serialized) return this.listAuthCredentials(providerName);
-			const existingRows = this.#listActiveByProviderStmt.all(providerName) as AuthRow[];
-			const existing = existingRows.map(row => ({
-				id: row.id,
-				credential: deserializeCredential(row),
-				identityKey: resolveRowCredentialIdentityKey(providerName, row),
-			}));
-
-			let targetId: number | null = null;
-			for (const row of existing) {
-				if (!matchesReplacementCredential(providerName, row.credential, row.identityKey, item)) continue;
-				if (targetId === null) {
-					targetId = row.id;
-					this.#updateStmt.run(serialized.credentialType, serialized.data, serialized.identityKey, row.id);
-					continue;
-				}
-				this.#deleteStmt.run("replaced by newer credential", row.id);
-			}
-
-			if (targetId === null) {
-				const row = this.#insertStmt.get(
-					providerName,
-					serialized.credentialType,
-					serialized.data,
-					serialized.identityKey,
-				) as { id?: number } | undefined;
-				targetId = row?.id ?? null;
-			}
-
-			const activeRows = this.#listActiveByProviderStmt.all(providerName) as AuthRow[];
-			const result: StoredAuthCredential[] = [];
-			for (const row of activeRows) {
-				const activeCredential = deserializeCredential(row);
-				if (!activeCredential) continue;
-				result.push(toStoredAuthCredential(row, activeCredential));
-			}
-			return result;
-		});
-
-		const result = upsert(provider, credential);
-		this.#purgeSupersededDisabledRows(provider, result);
-		return result;
-	}
-
-	/**
-	 * Hard-deletes disabled rows for a provider when an active row with the same identity exists.
-	 * This prevents unbounded accumulation of soft-deleted credentials while preserving
-	 * disabled rows that have no active replacement (safety net for recovery).
-	 */
-	#purgeSupersededDisabledRows(provider: string, activeRows: StoredAuthCredential[]): void {
-		try {
-			const activeIdentityKeys = new Set<string>();
-			for (const row of activeRows) {
-				const identityKey = resolveCredentialIdentityKey(provider, row.credential);
-				if (identityKey) activeIdentityKeys.add(identityKey);
-			}
-			if (activeIdentityKeys.size === 0) return;
-
-			const disabledRows = this.#listDisabledByProviderStmt.all(provider) as AuthRow[];
-			for (const row of disabledRows) {
-				const identityKey = resolveRowCredentialIdentityKey(provider, row);
-				if (identityKey && activeIdentityKeys.has(identityKey)) {
-					this.#hardDeleteStmt.run(row.id);
-				}
-			}
-		} catch {
-			// Best-effort cleanup; don't let it break the main operation
+				// Future migrations go here
+				this.#setVersion(AUTH_SCHEMA_VERSION);
+			})();
 		}
+	}
+
+	#getVersion(): number {
+		const row = this.#db.prepare("SELECT value FROM auth_meta WHERE key = 'version'").get() as
+			| { value: string }
+			| undefined;
+		return row ? parseInt(row.value, 10) : 0;
+	}
+
+	#setVersion(version: number): void {
+		this.#db.prepare("INSERT OR REPLACE INTO auth_meta (key, value) VALUES ('version', ?)").run(version.toString());
+	}
+
+	listAuthCredentials(): StoredAuthCredential[] {
+		const rows = this.#listActiveStmt.all() as AuthRow[];
+		return rows
+			.map(row => {
+				const credential = deserializeCredential(row);
+				return credential ? toStoredAuthCredential(row, credential) : null;
+			})
+			.filter((entry): entry is StoredAuthCredential => entry !== null);
+	}
+
+	getAuthCredentialsForProvider(provider: string): StoredAuthCredential[] {
+		const rows = this.#listActiveByProviderStmt.all(provider) as AuthRow[];
+		return rows
+			.map(row => {
+				const credential = deserializeCredential(row);
+				return credential ? toStoredAuthCredential(row, credential) : null;
+			})
+			.filter((entry): entry is StoredAuthCredential => entry !== null);
+	}
+
+	getDisabledAuthCredentialsForProvider(provider: string): StoredAuthCredential[] {
+		const rows = this.#listDisabledByProviderStmt.all(provider) as AuthRow[];
+		return rows
+			.map(row => {
+				const credential = deserializeCredential(row);
+				return credential ? toStoredAuthCredential(row, credential) : null;
+			})
+			.filter((entry): entry is StoredAuthCredential => entry !== null);
+	}
+
+	saveAuthCredential(provider: string, credential: AuthCredential): StoredAuthCredential {
+		const serialized = serializeCredential(provider, credential);
+		if (!serialized) throw new Error("Invalid credential type");
+		const result = this.#insertStmt.run(provider, serialized.credentialType, serialized.data, serialized.identityKey);
+		return { id: result.lastInsertRowid as number, provider, credential, disabledCause: null };
 	}
 
 	updateAuthCredential(id: number, credential: AuthCredential): void {
-		try {
-			const providerRow = this.#db.prepare("SELECT provider FROM auth_credentials WHERE id = ?").get(id) as
-				| { provider?: string }
-				| undefined;
-			const provider = providerRow?.provider ?? "";
+		// We need provider for identity key resolution.
+		const row = this.#db.prepare("SELECT provider FROM auth_credentials WHERE id = ?").get(id) as
+			| { provider: string }
+			| undefined;
+		if (!row) return;
+		const serialized = serializeCredential(row.provider, credential);
+		if (!serialized) throw new Error("Invalid credential type");
+		this.#updateStmt.run(serialized.data, serialized.identityKey, id);
+	}
+
+	deleteAuthCredential(id: number, cause: string): void {
+		this.#deleteStmt.run(normalizeDisabledCause(cause), id);
+	}
+
+	deleteAuthCredentialsForProvider(provider: string, cause: string): void {
+		this.#deleteByProviderStmt.run(normalizeDisabledCause(cause), provider);
+	}
+
+	/**
+	 * Atomically replaces all credentials for a provider.
+	 * Returns the newly stored records.
+	 */
+	replaceAuthCredentialsForProvider(provider: string, credentials: AuthCredential[]): StoredAuthCredential[] {
+		return this.#db.transaction(() => {
+			this.#hardDeleteStmt.run(provider);
+			return credentials.map(credential => this.saveAuthCredential(provider, credential));
+		})();
+	}
+
+	/**
+	 * Atomically upserts an OAuth credential for a provider based on its stable identity.
+	 * If a credential with the same accountId/email already exists (even if disabled),
+	 * it is updated and re-enabled. Otherwise, a new record is inserted.
+	 */
+	upsertAuthCredentialForProvider(provider: string, credential: OAuthCredential): StoredAuthCredential[] {
+		const identityKey = resolveCredentialIdentityKey(provider, credential);
+		if (identityKey === null || identityKey === undefined || identityKey === "") {
+			return this.#db.transaction(() => {
+				this.saveAuthCredential(provider, credential);
+				return this.getAuthCredentialsForProvider(provider);
+			})();
+		}
+
+		return this.#db.transaction(() => {
+			const activeRows = this.#listActiveByProviderStmt.all(provider) as AuthRow[];
+			const disabledRows = this.#listDisabledByProviderStmt.all(provider) as AuthRow[];
+
+			const matchingActive = activeRows.find(row => resolveRowCredentialIdentityKey(provider, row) === identityKey);
+			const matchingDisabled = disabledRows.find(
+				row => resolveRowCredentialIdentityKey(provider, row) === identityKey,
+			);
+
 			const serialized = serializeCredential(provider, credential);
-			if (!serialized) return;
-			this.#updateStmt.run(serialized.credentialType, serialized.data, serialized.identityKey, id);
-			if (provider) {
-				this.#purgeSupersededDisabledRows(provider, this.listAuthCredentials(provider));
+			if (!serialized) throw new Error("Invalid credential type");
+
+			if (matchingActive) {
+				this.#updateStmt.run(serialized.data, serialized.identityKey, matchingActive.id);
+			} else if (matchingDisabled) {
+				this.#updateStmt.run(serialized.data, serialized.identityKey, matchingDisabled.id);
+				this.#db.prepare("UPDATE auth_credentials SET disabled_cause = NULL WHERE id = ?").run(matchingDisabled.id);
+			} else {
+				this.saveAuthCredential(provider, credential);
 			}
-		} catch {
-			// Ignore update failures
-		}
+
+			return this.getAuthCredentialsForProvider(provider);
+		})();
 	}
 
-	deleteAuthCredential(id: number, disabledCause: string): void {
-		try {
-			this.#deleteStmt.run(normalizeDisabledCause(disabledCause), id);
-		} catch {
-			// Ignore delete failures
-		}
+	getCache(key: string): string | undefined {
+		const row = this.#getCacheStmt.get(key) as { value: string } | undefined;
+		return row?.value;
 	}
 
-	deleteAuthCredentialsForProvider(provider: string, disabledCause: string): void {
-		try {
-			this.#deleteByProviderStmt.run(normalizeDisabledCause(disabledCause), provider);
-		} catch {
-			// Ignore delete failures
-		}
-	}
-
-	getCache(key: string): string | null {
-		try {
-			const row = this.#getCacheStmt.get(key) as { value?: string } | undefined;
-			return row?.value ?? null;
-		} catch {
-			return null;
-		}
-	}
-
-	setCache(key: string, value: string, expiresAtSec: number): void {
-		try {
-			this.#upsertCacheStmt.run(key, value, expiresAtSec);
-		} catch {
-			// Ignore cache set failures
-		}
+	setCache(key: string, value: string, expiresAt: number): void {
+		this.#setCacheStmt.run(key, value, expiresAt);
 	}
 
 	cleanExpiredCache(): void {
-		try {
-			this.#deleteExpiredCacheStmt.run();
-		} catch {
-			// Ignore cleanup errors
-		}
+		this.#cleanCacheStmt.run();
 	}
+}
 
-	// ─── Convenience methods for CLI ────────────────────────────────────────
-
-	/**
-	 * Save OAuth credentials for a provider.
-	 * Preserves unrelated identities and replaces only the matching credential.
-	 */
-	saveOAuth(provider: string, credentials: OAuthCredentials): void {
-		const credential: AuthCredential = { type: "oauth", ...credentials };
-		this.upsertAuthCredentialForProvider(provider, credential);
-	}
-
-	/**
-	 * Get OAuth credentials for a provider.
-	 */
-	getOAuth(provider: string): OAuthCredentials | null {
-		const rows = this.#listActiveByProviderStmt.all(provider) as AuthRow[];
-		for (const row of rows) {
-			const credential = deserializeCredential(row);
-			if (credential && credential.type === "oauth") {
-				const { type: _type, ...oauth } = credential;
-				return oauth as OAuthCredentials;
-			}
-		}
-		return null;
-	}
-
-	/**
-	 * Save API key for a provider (replaces existing).
-	 */
-	saveApiKey(provider: string, apiKey: string): void {
-		const credential: AuthCredential = { type: "api_key", key: apiKey };
-		this.replaceAuthCredentialsForProvider(provider, [credential]);
-	}
-
-	/**
-	 * Get API key for a provider.
-	 */
-	getApiKey(provider: string): string | null {
-		const rows = this.#listActiveByProviderStmt.all(provider) as AuthRow[];
-		for (const row of rows) {
-			const credential = deserializeCredential(row);
-			if (credential && credential.type === "api_key") {
-				return credential.key;
-			}
-		}
-		return null;
-	}
-
-	/**
-	 * List all providers with credentials.
-	 */
-	listProviders(): string[] {
-		const rows = this.#listActiveStmt.all() as AuthRow[];
-		const providers = new Set<string>();
-		for (const row of rows) {
-			providers.add(row.provider);
-		}
-		return Array.from(providers);
-	}
-
-	/**
-	 * Delete all credentials for a provider.
-	 */
-	deleteProvider(provider: string): void {
-		this.deleteAuthCredentialsForProvider(provider, "deleted by user");
-	}
-
-	close(): void {
-		if (this.#closed) return;
-		this.#closed = true;
-		this.#listActiveStmt.finalize();
-		this.#listActiveByProviderStmt.finalize();
-		this.#listDisabledByProviderStmt.finalize();
-		this.#insertStmt.finalize();
-		this.#updateStmt.finalize();
-		this.#deleteStmt.finalize();
-		this.#deleteByProviderStmt.finalize();
-		this.#hardDeleteStmt.finalize();
-		this.#getCacheStmt.finalize();
-		this.#upsertCacheStmt.finalize();
-		this.#deleteExpiredCacheStmt.finalize();
-		this.#db.close();
-	}
+/**
+ * Standard database path for agent persistent storage.
+ */
+export async function getAuthDbPath(): Promise<string> {
+	return getAgentDbPath();
 }

@@ -85,7 +85,7 @@ function renderIrcPeerRoster(selfId: string): string {
 }
 
 function withAbortTimeout<T>(promise: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		return Promise.reject(new ToolAbortError());
 	}
 
@@ -117,14 +117,23 @@ function withAbortTimeout<T>(promise: Promise<T>, timeoutMs: number, signal?: Ab
 }
 
 function getReportFindingKey(value: unknown): string | null {
-	if (!value || typeof value !== "object") return null;
+	if (value === null || value === undefined || typeof value !== "object") return null;
 	const record = value as Record<string, unknown>;
 	const title = typeof record.title === "string" ? record.title : null;
 	const filePath = typeof record.file_path === "string" ? record.file_path : null;
 	const lineStart = typeof record.line_start === "number" ? record.line_start : null;
 	const lineEnd = typeof record.line_end === "number" ? record.line_end : null;
 	const priority = typeof record.priority === "string" ? record.priority : null;
-	if (!title || !filePath || lineStart === null || lineEnd === null) {
+	if (
+		title === null ||
+		title === undefined ||
+		title === "" ||
+		filePath === null ||
+		filePath === undefined ||
+		filePath === "" ||
+		lineStart === null ||
+		lineEnd === null
+	) {
 		return null;
 	}
 	return `${filePath}:${lineStart}:${lineEnd}:${priority ?? ""}:${title}`;
@@ -179,13 +188,13 @@ function parseStringifiedJson(value: unknown): unknown {
 
 function buildOutputValidator(schema: unknown): { validate?: ValidateFunction; error?: string } {
 	const { normalized, error } = normalizeSchema(schema);
-	if (error) return { error };
+	if (error !== null && error !== undefined && error !== "") return { error };
 	if (normalized === undefined) return {};
 	const jsonSchema = jtdToJsonSchema(normalized);
 	try {
 		return { validate: ajv.compile(jsonSchema as any) };
-	} catch (err) {
-		return { error: err instanceof Error ? err.message : String(err) };
+	} catch (error) {
+		return { error: error instanceof Error ? error.message : String(error) };
 	}
 }
 
@@ -200,7 +209,7 @@ function tryParseJsonOutput(text: string): unknown | undefined {
 }
 
 function extractCompletionData(parsed: unknown): unknown {
-	if (!parsed || typeof parsed !== "object") return parsed;
+	if (parsed === null || parsed === undefined || typeof parsed !== "object") return parsed;
 	const record = parsed as Record<string, unknown>;
 	if ("data" in record) {
 		return record.data;
@@ -213,7 +222,8 @@ function normalizeCompleteData(data: unknown, reportFindings?: ReviewFinding[]):
 	if (
 		Array.isArray(reportFindings) &&
 		reportFindings.length > 0 &&
-		normalized &&
+		normalized !== null &&
+		normalized !== undefined &&
 		typeof normalized === "object" &&
 		!Array.isArray(normalized)
 	) {
@@ -231,7 +241,7 @@ function resolveFallbackCompletion(rawOutput: string, outputSchema: unknown): { 
 	const candidate = parseStringifiedJson(extractCompletionData(parsed));
 	if (candidate === undefined) return null;
 	const { validate, error } = buildOutputValidator(outputSchema);
-	if (error) return null;
+	if (error !== null && error !== undefined && error !== "") return null;
 	if (validate && !validate(candidate)) return null;
 	return { data: candidate };
 }
@@ -276,11 +286,11 @@ export function finalizeSubprocessOutput(args: FinalizeSubprocessOutputArgs): Fi
 		if (lastYield?.status === "aborted") {
 			abortedViaYield = true;
 			exitCode = 0;
-			stderr = lastYield.error || "Subagent aborted task";
+			stderr = lastYield.error ?? "Subagent aborted task";
 			try {
 				rawOutput = JSON.stringify({ aborted: true, error: lastYield.error }, null, 2);
 			} catch {
-				rawOutput = `{"aborted":true,"error":"${lastYield.error || "Unknown error"}"}`;
+				rawOutput = `{"aborted":true,"error":"${lastYield.error ?? "Unknown error"}"}`;
 			}
 		} else {
 			const submitData = lastYield?.data;
@@ -290,8 +300,8 @@ export function finalizeSubprocessOutput(args: FinalizeSubprocessOutputArgs): Fi
 				const completeData = normalizeCompleteData(submitData, reportFindings);
 				try {
 					rawOutput = JSON.stringify(completeData, null, 2) ?? "null";
-				} catch (err) {
-					const errorMessage = err instanceof Error ? err.message : String(err);
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error);
 					rawOutput = `{"error":"Failed to serialize yield data: ${errorMessage}"}`;
 				}
 				exitCode = 0;
@@ -301,14 +311,15 @@ export function finalizeSubprocessOutput(args: FinalizeSubprocessOutputArgs): Fi
 	} else {
 		const allowFallback = exitCode === 0 && !doneAborted && !signalAborted;
 		const { normalized: normalizedSchema, error: schemaError } = normalizeSchema(outputSchema);
-		const hasOutputSchema = normalizedSchema !== undefined && !schemaError;
+		const hasOutputSchema =
+			normalizedSchema !== undefined && (schemaError === null || schemaError === undefined || schemaError === "");
 		const fallback = allowFallback ? resolveFallbackCompletion(rawOutput, outputSchema) : null;
 		if (fallback) {
 			const completeData = normalizeCompleteData(fallback.data, reportFindings);
 			try {
 				rawOutput = JSON.stringify(completeData, null, 2) ?? "null";
-			} catch (err) {
-				const errorMessage = err instanceof Error ? err.message : String(err);
+			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error);
 				rawOutput = `{"error":"Failed to serialize fallback completion: ${errorMessage}"}`;
 			}
 			exitCode = 0;
@@ -337,7 +348,7 @@ function extractToolArgsPreview(args: Record<string, unknown>): string {
 	const previewKeys = ["command", "file_path", "path", "pattern", "query", "url", "task", "prompt"];
 
 	for (const key of previewKeys) {
-		if (args[key] && typeof args[key] === "string") {
+		if (args[key] !== null && args[key] !== undefined && typeof args[key] === "string") {
 			const value = args[key] as string;
 			return value.length > 60 ? `${value.slice(0, 59)}…` : value;
 		}
@@ -364,7 +375,7 @@ function firstNumberField(record: Record<string, unknown>, keys: string[]): numb
  * Normalize usage objects from different event formats.
  */
 function getUsageTokens(usage: unknown): number {
-	if (!usage || typeof usage !== "object") return 0;
+	if (usage === null || usage === undefined || typeof usage !== "object") return 0;
 	const record = usage as Record<string, unknown>;
 
 	const totalTokens = firstNumberField(record, ["totalTokens", "total_tokens"]);
@@ -390,7 +401,7 @@ function createMCPProxyTools(mcpManager: MCPManager): CustomTool<TSchema>[] {
 			description: tool.description ?? "",
 			parameters: tool.parameters as TSchema,
 			execute: async (_toolCallId, params, _onUpdate, _ctx, signal) => {
-				if (signal?.aborted) {
+				if (signal !== undefined && signal.aborted) {
 					throw new ToolAbortError();
 				}
 				const serverName = mcpTool.mcpServerName ?? "";
@@ -484,7 +495,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	};
 
 	// Check if already aborted
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		return {
 			index,
 			id,
@@ -508,7 +519,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 	// Set up artifact paths and write input file upfront if artifacts dir provided
 	let subtaskSessionFile: string | undefined;
-	if (options.artifactsDir) {
+	if (options.artifactsDir !== null && options.artifactsDir !== undefined && options.artifactsDir !== "") {
 		subtaskSessionFile = path.join(options.artifactsDir, `${id}.jsonl`);
 	}
 
@@ -529,11 +540,11 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		}
 	}
 
-	if (atMaxDepth && toolNames?.includes("task")) {
+	if (atMaxDepth && toolNames?.includes("task") === true) {
 		toolNames = toolNames.filter(name => name !== "task");
 	}
 	const pythonToolMode = settings.get("python.toolMode") ?? "both";
-	if (toolNames?.includes("exec")) {
+	if (toolNames?.includes("exec") === true) {
 		const expanded = toolNames.filter(name => name !== "exec");
 		if (pythonToolMode === "bash-only") {
 			expanded.push("bash");
@@ -670,14 +681,14 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	};
 
 	const getMessageContent = (message: unknown): unknown => {
-		if (message && typeof message === "object" && "content" in message) {
+		if (message !== null && message !== undefined && typeof message === "object" && "content" in message) {
 			return (message as { content?: unknown }).content;
 		}
 		return undefined;
 	};
 
 	const getMessageUsage = (message: unknown): unknown => {
-		if (message && typeof message === "object" && "usage" in message) {
+		if (message !== null && message !== undefined && typeof message === "object" && "usage" in message) {
 			return (message as { usage?: unknown }).usage;
 		}
 		return undefined;
@@ -700,7 +711,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	const replaceRecentOutputFromContent = (content: unknown[]) => {
 		recentOutputTail = "";
 		for (const block of content) {
-			if (!block || typeof block !== "object") continue;
+			if (block === null || block === undefined || typeof block !== "object") continue;
 			const record = block as { type?: unknown; text?: unknown };
 			if (record.type !== "text" || typeof record.text !== "string") continue;
 			if (!record.text) continue;
@@ -749,17 +760,17 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				);
 				progress.currentToolStartMs = now;
 				const intent = event.intent?.trim();
-				if (intent) {
+				if (intent !== null && intent !== undefined && intent !== "") {
 					progress.lastIntent = intent;
 				}
 				break;
 			}
 
 			case "tool_execution_end": {
-				if (progress.currentTool) {
+				if (progress.currentTool !== null && progress.currentTool !== undefined && progress.currentTool !== "") {
 					progress.recentTools.unshift({
 						tool: progress.currentTool,
-						args: progress.currentToolArgs || "",
+						args: progress.currentToolArgs ?? "",
 						endMs: now,
 					});
 					// Keep only last 5
@@ -788,7 +799,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 							progress.extractedToolData = progress.extractedToolData || {};
 							const existing = progress.extractedToolData[event.toolName] || [];
 							const findingKey = event.toolName === "report_finding" ? getReportFindingKey(data) : null;
-							if (findingKey) {
+							if (findingKey !== null && findingKey !== undefined && findingKey !== "") {
 								const existingIndex = existing.findIndex(item => getReportFindingKey(item) === findingKey);
 								if (existingIndex >= 0) {
 									existing[existingIndex] = data;
@@ -837,8 +848,8 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 					break;
 				}
 				const updateContent =
-					getMessageContent(event.message) || (event as AgentEvent & { content?: unknown }).content;
-				if (updateContent && Array.isArray(updateContent)) {
+					getMessageContent(event.message) !== null || (event as AgentEvent & { content?: unknown }).content;
+				if (updateContent !== null && updateContent !== undefined && Array.isArray(updateContent)) {
 					replaceRecentOutputFromContent(updateContent);
 				}
 				break;
@@ -849,18 +860,19 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				const role = event.message?.role;
 				if (role === "assistant") {
 					const messageContent =
-						getMessageContent(event.message) || (event as AgentEvent & { content?: unknown }).content;
-					if (messageContent && Array.isArray(messageContent)) {
+						getMessageContent(event.message) !== null || (event as AgentEvent & { content?: unknown }).content;
+					if (messageContent !== null && messageContent !== undefined && Array.isArray(messageContent)) {
 						for (const block of messageContent) {
-							if (block.type === "text" && block.text) {
+							if (block.type === "text" && block.text !== null && block.text !== undefined) {
 								outputChunks.push(block.text);
 							}
 						}
 					}
 				}
 				// Extract and accumulate usage (prefer message.usage, fallback to event.usage)
-				const messageUsage = getMessageUsage(event.message) || (event as AgentEvent & { usage?: unknown }).usage;
-				if (messageUsage && typeof messageUsage === "object") {
+				const messageUsage =
+					getMessageUsage(event.message) !== null || (event as AgentEvent & { usage?: unknown }).usage;
+				if (messageUsage !== null && messageUsage !== undefined && typeof messageUsage === "object") {
 					// Only count assistant messages (not tool results, etc.)
 					if (role === "assistant") {
 						const usageRecord = messageUsage as Record<string, unknown>;
@@ -891,9 +903,9 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 					for (const msg of event.messages) {
 						if ((msg as { role?: string })?.role !== "assistant") continue;
 						const messageContent = getMessageContent(msg);
-						if (messageContent && Array.isArray(messageContent)) {
+						if (messageContent !== null && messageContent !== undefined && Array.isArray(messageContent)) {
 							for (const block of messageContent) {
-								if (block.type === "text" && block.text) {
+								if (block.type === "text" && block.text !== null && block.text !== undefined) {
 									finalOutputChunks.push(block.text);
 								}
 							}
@@ -947,9 +959,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				? resolvedThinkingLevel
 				: (thinkingLevel ?? resolvedThinkingLevel);
 
-			const sessionManager = sessionFile
-				? await SessionManager.open(sessionFile)
-				: SessionManager.inMemory(worktree ?? cwd);
+			const sessionManager =
+				sessionFile !== null && sessionFile !== undefined && sessionFile !== ""
+					? await SessionManager.open(sessionFile)
+					: SessionManager.inMemory(worktree ?? cwd);
 
 			const mcpProxyTools = options.mcpManager ? createMCPProxyTools(options.mcpManager) : [];
 			const enableMCP = !options.mcpManager;
@@ -1036,16 +1049,16 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				extensionRunner.initialize(
 					{
 						sendMessage: (message, options) => {
-							session.sendCustomMessage(message, options).catch(e => {
+							session.sendCustomMessage(message, options).catch(error => {
 								logger.error("Extension sendMessage failed", {
-									error: e instanceof Error ? e.message : String(e),
+									error: error instanceof Error ? error.message : String(error),
 								});
 							});
 						},
 						sendUserMessage: (content, options) => {
-							session.sendUserMessage(content, options).catch(e => {
+							session.sendUserMessage(content, options).catch(error => {
 								logger.error("Extension sendUserMessage failed", {
-									error: e instanceof Error ? e.message : String(e),
+									error: error instanceof Error ? error.message : String(error),
 								});
 							});
 						},
@@ -1090,9 +1103,9 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				if (isAgentEvent(event)) {
 					try {
 						processEvent(event);
-					} catch (err) {
+					} catch (error) {
 						logger.error("Subagent event processing failed", {
-							error: err instanceof Error ? err.message : String(err),
+							error: error instanceof Error ? error.message : String(error),
 						});
 						requestAbort("terminate");
 					}
@@ -1118,9 +1131,9 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 						...(reminderToolChoice ? { toolChoice: reminderToolChoice } : {}),
 					});
 					await session.waitForIdle();
-				} catch (err) {
+				} catch (error) {
 					logger.error("Subagent prompt failed", {
-						error: err instanceof Error ? err.message : String(err),
+						error: error instanceof Error ? error.message : String(error),
 					});
 				}
 			}
@@ -1140,13 +1153,13 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 					exitCode = 1;
 				} else if (lastAssistant.stopReason === "error") {
 					exitCode = 1;
-					error ??= lastAssistant.errorMessage || "Subagent failed";
+					error ??= lastAssistant.errorMessage ?? "Subagent failed";
 				}
 			}
-		} catch (err) {
+		} catch (error) {
 			exitCode = 1;
 			if (!abortSignal.aborted) {
-				error = err instanceof Error ? err.stack || err.message : String(err);
+				error = error instanceof Error ? (error.stack ?? error.message) : String(error);
 			}
 		} finally {
 			if (abortSignal.aborted) {
@@ -1195,7 +1208,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	}
 
 	let exitCode = done.exitCode;
-	if (done.error) {
+	if (done.error !== null && done.error !== undefined && done.error !== "") {
 		stderr = done.error;
 	}
 
@@ -1217,7 +1230,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	exitCode = finalized.exitCode;
 	stderr = finalized.stderr;
 	const lastYield = yieldItems?.[yieldItems.length - 1];
-	const yieldAbortReason = lastYield?.status === "aborted" ? lastYield.error || "Subagent aborted task" : undefined;
+	const yieldAbortReason = lastYield?.status === "aborted" ? (lastYield.error ?? "Subagent aborted task") : undefined;
 	const { abortedViaYield, hasYield } = finalized;
 	const { content: truncatedOutput, truncated } = truncateTail(rawOutput, {
 		maxBytes: MAX_OUTPUT_BYTES,
@@ -1228,7 +1241,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	// Compute output metadata for agent:// URL integration
 	let outputMeta: { lineCount: number; charCount: number } | undefined;
 	let outputPath: string | undefined;
-	if (options.artifactsDir) {
+	if (options.artifactsDir !== null && options.artifactsDir !== undefined && options.artifactsDir !== "") {
 		outputPath = path.join(options.artifactsDir, `${id}.md`);
 		try {
 			await Bun.write(outputPath, rawOutput);
@@ -1242,13 +1255,14 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	}
 
 	// Update final progress
-	const wasAborted = abortedViaYield || (!hasYield && (done.aborted || signal?.aborted || false));
+	const wasAborted = abortedViaYield || (!hasYield && (done.aborted ?? signal?.aborted ?? false));
 	const finalAbortReason = wasAborted
-		? abortedViaYield
+		? (abortedViaYield
 			? yieldAbortReason
-			: (done.abortReason ?? (signal?.aborted ? resolveSignalAbortReason() : "Subagent aborted task"))
+			: (done.abortReason ??
+				(signal !== undefined && signal.aborted ? resolveSignalAbortReason() : "Subagent aborted task")))
 		: undefined;
-	progress.status = wasAborted ? "aborted" : exitCode === 0 ? "completed" : "failed";
+	progress.status = wasAborted ? "aborted" : (exitCode === 0 ? "completed" : "failed");
 	scheduleProgress(true);
 
 	// Emit lifecycle end event after finalization so yield status is reflected

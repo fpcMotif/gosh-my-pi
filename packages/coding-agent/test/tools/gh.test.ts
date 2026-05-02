@@ -22,15 +22,16 @@ function createSession(
 		hasUI: false,
 		getSessionFile: () => null,
 		getArtifactsDir: () => artifactsDir ?? null,
-		allocateOutputArtifact: artifactsDir
-			? async toolType => {
-					const artifactId = String(nextArtifactId++);
-					return {
-						id: artifactId,
-						path: path.join(artifactsDir, `${artifactId}-${toolType}.md`),
-					};
-				}
-			: undefined,
+		allocateOutputArtifact:
+			artifactsDir !== null && artifactsDir !== undefined && artifactsDir !== ""
+				? async toolType => {
+						const artifactId = String(nextArtifactId++);
+						return {
+							id: artifactId,
+							path: path.join(artifactsDir, `${artifactId}-${toolType}.md`),
+						};
+					}
+				: undefined,
 		getSessionSpawns: () => null,
 		settings,
 	};
@@ -472,7 +473,7 @@ describe("github tool", () => {
 	it("rejects git.remote.add when the remote already exists with a different URL", async () => {
 		const fixture = await createPrFixture();
 		try {
-			await expect(git.remote.add(fixture.repoRoot, "forksrc", fixture.originBare)).rejects.toThrow(
+			expect(git.remote.add(fixture.repoRoot, "forksrc", fixture.originBare)).rejects.toThrow(
 				/already exists with URL/,
 			);
 			// Existing URL is preserved — we never overwrote it.
@@ -651,7 +652,7 @@ describe("github tool", () => {
 
 			const tool = new GithubTool(createSession(fixture.repoRoot));
 
-			await expect(tool.execute("pr-push", { op: "pr_push" })).rejects.toThrow(
+			expect(tool.execute("pr-push", { op: "pr_push" })).rejects.toThrow(
 				"branch manual-branch has no PR push metadata; check it out via op: pr_checkout first",
 			);
 			expect(runGit(fixture.baseDir, ["--git-dir", fixture.originBare, "rev-parse", "refs/heads/main"])).toBe(

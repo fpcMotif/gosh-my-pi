@@ -16,7 +16,7 @@
  * Based on code from OpenTUI (https://github.com/anomalyco/opentui)
  * MIT License - Copyright (c) 2025 opentui
  */
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 
 const ESC = "\x1b";
 const BRACKETED_PASTE_START = "\x1b[200~";

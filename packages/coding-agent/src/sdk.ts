@@ -1,11 +1,4 @@
-import {
-	Agent,
-	type AgentEvent,
-	type AgentMessage,
-	type AgentTool,
-	INTENT_FIELD,
-	type ThinkingLevel,
-} from "@oh-my-pi/pi-agent-core";
+import { Agent, type AgentMessage, type AgentTool, INTENT_FIELD, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Message, Model, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 import {
 	getOpenAICodexTransportDetails,
@@ -32,7 +25,6 @@ import { ModelRegistry } from "./config/model-registry";
 import { formatModelString, parseModelPattern, parseModelString, resolveModelRoleValue } from "./config/model-resolver";
 import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./config/prompt-templates";
 import { Settings, type SkillsSettings } from "./config/settings";
-import { CursorExecHandlers } from "./cursor";
 import "./discovery";
 import { resolveConfigValue } from "./config/resolve-config-value";
 import { initializeWithSettings } from "./discovery";
@@ -416,16 +408,16 @@ function createCustomToolContext(ctx: ExtensionContext): CustomToolContext {
 		sessionManager: ctx.sessionManager,
 		modelRegistry: ctx.modelRegistry,
 		model: ctx.model,
-		isIdle: ctx.isIdle,
-		hasQueuedMessages: ctx.hasPendingMessages,
-		abort: ctx.abort,
+		isIdle: () => ctx.isIdle(),
+		hasQueuedMessages: () => ctx.hasPendingMessages(),
+		abort: () => ctx.abort(),
 	};
 }
 
 function isCustomTool(tool: CustomTool | ToolDefinition): tool is CustomTool {
 	// To distinguish, we mark converted tools with a hidden symbol property.
 	// If the tool doesn't have this marker, it's a CustomTool that needs conversion.
-	return !(tool as any).__isToolDefinition;
+	return (tool as unknown as Record<symbol, unknown>)[TOOL_DEFINITION_MARKER] === undefined;
 }
 
 const TOOL_DEFINITION_MARKER = Symbol("__isToolDefinition");
@@ -492,14 +484,16 @@ function createCustomToolsExtension(tools: CustomTool[]): ExtensionFactory {
 		}
 
 		const runOnSession = async (event: CustomToolSessionEvent, ctx: ExtensionContext) => {
-			for (const tool of tools) {
-				if (!tool.onSession) continue;
-				try {
-					await tool.onSession(event, createCustomToolContext(ctx));
-				} catch (err) {
-					logger.warn("Custom tool onSession error", { tool: tool.name, error: String(err) });
-				}
-			}
+			const promises = tools
+				.filter(tool => tool.onSession !== undefined && tool.onSession !== null)
+				.map(async tool => {
+					try {
+						await tool.onSession!(event, createCustomToolContext(ctx));
+					} catch (error) {
+						logger.warn("Custom tool onSession error", { tool: tool.name, error: String(error) });
+					}
+				});
+			await Promise.allSettled(promises);
 		};
 
 		api.on("session_start", async (_event, ctx) =>
@@ -583,7 +577,7 @@ function buildMCPPromptCommands(manager: MCPManager): LoadedCustomCommand[] {
 	const commands: LoadedCustomCommand[] = [];
 	for (const serverName of manager.getConnectedServers()) {
 		const prompts = manager.getServerPrompts(serverName);
-		if (!prompts?.length) continue;
+		if (prompts?.length === null || prompts?.length === undefined || prompts?.length === 0) continue;
 		for (const prompt of prompts) {
 			const commandName = `${serverName}:${prompt.name}`;
 			commands.push({
@@ -611,7 +605,8 @@ function buildMCPPromptCommands(manager: MCPManager): LoadedCustomCommand[] {
 									parts.push(item.text);
 								} else if (item.type === "resource") {
 									const resource = item.resource;
-									if (resource.text) parts.push(resource.text);
+									if (resource.text !== null && resource.text !== undefined && resource.text !== "")
+										parts.push(resource.text);
 								}
 							}
 						}
@@ -666,10 +661,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const authStorage = options.authStorage ?? (await logger.time("discoverModels", discoverAuthStorage, agentDir));
 	const modelRegistry = options.modelRegistry ?? new ModelRegistry(authStorage);
 
-	const settings = options.settings ?? (await logger.time("settings", Settings.init, { cwd, agentDir }));
+	const settings = options.settings ?? (await logger.time("settings", () => Settings.init({ cwd, agentDir })));
 	logger.time("initializeWithSettings");
 	initializeWithSettings(settings);
-	if (!options.modelRegistry) {
+	if (options.modelRegistry === undefined || options.modelRegistry === null) {
 		modelRegistry.refreshInBackground();
 	}
 	const skillsSettings = settings.getGroup("skills");
@@ -703,7 +698,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const providerSessionId = options.providerSessionId ?? sessionManager.getSessionId();
 	const modelApiKeyAvailability = new Map<string, boolean>();
 	const getModelAvailabilityKey = (candidate: Model): string =>
-		`${candidate.provider}\u0000${candidate.baseUrl ?? ""}`;
+		`${candidate.provider}\u0000${(candidate.baseUrl !== undefined && candidate.baseUrl !== null) ? candidate.baseUrl : ""}`;
 	const hasModelApiKey = async (candidate: Model): Promise<boolean> => {
 		const availabilityKey = getModelAvailabilityKey(candidate);
 		const cached = modelApiKeyAvailability.get(availabilityKey);
@@ -711,7 +706,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			return cached;
 		}
 
-		const hasKey = !!(await modelRegistry.getApiKey(candidate, providerSessionId));
+		const apiKey = await modelRegistry.getApiKey(candidate, providerSessionId);
+		const hasKey = apiKey !== undefined && apiKey !== null && apiKey !== "";
 		modelApiKeyAvailability.set(availabilityKey, hasKey);
 		return hasKey;
 	};
@@ -801,7 +797,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	if (thinkingLevel === undefined) {
 		thinkingLevel = settings.get("defaultThinkingLevel");
 	}
-	if (model) {
+	if (model !== null && model !== undefined) {
 		const resolvedModel = model;
 		thinkingLevel = logger.time("resolveThinkingLevelForModel", () =>
 			resolveThinkingLevelForModel(resolvedModel, thinkingLevel),
@@ -810,16 +806,16 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	let skills: Skill[];
 	let skillWarnings: SkillWarning[];
-	if (options.skills !== undefined) {
-		skills = options.skills;
-		skillWarnings = [];
-	} else {
+	if (options.skills === undefined) {
 		const discovered = await logger.time(
 			"discoverSkills",
 			() => discoveredSkillsPromise ?? Promise.resolve({ skills: [], warnings: [] }),
 		);
 		skills = discovered.skills;
 		skillWarnings = discovered.warnings;
+	} else {
+		skills = options.skills;
+		skillWarnings = [];
 	}
 
 	// Discover rules and bucket them in one pass to avoid repeated scans over large rule sets.
@@ -827,9 +823,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		const ttsrSettings = settings.getGroup("ttsr");
 		const ttsrManager = new TtsrManager(ttsrSettings);
 		const rulesResult =
-			options.rules !== undefined
-				? { items: options.rules, warnings: undefined }
-				: await loadCapability<Rule>(ruleCapability.id, { cwd });
+			options.rules === undefined
+				? await loadCapability<Rule>(ruleCapability.id, { cwd })
+				: { items: options.rules, warnings: undefined };
 		const rulebookRules: Rule[] = [];
 		const alwaysApplyRules: Rule[] = [];
 		for (const rule of rulesResult.items) {
@@ -841,7 +837,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				alwaysApplyRules.push(rule);
 				continue;
 			}
-			if (rule.description) {
+			if (rule.description !== null && rule.description !== undefined && rule.description !== "") {
 				rulebookRules.push(rule);
 			}
 		}
@@ -872,7 +868,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		const preview = `${result.slice(0, ASYNC_PREVIEW_MAX_CHARS)}\n\n[Output truncated. Showing first ${ASYNC_PREVIEW_MAX_CHARS.toLocaleString()} characters.]`;
 		try {
 			const { path: artifactPath, id: artifactId } = await sessionManager.allocateArtifactPath("async");
-			if (artifactPath && artifactId) {
+			if (
+				artifactPath !== null &&
+				artifactPath !== undefined &&
+				artifactPath !== "" &&
+				artifactId !== null &&
+				artifactId !== undefined &&
+				artifactId !== ""
+			) {
 				await Bun.write(artifactPath, result);
 				return `${preview}\nFull output: artifact://${artifactId}`;
 			}
@@ -888,12 +891,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		? new AsyncJobManager({
 				maxRunningJobs: asyncMaxJobs,
 				onJobComplete: async (jobId, result, job) => {
-					if (!session || asyncJobManager!.isDeliverySuppressed(jobId)) return;
+					if (session === null || session === undefined || asyncJobManager?.isDeliverySuppressed(jobId) === true) return;
 					const formattedResult = await formatAsyncResultForFollowUp(result);
-					if (asyncJobManager!.isDeliverySuppressed(jobId)) return;
+					if (asyncJobManager?.isDeliverySuppressed(jobId) === true) return;
 
 					const message = prompt.render(asyncResultTemplate, { jobId, result: formattedResult });
-					const durationMs = job ? Math.max(0, Date.now() - job.startTime) : undefined;
+					const durationMs = job !== null && job !== undefined ? Math.max(0, Date.now() - job.startTime) : undefined;
 					await session.sendCustomMessage(
 						{
 							customType: "async-result",
@@ -916,14 +919,18 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const agentRegistry = options.agentRegistry ?? AgentRegistry.global();
 	const resolvedAgentId = options.agentId ?? options.parentTaskPrefix ?? MAIN_AGENT_ID;
 	const resolvedAgentDisplayName =
-		options.agentDisplayName ?? ((options.taskDepth ?? 0) > 0 || options.parentTaskPrefix ? "sub" : "main");
+		options.agentDisplayName ??
+		((options.taskDepth ?? 0) > 0 ||
+		(options.parentTaskPrefix !== null && options.parentTaskPrefix !== undefined && options.parentTaskPrefix !== "")
+			? "sub"
+			: "main");
 	const pythonKernelOwnerId = `agent-session:${Snowflake.next()}`;
 
 	try {
 		const getActiveModelString = (): string | undefined => {
 			const activeModel = agent?.state.model;
-			if (activeModel) return formatModelString(activeModel);
-			if (model) return formatModelString(model);
+			if (activeModel !== null && activeModel !== undefined) return formatModelString(activeModel);
+			if (model !== null && model !== undefined) return formatModelString(model);
 			return undefined;
 		};
 		const toolSession: ToolSession = {
@@ -948,7 +955,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			getPythonKernelOwnerId: () => pythonKernelOwnerId,
 			assertPythonExecutionAllowed: () => session?.assertPythonExecutionAllowed(),
 			trackPythonExecution: (execution, abortController) =>
-				session ? session.trackPythonExecution(execution, abortController) : execution,
+				(session !== null && session !== undefined) ? session.trackPythonExecution(execution, abortController) : execution,
 			getSessionId: () => sessionManager.getSessionId?.() ?? null,
 			getAgentId: () => resolvedAgentId,
 			agentRegistry,
@@ -1030,7 +1037,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		toolSession.getArtifactsDir = getArtifactsDir;
 		toolSession.agentOutputManager = new AgentOutputManager(
 			getArtifactsDir,
-			options.parentTaskPrefix ? { parentPrefix: options.parentTaskPrefix } : undefined,
+			options.parentTaskPrefix !== null && options.parentTaskPrefix !== undefined && options.parentTaskPrefix !== ""
+				? { parentPrefix: options.parentTaskPrefix }
+				: undefined,
 		);
 
 		// Create built-in tools (already wrapped with meta notice formatting)
@@ -1043,7 +1052,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		if (enableMCP && !mcpManager) {
 			const mcpResult = await logger.time("discoverAndLoadMCPTools", discoverAndLoadMCPTools, cwd, {
 				onConnecting: serverNames => {
-					if (options.hasUI && serverNames.length > 0) {
+					if (options.hasUI === true && serverNames.length > 0) {
 						process.stderr.write(`${chalk.gray(`Connecting to MCP servers: ${serverNames.join(", ")}…`)}\n`);
 					}
 				},
@@ -1084,7 +1093,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 
 		// Add web search tools
-		if (options.toolNames?.includes("web_search")) {
+		if (options.toolNames?.includes("web_search") === true) {
 			customTools.push(...getSearchTools());
 		}
 
@@ -1113,7 +1122,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 		// Load extensions (discovers from standard locations + configured paths)
 		let extensionsResult: LoadExtensionsResult;
-		if (options.disableExtensionDiscovery) {
+		if (options.disableExtensionDiscovery === true) {
 			const configuredPaths = options.additionalExtensionPaths ?? [];
 			extensionsResult = await logger.time("loadExtensions", loadExtensions, configuredPaths, cwd, eventBus);
 			for (const { path, error } of extensionsResult.errors) {
@@ -1140,15 +1149,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 		// Load inline extensions from factories
 		if (inlineExtensions.length > 0) {
-			for (let i = 0; i < inlineExtensions.length; i++) {
-				const factory = inlineExtensions[i];
-				const loaded = await loadExtensionFromFactory(
-					factory,
-					cwd,
-					eventBus,
-					extensionsResult.runtime,
-					`<inline-${i}>`,
-				);
+			const loadedExtensions = await Promise.all(
+				inlineExtensions.map((factory, i) =>
+					loadExtensionFromFactory(factory, cwd, eventBus, extensionsResult.runtime, `<inline-${i}>`),
+				),
+			);
+			for (const loaded of loadedExtensions) {
 				extensionsResult.extensions.push(loaded);
 			}
 		}
@@ -1169,7 +1175,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 
 		// Resolve deferred --model pattern now that extension models are registered.
-		if (!model && options.modelPattern) {
+		if (
+			!model &&
+			options.modelPattern !== null &&
+			options.modelPattern !== undefined &&
+			options.modelPattern !== ""
+		) {
 			const availableModels = modelRegistry.getAll();
 			const matchPreferences = {
 				usageOrder: settings.getStorage()?.getModelUsageOrder(),
@@ -1187,16 +1198,20 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 		// Fall back to first available model with a valid API key.
 		// Skip fallback if the user explicitly requested a model via --model that wasn't found.
-		if (!model && !options.modelPattern) {
+		if (
+			!model &&
+			(options.modelPattern === null || options.modelPattern === undefined || options.modelPattern === "")
+		) {
 			const allModels = modelRegistry.getAll();
-			for (const candidate of allModels) {
-				if (await hasModelApiKey(candidate)) {
-					model = candidate;
-					break;
-				}
+			const candidatesWithKeys = await Promise.all(
+				allModels.map(async candidate => ((await hasModelApiKey(candidate)) ? candidate : null)),
+			);
+			const firstWithKey = candidatesWithKeys.find(c => c !== null);
+			if (firstWithKey) {
+				selectedModel = firstWithKey;
 			}
-			if (model) {
-				if (modelFallbackMessage) {
+			if (model !== null && model !== undefined) {
+				if (modelFallbackMessage !== null && modelFallbackMessage !== undefined && modelFallbackMessage !== "") {
 					modelFallbackMessage += `. Using ${model.provider}/${model.id}`;
 				}
 			} else {
@@ -1206,10 +1221,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 
 		// Discover custom commands (TypeScript slash commands)
-		const customCommandsResult: CustomCommandsLoadResult = options.disableExtensionDiscovery
-			? { commands: [], errors: [] }
-			: await logger.time("discoverCustomCommands", loadCustomCommandsInternal, { cwd, agentDir });
-		if (!options.disableExtensionDiscovery) {
+		const customCommandsResult: CustomCommandsLoadResult =
+			options.disableExtensionDiscovery === true
+				? { commands: [], errors: [] }
+				: await logger.time("discoverCustomCommands", loadCustomCommandsInternal, { cwd, agentDir });
+		if (options.disableExtensionDiscovery !== true) {
 			for (const { path, error } of customCommandsResult.errors) {
 				logger.error("Failed to load custom command", { path, error });
 			}
@@ -1233,7 +1249,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			isIdle: () => !session.isStreaming,
 			hasQueuedMessages: () => session.queuedMessageCount > 0,
 			abort: () => {
-				session.abort();
+				void session.abort();
 			},
 			settings,
 		});
@@ -1296,14 +1312,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			}
 		}
 
-		let cursorEventEmitter: ((event: AgentEvent) => void) | undefined;
-		const cursorExecHandlers = new CursorExecHandlers({
-			cwd,
-			tools: toolRegistry,
-			getToolContext: () => toolContextStore.getContext(),
-			emitEvent: event => cursorEventEmitter?.(event),
-		});
-
 		const repeatToolDescriptions = settings.get("repeatToolDescriptions");
 		const eagerTasks = settings.get("task.eager");
 		const intentField = settings.get("tools.intentTracing") || $flag("PI_INTENT_TRACING") ? INTENT_FIELD : undefined;
@@ -1324,7 +1332,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			if (serverInstructions && serverInstructions.size > 0) {
 				const MAX_INSTRUCTIONS_LENGTH = 4000;
 				const parts: string[] = [];
-				if (appendPrompt) parts.push(appendPrompt);
+				if (appendPrompt !== null && appendPrompt !== undefined && appendPrompt !== "") parts.push(appendPrompt);
 				parts.push(
 					"## MCP Server Instructions\n\nThe following instructions are provided by connected MCP servers. They are server-controlled and may not be verified.",
 				);
@@ -1389,7 +1397,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		const includeExitPlanMode = requestedToolNames.includes("exit_plan_mode");
 		const mcpDiscoveryEnabled = settings.get("mcp.discoveryMode") ?? false;
 		const defaultInactiveToolNames = new Set(
-			registeredTools.filter(tool => tool.definition.defaultInactive).map(tool => tool.definition.name),
+			registeredTools.filter(tool => tool.definition.defaultInactive === true).map(tool => tool.definition.name),
 		);
 		const requestedActiveToolNames = includeExitPlanMode
 			? normalizedRequested
@@ -1433,7 +1441,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		// Custom tools and extension-registered tools are always included regardless of toolNames filter
 		const alwaysInclude: string[] = [
 			...(options.customTools?.map(t => (isCustomTool(t) ? t.name : t.name)) ?? []),
-			...registeredTools.filter(t => !t.definition.defaultInactive).map(t => t.definition.name),
+			...registeredTools.filter(t => t.definition.defaultInactive !== true).map(t => t.definition.name),
 		];
 		for (const name of alwaysInclude) {
 			if (mcpDiscoveryEnabled && name.startsWith("mcp__")) {
@@ -1489,7 +1497,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		// Final convertToLlm: chain block-images filter with secret obfuscation
 		const convertToLlmFinal = (messages: AgentMessage[]): Message[] => {
 			const converted = convertToLlmWithBlockImages(messages);
-			if (!obfuscator?.hasSecrets()) return converted;
+			if (obfuscator?.hasSecrets() !== true) return converted;
 			return obfuscateMessages(obfuscator, converted);
 		};
 		const transformContext = extensionRunner
@@ -1518,14 +1526,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 		const openaiWebsocketSetting = settings.get("providers.openaiWebsockets") ?? "off";
 		const preferOpenAICodexWebsockets =
-			openaiWebsocketSetting === "on" ? true : openaiWebsocketSetting === "off" ? false : undefined;
+			openaiWebsocketSetting === "on" ? true : (openaiWebsocketSetting === "off" ? false : undefined);
 		const serviceTierSetting = settings.get("serviceTier");
 
 		const initialServiceTier = hasServiceTierEntry
 			? existingSession.serviceTier
-			: serviceTierSetting === "none"
+			: (serviceTierSetting === "none"
 				? undefined
-				: serviceTierSetting;
+				: serviceTierSetting);
 
 		agent = new Agent({
 			initialState: {
@@ -1557,19 +1565,18 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				// Use the provider-facing session id for sticky credential selection so cache keys
 				// and provider auth affinity stay aligned across fresh benchmark sessions.
 				const key = await modelRegistry.getApiKeyForProvider(provider, providerSessionId);
-				if (!key) {
+				if (key === null || key === undefined || key === "") {
 					throw new Error(`No API key found for provider "${provider}"`);
 				}
 				return key;
 			},
-			cursorExecHandlers,
 			transformToolCallArguments: (args, _toolName) => {
 				let result = args;
 				const maxTimeout = settings.get("tools.maxTimeout");
 				if (maxTimeout > 0 && typeof result.timeout === "number") {
 					result = { ...result, timeout: Math.min(result.timeout, maxTimeout) };
 				}
-				if (obfuscator?.hasSecrets()) {
+				if (obfuscator?.hasSecrets() === true) {
 					result = obfuscator.deobfuscateObject(result);
 				}
 				return result;
@@ -1578,14 +1585,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			getToolChoice: () => session?.nextToolChoice(),
 		});
 
-		cursorEventEmitter = event => agent.emitExternalEvent(event);
-
 		// Restore messages if session has existing data
 		if (hasExistingSession) {
 			agent.replaceMessages(existingSession.messages);
 		} else {
 			// Save initial model and thinking level for new sessions so they can be restored on resume
-			if (model) {
+			if (model !== null && model !== undefined) {
 				sessionManager.appendModelChange(`${model.provider}/${model.id}`);
 			}
 			sessionManager.appendThinkingLevelChange(thinkingLevel);
@@ -1630,7 +1635,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		agentRegistry.register({
 			id: resolvedAgentId,
 			displayName: resolvedAgentDisplayName,
-			kind: (options.taskDepth ?? 0) > 0 || options.parentTaskPrefix ? "sub" : "main",
+			kind:
+				(options.taskDepth ?? 0) > 0 ||
+				(options.parentTaskPrefix !== null &&
+					options.parentTaskPrefix !== undefined &&
+					options.parentTaskPrefix !== "")
+					? "sub"
+					: "main",
 			parentId: options.parentTaskPrefix,
 			session,
 			sessionFile: sessionManager.getSessionFile() ?? null,
@@ -1648,7 +1659,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 
 		if (model?.api === "openai-codex-responses") {
-			const codexModel = model;
+			const codexModel = model as Model<"openai-codex-responses">;
 			const codexTransport = getOpenAICodexTransportDetails(codexModel, {
 				sessionId: providerSessionId,
 				baseUrl: codexModel.baseUrl,
@@ -1659,7 +1670,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				void (async () => {
 					try {
 						const codexPrewarmApiKey = await modelRegistry.getApiKey(codexModel, providerSessionId);
-						if (!codexPrewarmApiKey) return;
+						if (codexPrewarmApiKey === null || codexPrewarmApiKey === undefined || codexPrewarmApiKey === "")
+							return;
 						await logger.time("prewarmOpenAICodexResponses", prewarmOpenAICodexResponses, codexModel, {
 							apiKey: codexPrewarmApiKey,
 							sessionId: providerSessionId,

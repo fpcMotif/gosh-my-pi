@@ -102,7 +102,10 @@ export class SelectList implements Component {
 			if (!item) continue;
 
 			const isSelected = i === this.#selectedIndex;
-			const descriptionText = item.description ? sanitizeSingleLine(item.description) : undefined;
+			const descriptionText =
+				item.description !== null && item.description !== undefined && item.description !== ""
+					? sanitizeSingleLine(item.description)
+					: undefined;
 			lines.push(this.#renderItem(item, isSelected, width, descriptionText, primaryColumnWidth));
 		}
 
@@ -166,7 +169,12 @@ export class SelectList implements Component {
 			: padding(visibleWidth(this.theme.symbols.cursor) + 1);
 		const prefixWidth = visibleWidth(prefix);
 
-		if (descriptionSingleLine && width > 40) {
+		if (
+			descriptionSingleLine !== null &&
+			descriptionSingleLine !== undefined &&
+			descriptionSingleLine !== "" &&
+			width > 40
+		) {
 			const effectivePrimaryColumnWidth = Math.max(1, Math.min(primaryColumnWidth, width - prefixWidth - 4));
 			const maxPrimaryWidth = Math.max(1, effectivePrimaryColumnWidth - PRIMARY_COLUMN_GAP);
 			const truncatedValue = this.#truncatePrimary(item, isSelected, maxPrimaryWidth, effectivePrimaryColumnWidth);

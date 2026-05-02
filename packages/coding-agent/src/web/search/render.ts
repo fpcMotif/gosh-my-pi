@@ -82,7 +82,7 @@ export function renderSearchResult(
 	const details = result.details;
 
 	// Handle error case
-	if (details?.error) {
+	if (details?.error !== null && details?.error !== undefined && details?.error !== "") {
 		return new Text(theme.fg("error", `Error: ${details.error}`), 0, 0);
 	}
 
@@ -113,11 +113,12 @@ export function renderSearchResult(
 	const totalAnswerLines = answerLines.length;
 
 	const providerLabel = provider !== "none" ? getSearchProvider(provider).label : "None";
-	const queryPreview = args?.query
-		? truncateToWidth(args.query, 80)
-		: searchQueries[0]
-			? truncateToWidth(searchQueries[0], 80)
-			: undefined;
+	const queryPreview =
+		args?.query !== null && args?.query !== undefined && args?.query !== ""
+			? truncateToWidth(args.query, 80)
+			: (searchQueries[0]
+				? truncateToWidth(searchQueries[0], 80)
+				: undefined);
 	const header = renderStatusLine(
 		{
 			icon: sourceCount > 0 ? "success" : "warning",
@@ -130,11 +131,12 @@ export function renderSearchResult(
 
 	const metaLines: string[] = [];
 	metaLines.push(`${theme.fg("muted", "Provider:")} ${theme.fg("text", providerLabel)}`);
-	if (response.authMode)
+	if (response.authMode !== null && response.authMode !== undefined && response.authMode !== "")
 		metaLines.push(
-			`${theme.fg("muted", "Auth:")} ${theme.fg("text", response.authMode === "oauth" ? "OAuth" : response.authMode === "api_key" ? "API key" : response.authMode)}`,
+			`${theme.fg("muted", "Auth:")} ${theme.fg("text", response.authMode === "oauth" ? "OAuth" : (response.authMode === "api_key" ? "API key" : response.authMode))}`,
 		);
-	if (response.model) metaLines.push(`${theme.fg("muted", "Model:")} ${theme.fg("text", response.model)}`);
+	if (response.model !== null && response.model !== undefined && response.model !== "")
+		metaLines.push(`${theme.fg("muted", "Model:")} ${theme.fg("text", response.model)}`);
 	metaLines.push(`${theme.fg("muted", "Sources:")} ${theme.fg("text", String(sourceCount))}`);
 	if (citationCount > 0)
 		metaLines.push(`${theme.fg("muted", "Citations:")} ${theme.fg("text", String(citationCount))}`);
@@ -147,7 +149,7 @@ export function renderSearchResult(
 		if (usageParts.length > 0)
 			metaLines.push(`${theme.fg("muted", "Usage:")} ${theme.fg("text", usageParts.join(theme.sep.dot))}`);
 	}
-	if (response.requestId) {
+	if (response.requestId !== null && response.requestId !== undefined && response.requestId !== "") {
 		metaLines.push(
 			`${theme.fg("muted", "Request:")} ${theme.fg("text", truncateToWidth(response.requestId, MAX_REQUEST_ID_LEN))}`,
 		);
@@ -169,9 +171,9 @@ export function renderSearchResult(
 			// Expanded-dependent computations
 			const answerLimit = expanded ? MAX_EXPANDED_ANSWER_LINES : MAX_COLLAPSED_ANSWER_LINES;
 			const answerPreview = contentText
-				? args?.allowLongAnswer
+				? (args?.allowLongAnswer === true
 					? answerLines.slice(0, args.maxAnswerLines ?? answerLines.length)
-					: getPreviewLines(contentText, answerLimit, MAX_ANSWER_LINE_LEN)
+					: getPreviewLines(contentText, answerLimit, MAX_ANSWER_LINE_LEN))
 				: [];
 			const remainingAnswer = totalAnswerLines - answerPreview.length;
 
@@ -185,9 +187,9 @@ export function renderSearchResult(
 						const titleText =
 							typeof src.title === "string" && src.title.trim()
 								? src.title
-								: typeof src.url === "string" && src.url.trim()
+								: (typeof src.url === "string" && src.url.trim()
 									? src.url
-									: "Untitled";
+									: "Untitled");
 						const title = truncateToWidth(titleText, MAX_SNIPPET_LINE_LEN);
 						const url = typeof src.url === "string" ? src.url : "";
 						const domain = url ? getDomain(url) : "";
@@ -234,7 +236,7 @@ export function renderSearchResult(
 					renderItem: (line, context) => {
 						const coloredLine =
 							line === "No answer text returned" ? theme.fg("muted", line) : theme.fg("dim", line);
-						if (!args?.allowLongAnswer) {
+						if (args?.allowLongAnswer !== true) {
 							return coloredLine;
 						}
 						const prefixWidth = visibleWidth(context.continuePrefix);
@@ -253,7 +255,7 @@ export function renderSearchResult(
 					header,
 					state: sourceCount > 0 ? "success" : "warning",
 					sections: [
-						...(queryPreview
+						...(queryPreview !== null && queryPreview !== undefined && queryPreview !== ""
 							? [
 									{
 										lines: [`${theme.fg("muted", "Query:")} ${theme.fg("text", queryPreview)}`],

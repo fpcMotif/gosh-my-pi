@@ -24,7 +24,7 @@ export class LoginDialogComponent extends Container {
 		this.#tui = tui;
 
 		const providerInfo = getOAuthProviders().find(p => p.id === providerId);
-		const providerName = providerInfo?.name || providerId;
+		const providerName = providerInfo?.name ?? providerId;
 
 		// Top border
 		this.addChild(new DynamicBorder());
@@ -79,7 +79,7 @@ export class LoginDialogComponent extends Container {
 		const hyperlink = `\x1b]8;;${url}\x07${clickHint}\x1b]8;;\x07`;
 		this.#contentContainer.addChild(new Text(theme.fg("dim", hyperlink), 1, 0));
 
-		if (instructions) {
+		if (instructions !== null && instructions !== undefined && instructions !== "") {
 			this.#contentContainer.addChild(new Spacer(1));
 			this.#contentContainer.addChild(new Text(theme.fg("warning", instructions), 1, 0));
 		}
@@ -115,7 +115,7 @@ export class LoginDialogComponent extends Container {
 	showPrompt(message: string, placeholder?: string): Promise<string> {
 		this.#contentContainer.addChild(new Spacer(1));
 		this.#contentContainer.addChild(new Text(theme.fg("text", message), 1, 0));
-		if (placeholder) {
+		if (placeholder !== null && placeholder !== undefined && placeholder !== "") {
 			this.#contentContainer.addChild(new Text(theme.fg("dim", `e.g., ${placeholder}`), 1, 0));
 		}
 		if (!this.#contentContainer.children.includes(this.#input)) {

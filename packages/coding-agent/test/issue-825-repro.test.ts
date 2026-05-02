@@ -25,7 +25,7 @@ import type { CompactionQueuedMessage, InteractiveModeContext } from "@oh-my-pi/
 import { UiHelpers } from "@oh-my-pi/pi-coding-agent/modes/utils/ui-helpers";
 
 beforeAll(() => {
-	initTheme();
+	void initTheme();
 });
 
 type PromptOpts = { streamingBehavior?: "steer" | "followUp" } | undefined;

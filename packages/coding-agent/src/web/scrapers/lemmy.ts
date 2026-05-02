@@ -58,7 +58,7 @@ interface LemmyCommentResponse {
 }
 
 function formatCommunity(community: LemmyCommunity): string {
-	if (community.actor_id) {
+	if (community.actor_id !== null && community.actor_id !== undefined && community.actor_id !== "") {
 		try {
 			const host = new URL(community.actor_id).hostname;
 			return `!${community.name}@${host}`;
@@ -68,7 +68,7 @@ function formatCommunity(community: LemmyCommunity): string {
 }
 
 function formatAuthor(creator: LemmyCreator): string {
-	if (creator.actor_id) {
+	if (creator.actor_id !== null && creator.actor_id !== undefined && creator.actor_id !== "") {
 		try {
 			const host = new URL(creator.actor_id).hostname;
 			return `@${creator.name}@${host}`;
@@ -91,7 +91,8 @@ function renderComments(comments: LemmyCommentView[]): string {
 
 	for (const commentView of comments) {
 		const parentId = commentView.comment.parent_id;
-		const resolvedParent = parentId && commentIds.has(parentId) ? parentId : 0;
+		const resolvedParent =
+			parentId !== null && parentId !== undefined && parentId !== 0 && commentIds.has(parentId) ? parentId : 0;
 		const list = childrenByParent.get(resolvedParent);
 		if (list) {
 			list.push(commentView);
@@ -151,7 +152,7 @@ export const handleLemmy: SpecialHandler = async (
 			const commentData = tryParseJson<LemmyCommentResponse>(commentResult.content);
 			const commentView = commentData?.comment_view;
 			const commentPostId = commentView?.comment?.post_id;
-			if (!commentPostId) return null;
+			if (commentPostId === null || commentPostId === undefined || commentPostId === 0) return null;
 			postId = commentPostId;
 		}
 
@@ -180,12 +181,12 @@ export const handleLemmy: SpecialHandler = async (
 		const commentCount = postView.counts?.comments ?? comments.length;
 
 		md += `**Community:** ${communityLabel} · **Author:** ${authorLabel} · **Score:** ${score} · **Comments:** ${commentCount}\n`;
-		if (postView.post.url) {
+		if (postView.post.url !== null && postView.post.url !== undefined && postView.post.url !== "") {
 			md += `**Link:** ${postView.post.url}\n`;
 		}
 		md += "\n";
 
-		if (postView.post.body) {
+		if (postView.post.body !== null && postView.post.body !== undefined && postView.post.body !== "") {
 			md += `---\n\n${postView.post.body}\n\n`;
 		}
 

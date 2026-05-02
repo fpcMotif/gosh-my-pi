@@ -52,9 +52,9 @@ async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
 
 	try {
 		await fs.rename(tmpPath, filePath);
-	} catch (err) {
+	} catch (error) {
 		// Windows EPERM fallback: unlink target, then rename
-		if ((err as NodeJS.ErrnoException).code === "EPERM") {
+		if ((error as NodeJS.ErrnoException).code === "EPERM") {
 			try {
 				await fs.unlink(filePath);
 			} catch {
@@ -68,7 +68,7 @@ async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
 			} catch {
 				// Best effort
 			}
-			throw err;
+			throw error;
 		}
 	}
 }
@@ -88,9 +88,9 @@ export async function readMarketplacesRegistry(filePath: string): Promise<Market
 			return emptyMarketplacesRegistry();
 		}
 		return data;
-	} catch (err) {
-		if (isEnoent(err)) return emptyMarketplacesRegistry();
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return emptyMarketplacesRegistry();
+		throw error;
 	}
 }
 
@@ -121,9 +121,9 @@ export async function readInstalledPluginsRegistry(filePath: string): Promise<In
 		}
 		// Accept any numeric version — forward compatible reads
 		return { ...data, version: 2 };
-	} catch (err) {
-		if (isEnoent(err)) return emptyInstalledPluginsRegistry();
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return emptyInstalledPluginsRegistry();
+		throw error;
 	}
 }
 

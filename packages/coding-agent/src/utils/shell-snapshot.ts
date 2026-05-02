@@ -125,10 +125,10 @@ export async function getOrCreateSnapshot(
 	const cacheKey = shell;
 	// Return cached snapshot if valid
 	const cached = cachedSnapshotPaths.get(cacheKey);
-	if (cached && fs.existsSync(cached)) {
+	if (cached !== null && cached !== undefined && cached !== "" && fs.existsSync(cached)) {
 		return cached;
 	}
-	if (cached) {
+	if (cached !== null && cached !== undefined && cached !== "") {
 		cachedSnapshotPaths.delete(cacheKey);
 	}
 
@@ -144,7 +144,7 @@ export async function getOrCreateSnapshot(
 	fs.mkdirSync(snapshotDir, { recursive: true });
 
 	// Generate unique snapshot path
-	const shellName = shell.includes("zsh") ? "zsh" : shell.includes("bash") ? "bash" : "sh";
+	const shellName = shell.includes("zsh") ? "zsh" : (shell.includes("bash") ? "bash" : "sh");
 	const snapshotPath = path.join(snapshotDir, `snapshot-${shellName}-${crypto.randomUUID()}.sh`);
 
 	// Generate and execute snapshot script

@@ -248,17 +248,17 @@ export class MCPCommandController {
 		if (!hasQuick) {
 			return { scope, initialName: name };
 		}
-		if (!name) {
+		if (name === null || name === undefined || name === "") {
 			return { scope, error: "Server name required for quick add. Usage: /mcp add <name> ..." };
 		}
-		if (url && commandTokens && commandTokens.length > 0) {
+		if (url !== undefined && url !== "" && commandTokens !== undefined && commandTokens.length > 0) {
 			return { scope, error: "Use either --url or -- <command...>, not both." };
 		}
-		if (authToken && !url) {
+		if (authToken !== undefined && authToken !== "" && (url === null || url === undefined || url === "")) {
 			return { scope, error: "--token requires --url (HTTP/SSE transport)." };
 		}
 
-		if (commandTokens && commandTokens.length > 0) {
+		if (commandTokens !== undefined && commandTokens.length > 0) {
 			const [command, ...args] = commandTokens;
 			const config: MCPServerConfig = {
 				type: "stdio",
@@ -276,7 +276,10 @@ export class MCPCommandController {
 		const config: MCPServerConfig = {
 			type: useHttpTransport ? "http" : "sse",
 			url: normalizedUrl,
-			headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+			headers:
+				authToken !== null && authToken !== undefined && authToken !== ""
+					? { Authorization: `Bearer ${authToken}` }
+					: undefined,
 		};
 		return {
 			scope,
@@ -365,20 +368,25 @@ export class MCPCommandController {
 	 */
 	async #handleAdd(text: string): Promise<void> {
 		const parsed = this.#parseAddCommand(text);
-		if (parsed.error) {
+		if (parsed.error !== null && parsed.error !== undefined && parsed.error !== "") {
 			this.ctx.showError(parsed.error);
 			return;
 		}
-		if (parsed.quickConfig && parsed.initialName) {
+		if (
+			parsed.quickConfig &&
+			parsed.initialName !== null &&
+			parsed.initialName !== undefined &&
+			parsed.initialName !== ""
+		) {
 			let finalConfig = parsed.quickConfig;
 
 			// Quick-add with URL should still perform auth detection and OAuth flow,
 			// matching wizard behavior. Command quick-add intentionally skips this.
-			if (!parsed.isCommandQuickAdd && (finalConfig.type === "http" || finalConfig.type === "sse")) {
+			if (parsed.isCommandQuickAdd !== true && (finalConfig.type === "http" || finalConfig.type === "sse")) {
 				try {
 					await this.#handleTestConnection(finalConfig);
 				} catch (error) {
-					if (parsed.hasAuthToken) {
+					if (parsed.hasAuthToken === true) {
 						this.ctx.showError(
 							`Authentication failed for "${parsed.initialName}": ${error instanceof Error ? error.message : String(error)}`,
 						);
@@ -495,13 +503,13 @@ export class MCPCommandController {
 		try {
 			parsedAuthUrl = new URL(authUrl);
 			new URL(tokenUrl);
-		} catch (_error) {
+		} catch {
 			throw new Error(
 				`Invalid OAuth URLs. Please check:\n  Authorization URL: ${authUrl}\n  Token URL: ${tokenUrl}`,
 			);
 		}
 
-		const resolvedClientId = clientId.trim() || parsedAuthUrl.searchParams.get("client_id") || undefined;
+		const resolvedClientId = clientId.trim() || (parsedAuthUrl.searchParams.get("client_id") ?? undefined);
 		const resolvedClientSecret = clientSecret.trim() || undefined;
 
 		try {
@@ -509,7 +517,7 @@ export class MCPCommandController {
 			const flow = new MCPOAuthFlow(
 				{
 					authorizationUrl: authUrl,
-					tokenUrl: tokenUrl,
+					tokenUrl,
 					clientId: resolvedClientId,
 					clientSecret: resolvedClientSecret,
 					scopes: scopes || undefined,
@@ -559,7 +567,7 @@ export class MCPCommandController {
 							);
 							this.ctx.chatContainer.addChild(new Text(theme.fg("accent", info.url), 1, 0));
 							this.ctx.ui.requestRender();
-						} catch (_error) {
+						} catch {
 							// Show error if browser doesn't open
 							this.ctx.chatContainer.addChild(new Spacer(1));
 							this.ctx.chatContainer.addChild(
@@ -660,7 +668,7 @@ export class MCPCommandController {
 	}
 
 	async #removeManagedOAuthCredential(credentialId: string | undefined): Promise<void> {
-		if (!credentialId?.startsWith("mcp_oauth_")) return;
+		if (credentialId?.startsWith("mcp_oauth_") !== true) return;
 		await this.ctx.session.modelRegistry.authStorage.remove(credentialId);
 	}
 
@@ -742,7 +750,7 @@ export class MCPCommandController {
 				statusText.setText(theme.fg("muted", `◌ "${name}" is still connecting...`));
 			} else {
 				statusText.setText(
-					options?.suppressDisconnectedWarning
+					options?.suppressDisconnectedWarning === true
 						? theme.fg("muted", `◌ Connection check complete for "${name}"`)
 						: theme.fg("warning", `⚠ Could not connect to "${name}" yet`),
 				);
@@ -984,9 +992,9 @@ export class MCPCommandController {
 						const status =
 							state === "connected"
 								? theme.fg("success", " ● connected")
-								: state === "connecting"
+								: (state === "connecting"
 									? theme.fg("muted", " ◌ connecting")
-									: theme.fg("muted", " ○ not connected");
+									: theme.fg("muted", " ○ not connected"));
 						lines.push(`  ${theme.fg("accent", name)}${status}`);
 					}
 					lines.push("");
@@ -1041,7 +1049,7 @@ export class MCPCommandController {
 			return;
 		}
 
-		if (!name) {
+		if (name === null || name === undefined || name === "") {
 			this.ctx.showError("Server name required. Usage: /mcp remove <name> [--scope project|user]");
 			return;
 		}
@@ -1078,7 +1086,7 @@ export class MCPCommandController {
 	 * Handle /mcp test <name> - Test connection to a server
 	 */
 	async #handleTest(name: string | undefined): Promise<void> {
-		if (!name) {
+		if (name === null || name === undefined || name === "") {
 			this.ctx.showError("Server name required. Usage: /mcp test <name>");
 			return;
 		}
@@ -1187,7 +1195,7 @@ export class MCPCommandController {
 	}
 
 	async #handleSetEnabled(name: string | undefined, enabled: boolean): Promise<void> {
-		if (!name) {
+		if (name === null || name === undefined || name === "") {
 			this.ctx.showError(`Server name required. Usage: /mcp ${enabled ? "enable" : "disable"} <name>`);
 			return;
 		}
@@ -1219,9 +1227,9 @@ export class MCPCommandController {
 					const status =
 						state === "connected"
 							? theme.fg("success", "Connected")
-							: state === "connecting"
+							: (state === "connecting"
 								? theme.fg("muted", "Connecting")
-								: theme.fg("warning", "Not connected yet");
+								: theme.fg("warning", "Not connected yet"));
 					this.#showMessage(
 						["", theme.fg("success", `\u2713 Enabled "${name}"`), "", `  Status: ${status}`, ""].join("\n"),
 					);
@@ -1252,9 +1260,9 @@ export class MCPCommandController {
 				status =
 					state === "connected"
 						? theme.fg("success", "Connected")
-						: state === "connecting"
+						: (state === "connecting"
 							? theme.fg("muted", "Connecting")
-							: theme.fg("warning", "Not connected yet");
+							: theme.fg("warning", "Not connected yet"));
 			}
 
 			const lines = [
@@ -1275,7 +1283,7 @@ export class MCPCommandController {
 	}
 
 	async #handleUnauth(name: string | undefined): Promise<void> {
-		if (!name) {
+		if (name === null || name === undefined || name === "") {
 			this.ctx.showError("Server name required. Usage: /mcp unauth <name>");
 			return;
 		}
@@ -1305,7 +1313,7 @@ export class MCPCommandController {
 	}
 
 	async #handleReauth(name: string | undefined): Promise<void> {
-		if (!name) {
+		if (name === null || name === undefined || name === "") {
 			this.ctx.showError("Server name required. Usage: /mcp reauth <name>");
 			return;
 		}
@@ -1365,9 +1373,9 @@ export class MCPCommandController {
 				`  Status: ${
 					state === "connected"
 						? theme.fg("success", "connected")
-						: state === "connecting"
+						: (state === "connecting"
 							? theme.fg("muted", "connecting")
-							: theme.fg("warning", "not connected")
+							: theme.fg("warning", "not connected"))
 				}`,
 				"",
 			];
@@ -1394,7 +1402,7 @@ export class MCPCommandController {
 	 * Handle /mcp reconnect <name> - Reconnect to a specific server.
 	 */
 	async #handleReconnect(name: string | undefined): Promise<void> {
-		if (!name) {
+		if (name === null || name === undefined || name === "") {
 			this.ctx.showError("Server name required. Usage: /mcp reconnect <name>");
 			return;
 		}
@@ -1479,14 +1487,23 @@ export class MCPCommandController {
 
 			lines.push(`${theme.fg("accent", name)}:`);
 			for (const r of resources) {
-				const desc = r.description ? ` ${theme.fg("dim", r.description)}` : "";
-				const mime = r.mimeType ? ` ${theme.fg("dim", `[${r.mimeType}]`)}` : "";
+				const desc =
+					r.description !== null && r.description !== undefined && r.description !== ""
+						? ` ${theme.fg("dim", r.description)}`
+						: "";
+				const mime =
+					r.mimeType !== null && r.mimeType !== undefined && r.mimeType !== ""
+						? ` ${theme.fg("dim", `[${r.mimeType}]`)}`
+						: "";
 				lines.push(`  ${theme.fg("success", r.uri)}${mime}${desc}`);
 			}
 			if (templates.length > 0) {
 				lines.push(`  ${theme.fg("muted", "Templates:")}`);
 				for (const t of templates) {
-					const desc = t.description ? ` ${theme.fg("dim", t.description)}` : "";
+					const desc =
+						t.description !== null && t.description !== undefined && t.description !== ""
+							? ` ${theme.fg("dim", t.description)}`
+							: "";
 					lines.push(`    ${theme.fg("accent", t.uriTemplate)}${desc}`);
 				}
 			}
@@ -1515,18 +1532,24 @@ export class MCPCommandController {
 
 		for (const name of servers) {
 			const prompts = this.ctx.mcpManager.getServerPrompts(name);
-			if (!prompts?.length) continue;
+			if (prompts?.length === null || prompts?.length === undefined || prompts?.length === 0) continue;
 			hasAny = true;
 
 			lines.push(`${theme.fg("accent", name)}:`);
 			for (const p of prompts) {
 				const commandName = `${name}:${p.name}`;
-				const desc = p.description ? ` ${theme.fg("dim", p.description)}` : "";
+				const desc =
+					p.description !== null && p.description !== undefined && p.description !== ""
+						? ` ${theme.fg("dim", p.description)}`
+						: "";
 				lines.push(`  ${theme.fg("success", `/${commandName}`)}${desc}`);
-				if (p.arguments?.length) {
+				if (p.arguments?.length !== null && p.arguments?.length !== undefined && p.arguments?.length !== 0) {
 					for (const arg of p.arguments) {
-						const required = arg.required ? theme.fg("warning", " *") : "";
-						const argDesc = arg.description ? ` - ${arg.description}` : "";
+						const required = arg.required === true ? theme.fg("warning", " *") : "";
+						const argDesc =
+							arg.description !== null && arg.description !== undefined && arg.description !== ""
+								? ` - ${arg.description}`
+								: "";
 						lines.push(`    ${arg.name}=${required}${theme.fg("dim", argDesc)}`);
 					}
 				}
@@ -1586,9 +1609,9 @@ export class MCPCommandController {
 				const subStatus =
 					enabled && subCount > 0
 						? theme.fg("success", `subscribed (${subCount} URI${subCount !== 1 ? "s" : ""})`)
-						: enabled
+						: (enabled
 							? theme.fg("muted", "no active subscriptions")
-							: theme.fg("dim", "inactive (notifications disabled)");
+							: theme.fg("dim", "inactive (notifications disabled)"));
 				lines.push(`  ${check} resources/subscribe  ${subStatus}`);
 				if (enabled && subscribedUris && subscribedUris.size > 0) {
 					for (const uri of subscribedUris) {
@@ -1634,7 +1657,7 @@ export class MCPCommandController {
 
 	async #handleSmitheryLoginWithApiKey(): Promise<boolean> {
 		const apiKey = await this.#promptSmitheryApiKey("Smithery API key (Esc to cancel)");
-		if (!apiKey) return false;
+		if (apiKey === null || apiKey === undefined || apiKey === "") return false;
 		await saveSmitheryApiKey(apiKey);
 		this.ctx.showStatus("Smithery API key saved.");
 		return true;
@@ -1650,7 +1673,12 @@ export class MCPCommandController {
 				throw new Error("Smithery authorization timed out after 5 minutes.");
 			}
 			const response = await pollSmitheryCliAuthSession(sessionId, signal);
-			if (response.status === "success" && response.apiKey) {
+			if (
+				response.status === "success" &&
+				response.apiKey !== null &&
+				response.apiKey !== undefined &&
+				response.apiKey !== ""
+			) {
 				return response.apiKey;
 			}
 			if (response.status === "error") {
@@ -1721,7 +1749,7 @@ export class MCPCommandController {
 
 	async #requireSmitheryApiKey(reason: string): Promise<string> {
 		let apiKey = await getSmitheryApiKey();
-		if (apiKey) return apiKey;
+		if (apiKey !== null && apiKey !== undefined && apiKey !== "") return apiKey;
 
 		const loggedIn = await this.#promptSmitheryLogin(reason);
 		if (!loggedIn) {
@@ -1729,7 +1757,7 @@ export class MCPCommandController {
 		}
 
 		apiKey = await getSmitheryApiKey();
-		if (!apiKey) {
+		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new Error("Smithery API key not found after login.");
 		}
 		return apiKey;
@@ -1800,7 +1828,7 @@ export class MCPCommandController {
 		const values: Record<string, string> = {};
 		for (const input of result.requiredInputs) {
 			const label = input.required ? `${input.key} (required)` : `${input.key} (optional)`;
-			const prompt = `${label}${input.description ? ` - ${input.description}` : ""}`;
+			const prompt = `${label}${input.description !== null && input.description !== undefined && input.description !== "" ? ` - ${input.description}` : ""}`;
 			const userInput = await this.ctx.showHookInput(prompt, input.defaultValue);
 			if (userInput === undefined) {
 				if (input.required) return null;
@@ -1845,7 +1873,7 @@ export class MCPCommandController {
 			return label.length > 120 ? `${label.slice(0, 117)}...` : label;
 		});
 		const selected = await this.ctx.showHookSelector(`Registry results for "${keyword}"`, options);
-		if (!selected) return null;
+		if (selected === null || selected === undefined || selected === "") return null;
 		const prefix = selected.split(".", 1)[0];
 		const index = Number(prefix) - 1;
 		if (!Number.isInteger(index) || index < 0 || index >= results.length) return null;
@@ -1856,7 +1884,7 @@ export class MCPCommandController {
 		const baseName = toConfigName(result.name);
 		const defaultName = await this.#nextAvailableServerName(scope, baseName);
 		const serverName = await this.#promptDeploymentServerName(scope, defaultName);
-		if (!serverName) {
+		if (serverName === null || serverName === undefined || serverName === "") {
 			this.ctx.showStatus("MCP deploy cancelled.");
 			return;
 		}
@@ -1871,7 +1899,7 @@ export class MCPCommandController {
 
 	async #handleSearch(text: string): Promise<void> {
 		const parsed = this.#parseSearchCommand(text);
-		if (parsed.error) {
+		if (parsed.error !== null && parsed.error !== undefined && parsed.error !== "") {
 			this.ctx.showError(parsed.error);
 			return;
 		}

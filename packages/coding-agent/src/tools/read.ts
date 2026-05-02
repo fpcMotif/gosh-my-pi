@@ -273,7 +273,7 @@ const MAX_IMAGE_SIZE = MAX_IMAGE_INPUT_BYTES;
 const GLOB_TIMEOUT_MS = 5000;
 
 function isNotFoundError(error: unknown): boolean {
-	if (!error || typeof error !== "object") return false;
+	if (error === null || error === undefined || typeof error !== "object") return false;
 	const code = (error as { code?: string }).code;
 	return code === "ENOENT" || code === "ENOTDIR";
 }
@@ -307,7 +307,7 @@ async function findUniqueSuffixMatch(
 		matches = result.matches.map(m => m.path);
 	} catch (error) {
 		if (error instanceof Error && error.name === "AbortError") {
-			if (!signal?.aborted) return null; // timeout — give up silently
+			if (signal?.aborted !== true) return null; // timeout — give up silently
 			throw new ToolAbortError();
 		}
 		return null;
@@ -377,7 +377,7 @@ type ParsedSelector =
 const LINE_RANGE_RE = /^L?(\d+)(?:([-+])L?(\d+))?$/i;
 
 function parseSel(sel: string | undefined): ParsedSelector {
-	if (!sel || sel.length === 0) return { kind: "none" };
+	if (sel === null || sel === undefined || sel === "" || sel.length === 0) return { kind: "none" };
 	if (sel === "raw") return { kind: "raw" };
 	const lineMatch = LINE_RANGE_RE.exec(sel);
 	if (lineMatch) {
@@ -428,7 +428,7 @@ interface ResolvedSqliteReadPath {
 }
 
 function parseSqliteSelectorInput(selector: string | undefined): { subPath: string; queryString: string } {
-	if (!selector) {
+	if (selector === null || selector === undefined || selector === "") {
 		return { subPath: "", queryString: "" };
 	}
 
@@ -590,18 +590,18 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const details = options.details ?? {};
 		const allLines = text.split("\n");
 		const totalLines = allLines.length;
-		const startLine = offset ? Math.max(0, offset - 1) : 0;
+		const startLine = offset !== null && offset !== undefined && offset !== 0 ? Math.max(0, offset - 1) : 0;
 		const startLineDisplay = startLine + 1;
 		const ignoreResultLimits = options.ignoreResultLimits ?? false;
 
 		const resultBuilder = toolResult(details);
-		if (options.sourcePath) {
+		if (options.sourcePath !== null && options.sourcePath !== undefined && options.sourcePath !== "") {
 			resultBuilder.sourcePath(options.sourcePath);
 		}
-		if (options.sourceUrl) {
+		if (options.sourceUrl !== null && options.sourceUrl !== undefined && options.sourceUrl !== "") {
 			resultBuilder.sourceUrl(options.sourceUrl);
 		}
-		if (options.sourceInternal) {
+		if (options.sourceInternal !== null && options.sourceInternal !== undefined && options.sourceInternal !== "") {
 			resultBuilder.sourceInternal(options.sourceInternal);
 		}
 
@@ -635,7 +635,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			| { result: TruncationResult; options: { direction: "head"; startLine?: number; totalFileLines?: number } }
 			| undefined;
 
-		if (truncation.firstLineExceedsLimit) {
+		if (truncation.firstLineExceedsLimit === true) {
 			const firstLine = allLines[startLine] ?? "";
 			const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
 			const snippet = truncateHeadBytes(firstLine, DEFAULT_MAX_BYTES);
@@ -659,7 +659,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				result: truncation,
 				options: { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines },
 			};
-		} else if (truncation.truncated) {
+		} else if (truncation.truncated === true) {
 			outputText = formatText(truncation.content, startLineDisplay);
 			details.truncation = truncation;
 			truncationInfo = {
@@ -717,7 +717,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const directoryDetails: ReadToolDetails = { ...details, isDirectory: true };
 		const resultBuilder = toolResult<ReadToolDetails>(directoryDetails).text(truncation.content);
 		resultBuilder.sourcePath(archivePath).limits({ resultLimit: limitMeta.resultLimit?.reached });
-		if (truncation.truncated) {
+		if (truncation.truncated === true) {
 			directoryDetails.truncation = truncation;
 			resultBuilder.truncation(truncation, { direction: "head" });
 		}
@@ -791,9 +791,10 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	): Promise<AgentToolResult<ReadToolDetails>> {
 		throwIfAborted(signal);
 
-		const selectorInput = sel
-			? parseSqliteSelectorInput(sel)
-			: { subPath: resolvedSqlitePath.sqliteSubPath, queryString: resolvedSqlitePath.queryString };
+		const selectorInput =
+			sel !== null && sel !== undefined && sel !== ""
+				? parseSqliteSelectorInput(sel)
+				: { subPath: resolvedSqlitePath.sqliteSubPath, queryString: resolvedSqlitePath.queryString };
 		const selector = parseSqliteSelector(selectorInput.subPath, selectorInput.queryString);
 		const details: ReadToolDetails = {
 			resolvedPath: resolvedSqlitePath.absolutePath,
@@ -814,12 +815,12 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 						resolvedSqlitePath.suffixResolution,
 					);
 					const truncation = truncateHead(output, { maxLines: Number.MAX_SAFE_INTEGER });
-					details.truncation = truncation.truncated ? truncation : undefined;
+					details.truncation = truncation.truncated === true ? truncation : undefined;
 					const resultBuilder = toolResult<ReadToolDetails>(details)
 						.text(truncation.content)
 						.sourcePath(resolvedSqlitePath.absolutePath)
 						.limits({ resultLimit: listLimit.meta.resultLimit?.reached });
-					if (truncation.truncated) {
+					if (truncation.truncated === true) {
 						resultBuilder.truncation(truncation, { direction: "head" });
 					}
 					return resultBuilder.done();
@@ -917,7 +918,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		_onUpdate?: AgentToolUpdateCallback<ReadToolDetails>,
 		_toolContext?: AgentToolContext,
 	): Promise<AgentToolResult<ReadToolDetails>> {
-		let { path: readPath, sel, timeout } = params;
+		const { sel, timeout } = params;
+		let readPath = params.path;
 		if (readPath.startsWith("file://")) {
 			readPath = expandPath(readPath);
 		}
@@ -925,7 +927,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 		// Handle internal URLs (agent://, artifact://, memory://, skill://, rule://, local://, mcp://)
 		const internalRouter = this.session.internalRouter;
-		if (internalRouter?.canHandle(readPath)) {
+		if (internalRouter?.canHandle(readPath) === true) {
 			const parsed = parseSel(sel);
 			const { offset, limit } = selToOffsetLimit(parsed);
 			return this.#handleInternalUrl(readPath, offset, limit);
@@ -1042,9 +1044,9 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					metadata?.channels !== undefined ? `- Channels: ${metadata.channels}` : "- Channels: unknown",
 					metadata?.hasAlpha === true
 						? "- Alpha: yes"
-						: metadata?.hasAlpha === false
+						: (metadata?.hasAlpha === false
 							? "- Alpha: no"
-							: "- Alpha: unknown",
+							: "- Alpha: unknown"),
 					"",
 					`If you want to analyze the image, call inspect_image with path="${formatPathRelativeToCwd(
 						absolutePath,
@@ -1098,7 +1100,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				truncationInfo = { result: truncation, options: { direction: "head", startLine: 1 } };
 
 				content = [{ type: "text", text: outputText }];
-			} else if (result.error) {
+			} else if (result.error !== null && result.error !== undefined && result.error !== "") {
 				content = [{ type: "text", text: `[Cannot read ${ext} file: ${result.error || "conversion failed"}]` }];
 			} else {
 				content = [{ type: "text", text: `[Cannot read ${ext} file: conversion failed]` }];
@@ -1106,7 +1108,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		} else {
 			// Raw text or line-range mode
 			const { offset, limit } = selToOffsetLimit(parsed);
-			const startLine = offset ? Math.max(0, offset - 1) : 0;
+			const startLine = offset !== null && offset !== undefined && offset !== 0 ? Math.max(0, offset - 1) : 0;
 			const startLineDisplay = startLine + 1;
 
 			const DEFAULT_LIMIT = this.#defaultLimit;
@@ -1157,7 +1159,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const truncation: TruncationResult = {
 				content: selectedContent,
 				truncated: wasTruncated,
-				truncatedBy: stoppedByByteLimit ? "bytes" : wasTruncated ? "lines" : undefined,
+				truncatedBy: stoppedByByteLimit ? "bytes" : (wasTruncated ? "lines" : undefined),
 				totalLines: totalSelectedLines,
 				totalBytes: totalSelectedBytes,
 				outputLines: collectedLines.length,
@@ -1168,7 +1170,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 			const isRawMode = parsed.kind === "raw";
 			const shouldAddHashLines = !isRawMode && displayMode.hashLines;
-			const shouldAddLineNumbers = isRawMode ? false : shouldAddHashLines ? false : displayMode.lineNumbers;
+			const shouldAddLineNumbers = isRawMode ? false : (shouldAddHashLines ? false : displayMode.lineNumbers);
 			let capturedDisplayContent: { text: string; startLine: number } | undefined;
 			const formatText = (text: string, startNum: number): string => {
 				capturedDisplayContent = { text, startLine: startNum };
@@ -1177,7 +1179,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 			let outputText: string;
 
-			if (truncation.firstLineExceedsLimit) {
+			if (truncation.firstLineExceedsLimit === true) {
 				const firstLineBytes = firstLineByteLength ?? 0;
 				const snippet = firstLinePreview ?? { text: "", bytes: 0 };
 
@@ -1199,7 +1201,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					result: truncation,
 					options: { direction: "head", startLine: startLineDisplay, totalFileLines },
 				};
-			} else if (truncation.truncated) {
+			} else if (truncation.truncated === true) {
 				outputText = formatText(truncation.content, startLineDisplay);
 				details = { truncation };
 				sourcePath = absolutePath;
@@ -1241,7 +1243,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			}
 		}
 		const resultBuilder = toolResult(details).content(content);
-		if (sourcePath) {
+		if (sourcePath !== null && sourcePath !== undefined && sourcePath !== "") {
 			resultBuilder.sourcePath(sourcePath);
 		}
 		if (truncationInfo) {
@@ -1262,8 +1264,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		let parsed: InternalUrl;
 		try {
 			parsed = parseInternalUrl(url);
-		} catch (e) {
-			throw new ToolError(e instanceof Error ? e.message : String(e));
+		} catch (error) {
+			throw new ToolError(error instanceof Error ? error.message : String(error));
 		}
 		const scheme = parsed.protocol.replace(/:$/, "").toLowerCase();
 		let hasExtraction = false;
@@ -1358,7 +1360,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const resultBuilder = toolResult(details)
 			.text(truncation.content)
 			.limits({ resultLimit: limitMeta.resultLimit?.reached });
-		if (truncation.truncated) {
+		if (truncation.truncated === true) {
 			resultBuilder.truncation(truncation, { direction: "head" });
 			details.truncation = truncation;
 		}
@@ -1384,11 +1386,11 @@ interface ReadRenderArgs {
 
 export const readToolRenderer = {
 	renderCall(args: ReadRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
-		if (isReadableUrlPath(args.file_path || args.path || "")) {
+		if (isReadableUrlPath(args.file_path ?? args.path ?? "")) {
 			return renderReadUrlCall(args, _options, uiTheme);
 		}
 
-		const rawPath = args.file_path || args.path || "";
+		const rawPath = args.file_path ?? args.path ?? "";
 		const filePath = shortenPath(rawPath);
 		const offset = args.offset;
 		const limit = args.limit;
@@ -1411,7 +1413,7 @@ export const readToolRenderer = {
 		args?: ReadRenderArgs,
 	): Component {
 		const urlDetails = result.details as ReadUrlToolDetails | undefined;
-		if (urlDetails?.kind === "url" || isReadableUrlPath(args?.file_path || args?.path || "")) {
+		if (urlDetails?.kind === "url" || isReadableUrlPath(args?.file_path ?? args?.path ?? "")) {
 			return renderReadUrlResult(
 				result as { content: Array<{ type: string; text?: string }>; details?: ReadUrlToolDetails },
 				_options,
@@ -1425,26 +1427,26 @@ export const readToolRenderer = {
 		// shows clean file content (no model-only hashline anchors) without parsing the formatted text.
 		const contentText = details?.displayContent?.text ?? rawText;
 		const imageContent = result.content?.find(c => c.type === "image");
-		const rawPath = args?.file_path || args?.path || "";
+		const rawPath = args?.file_path ?? args?.path ?? "";
 		const filePath = shortenPath(rawPath);
 		const lang = getLanguageFromPath(rawPath);
 
 		const warningLines: string[] = [];
 		const truncation = details?.meta?.truncation;
 		const fallback = details?.truncation;
-		if (details?.resolvedPath) {
+		if (details?.resolvedPath !== null && details?.resolvedPath !== undefined && details?.resolvedPath !== "") {
 			warningLines.push(uiTheme.fg("dim", wrapBrackets(`Resolved path: ${details.resolvedPath}`, uiTheme)));
 		}
 		if (truncation) {
-			if (fallback?.firstLineExceedsLimit) {
+			if (fallback?.firstLineExceedsLimit === true) {
 				let warning = `First line exceeds ${formatBytes(fallback.outputBytes ?? fallback.totalBytes)} limit`;
-				if (truncation.artifactId) {
+				if (truncation.artifactId !== null && truncation.artifactId !== undefined && truncation.artifactId !== "") {
 					warning += `. ${formatFullOutputReference(truncation.artifactId)}`;
 				}
 				warningLines.push(uiTheme.fg("warning", wrapBrackets(warning, uiTheme)));
 			} else {
 				const warning = formatStyledTruncationWarning(details?.meta, uiTheme);
-				if (warning) warningLines.push(warning);
+				if (warning !== null && warning !== undefined && warning !== "") warningLines.push(warning);
 			}
 		}
 

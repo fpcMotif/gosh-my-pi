@@ -264,7 +264,7 @@ describe("mcp oauth flow", () => {
 			{ signal: AbortSignal.timeout(1_000) },
 		);
 
-		await expect(flow.login()).rejects.toThrow(
+		expect(flow.login()).rejects.toThrow(
 			"OAuth callback port 80 unavailable; cannot fall back to a random port when oauth.redirectUri is set",
 		);
 		expect(serveSpy).toHaveBeenCalledTimes(1);
@@ -285,7 +285,7 @@ describe("mcp oauth flow", () => {
 			{ signal: AbortSignal.timeout(1_000) },
 		);
 
-		await expect(flow.login()).rejects.toThrow(
+		expect(flow.login()).rejects.toThrow(
 			"OAuth callback port 3000 unavailable; cannot fall back to a random port when oauth.redirectUri is set",
 		);
 		expect(serveSpy).toHaveBeenCalledTimes(1);
@@ -307,6 +307,6 @@ describe("mcp oauth flow", () => {
 			{ signal: AbortSignal.timeout(1_000) },
 		);
 
-		await expect(flow.login()).rejects.toThrow("cannot fall back to a random port when oauth.redirectUri is set");
+		expect(flow.login()).rejects.toThrow("cannot fall back to a random port when oauth.redirectUri is set");
 	});
 });

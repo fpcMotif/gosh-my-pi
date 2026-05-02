@@ -5,7 +5,7 @@ export interface GetCurrentTimeResult extends AgentToolResult<{ utcTimestamp: nu
 
 export async function getCurrentTime(timezone?: string): Promise<GetCurrentTimeResult> {
 	const date = new Date();
-	if (timezone) {
+	if (timezone !== null && timezone !== undefined && timezone !== "") {
 		try {
 			const timeStr = date.toLocaleString("en-US", {
 				timeZone: timezone,

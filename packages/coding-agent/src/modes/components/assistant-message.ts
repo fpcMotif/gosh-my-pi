@@ -71,7 +71,7 @@ export class AssistantMessageComponent extends Container {
 		this.#contentContainer.addChild(new Spacer(1));
 		for (const image of images) {
 			if (
-				TERMINAL.imageProtocol &&
+				TERMINAL.imageProtocol !== undefined &&
 				(TERMINAL.imageProtocol !== ImageProtocol.Kitty || image.mimeType === "image/png")
 			) {
 				this.#contentContainer.addChild(
@@ -141,7 +141,10 @@ export class AssistantMessageComponent extends Container {
 		if (!hasToolCalls) {
 			if (message.stopReason === "aborted") {
 				const abortMessage =
-					message.errorMessage && message.errorMessage !== "Request was aborted"
+					message.errorMessage !== null &&
+					message.errorMessage !== undefined &&
+					message.errorMessage !== "" &&
+					message.errorMessage !== "Request was aborted"
 						? message.errorMessage
 						: "Operation aborted";
 				if (hasVisibleContent) {
@@ -151,12 +154,18 @@ export class AssistantMessageComponent extends Container {
 				}
 				this.#contentContainer.addChild(new Text(theme.fg("error", abortMessage), 1, 0));
 			} else if (message.stopReason === "error") {
-				const errorMsg = message.errorMessage || "Unknown error";
+				const errorMsg = message.errorMessage ?? "Unknown error";
 				this.#contentContainer.addChild(new Spacer(1));
 				this.#contentContainer.addChild(new Text(theme.fg("error", `Error: ${errorMsg}`), 1, 0));
 			}
 		}
-		if (message.errorMessage && message.stopReason !== "aborted" && message.stopReason !== "error") {
+		if (
+			message.errorMessage !== null &&
+			message.errorMessage !== undefined &&
+			message.errorMessage !== "" &&
+			message.stopReason !== "aborted" &&
+			message.stopReason !== "error"
+		) {
 			this.#contentContainer.addChild(new Spacer(1));
 			this.#contentContainer.addChild(new Text(theme.fg("error", `Error: ${message.errorMessage}`), 1, 0));
 		}

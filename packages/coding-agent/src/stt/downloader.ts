@@ -15,9 +15,9 @@ export interface EnsureOptions {
 // ── Recording tool ─────────────────────────────────────────────────
 
 async function ensureRecordingTool(options?: EnsureOptions): Promise<void> {
-	if ($which("sox")) return;
-	if ($which("ffmpeg")) return;
-	if (process.platform === "linux" && $which("arecord")) return;
+	if ($which("sox") !== undefined && $which("sox") !== "") return;
+	if ($which("ffmpeg") !== undefined && $which("ffmpeg") !== "") return;
+	if (process.platform === "linux" && $which("arecord") !== undefined && $which("arecord") !== "") return;
 
 	// Windows: PowerShell mciSendString is always available as fallback
 	if (process.platform === "win32") {
@@ -41,7 +41,7 @@ async function ensureRecordingTool(options?: EnsureOptions): Promise<void> {
 
 async function ensurePythonWhisper(options?: EnsureOptions): Promise<void> {
 	const pythonCmd = resolvePython();
-	if (!pythonCmd) {
+	if (pythonCmd === null || pythonCmd === undefined || pythonCmd === "") {
 		throw new Error("Python not found. Install Python 3.8+ from https://python.org");
 	}
 

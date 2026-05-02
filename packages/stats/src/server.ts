@@ -21,7 +21,7 @@ const getEmbeddedClientArchive = (() => {
 const CLIENT_DIR = path.join(import.meta.dir, "client");
 const STATIC_DIR = path.join(import.meta.dir, "..", "dist", "client");
 const IS_BUN_COMPILED =
-	Bun.env.PI_COMPILED ||
+	(Bun.env.PI_COMPILED !== null && Bun.env.PI_COMPILED !== undefined && Bun.env.PI_COMPILED !== "") ||
 	import.meta.url.includes("$bunfs") ||
 	import.meta.url.includes("~BUN") ||
 	import.meta.url.includes("%7EBUN");
@@ -43,7 +43,7 @@ async function extractEmbeddedClientArchive(archiveBytes: Buffer, outputDir: str
 
 	for (const [archivePath, file] of files) {
 		const sanitizedPath = sanitizeArchivePath(archivePath);
-		if (!sanitizedPath) continue;
+		if (sanitizedPath === null || sanitizedPath === undefined || sanitizedPath === "") continue;
 		const destinationPath = path.resolve(extractRoot, sanitizedPath);
 		if (!destinationPath.startsWith(extractRoot + path.sep)) {
 			throw new Error(`Archive entry escapes extraction directory: ${archivePath}`);
@@ -177,13 +177,17 @@ async function handleApi(req: Request): Promise<Response> {
 
 	if (path === "/api/stats/recent") {
 		const limit = url.searchParams.get("limit");
-		const stats = await getRecentRequests(limit ? parseInt(limit, 10) : undefined);
+		const stats = await getRecentRequests(
+			limit !== null && limit !== undefined && limit !== "" ? parseInt(limit, 10) : undefined,
+		);
 		return Response.json(stats);
 	}
 
 	if (path === "/api/stats/errors") {
 		const limit = url.searchParams.get("limit");
-		const stats = await getRecentErrors(limit ? parseInt(limit, 10) : undefined);
+		const stats = await getRecentErrors(
+			limit !== null && limit !== undefined && limit !== "" ? parseInt(limit, 10) : undefined,
+		);
 		return Response.json(stats);
 	}
 
@@ -204,7 +208,7 @@ async function handleApi(req: Request): Promise<Response> {
 
 	if (path.startsWith("/api/request/")) {
 		const id = path.split("/").pop();
-		if (!id) return new Response("Bad Request", { status: 400 });
+		if (id === null || id === undefined || id === "") return new Response("Bad Request", { status: 400 });
 		const details = await getRequestDetails(parseInt(id, 10));
 		if (!details) return new Response("Not Found", { status: 404 });
 		return Response.json(details);

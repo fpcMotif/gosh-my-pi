@@ -147,8 +147,20 @@ export const handleRepology: SpecialHandler = async (
 			if (pkg.status === "newest" || pkg.status === "unique") {
 				newestVersions.add(pkg.version);
 			}
-			if (!summary && pkg.summary) summary = pkg.summary;
-			if (pkg.licenses?.length && !licenses.length) licenses = pkg.licenses;
+			if (
+				(summary === null || summary === undefined || summary === "") &&
+				pkg.summary !== null &&
+				pkg.summary !== undefined &&
+				pkg.summary !== ""
+			)
+				summary = pkg.summary;
+			if (
+				pkg.licenses?.length !== null &&
+				pkg.licenses?.length !== undefined &&
+				pkg.licenses?.length !== 0 &&
+				!licenses.length
+			)
+				licenses = pkg.licenses;
 			if (pkg.categories) {
 				for (const cat of pkg.categories) categories.add(cat);
 			}
@@ -168,7 +180,7 @@ export const handleRepology: SpecialHandler = async (
 
 		// Build markdown
 		let md = `# ${packageName}\n\n`;
-		if (summary) md += `${summary}\n\n`;
+		if (summary !== null && summary !== undefined && summary !== "") md += `${summary}\n\n`;
 
 		md += `**Newest Version:** ${Array.from(newestVersions).join(", ") || "unknown"}\n`;
 		md += `**Repositories:** ${packages.length}\n`;
@@ -226,12 +238,15 @@ export const handleRepology: SpecialHandler = async (
 		let count = 0;
 		for (const pkg of sortedPackages) {
 			// Skip duplicate repos (some have multiple entries)
-			const repoKey = pkg.subrepo ? `${pkg.repo}/${pkg.subrepo}` : pkg.repo;
+			const repoKey =
+				pkg.subrepo !== null && pkg.subrepo !== undefined && pkg.subrepo !== ""
+					? `${pkg.repo}/${pkg.subrepo}`
+					: pkg.repo;
 			if (shownRepos.has(repoKey)) continue;
 			shownRepos.add(repoKey);
 
 			const repoName = prettifyRepo(pkg.repo);
-			const version = pkg.origversion || pkg.version;
+			const version = pkg.origversion ?? pkg.version;
 			md += `| ${repoName} | \`${version}\` | ${statusIndicator(pkg.status)} ${pkg.status} |\n`;
 
 			count++;

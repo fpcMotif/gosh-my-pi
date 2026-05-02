@@ -264,16 +264,10 @@ export class StatusLineSegmentEditorComponent extends Container {
 
 		// Key bindings
 		lines.push(
-			theme.fg("muted", "Space") +
-				" toggle  " +
-				theme.fg("muted", "Tab/S-Tab") +
-				" cycle column  " +
-				theme.fg("muted", "J/K") +
-				" reorder  " +
-				theme.fg("muted", "Enter") +
-				" save  " +
-				theme.fg("muted", "Esc") +
-				" cancel",
+			`${theme.fg("muted", "Space")} toggle  ${theme.fg("muted", "Tab/S-Tab")} cycle column  ${theme.fg(
+				"muted",
+				"J/K",
+			)} reorder  ${theme.fg("muted", "Enter")} save  ${theme.fg("muted", "Esc")} cancel`,
 		);
 		lines.push("");
 

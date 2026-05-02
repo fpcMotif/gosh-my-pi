@@ -429,7 +429,7 @@ async function buildCodexRequestContext(
 	const transformedBody = await buildTransformedCodexRequestBody(model, context, options);
 	options?.onPayload?.(transformedBody);
 
-	const requestHeaders = { ...(model.headers ?? {}), ...(options?.headers ?? {}) };
+	const requestHeaders = { ...model.headers, ...options?.headers };
 	const rawRequestDump: RawHttpRequestDump = {
 		provider: model.provider,
 		api: output.api,
@@ -1384,7 +1384,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 ): AssistantMessageEventStream => {
 	const stream = new AssistantMessageEventStream();
 
-	(async () => {
+	void (async () => {
 		const startTime = Date.now();
 		const output = createAssistantOutput(model);
 		const requestSetup = createRequestSetup(options);
@@ -1476,7 +1476,7 @@ export async function prewarmOpenAICodexResponses(
 	if (!shouldUseCodexWebSocket(model, state, options?.preferWebsockets)) return;
 	logger.time("prewarmCodex:createHeaders");
 	const headers = createCodexHeaders(
-		{ ...(model.headers ?? {}), ...(options?.headers ?? {}) },
+		{ ...model.headers, ...options?.headers },
 		accountId,
 		apiKey,
 		options?.sessionId,

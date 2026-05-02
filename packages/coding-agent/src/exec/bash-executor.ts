@@ -53,7 +53,7 @@ const shellSessions = new Map<string, Shell>();
 const brokenShellSessions = new Set<string>();
 
 async function resolveShellCwd(cwd: string | undefined): Promise<string | undefined> {
-	if (!cwd) return undefined;
+	if (cwd === null || cwd === undefined || cwd === "") return undefined;
 
 	try {
 		// Brush preserves the working directory string verbatim, so resolve symlinks
@@ -68,7 +68,7 @@ function buildMinimizerOptions(group: ShellMinimizerSettings): MinimizerOptions 
 	if (!group.enabled) return undefined;
 	return {
 		enabled: true,
-		settingsPath: group.settingsPath || undefined,
+		settingsPath: group.settingsPath ?? undefined,
 		only: group.only.length > 0 ? group.only : undefined,
 		except: group.except.length > 0 ? group.except : undefined,
 		maxCaptureBytes: group.maxCaptureBytes,
@@ -86,7 +86,7 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 	const commandEnv = options?.env ? { ...NON_INTERACTIVE_ENV, ...options.env } : NON_INTERACTIVE_ENV;
 
 	// Apply command prefix if configured
-	const prefixedCommand = prefix ? `${prefix} ${command}` : command;
+	const prefixedCommand = prefix !== null && prefix !== undefined && prefix !== "" ? `${prefix} ${command}` : command;
 	const finalCommand = prefixedCommand;
 
 	// Create output sink for truncation and artifact handling
@@ -106,7 +106,7 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		sink.push(chunk);
 	};
 
-	if (options?.signal?.aborted) {
+	if (options?.signal !== undefined && options?.signal.aborted) {
 		return {
 			exitCode: undefined,
 			cancelled: true,
@@ -213,9 +213,10 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 
 		// Handle timeout
 		if (winner.result.timedOut) {
-			const annotation = options?.timeout
-				? `Command timed out after ${Math.round(options.timeout / 1000)} seconds`
-				: "Command timed out";
+			const annotation =
+				options?.timeout !== null && options?.timeout !== undefined && options?.timeout !== 0
+					? `Command timed out after ${Math.round(options.timeout / 1000)} seconds`
+					: "Command timed out";
 			resetSession = true;
 			return {
 				exitCode: undefined,
@@ -247,7 +248,7 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 					inputBytes: minimized.inputBytes,
 					outputBytes: minimized.outputBytes,
 				});
-				if (artifactId) {
+				if (artifactId !== null && artifactId !== undefined && artifactId !== "") {
 					sink.push(`\n[raw output: artifact://${artifactId}]\n`);
 				}
 			}
@@ -259,9 +260,9 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 			cancelled: false,
 			...(await sink.dump()),
 		};
-	} catch (err) {
+	} catch (error) {
 		resetSession = true;
-		throw err;
+		throw error;
 	} finally {
 		if (hardTimeoutTimer) {
 			clearTimeout(hardTimeoutTimer);

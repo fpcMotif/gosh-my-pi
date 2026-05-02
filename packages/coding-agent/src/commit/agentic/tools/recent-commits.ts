@@ -16,7 +16,7 @@ interface RecentCommitStats {
 
 function extractSummary(subject: string): string {
 	const match = subject.match(/^[a-z]+(?:\([^)]+\))?:\s+(.*)$/i);
-	if (match?.[1]) return match[1].trim();
+	if (match?.[1] !== undefined && match?.[1] !== "") return match[1].trim();
 	return subject.trim();
 }
 
@@ -43,7 +43,7 @@ export function createRecentCommitsTool(cwd: string): CustomTool<typeof recentCo
 			for (const subject of commits) {
 				const summary = extractSummary(subject);
 				const scope = extractScope(subject);
-				if (scope) {
+				if (scope !== null && scope !== undefined && scope !== "") {
 					scopeCount += 1;
 					scopes[scope] = (scopes[scope] ?? 0) + 1;
 				}

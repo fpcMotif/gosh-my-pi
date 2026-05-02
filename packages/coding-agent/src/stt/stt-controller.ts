@@ -63,12 +63,12 @@ export class STTController {
 				options.showStatus("Checking STT dependencies...");
 				await ensureSTTDependencies({
 					modelName: settings.get("stt.modelName") as string | undefined,
-					onProgress: p => options.showStatus(p.stage + (p.percent != null ? ` (${p.percent}%)` : "")),
+					onProgress: p => options.showStatus(p.stage + (p.percent !== null ? ` (${p.percent}%)` : "")),
 				});
 				options.showStatus("");
 				this.#depsResolved = true;
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : "Failed to setup STT dependencies";
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : "Failed to setup STT dependencies";
 				options.showWarning(msg);
 				logger.error("STT dependency setup failed", { error: msg });
 				return;
@@ -81,9 +81,9 @@ export class STTController {
 			this.#recordingHandle = await startRecording(this.#tempFile);
 			this.#setState("recording", options);
 			logger.debug("STT recording started", { tempFile: this.#tempFile });
-		} catch (err) {
+		} catch (error) {
 			this.#tempFile = null;
-			const msg = err instanceof Error ? err.message : "Failed to start recording";
+			const msg = error instanceof Error ? error.message : "Failed to start recording";
 			options.showWarning(msg);
 			logger.error("STT recording failed to start", { error: msg });
 		}
@@ -94,7 +94,7 @@ export class STTController {
 		const tempFile = this.#tempFile;
 		this.#recordingHandle = null;
 
-		if (!handle || !tempFile) {
+		if (!handle || tempFile === null || tempFile === undefined || tempFile === "") {
 			this.#setState("idle", options);
 			return;
 		}
@@ -120,13 +120,13 @@ export class STTController {
 				options.showStatus("No speech detected.");
 			}
 			if (!this.#disposed) this.#setState("idle", options);
-		} catch (err) {
+		} catch (error) {
 			if (this.#disposed) return;
-			if (err instanceof DOMException && err.name === "AbortError") {
+			if (error instanceof DOMException && error.name === "AbortError") {
 				this.#setState("idle", options);
 				return;
 			}
-			const msg = err instanceof Error ? err.message : "Transcription failed";
+			const msg = error instanceof Error ? error.message : "Transcription failed";
 			options.showWarning(msg);
 			logger.error("STT transcription failed", { error: msg });
 			this.#setState("idle", options);
@@ -150,7 +150,7 @@ export class STTController {
 			this.#recordingHandle.stop().catch(() => {});
 			this.#recordingHandle = null;
 		}
-		if (this.#tempFile) {
+		if (this.#tempFile !== null && this.#tempFile !== undefined && this.#tempFile !== "") {
 			fs.rm(this.#tempFile, { force: true }).catch(() => {});
 			this.#tempFile = null;
 		}

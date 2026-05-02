@@ -85,7 +85,7 @@ function formatCount(label: string, count: number): string {
 function formatForLLM(response: SearchResponse): string {
 	const parts: string[] = [];
 
-	if (response.answer) {
+	if (response.answer !== null && response.answer !== undefined && response.answer !== "") {
 		parts.push(response.answer);
 		if (response.sources.length > 0) {
 			parts.push("\n## Sources");
@@ -95,9 +95,9 @@ function formatForLLM(response: SearchResponse): string {
 
 	for (const [i, src] of response.sources.entries()) {
 		const age = formatAge(src.ageSeconds) || src.publishedDate;
-		const agePart = age ? ` (${age})` : "";
+		const agePart = age !== null && age !== undefined && age !== "" ? ` (${age})` : "";
 		parts.push(`[${i + 1}] ${src.title}${agePart}\n    ${src.url}`);
-		if (src.snippet) {
+		if (src.snippet !== null && src.snippet !== undefined && src.snippet !== "") {
 			parts.push(`    ${truncateText(src.snippet, 240)}`);
 		}
 	}
@@ -108,7 +108,7 @@ function formatForLLM(response: SearchResponse): string {
 		for (const [i, citation] of response.citations.entries()) {
 			const title = citation.title || citation.url;
 			parts.push(`[${i + 1}] ${title}\n    ${citation.url}`);
-			if (citation.citedText) {
+			if (citation.citedText !== null && citation.citedText !== undefined && citation.citedText !== "") {
 				parts.push(`    ${truncateText(citation.citedText, 240)}`);
 			}
 		}
@@ -139,9 +139,9 @@ async function executeSearch(
 ): Promise<{ content: Array<{ type: "text"; text: string }>; details: SearchRenderDetails }> {
 	const providers =
 		params.provider && params.provider !== "auto"
-			? (await getSearchProvider(params.provider).isAvailable())
+			? ((await getSearchProvider(params.provider).isAvailable())
 				? [getSearchProvider(params.provider)]
-				: await resolveProviderChain("auto")
+				: await resolveProviderChain("auto"))
 			: await resolveProviderChain();
 	if (providers.length === 0) {
 		const message = "No web search provider configured.";

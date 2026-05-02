@@ -22,7 +22,7 @@ async function resolvePackageRunner(cwd: string): Promise<string> {
 	if ((await isFile(path.join(cwd, "package-lock.json"))) || (await isFile(path.join(cwd, "npm-shrinkwrap.json")))) {
 		return "npm run";
 	}
-	if ($which("bun")) {
+	if ($which("bun") !== undefined && $which("bun") !== "") {
 		return "bun run";
 	}
 	return "npm run";
@@ -40,9 +40,9 @@ async function isFile(filePath: string): Promise<boolean> {
 	try {
 		const stat = await fs.stat(filePath);
 		return stat.isFile();
-	} catch (err) {
-		if (isEnoent(err)) return false;
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return false;
+		throw error;
 	}
 }
 
@@ -73,10 +73,10 @@ async function readPackageJson(filePath: string): Promise<PackageJsonInfo | null
 			: [];
 		const name = typeof pkg.name === "string" && pkg.name.length > 0 ? pkg.name : undefined;
 		return { name, scripts, workspaces: parseWorkspacePatterns(pkg) };
-	} catch (err) {
-		if (!isEnoent(err)) {
+	} catch (error) {
+		if (!isEnoent(error)) {
 			logger.debug("package.json script detection failed", {
-				error: err instanceof Error ? err.message : String(err),
+				error: error instanceof Error ? error.message : String(error),
 			});
 		}
 		return null;
@@ -157,8 +157,8 @@ export const pkgRunner: TaskRunner = {
 			const tasks = await readPackageTasks(cwd);
 			if (!tasks || tasks.length === 0) return null;
 			return { id: "pkg", label: "Pkg", commandPrefix, tasks };
-		} catch (err) {
-			logger.debug("package runner probe failed", { error: err instanceof Error ? err.message : String(err) });
+		} catch (error) {
+			logger.debug("package runner probe failed", { error: error instanceof Error ? error.message : String(error) });
 			return null;
 		}
 	},

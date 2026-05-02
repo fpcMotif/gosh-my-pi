@@ -8,46 +8,7 @@ export type OAuthCredentials = {
 	accountId?: string;
 };
 
-export type OAuthProvider =
-	| "alibaba-coding-plan"
-	| "anthropic"
-	| "cerebras"
-	| "cloudflare-ai-gateway"
-	| "cursor"
-	| "fireworks"
-	| "github-copilot"
-	| "google-gemini-cli"
-	| "google-antigravity"
-	| "gitlab-duo"
-	| "huggingface"
-	| "kimi-code"
-	| "kilo"
-	| "kagi"
-	| "litellm"
-	| "lm-studio"
-	| "minimax-code"
-	| "minimax-code-cn"
-	| "moonshot"
-	| "nvidia"
-	| "nanogpt"
-	| "ollama"
-	| "ollama-cloud"
-	| "openai-codex"
-	| "opencode-go"
-	| "opencode-zen"
-	| "parallel"
-	| "perplexity"
-	| "qianfan"
-	| "qwen-portal"
-	| "synthetic"
-	| "tavily"
-	| "together"
-	| "venice"
-	| "vercel-ai-gateway"
-	| "vllm"
-	| "xiaomi"
-	| "zenmux"
-	| "zai";
+export type OAuthProvider = "kimi" | "minimax-code" | "moonshot" | "openai-codex" | "zai";
 
 export type OAuthProviderId = OAuthProvider | (string & {});
 

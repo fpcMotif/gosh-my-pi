@@ -72,8 +72,13 @@ function splitHelperArgs(args: unknown[]): { positional: unknown[]; options?: pr
 function getHashlineHelperState(context: unknown, options: prompt.HelperOptions | undefined): HashlineHelperState {
 	const data = options?.data;
 	const root = data?.root;
-	const holderTarget = data && typeof data === "object" ? data : root && typeof root === "object" ? root : context;
-	if (!holderTarget || typeof holderTarget !== "object") {
+	const holderTarget =
+		data !== null && data !== undefined && typeof data === "object"
+			? data
+			: (root !== null && root !== undefined && typeof root === "object"
+				? root
+				: context);
+	if (holderTarget === null || holderTarget === undefined || typeof holderTarget !== "object") {
 		throw new Error("hashline prompt helpers require an object render context");
 	}
 
@@ -226,10 +231,10 @@ async function loadTemplatesFromDir(
 					}
 
 					// Get description from frontmatter or first non-empty line
-					let description = String(frontmatter.description || "");
+					let description = String(frontmatter.description ?? "");
 					if (!description) {
 						const firstLine = body.split("\n").find(line => line.trim());
-						if (firstLine) {
+						if (firstLine !== null && firstLine !== undefined && firstLine !== "") {
 							// Truncate if too long
 							description = firstLine.slice(0, 60);
 							if (firstLine.length > 60) description += "...";
@@ -280,7 +285,10 @@ export async function loadPromptTemplates(options: LoadPromptTemplatesOptions = 
 
 	// 1. Load global templates from agentDir/prompts/
 	// Note: if agentDir is provided, it should be the agent dir, not the prompts dir
-	const globalPromptsDir = options.agentDir ? path.join(options.agentDir, "prompts") : resolvedAgentDir;
+	const globalPromptsDir =
+		options.agentDir !== null && options.agentDir !== undefined && options.agentDir !== ""
+			? path.join(options.agentDir, "prompts")
+			: resolvedAgentDir;
 	templates.push(...(await loadTemplatesFromDir(globalPromptsDir, "user")));
 
 	// 2. Load project templates from cwd/.omp/prompts/

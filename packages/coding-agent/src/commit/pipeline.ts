@@ -31,7 +31,7 @@ const TYPES_DESCRIPTION = prompt.render(typesDescriptionPrompt);
  * Execute the omp commit pipeline for staged changes.
  */
 export async function runCommitCommand(args: CommitCommandArgs): Promise<void> {
-	if (args.legacy) {
+	if (args.legacy === true) {
 		return runLegacyCommitCommand(args);
 	}
 	return runAgenticCommit(args);

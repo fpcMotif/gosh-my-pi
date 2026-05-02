@@ -61,7 +61,7 @@ export function createGitOverviewTool(cwd: string, state: CommitAgentState): Cus
 			const allNumstat = await git.diff.numstat(cwd, { cached: staged });
 			const numstat = allNumstat.filter(entry => !isExcludedFile(entry.path));
 			const scopeResult = extractScopeCandidates(numstat);
-			const untrackedFiles = !staged && params.include_untracked ? await git.ls.untracked(cwd) : undefined;
+			const untrackedFiles = !staged && params.include_untracked === true ? await git.ls.untracked(cwd) : undefined;
 			const snapshot: GitOverviewSnapshot = {
 				files,
 				stat,

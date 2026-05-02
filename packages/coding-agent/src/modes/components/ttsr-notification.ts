@@ -48,7 +48,7 @@ export class TtsrNotificationComponent extends Container {
 
 		// Show description(s) - italic and truncated
 		for (const rule of this.rules) {
-			const desc = rule.description || rule.content;
+			const desc = rule.description ?? rule.content;
 			if (desc) {
 				this.#box.addChild(new Spacer(1));
 
@@ -69,7 +69,7 @@ export class TtsrNotificationComponent extends Container {
 		// Show expand hint if collapsed and there's more content
 		if (!this.#expanded) {
 			const hasMoreContent = this.rules.some(r => {
-				const desc = r.description || r.content;
+				const desc = r.description ?? r.content;
 				return desc && desc.split("\n").length > 2;
 			});
 			if (hasMoreContent) {

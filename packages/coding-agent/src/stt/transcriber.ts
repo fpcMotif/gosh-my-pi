@@ -14,7 +14,7 @@ const TRANSCRIBE_TIMEOUT_MS = 120_000;
  */
 export function resolvePython(): string | null {
 	for (const cmd of ["python", "py", "python3"]) {
-		if ($which(cmd)) return cmd;
+		if ($which(cmd) !== undefined && $which(cmd) !== "") return cmd;
 	}
 	return null;
 }
@@ -32,7 +32,7 @@ export async function transcribe(audioPath: string, options?: TranscribeOptions)
 	}
 
 	const pythonCmd = resolvePython();
-	if (!pythonCmd) {
+	if (pythonCmd === null || pythonCmd === undefined || pythonCmd === "") {
 		throw new Error("Python not found. Install Python 3.8+ from https://python.org");
 	}
 
@@ -46,7 +46,7 @@ export async function transcribe(audioPath: string, options?: TranscribeOptions)
 		stderr: "pipe",
 	});
 
-	if (options?.signal?.aborted) {
+	if (options?.signal !== undefined && options?.signal.aborted) {
 		proc.kill();
 		options.signal.throwIfAborted();
 	}

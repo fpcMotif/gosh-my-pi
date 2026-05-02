@@ -59,13 +59,23 @@ export const mcpCapability = defineCapability<MCPServer>({
 	toExtensionId: server => `mcp:${server.name}`,
 	validate: server => {
 		if (!server.name) return "Missing server name";
-		if (!server.command && !server.url) return "Must have command or url";
+		if (
+			(server.command === null || server.command === undefined || server.command === "") &&
+			(server.url === null || server.url === undefined || server.url === "")
+		)
+			return "Must have command or url";
 
 		// Validate transport-endpoint pairing
-		if (server.transport === "stdio" && !server.command) {
+		if (
+			server.transport === "stdio" &&
+			(server.command === null || server.command === undefined || server.command === "")
+		) {
 			return "stdio transport requires command field";
 		}
-		if ((server.transport === "http" || server.transport === "sse") && !server.url) {
+		if (
+			(server.transport === "http" || server.transport === "sse") &&
+			(server.url === null || server.url === undefined || server.url === "")
+		) {
 			return "http/sse transport requires url field";
 		}
 

@@ -78,7 +78,10 @@ export function applyHeadTail(
 	headLines?: number,
 	tailLines?: number,
 ): { text: string; applied: boolean; headApplied?: number; tailApplied?: number } {
-	if (!headLines && !tailLines) {
+	if (
+		(headLines === null || headLines === undefined || headLines === 0) &&
+		(tailLines === null || tailLines === undefined || tailLines === 0)
+	) {
 		return { text, applied: false };
 	}
 

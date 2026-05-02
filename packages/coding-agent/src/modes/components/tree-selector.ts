@@ -87,7 +87,7 @@ class TreeList implements Component {
 	/** Build the set of entry IDs on the path from root to current leaf */
 	#buildActivePath(): void {
 		this.#activePathIds.clear();
-		if (!this.currentLeafId) return;
+		if (this.currentLeafId === null || this.currentLeafId === undefined || this.currentLeafId === "") return;
 
 		// Build a map of id -> entry for parent lookup
 		const entryMap = new Map<string, FlatNode>();
@@ -97,7 +97,7 @@ class TreeList implements Component {
 
 		// Walk from leaf to root
 		let currentId: string | null = this.currentLeafId;
-		while (currentId) {
+		while (currentId !== null && currentId !== undefined && currentId !== "") {
 			this.#activePathIds.add(currentId);
 			const node = entryMap.get(currentId);
 			if (!node) break;
@@ -169,7 +169,7 @@ class TreeList implements Component {
 				const node = allNodes[i];
 				let has = leafId !== null && node.entry.id === leafId;
 				for (const child of node.children) {
-					if (containsActive.get(child)) {
+					if (containsActive.get(child) === true) {
 						has = true;
 					}
 				}
@@ -213,7 +213,7 @@ class TreeList implements Component {
 				const prioritized: SessionTreeNode[] = [];
 				const rest: SessionTreeNode[] = [];
 				for (const child of children) {
-					if (containsActive.get(child)) {
+					if (containsActive.get(child) === true) {
 						prioritized.push(child);
 					} else {
 						rest.push(child);
@@ -283,7 +283,12 @@ class TreeList implements Component {
 			if (entry.type === "message" && entry.message.role === "assistant" && !isCurrentLeaf) {
 				const msg = entry.message as { stopReason?: string; content?: unknown };
 				const hasText = this.#hasTextContent(msg.content);
-				const isErrorOrAborted = msg.stopReason && msg.stopReason !== "stop" && msg.stopReason !== "toolUse";
+				const isErrorOrAborted =
+					msg.stopReason !== null &&
+					msg.stopReason !== undefined &&
+					msg.stopReason !== "" &&
+					msg.stopReason !== "stop" &&
+					msg.stopReason !== "toolUse";
 				// Only hide if no text AND not an error/aborted message
 				if (!hasText && !isErrorOrAborted) {
 					return false;
@@ -334,7 +339,7 @@ class TreeList implements Component {
 		});
 
 		// Try to preserve cursor on the same node, or find nearest visible ancestor
-		if (this.#lastSelectedId) {
+		if (this.#lastSelectedId !== null && this.#lastSelectedId !== undefined && this.#lastSelectedId !== "") {
 			this.#selectedIndex = this.#findNearestVisibleIndex(this.#lastSelectedId);
 		} else if (this.#selectedIndex >= this.#filteredNodes.length) {
 			// Clamp index if out of bounds
@@ -352,7 +357,7 @@ class TreeList implements Component {
 		const entry = node.entry;
 		const parts: string[] = [];
 
-		if (node.label) {
+		if (node.label !== null && node.label !== undefined && node.label !== "") {
 			parts.push(node.label);
 		}
 
@@ -365,7 +370,8 @@ class TreeList implements Component {
 				}
 				if (msg.role === "bashExecution") {
 					const bashMsg = msg as { command?: string };
-					if (bashMsg.command) parts.push(bashMsg.command);
+					if (bashMsg.command !== null && bashMsg.command !== undefined && bashMsg.command !== "")
+						parts.push(bashMsg.command);
 				}
 				break;
 			}
@@ -505,7 +511,10 @@ class TreeList implements Component {
 			const isOnActivePath = this.#activePathIds.has(entry.id);
 			const pathMarker = isOnActivePath ? theme.fg("accent", `${theme.md.bullet} `) : "";
 
-			const label = flatNode.node.label ? theme.fg("warning", `[${flatNode.node.label}] `) : "";
+			const label =
+				flatNode.node.label !== null && flatNode.node.label !== undefined && flatNode.node.label !== ""
+					? theme.fg("warning", `[${flatNode.node.label}] `)
+					: "";
 			const content = this.#getEntryDisplayText(flatNode.node, isSelected);
 
 			let line = cursor + theme.fg("dim", prefix) + pathMarker + label + content;
@@ -546,7 +555,11 @@ class TreeList implements Component {
 						result = theme.fg("success", "assistant: ") + textContent;
 					} else if (msgWithContent.stopReason === "aborted") {
 						result = theme.fg("success", "assistant: ") + theme.fg("muted", "(aborted)");
-					} else if (msgWithContent.errorMessage) {
+					} else if (
+						msgWithContent.errorMessage !== null &&
+						msgWithContent.errorMessage !== undefined &&
+						msgWithContent.errorMessage !== ""
+					) {
 						const errMsg = normalize(msgWithContent.errorMessage).slice(0, 80);
 						result = theme.fg("success", "assistant: ") + theme.fg("error", errMsg);
 					} else {
@@ -554,7 +567,10 @@ class TreeList implements Component {
 					}
 				} else if (role === "toolResult") {
 					const toolMsg = msg as { toolCallId?: string; toolName?: string };
-					const toolCall = toolMsg.toolCallId ? this.#toolCallMap.get(toolMsg.toolCallId) : undefined;
+					const toolCall =
+						toolMsg.toolCallId !== null && toolMsg.toolCallId !== undefined && toolMsg.toolCallId !== ""
+							? this.#toolCallMap.get(toolMsg.toolCallId)
+							: undefined;
 					if (toolCall) {
 						result = theme.fg("muted", this.#formatToolCall(toolCall.name, toolCall.arguments));
 					} else {
@@ -628,7 +644,7 @@ class TreeList implements Component {
 			for (const c of content) {
 				if (typeof c === "object" && c !== null && "type" in c && c.type === "text") {
 					const text = (c as { text?: string }).text;
-					if (text && text.trim().length > 0) return true;
+					if (text !== null && text !== undefined && text !== "" && text.trim().length > 0) return true;
 				}
 			}
 		}
@@ -638,7 +654,7 @@ class TreeList implements Component {
 	#formatToolCall(name: string, args: Record<string, unknown>): string {
 		switch (name) {
 			case "read": {
-				const path = shortenPath(String(args.path || args.file_path || ""));
+				const path = shortenPath(String(args.path ?? args.file_path ?? ""));
 				const offset = args.offset as number | undefined;
 				const limit = args.limit as number | undefined;
 				let display = path;
@@ -650,15 +666,15 @@ class TreeList implements Component {
 				return `[read: ${display}]`;
 			}
 			case "write": {
-				const path = shortenPath(String(args.path || args.file_path || ""));
+				const path = shortenPath(String(args.path ?? args.file_path ?? ""));
 				return `[write: ${path}]`;
 			}
 			case "edit": {
-				const path = shortenPath(String(args.path || args.file_path || ""));
+				const path = shortenPath(String(args.path ?? args.file_path ?? ""));
 				return `[edit: ${path}]`;
 			}
 			case "bash": {
-				const rawCmd = String(args.command || "");
+				const rawCmd = String(args.command ?? "");
 				const cmd = rawCmd
 					.replace(/[\n\t]/g, " ")
 					.trim()
@@ -666,17 +682,17 @@ class TreeList implements Component {
 				return `[bash: ${cmd}${rawCmd.length > 50 ? "..." : ""}]`;
 			}
 			case "search": {
-				const pattern = String(args.pattern || "");
-				const path = shortenPath(String(args.path || "."));
+				const pattern = String(args.pattern ?? "");
+				const path = shortenPath(String(args.path ?? "."));
 				return `[search: /${pattern}/ in ${path}]`;
 			}
 			case "find": {
-				const pattern = String(args.pattern || "");
-				const path = shortenPath(String(args.path || "."));
+				const pattern = String(args.pattern ?? "");
+				const path = shortenPath(String(args.path ?? "."));
 				return `[find: ${pattern} in ${path}]`;
 			}
 			case "ls": {
-				const path = shortenPath(String(args.path || "."));
+				const path = shortenPath(String(args.path ?? "."));
 				return `[ls: ${path}]`;
 			}
 			default: {
@@ -751,7 +767,7 @@ class TreeList implements Component {
 			}
 		} else {
 			const printableText = extractPrintableText(keyData);
-			if (printableText) {
+			if (printableText !== null && printableText !== undefined && printableText !== "") {
 				this.#searchQuery += printableText;
 				this.#applyFilter();
 			}
@@ -787,7 +803,7 @@ class LabelInput implements Component {
 		currentLabel: string | undefined,
 	) {
 		this.#input = new Input();
-		if (currentLabel) {
+		if (currentLabel !== null && currentLabel !== undefined && currentLabel !== "") {
 			this.#input.setValue(currentLabel);
 		}
 	}

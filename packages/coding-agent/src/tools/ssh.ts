@@ -89,7 +89,7 @@ function quoteCmdPath(value: string): string {
 }
 
 function buildRemoteCommand(command: string, cwd: string | undefined, info: SSHHostInfo): string {
-	if (!cwd) return command;
+	if (cwd === null || cwd === undefined || cwd === "") return command;
 
 	if (info.os === "windows" && !info.compatEnabled) {
 		if (info.shell === "powershell") {
@@ -222,8 +222,8 @@ interface SshRenderContext {
 
 export const sshToolRenderer = {
 	renderCall(args: SshRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
-		const host = args.host || "…";
-		const command = args.command || "…";
+		const host = args.host ?? "…";
+		const command = args.command ?? "…";
 		const text = renderStatusLine({ icon: "pending", title: "SSH", description: `[${host}] $ ${command}` }, uiTheme);
 		return new Text(text, 0, 0);
 	},
@@ -238,8 +238,8 @@ export const sshToolRenderer = {
 		args?: SshRenderArgs,
 	): Component {
 		const details = result.details;
-		const host = args?.host || "…";
-		const command = args?.command || "…";
+		const host = args?.host ?? "…";
+		const command = args?.command ?? "…";
 		const header = renderStatusLine(
 			{ icon: "success", title: "SSH", description: `[${host}] $ ${command}` },
 			uiTheme,
@@ -285,7 +285,7 @@ export const sshToolRenderer = {
 
 				if (details?.meta?.truncation) {
 					const warning = formatStyledTruncationWarning(details.meta, uiTheme);
-					if (warning) outputLines.push(warning);
+					if (warning !== null && warning !== undefined && warning !== "") outputLines.push(warning);
 				}
 
 				return outputBlock.render(

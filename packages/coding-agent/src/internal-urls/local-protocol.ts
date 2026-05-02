@@ -82,12 +82,12 @@ function extractRelativePath(url: InternalUrl): string {
 	const pathname = url.rawPathname ?? url.pathname;
 
 	const combined = host
-		? pathname && pathname !== "/"
+		? (pathname && pathname !== "/"
 			? `${host}${pathname}`
-			: host
-		: pathname && pathname !== "/"
+			: host)
+		: (pathname && pathname !== "/"
 			? pathname.slice(1)
-			: "";
+			: "");
 
 	if (!combined) {
 		return "";
@@ -109,7 +109,7 @@ function extractRelativePath(url: InternalUrl): string {
 
 export function resolveLocalRoot(options: LocalProtocolOptions): string {
 	const artifactsDir = options.getArtifactsDir?.();
-	if (artifactsDir) {
+	if (artifactsDir !== null && artifactsDir !== undefined && artifactsDir !== "") {
 		return path.resolve(artifactsDir, "local");
 	}
 

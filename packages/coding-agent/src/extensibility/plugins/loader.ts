@@ -21,9 +21,9 @@ async function loadRuntimeConfig(): Promise<PluginRuntimeConfig> {
 	const lockPath = getPluginsLockfile();
 	try {
 		return await Bun.file(lockPath).json();
-	} catch (err) {
-		if (isEnoent(err)) return { plugins: {}, settings: {} };
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return { plugins: {}, settings: {} };
+		throw error;
 	}
 }
 
@@ -34,8 +34,8 @@ async function loadProjectOverrides(cwd: string): Promise<ProjectPluginOverrides
 	for (const overridesPath of getConfigDirPaths("plugin-overrides.json", { user: false, cwd })) {
 		try {
 			return await Bun.file(overridesPath).json();
-		} catch (err) {
-			if (isEnoent(err)) continue;
+		} catch (error) {
+			if (isEnoent(error)) continue;
 			// JSON parse error - continue to next path
 		}
 	}
@@ -55,9 +55,9 @@ export async function getEnabledPlugins(cwd: string): Promise<InstalledPlugin[]>
 	let pkg: { dependencies?: Record<string, string> };
 	try {
 		pkg = await Bun.file(pkgJsonPath).json();
-	} catch (err) {
-		if (isEnoent(err)) return [];
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return [];
+		throw error;
 	}
 
 	const nodeModulesPath = getPluginsNodeModules();
@@ -75,9 +75,9 @@ export async function getEnabledPlugins(cwd: string): Promise<InstalledPlugin[]>
 		let pluginPkg: { version: string; omp?: PluginManifest; pi?: PluginManifest };
 		try {
 			pluginPkg = await Bun.file(pluginPkgPath).json();
-		} catch (err) {
-			if (isEnoent(err)) continue;
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) continue;
+			throw error;
 		}
 
 		const manifest: PluginManifest | undefined = pluginPkg.omp || pluginPkg.pi;
@@ -97,7 +97,7 @@ export async function getEnabledPlugins(cwd: string): Promise<InstalledPlugin[]>
 		}
 
 		// Check if disabled in project
-		if (projectOverrides.disabled?.includes(name)) {
+		if (projectOverrides.disabled?.includes(name) === true) {
 			continue;
 		}
 
@@ -160,7 +160,7 @@ function resolvePluginPaths(plugin: InstalledPlugin, key: "tools" | "hooks" | "c
 	} else if (manifest.features && plugin.enabledFeatures === null) {
 		// null means use defaults - enable features with default: true
 		for (const [_featName, feat] of Object.entries(manifest.features)) {
-			if (!feat.default) continue;
+			if (feat.default !== true) continue;
 
 			if (feat[key]) {
 				for (const entry of feat[key]) {

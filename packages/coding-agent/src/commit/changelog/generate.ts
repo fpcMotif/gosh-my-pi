@@ -72,7 +72,7 @@ export async function generateChangelogEntries({
 function parseChangelogResponse(message: AssistantMessage): ChangelogGenerationResult {
 	const toolCall = extractToolCall(message, "create_changelog_entries");
 	if (toolCall) {
-		const parsed = validateToolCall([changelogTool], toolCall) as ChangelogGenerationResult;
+		const parsed = validateToolCall([changelogTool], toolCall) as unknown as ChangelogGenerationResult;
 		return { entries: parsed.entries ?? {} };
 	}
 

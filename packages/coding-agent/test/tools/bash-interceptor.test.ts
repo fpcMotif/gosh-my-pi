@@ -33,7 +33,7 @@ describe("BashTool interception", () => {
 			},
 		]);
 
-		await expect(
+		expect(
 			tool.execute("tool-call", { command: "cd packages/coding-agent && echo ok" }, undefined, undefined, {
 				toolNames: ["bash"],
 			} as AgentToolContext),
@@ -49,7 +49,7 @@ describe("BashTool interception", () => {
 			},
 		]);
 
-		await expect(
+		expect(
 			tool.execute("tool-call", { command: "cd packages/coding-agent && cat package.json" }, undefined, undefined, {
 				toolNames: ["read"],
 			} as AgentToolContext),

@@ -274,7 +274,7 @@ function formatOccurrenceMatchError(
 	const previews = occurrencePreviews?.join("\n\n") ?? "";
 	const moreMsg =
 		occurrences > MAX_OCCURRENCE_PREVIEWS ? ` (showing first ${MAX_OCCURRENCE_PREVIEWS} of ${occurrences})` : "";
-	const pathSuffix = path ? ` in ${path}` : "";
+	const pathSuffix = path !== null && path !== undefined && path !== "" ? ` in ${path}` : "";
 	return `Found ${occurrences} occurrences${pathSuffix}${moreMsg}:\n\n${previews}\n\nAdd more context lines to disambiguate.`;
 }
 
@@ -386,7 +386,11 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 		if (unifiedHeader.oldStartLine < 1 || unifiedHeader.newStartLine < 1) {
 			throw new ParseError("Line numbers in @@ header must be >= 1", lineNumber);
 		}
-		if (unifiedHeader.changeContext) {
+		if (
+			unifiedHeader.changeContext !== null &&
+			unifiedHeader.changeContext !== undefined &&
+			unifiedHeader.changeContext !== ""
+		) {
 			changeContexts.push(unifiedHeader.changeContext);
 		}
 		oldStartLine = unifiedHeader.oldStartLine;
@@ -494,7 +498,7 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 
 		const firstChar = line[0];
 
-		if (firstChar === undefined || firstChar === "") {
+		if (firstChar === null || firstChar === undefined || firstChar === "") {
 			hunk.hasContextLines = true;
 			hunk.oldLines.push("");
 			hunk.newLines.push("");
@@ -575,7 +579,7 @@ function countMultiFileMarkers(diff: string): number {
 		for (const marker of MULTI_FILE_MARKERS) {
 			if (trimmed.startsWith(marker)) {
 				const filePath = extractMarkerPath(trimmed);
-				if (filePath) {
+				if (filePath !== null && filePath !== undefined && filePath !== "") {
 					paths.add(filePath);
 				}
 				counts.set(marker, (counts.get(marker) ?? 0) + 1);
@@ -690,7 +694,7 @@ export function replaceText(content: string, oldText: string, newText: string, o
 				matchOutcome.closest &&
 				matchOutcome.closest.confidence >= threshold &&
 				(matchOutcome.fuzzyMatches === undefined || matchOutcome.fuzzyMatches <= 1);
-			const match = matchOutcome.match || (shouldUseClosest ? matchOutcome.closest : undefined);
+			const match = matchOutcome.match || (shouldUseClosest === true ? matchOutcome.closest : undefined);
 			if (!match) {
 				break;
 			}
@@ -715,7 +719,12 @@ export function replaceText(content: string, oldText: string, newText: string, o
 		threshold,
 	});
 
-	if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
+	if (
+		matchOutcome.occurrences !== null &&
+		matchOutcome.occurrences !== undefined &&
+		matchOutcome.occurrences !== 0 &&
+		matchOutcome.occurrences > 1
+	) {
 		throw new Error(formatOccurrenceMatchError(matchOutcome.occurrences, matchOutcome.occurrencePreviews));
 	}
 
@@ -782,7 +791,12 @@ export async function computeEditDiff(
 				threshold: threshold ?? DEFAULT_FUZZY_THRESHOLD,
 			});
 
-			if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
+			if (
+				matchOutcome.occurrences !== null &&
+				matchOutcome.occurrences !== undefined &&
+				matchOutcome.occurrences !== 0 &&
+				matchOutcome.occurrences > 1
+			) {
 				return {
 					error: formatOccurrenceMatchError(matchOutcome.occurrences, matchOutcome.occurrencePreviews, path),
 				};
@@ -804,7 +818,7 @@ export async function computeEditDiff(
 		}
 
 		return generateDiffString(normalizedContent, result.content);
-	} catch (err) {
-		return { error: err instanceof Error ? err.message : String(err) };
+	} catch (error) {
+		return { error: error instanceof Error ? error.message : String(error) };
 	}
 }

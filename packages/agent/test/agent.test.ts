@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Agent, type AgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { Agent, type AgentTool, type AnyAgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { getBundledModel, type SimpleStreamOptions, type ThinkingBudgets } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { Type } from "@sinclair/typebox";
@@ -77,7 +77,7 @@ describe("Agent", () => {
 		expect(agent.state.thinkingLevel).toBe(ThinkingLevel.High);
 
 		// Test setTools
-		const tools = [{ name: "test", description: "test tool" } as any];
+		const tools = [{ name: "test", description: "test tool" } as unknown as AnyAgentTool];
 		agent.setTools(tools);
 		expect(agent.state.tools).toBe(tools);
 
@@ -145,7 +145,7 @@ describe("Agent", () => {
 			timestamp: Date.now(),
 		});
 
-		await expect(agent.continue()).resolves.toBeUndefined();
+		expect(agent.continue()).resolves.toBeUndefined();
 
 		const hasQueuedFollowUp = agent.state.messages.some(message => {
 			if (message.role !== "user") return false;
@@ -194,7 +194,7 @@ describe("Agent", () => {
 			timestamp: Date.now() + 1,
 		});
 
-		await expect(agent.continue()).resolves.toBeUndefined();
+		expect(agent.continue()).resolves.toBeUndefined();
 
 		const recentMessages = agent.state.messages.slice(-4);
 		expect(recentMessages.map(m => m.role)).toEqual(["user", "assistant", "user", "assistant"]);

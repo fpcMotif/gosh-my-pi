@@ -1,5 +1,4 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { prompt } from "@oh-my-pi/pi-utils";
 import type { Static } from "@sinclair/typebox";
 import {
 	createLspWritethrough,
@@ -8,29 +7,19 @@ import {
 	type WritethroughDeferredHandle,
 	writethroughNoop,
 } from "../lsp";
-import applyPatchDescription from "../prompts/tools/apply-patch.md" with { type: "text" };
-import atomDescription from "../prompts/tools/atom.md" with { type: "text" };
-import hashlineDescription from "../prompts/tools/hashline.md" with { type: "text" };
-import patchDescription from "../prompts/tools/patch.md" with { type: "text" };
-import replaceDescription from "../prompts/tools/replace.md" with { type: "text" };
 import type { ToolSession } from "../tools";
-import { VimTool, vimSchema } from "../tools/vim";
+import { VimTool } from "../tools/vim";
+import type { vimSchema } from "../tools/vim";
 import { type EditMode, normalizeEditMode, resolveEditMode } from "../utils/edit-mode";
 import type { VimToolDetails } from "../vim/types";
-import { type ApplyPatchParams, applyPatchSchema, expandApplyPatchToEntries } from "./modes/apply-patch";
-import applyPatchGrammar from "./modes/apply-patch.lark" with { type: "text" };
-import { type AtomParams, atomEditParamsSchema, executeAtomSingle } from "./modes/atom";
-import atomGrammar from "./modes/atom.lark" with { type: "text" };
-import {
-	executeHashlineSingle,
-	HashlineMismatchError,
-	type HashlineParams,
-	type HashlineToolEdit,
-	hashlineEditParamsSchema,
-} from "./modes/hashline";
-import { executePatchSingle, type PatchEditEntry, type PatchParams, patchEditSchema } from "./modes/patch";
-import { executeReplaceSingle, type ReplaceEditEntry, type ReplaceParams, replaceEditSchema } from "./modes/replace";
-import { type EditToolDetails, type EditToolPerFileResult, getLspBatchRequest, type LspBatchRequest } from "./renderer";
+import type { ApplyPatchParams, applyPatchSchema } from "./modes/apply-patch";
+import type { AtomParams, atomEditParamsSchema } from "./modes/atom";
+import type { HashlineParams, hashlineEditParamsSchema } from "./modes/hashline";
+import type { PatchParams, patchEditSchema } from "./modes/patch";
+import type { ReplaceParams, replaceEditSchema } from "./modes/replace";
+import { buildEditModeDefinitions } from "./mode-definitions";
+import type { EditToolDetails, EditToolPerFileResult, LspBatchRequest } from "./renderer";
+import { getLspBatchRequest } from "./renderer";
 
 export { DEFAULT_EDIT_MODE, type EditMode, normalizeEditMode } from "../utils/edit-mode";
 export * from "./apply-patch";
@@ -45,7 +34,7 @@ export * from "./normalize";
 export * from "./renderer";
 export * from "./streaming";
 
-type TInput =
+export type TInput =
 	| typeof replaceEditSchema
 	| typeof patchEditSchema
 	| typeof hashlineEditParamsSchema
@@ -54,10 +43,10 @@ type TInput =
 	| typeof applyPatchSchema;
 
 type VimParams = Static<typeof vimSchema>;
-type EditParams = ReplaceParams | PatchParams | HashlineParams | AtomParams | VimParams | ApplyPatchParams;
-type EditToolResultDetails = EditToolDetails | VimToolDetails;
+export type EditParams = ReplaceParams | PatchParams | HashlineParams | AtomParams | VimParams | ApplyPatchParams;
+export type EditToolResultDetails = EditToolDetails | VimToolDetails;
 
-type EditModeDefinition = {
+export type EditModeDefinition = {
 	description: (session: ToolSession) => string;
 	parameters: TInput;
 	execute: (
@@ -69,8 +58,10 @@ type EditModeDefinition = {
 	) => Promise<AgentToolResult<EditToolResultDetails, TInput>>;
 };
 
+export type { EditToolDetails, EditToolPerFileResult, LspBatchRequest };
+
 function resolveConfiguredEditMode(rawEditMode: string): EditMode | undefined {
-	if (!rawEditMode || rawEditMode === "auto") {
+	if (rawEditMode === "" || rawEditMode === "auto") {
 		return undefined;
 	}
 
@@ -117,132 +108,6 @@ function createEditWritethrough(session: ToolSession): WritethroughCallback {
 	return enableLsp ? createLspWritethrough(session.cwd, { enableFormat, enableDiagnostics }) : writethroughNoop;
 }
 
-/** Run apply_patch file operations and aggregate their multi-file result. */
-async function executeApplyPatchPerFile(
-	fileEntries: {
-		path: string;
-		run: (batchRequest: LspBatchRequest | undefined) => Promise<AgentToolResult<EditToolDetails>>;
-	}[],
-	outerBatchRequest: LspBatchRequest | undefined,
-	onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
-): Promise<AgentToolResult<EditToolDetails, TInput>> {
-	if (fileEntries.length === 1) {
-		// Single file — just run directly, no wrapping
-		return fileEntries[0].run(outerBatchRequest);
-	}
-
-	const perFileResults: EditToolPerFileResult[] = [];
-	const contentTexts: string[] = [];
-
-	for (let i = 0; i < fileEntries.length; i++) {
-		const { path, run } = fileEntries[i];
-		const isLast = i === fileEntries.length - 1;
-		const batchRequest: LspBatchRequest | undefined = outerBatchRequest
-			? { id: outerBatchRequest.id, flush: isLast && outerBatchRequest.flush }
-			: undefined;
-
-		try {
-			const result = await run(batchRequest);
-			const details = result.details;
-			perFileResults.push({
-				path,
-				diff: details?.diff ?? "",
-				firstChangedLine: details?.firstChangedLine,
-				diagnostics: details?.diagnostics,
-				op: details?.op,
-				move: details?.move,
-				meta: details?.meta,
-			});
-			const text = result.content?.find(c => c.type === "text")?.text ?? "";
-			if (text) contentTexts.push(text);
-		} catch (err) {
-			const errorText = err instanceof Error ? err.message : String(err);
-			const displayErrorText = err instanceof HashlineMismatchError ? err.displayMessage : undefined;
-			perFileResults.push({ path, diff: "", isError: true, errorText, displayErrorText });
-			contentTexts.push(`Error editing ${path}: ${errorText}`);
-		}
-
-		// Emit partial result after each file so UI shows progressive completion
-		if (!isLast && onUpdate) {
-			onUpdate({
-				content: [{ type: "text", text: contentTexts.join("\n") }],
-				details: {
-					diff: perFileResults
-						.map(r => r.diff)
-						.filter(Boolean)
-						.join("\n"),
-					firstChangedLine: perFileResults.find(r => r.firstChangedLine)?.firstChangedLine,
-					perFileResults: [...perFileResults],
-				},
-			});
-		}
-	}
-
-	return {
-		content: [{ type: "text", text: contentTexts.join("\n") }],
-		details: {
-			diff: perFileResults
-				.map(r => r.diff)
-				.filter(Boolean)
-				.join("\n"),
-			firstChangedLine: perFileResults.find(r => r.firstChangedLine)?.firstChangedLine,
-			perFileResults,
-		},
-	};
-}
-
-async function executeSinglePathEntries(
-	path: string,
-	runs: ((batchRequest: LspBatchRequest | undefined) => Promise<AgentToolResult<EditToolDetails>>)[],
-	outerBatchRequest: LspBatchRequest | undefined,
-	onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
-): Promise<AgentToolResult<EditToolDetails, TInput>> {
-	if (runs.length === 1) {
-		return runs[0](outerBatchRequest);
-	}
-
-	const contentTexts: string[] = [];
-	const diffTexts: string[] = [];
-	let firstChangedLine: number | undefined;
-
-	for (let i = 0; i < runs.length; i++) {
-		const isLast = i === runs.length - 1;
-		const batchRequest: LspBatchRequest | undefined = outerBatchRequest
-			? { id: outerBatchRequest.id, flush: isLast && outerBatchRequest.flush }
-			: undefined;
-
-		try {
-			const result = await runs[i](batchRequest);
-			const details = result.details;
-			if (details?.diff) diffTexts.push(details.diff);
-			firstChangedLine ??= details?.firstChangedLine;
-			const text = result.content?.find(c => c.type === "text")?.text ?? "";
-			if (text) contentTexts.push(text);
-		} catch (err) {
-			const errorText = err instanceof Error ? err.message : String(err);
-			contentTexts.push(`Error editing ${path}: ${errorText}`);
-		}
-
-		if (!isLast && onUpdate) {
-			onUpdate({
-				content: [{ type: "text", text: contentTexts.join("\n") }],
-				details: {
-					diff: diffTexts.join("\n"),
-					firstChangedLine,
-				},
-			});
-		}
-	}
-
-	return {
-		content: [{ type: "text", text: contentTexts.join("\n") }],
-		details: {
-			diff: diffTexts.join("\n"),
-			firstChangedLine,
-		},
-	};
-}
-
 export class EditTool implements AgentTool<TInput> {
 	readonly name = "edit";
 	readonly label = "Edit";
@@ -257,7 +122,7 @@ export class EditTool implements AgentTool<TInput> {
 	readonly #vimTool: VimTool;
 	readonly #pendingDeferredFetches = new Map<string, AbortController>();
 
-	constructor(private readonly session: ToolSession) {
+	constructor(readonly session: ToolSession) {
 		const {
 			PI_EDIT_FUZZY: editFuzzy = "auto",
 			PI_EDIT_FUZZY_THRESHOLD: editFuzzyThreshold = "auto",
@@ -269,6 +134,26 @@ export class EditTool implements AgentTool<TInput> {
 		this.#fuzzyThreshold = resolveFuzzyThreshold(session, editFuzzyThreshold);
 		this.#writethrough = createEditWritethrough(session);
 		this.#vimTool = new VimTool(session);
+	}
+
+	get allowFuzzy(): boolean {
+		return this.#allowFuzzy;
+	}
+
+	get fuzzyThreshold(): number {
+		return this.#fuzzyThreshold;
+	}
+
+	get writethrough(): WritethroughCallback {
+		return this.#writethrough;
+	}
+
+	get vimTool(): VimTool {
+		return this.#vimTool;
+	}
+
+	beginDeferredDiagnosticsForPath(path: string): WritethroughDeferredHandle {
+		return this.#beginDeferredDiagnosticsForPath(path);
 	}
 
 	get mode(): EditMode {
@@ -291,9 +176,7 @@ export class EditTool implements AgentTool<TInput> {
 	 * and fall back to emitting a JSON function tool from `parameters`.
 	 */
 	get customFormat(): { syntax: "lark"; definition: string } | undefined {
-		if (this.mode === "apply_patch") return { syntax: "lark", definition: applyPatchGrammar };
-		if (this.mode === "atom") return { syntax: "lark", definition: atomGrammar };
-		return undefined;
+		return this.#getModeDefinition().customFormat;
 	}
 
 	/**
@@ -318,164 +201,8 @@ export class EditTool implements AgentTool<TInput> {
 		return modeDefinition.execute(this, params, signal, getLspBatchRequest(context?.toolCall), onUpdate);
 	}
 
-	#getModeDefinition(): EditModeDefinition {
-		return {
-			patch: {
-				description: () => prompt.render(patchDescription),
-				parameters: patchEditSchema,
-				execute: (
-					tool: EditTool,
-					params: EditParams,
-					signal: AbortSignal | undefined,
-					batchRequest: LspBatchRequest | undefined,
-					onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
-				) => {
-					const { edits, path } = params as PatchParams;
-					const runs = (edits as PatchEditEntry[]).map(
-						entry => (br: LspBatchRequest | undefined) =>
-							executePatchSingle({
-								session: tool.session,
-								path,
-								params: entry,
-								signal,
-								batchRequest: br,
-								allowFuzzy: tool.#allowFuzzy,
-								fuzzyThreshold: tool.#fuzzyThreshold,
-								writethrough: tool.#writethrough,
-								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
-							}),
-					);
-					return executeSinglePathEntries(path, runs, batchRequest, onUpdate);
-				},
-			},
-			apply_patch: {
-				description: () => prompt.render(applyPatchDescription),
-				parameters: applyPatchSchema,
-				execute: (
-					tool: EditTool,
-					params: EditParams,
-					signal: AbortSignal | undefined,
-					batchRequest: LspBatchRequest | undefined,
-					onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
-				) => {
-					const entries = expandApplyPatchToEntries(params as ApplyPatchParams);
-					const perFile = entries.map(entry => {
-						const { path, ...patchParams } = entry;
-						return {
-							path,
-							run: (br: LspBatchRequest | undefined) =>
-								executePatchSingle({
-									session: tool.session,
-									path,
-									params: patchParams,
-									signal,
-									batchRequest: br,
-									allowFuzzy: tool.#allowFuzzy,
-									fuzzyThreshold: tool.#fuzzyThreshold,
-									writethrough: tool.#writethrough,
-									beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
-								}),
-						};
-					});
-					return executeApplyPatchPerFile(perFile, batchRequest, onUpdate);
-				},
-			},
-			hashline: {
-				description: () => prompt.render(hashlineDescription),
-				parameters: hashlineEditParamsSchema,
-				execute: (
-					tool: EditTool,
-					params: EditParams,
-					signal: AbortSignal | undefined,
-					batchRequest: LspBatchRequest | undefined,
-					_onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
-				) => {
-					const { edits, path } = params as HashlineParams;
-					return executeHashlineSingle({
-						session: tool.session,
-						path,
-						edits: edits as HashlineToolEdit[],
-						signal,
-						batchRequest,
-						writethrough: tool.#writethrough,
-						beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
-					});
-				},
-			},
-			atom: {
-				description: () => prompt.render(atomDescription),
-				parameters: atomEditParamsSchema,
-				execute: (
-					tool: EditTool,
-					params: EditParams,
-					signal: AbortSignal | undefined,
-					batchRequest: LspBatchRequest | undefined,
-					_onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
-				) => {
-					const { input, path } = params as AtomParams & { path?: string };
-					return executeAtomSingle({
-						session: tool.session,
-						input,
-						path,
-						signal,
-						batchRequest,
-						writethrough: tool.#writethrough,
-						beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
-					});
-				},
-			},
-			replace: {
-				description: () => prompt.render(replaceDescription),
-				parameters: replaceEditSchema,
-				execute: (
-					tool: EditTool,
-					params: EditParams,
-					signal: AbortSignal | undefined,
-					batchRequest: LspBatchRequest | undefined,
-					onUpdate?: (partialResult: AgentToolResult<EditToolDetails, TInput>) => void,
-				) => {
-					const { edits, path } = params as ReplaceParams;
-					const runs = (edits as ReplaceEditEntry[]).map(
-						entry => (br: LspBatchRequest | undefined) =>
-							executeReplaceSingle({
-								session: tool.session,
-								path,
-								params: entry,
-								signal,
-								batchRequest: br,
-								allowFuzzy: tool.#allowFuzzy,
-								fuzzyThreshold: tool.#fuzzyThreshold,
-								writethrough: tool.#writethrough,
-								beginDeferredDiagnosticsForPath: p => tool.#beginDeferredDiagnosticsForPath(p),
-							}),
-					);
-					return executeSinglePathEntries(path, runs, batchRequest, onUpdate);
-				},
-			},
-			vim: {
-				description: () => this.#vimTool.description,
-				parameters: vimSchema,
-				execute: async (
-					tool: EditTool,
-					params: EditParams,
-					signal: AbortSignal | undefined,
-					_batchRequest: LspBatchRequest | undefined,
-					onUpdate?: (partialResult: AgentToolResult<EditToolResultDetails, TInput>) => void,
-				) => {
-					const handleUpdate = onUpdate
-						? (partialResult: AgentToolResult<VimToolDetails>) => {
-								onUpdate(partialResult as AgentToolResult<EditToolResultDetails, TInput>);
-							}
-						: undefined;
-					return (await tool.#vimTool.execute(
-						"edit",
-						params as VimParams,
-						signal,
-						handleUpdate,
-					)) as AgentToolResult<EditToolResultDetails, TInput>;
-				},
-			},
-		}[this.mode];
+	#getModeDefinition(): EditModeDefinition & { customFormat?: { syntax: "lark"; definition: string } } {
+		return buildEditModeDefinitions(this)[this.mode];
 	}
 
 	#beginDeferredDiagnosticsForPath(path: string): WritethroughDeferredHandle {
@@ -493,10 +220,10 @@ export class EditTool implements AgentTool<TInput> {
 			},
 			signal: deferredController.signal,
 			finalize: (diagnostics: FileDiagnosticsResult | undefined) => {
-				if (!diagnostics) {
-					this.#pendingDeferredFetches.set(path, deferredController);
-				} else {
+				if (diagnostics) {
 					deferredController.abort();
+				} else {
+					this.#pendingDeferredFetches.set(path, deferredController);
 				}
 			},
 		};

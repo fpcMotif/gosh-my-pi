@@ -1,26 +1,33 @@
 /**
  * Tool wrappers for extensions.
  */
-import type { AgentTool, AgentToolContext, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
+import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Static, TSchema } from "@sinclair/typebox";
+import type { Component } from "@oh-my-pi/pi-tui";
 import type { Theme } from "../../modes/theme/theme";
 import { applyToolProxy } from "../tool-proxy";
 import type { ExtensionRunner } from "./runner";
-import type { RegisteredTool, ToolCallEventResult } from "./types";
+import type { RegisteredTool, ToolRenderResultOptions } from "./types";
+
+export { ExtensionToolWrapper } from "./tool-wrapper";
 
 /**
  * Adapts a RegisteredTool into an AgentTool.
  */
-export class RegisteredToolAdapter implements AgentTool<any, any, any> {
+export class RegisteredToolAdapter implements AgentTool {
 	declare name: string;
 	declare description: string;
-	declare parameters: any;
+	declare parameters: TSchema;
 	declare label: string;
 	declare strict: boolean;
 
-	renderCall?: (args: any, options: any, theme: any) => any;
-	renderResult?: (result: any, options: any, theme: any, args?: any) => any;
+	renderCall?: (args: unknown, options: ToolRenderResultOptions, theme: unknown) => Component;
+	renderResult?: (
+		result: AgentToolResult<unknown>,
+		options: ToolRenderResultOptions,
+		theme: unknown,
+		args?: unknown,
+	) => Component;
 
 	constructor(
 		private registeredTool: RegisteredTool,
@@ -32,29 +39,37 @@ export class RegisteredToolAdapter implements AgentTool<any, any, any> {
 		// If these exist unconditionally on the prototype, ToolExecutionComponent
 		// enters the custom-renderer path, gets undefined back, and silently
 		// discards tool result text (extensions without renderers show blank).
-		if (registeredTool.definition.renderCall) {
-			this.renderCall = (args: any, options: any, theme: any) =>
-				registeredTool.definition.renderCall!(args, options, theme as Theme);
+		const definition = registeredTool.definition;
+		const renderCall = definition.renderCall;
+		if (renderCall) {
+			this.renderCall = (args, options, theme) => renderCall(args as Static<TSchema>, options, theme as Theme);
 		}
-		if (registeredTool.definition.renderResult) {
-			this.renderResult = (result: any, options: any, theme: any, args?: any) =>
-				registeredTool.definition.renderResult!(
+		const renderResult = definition.renderResult;
+		if (renderResult) {
+			this.renderResult = (result, options, theme, args) =>
+				renderResult(
 					result,
 					{ expanded: options.expanded, isPartial: options.isPartial, spinnerFrame: options.spinnerFrame },
 					theme as Theme,
-					args,
+					args as Static<TSchema>,
 				);
 		}
 	}
 
 	async execute(
 		toolCallId: string,
-		params: any,
+		params: unknown,
 		signal?: AbortSignal,
-		onUpdate?: AgentToolUpdateCallback<any>,
+		onUpdate?: AgentToolUpdateCallback<unknown>,
 		_context?: AgentToolContext,
-	) {
-		return this.registeredTool.definition.execute(toolCallId, params, signal, onUpdate, this.runner.createContext());
+	): Promise<AgentToolResult<unknown>> {
+		return this.registeredTool.definition.execute(
+			toolCallId,
+			params as Static<TSchema>,
+			signal,
+			onUpdate,
+			this.runner.createContext(),
+		);
 	}
 }
 
@@ -70,122 +85,4 @@ export function wrapRegisteredTool(registeredTool: RegisteredTool, runner: Exten
  */
 export function wrapRegisteredTools(registeredTools: RegisteredTool[], runner: ExtensionRunner): AgentTool[] {
 	return registeredTools.map(rt => wrapRegisteredTool(rt, runner));
-}
-
-/**
- * Wraps a tool with extension callbacks for interception.
- * - Emits tool_call event before execution (can block)
- * - Emits tool_result event after execution (can modify result)
- */
-export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetails = unknown> implements AgentTool<
-	TParameters,
-	TDetails
-> {
-	declare name: string;
-	declare description: string;
-	declare parameters: TParameters;
-	declare label: string;
-	declare strict: boolean;
-
-	constructor(
-		private tool: AgentTool<TParameters, TDetails>,
-		private runner: ExtensionRunner,
-	) {
-		applyToolProxy(tool, this);
-	}
-
-	/**
-	 * Forward browser mode changes when available.
-	 */
-	restartForModeChange(): Promise<void> {
-		const target = this.tool as { restartForModeChange?: () => Promise<void> };
-		if (!target.restartForModeChange) return Promise.resolve();
-		return target.restartForModeChange();
-	}
-
-	async execute(
-		toolCallId: string,
-		params: Static<TParameters>,
-		signal?: AbortSignal,
-		onUpdate?: AgentToolUpdateCallback<TDetails, TParameters>,
-		context?: AgentToolContext,
-	) {
-		// Emit tool_call event - extensions can block execution
-		if (this.runner.hasHandlers("tool_call")) {
-			try {
-				const callResult = (await this.runner.emitToolCall({
-					type: "tool_call",
-					toolName: this.tool.name,
-					toolCallId,
-					input: params as Record<string, unknown>,
-				})) as ToolCallEventResult | undefined;
-
-				if (callResult?.block) {
-					const reason = callResult.reason || "Tool execution was blocked by an extension";
-					throw new Error(reason);
-				}
-			} catch (err) {
-				if (err instanceof Error) {
-					throw err;
-				}
-				throw new Error(`Extension failed, blocking execution: ${String(err)}`);
-			}
-		}
-
-		// Execute the actual tool
-		let result: { content: any; details?: TDetails };
-		let executionError: Error | undefined;
-
-		try {
-			result = await this.tool.execute(toolCallId, params, signal, onUpdate, context);
-		} catch (err) {
-			executionError = err instanceof Error ? err : new Error(String(err));
-			result = {
-				content: [{ type: "text", text: executionError.message }],
-				details: undefined as TDetails,
-			};
-		}
-
-		// Emit tool_result event - extensions can modify the result and error status
-		if (this.runner.hasHandlers("tool_result")) {
-			const resultResult = await this.runner.emitToolResult({
-				type: "tool_result",
-				toolName: this.tool.name,
-				toolCallId,
-				input: params as Record<string, unknown>,
-				content: result.content,
-				details: result.details,
-				isError: !!executionError,
-			});
-
-			if (resultResult) {
-				const modifiedContent: (TextContent | ImageContent)[] = resultResult.content ?? result.content;
-				const modifiedDetails = (resultResult.details ?? result.details) as TDetails;
-
-				// Extension can override error status
-				if (resultResult.isError === true && !executionError) {
-					// Extension marks a successful result as error
-					const textBlocks = (modifiedContent ?? []).filter((c): c is TextContent => c.type === "text");
-					const errorText = textBlocks.map(t => t.text).join("\n") || "Tool result marked as error by extension";
-					throw new Error(errorText);
-				}
-				if (resultResult.isError === false && executionError) {
-					// Extension clears the error - return success
-					return { content: modifiedContent, details: modifiedDetails };
-				}
-
-				// Error status unchanged, but content/details may be modified
-				if (executionError) {
-					throw executionError;
-				}
-				return { content: modifiedContent, details: modifiedDetails };
-			}
-		}
-
-		// No extension modification
-		if (executionError) {
-			throw executionError;
-		}
-		return result;
-	}
 }

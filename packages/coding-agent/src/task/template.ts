@@ -27,7 +27,7 @@ export function renderTemplate(
 	const { contextEnabled } = getTaskSimpleModeCapabilities(simpleMode);
 	context = contextEnabled ? context?.trim() : undefined;
 
-	if (!context || !assignment) {
+	if (context === null || context === undefined || context === "" || !assignment) {
 		if (simpleMode === "independent" && assignment) {
 			return {
 				task: prompt.render(subagentUserPromptTemplate, { assignment, independentMode: true }),

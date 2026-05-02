@@ -90,17 +90,21 @@ export const handleCoinGecko: SpecialHandler = async (
 			md += "\n";
 		}
 
-		if (market?.market_cap?.usd) {
+		if (market?.market_cap?.usd !== null && market?.market_cap?.usd !== undefined && market?.market_cap?.usd !== 0) {
 			md += `**Market Cap:** $${formatNumber(market.market_cap.usd)}\n`;
 		}
 
-		if (market?.total_volume?.usd) {
+		if (
+			market?.total_volume?.usd !== null &&
+			market?.total_volume?.usd !== undefined &&
+			market?.total_volume?.usd !== 0
+		) {
 			md += `**24h Volume:** $${formatNumber(market.total_volume.usd)}\n`;
 		}
 
 		if (market?.ath?.usd !== undefined) {
 			md += `**All-Time High:** $${formatPrice(market.ath.usd)}`;
-			if (market.ath_date?.usd) {
+			if (market.ath_date?.usd !== null && market.ath_date?.usd !== undefined && market.ath_date?.usd !== "") {
 				const athDate = new Date(market.ath_date.usd).toLocaleDateString("en-US", {
 					year: "numeric",
 					month: "short",
@@ -114,34 +118,38 @@ export const handleCoinGecko: SpecialHandler = async (
 		md += "\n";
 
 		// Supply info
-		if (market?.circulating_supply) {
+		if (
+			market?.circulating_supply !== null &&
+			market?.circulating_supply !== undefined &&
+			market?.circulating_supply !== 0
+		) {
 			md += `**Circulating Supply:** ${formatNumber(Math.round(market.circulating_supply))}`;
-			if (market.max_supply) {
+			if (market.max_supply !== null && market.max_supply !== undefined && market.max_supply !== 0) {
 				const percent = ((market.circulating_supply / market.max_supply) * 100).toFixed(1);
 				md += ` / ${formatNumber(Math.round(market.max_supply))} (${percent}%)`;
-			} else if (market.total_supply) {
+			} else if (market.total_supply !== null && market.total_supply !== undefined && market.total_supply !== 0) {
 				md += ` / ${formatNumber(Math.round(market.total_supply))} total`;
 			}
 			md += "\n";
 		}
 
-		if (coin.genesis_date) {
+		if (coin.genesis_date !== null && coin.genesis_date !== undefined && coin.genesis_date !== "") {
 			md += `**Launch Date:** ${coin.genesis_date}\n`;
 		}
 
-		if (coin.categories?.length) {
+		if (coin.categories?.length !== null && coin.categories?.length !== undefined && coin.categories?.length !== 0) {
 			md += `**Categories:** ${coin.categories.join(", ")}\n`;
 		}
 
 		// Links
 		const links: string[] = [];
-		if (coin.links?.homepage?.[0]) {
+		if (coin.links?.homepage?.[0] !== undefined && coin.links?.homepage?.[0] !== "") {
 			links.push(`[Website](${coin.links.homepage[0]})`);
 		}
-		if (coin.links?.blockchain_site?.[0]) {
+		if (coin.links?.blockchain_site?.[0] !== undefined && coin.links?.blockchain_site?.[0] !== "") {
 			links.push(`[Explorer](${coin.links.blockchain_site[0]})`);
 		}
-		if (coin.links?.repos_url?.github?.[0]) {
+		if (coin.links?.repos_url?.github?.[0] !== undefined && coin.links?.repos_url?.github?.[0] !== "") {
 			links.push(`[GitHub](${coin.links.repos_url.github[0]})`);
 		}
 		if (links.length) {
@@ -149,7 +157,7 @@ export const handleCoinGecko: SpecialHandler = async (
 		}
 
 		// Description
-		if (coin.description?.en) {
+		if (coin.description?.en !== null && coin.description?.en !== undefined && coin.description?.en !== "") {
 			const desc = coin.description.en
 				.replace(/<[^>]+>/g, "") // Strip HTML
 				.replace(/\r\n/g, "\n")

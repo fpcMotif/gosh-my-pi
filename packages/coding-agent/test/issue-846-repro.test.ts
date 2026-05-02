@@ -155,7 +155,12 @@ describe("issue #846: phase1 stage1 failures must be logged", () => {
 				.prepare("SELECT last_error, status FROM jobs WHERE kind = 'memory_stage1' AND job_key = ?")
 				.get("thread-missing") as { last_error?: string; status?: string } | undefined;
 			memoryStorage.closeMemoryDb(probe);
-			if (row?.status === "error" && row.last_error) {
+			if (
+				row?.status === "error" &&
+				row.last_error !== null &&
+				row.last_error !== undefined &&
+				row.last_error !== ""
+			) {
 				lastError = row.last_error;
 				break;
 			}

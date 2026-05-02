@@ -289,23 +289,23 @@ export class HookRunner {
 					const handlerResult = await handler(event, ctx);
 
 					// For session before_* events, capture the result (for cancellation)
-					if (this.#isSessionBeforeEvent(event.type) && handlerResult) {
+					if (this.#isSessionBeforeEvent(event.type) && handlerResult !== null && handlerResult !== undefined) {
 						result = handlerResult as SessionBeforeCompactResult | SessionBeforeTreeResult;
 						// If cancelled, stop processing further hooks
-						if (result.cancel) {
+						if (result.cancel === true) {
 							return result;
 						}
 					}
 
 					// For tool_result events, capture the result
-					if (event.type === "tool_result" && handlerResult) {
+					if (event.type === "tool_result" && handlerResult !== null && handlerResult !== undefined) {
 						result = handlerResult as ToolResultEventResult;
 					}
-					if (event.type === "session.compacting" && handlerResult) {
+					if (event.type === "session.compacting" && handlerResult !== null && handlerResult !== undefined) {
 						result = handlerResult as SessionCompactingResult;
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
 					this.emitError({
 						hookPath: hook.path,
 						event: event.type,
@@ -335,10 +335,10 @@ export class HookRunner {
 				// No timeout - let user take their time
 				const handlerResult = await handler(event, ctx);
 
-				if (handlerResult) {
+				if (handlerResult !== null && handlerResult !== undefined) {
 					result = handlerResult as ToolCallEventResult;
 					// If blocked, stop processing further hooks
-					if (result.block) {
+					if (result.block === true) {
 						return result;
 					}
 				}
@@ -368,11 +368,15 @@ export class HookRunner {
 					const event: ContextEvent = { type: "context", messages: currentMessages };
 					const handlerResult = await handler(event, ctx);
 
-					if (handlerResult && (handlerResult as ContextEventResult).messages) {
+					if (
+						handlerResult !== null &&
+						handlerResult !== undefined &&
+						(handlerResult as ContextEventResult).messages
+					) {
 						currentMessages = (handlerResult as ContextEventResult).messages!;
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
 					this.emitError({
 						hookPath: hook.path,
 						event: "context",
@@ -406,11 +410,16 @@ export class HookRunner {
 					const handlerResult = await handler(event, ctx);
 
 					// Take the first message returned
-					if (handlerResult && (handlerResult as BeforeAgentStartEventResult).message && !result) {
+					if (
+						handlerResult !== null &&
+						handlerResult !== undefined &&
+						(handlerResult as BeforeAgentStartEventResult).message &&
+						!result
+					) {
 						result = handlerResult as BeforeAgentStartEventResult;
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
 					this.emitError({
 						hookPath: hook.path,
 						event: "before_agent_start",

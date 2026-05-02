@@ -217,7 +217,7 @@ export class ExtensionList implements Component {
 		line += namePadded;
 
 		// Trigger hint
-		if (ext.trigger) {
+		if (ext.trigger !== null && ext.trigger !== undefined && ext.trigger !== "") {
 			const triggerStyle = effectivelyDisabled ? "dim" : "muted";
 			const remainingWidth = width - visibleWidth(line) - 2;
 			if (remainingWidth > 5) {
@@ -297,7 +297,11 @@ export class ExtensionList implements Component {
 		}
 
 		// Provider-specific view: Master switch + flat list
-		if (this.#masterSwitchProvider) {
+		if (
+			this.#masterSwitchProvider !== null &&
+			this.#masterSwitchProvider !== undefined &&
+			this.#masterSwitchProvider !== ""
+		) {
 			const providerName = filtered[0]?.source.providerName ?? this.#masterSwitchProvider;
 			const enabled = isProviderEnabled(this.#masterSwitchProvider);
 
@@ -453,14 +457,13 @@ export class ExtensionList implements Component {
 
 		// Printable characters -> search
 		const printableText = extractPrintableText(data);
-		if (printableText && printableText.length === 1) {
+		if (printableText !== null && printableText !== undefined && printableText !== "" && printableText.length === 1) {
 			const printableCharCode = printableText.charCodeAt(0);
 			if (printableCharCode > 32 && printableCharCode < 127) {
 				if (printableText === "j" || printableText === "k") {
 					return;
 				}
 				this.setSearchQuery(this.#searchQuery + printableText);
-				return;
 			}
 		}
 	}

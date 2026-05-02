@@ -36,7 +36,7 @@ export function parseUpdateArgs(args: string[]): { force: boolean; check: boolea
 }
 
 async function getBunGlobalBinDir(): Promise<string | undefined> {
-	if (!$which("bun")) return undefined;
+	if ($which("bun") === undefined || $which("bun") === "") return undefined;
 	try {
 		const result = await $`bun pm bin -g`.quiet().nothrow();
 		if (result.exitCode !== 0) return undefined;
@@ -79,7 +79,15 @@ function isPathInDirectory(filePath: string, directoryPath: string): boolean {
 	// equality once the directory exists.
 	const fileDir = tryRealpath(path.dirname(path.resolve(filePath)));
 	const dirReal = tryRealpath(path.resolve(directoryPath));
-	if (!fileDir || !dirReal) return false;
+	if (
+		fileDir === null ||
+		fileDir === undefined ||
+		fileDir === "" ||
+		dirReal === null ||
+		dirReal === undefined ||
+		dirReal === ""
+	)
+		return false;
 	const resolvedFile = path.join(fileDir, path.basename(filePath));
 	return isPathInDirectoryLexical(resolvedFile, dirReal);
 }
@@ -87,7 +95,7 @@ function isPathInDirectory(filePath: string, directoryPath: string): boolean {
 type UpdateTarget = { method: "bun" } | { method: "binary"; path: string };
 
 function resolveUpdateMethod(ompPath: string, bunBinDir: string | undefined): "bun" | "binary" {
-	if (!bunBinDir) return "binary";
+	if (bunBinDir === null || bunBinDir === undefined || bunBinDir === "") return "binary";
 	return isPathInDirectory(ompPath, bunBinDir) ? "bun" : "binary";
 }
 
@@ -98,13 +106,13 @@ async function resolveUpdateTarget(): Promise<UpdateTarget> {
 	const bunBinDir = await getBunGlobalBinDir();
 	const ompPath = resolveOmpPath();
 
-	if (ompPath) {
+	if (ompPath !== null && ompPath !== undefined && ompPath !== "") {
 		const method = resolveUpdateMethod(ompPath, bunBinDir);
 		if (method === "bun") return { method };
 		return { method, path: ompPath };
 	}
 
-	if (bunBinDir) return { method: "bun" };
+	if (bunBinDir !== null && bunBinDir !== undefined && bunBinDir !== "") return { method: "bun" };
 
 	throw new Error(`Could not resolve ${APP_NAME} binary path in PATH`);
 }
@@ -201,7 +209,7 @@ async function verifyInstalledVersion(
 	expectedVersion: string,
 ): Promise<{ ok: boolean; actual?: string; path?: string }> {
 	const ompPath = resolveOmpPath();
-	if (!ompPath) return { ok: false };
+	if (ompPath === null || ompPath === undefined || ompPath === "") return { ok: false };
 	try {
 		const result = await $`${ompPath} --version`.quiet().nothrow();
 		if (result.exitCode !== 0) return { ok: false, path: ompPath };
@@ -224,7 +232,7 @@ async function printVerification(expectedVersion: string): Promise<void> {
 		console.log(chalk.green(`\n${theme.status.success} Updated to ${expectedVersion}`));
 		return;
 	}
-	if (result.actual) {
+	if (result.actual !== null && result.actual !== undefined && result.actual !== "") {
 		console.log(
 			chalk.yellow(
 				`\nWarning: ${APP_NAME} at ${result.path} still reports ${result.actual} (expected ${expectedVersion})`,
@@ -232,7 +240,9 @@ async function printVerification(expectedVersion: string): Promise<void> {
 		);
 	} else {
 		console.log(
-			chalk.yellow(`\nWarning: could not verify updated version${result.path ? ` at ${result.path}` : ""}`),
+			chalk.yellow(
+				`\nWarning: could not verify updated version${result.path !== null && result.path !== undefined && result.path !== "" ? ` at ${result.path}` : ""}`,
+			),
 		);
 	}
 	console.log(
@@ -278,8 +288,8 @@ async function updateViaBinaryAt(targetPath: string, expectedVersion: string): P
 	try {
 		try {
 			await fs.promises.unlink(backupPath);
-		} catch (err) {
-			if (!isEnoent(err)) throw err;
+		} catch (error) {
+			if (!isEnoent(error)) throw error;
 		}
 		await fs.promises.rename(targetPath, backupPath);
 		await fs.promises.rename(tempPath, targetPath);
@@ -287,14 +297,14 @@ async function updateViaBinaryAt(targetPath: string, expectedVersion: string): P
 
 		await printVerification(expectedVersion);
 		console.log(chalk.dim(`Restart ${APP_NAME} to use the new version`));
-	} catch (err) {
+	} catch (error) {
 		if (fs.existsSync(backupPath) && !fs.existsSync(targetPath)) {
 			await fs.promises.rename(backupPath, targetPath);
 		}
 		if (fs.existsSync(tempPath)) {
 			await fs.promises.unlink(tempPath);
 		}
-		throw err;
+		throw error;
 	}
 }
 
@@ -308,8 +318,8 @@ export async function runUpdateCommand(opts: { force: boolean; check: boolean })
 	let release: ReleaseInfo;
 	try {
 		release = await getLatestRelease();
-	} catch (err) {
-		console.error(chalk.red(`Failed to check for updates: ${err}`));
+	} catch (error) {
+		console.error(chalk.red(`Failed to check for updates: ${String(error)}`));
 		process.exit(1);
 	}
 
@@ -339,8 +349,8 @@ export async function runUpdateCommand(opts: { force: boolean; check: boolean })
 		} else {
 			await updateViaBinaryAt(target.path, release.version);
 		}
-	} catch (err) {
-		console.error(chalk.red(`Update failed: ${err}`));
+	} catch (error) {
+		console.error(chalk.red(`Update failed: ${String(error)}`));
 		process.exit(1);
 	}
 }

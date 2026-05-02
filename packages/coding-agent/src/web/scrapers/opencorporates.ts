@@ -143,28 +143,45 @@ export const handleOpenCorporates: SpecialHandler = async (
 		md += "| Field | Value |\n|-------|-------|\n";
 		md += `| **Company Number** | ${company.company_number} |\n`;
 		md += `| **Jurisdiction** | ${company.jurisdiction_code.toUpperCase()} |\n`;
-		if (company.current_status) {
+		if (company.current_status !== null && company.current_status !== undefined && company.current_status !== "") {
 			md += `| **Status** | ${company.current_status} |\n`;
 		}
-		if (company.company_type) {
+		if (company.company_type !== null && company.company_type !== undefined && company.company_type !== "") {
 			md += `| **Company Type** | ${company.company_type} |\n`;
 		}
-		if (company.incorporation_date) {
+		if (
+			company.incorporation_date !== null &&
+			company.incorporation_date !== undefined &&
+			company.incorporation_date !== ""
+		) {
 			md += `| **Incorporated** | ${company.incorporation_date} |\n`;
 		}
-		if (company.dissolution_date) {
+		if (
+			company.dissolution_date !== null &&
+			company.dissolution_date !== undefined &&
+			company.dissolution_date !== ""
+		) {
 			md += `| **Dissolved** | ${company.dissolution_date} |\n`;
 		}
-		if (company.branch) {
-			md += `| **Branch** | ${company.branch}${company.branch_status ? ` (${company.branch_status})` : ""} |\n`;
+		if (company.branch !== null && company.branch !== undefined && company.branch !== "") {
+			md += `| **Branch** | ${company.branch}${company.branch_status !== null && company.branch_status !== undefined && company.branch_status !== "" ? ` (${company.branch_status})` : ""} |\n`;
 		}
-		if (company.native_company_number && company.native_company_number !== company.company_number) {
+		if (
+			company.native_company_number !== null &&
+			company.native_company_number !== undefined &&
+			company.native_company_number !== "" &&
+			company.native_company_number !== company.company_number
+		) {
 			md += `| **Native Number** | ${company.native_company_number} |\n`;
 		}
 		md += "\n";
 
 		// Registered address
-		if (company.registered_address_in_full) {
+		if (
+			company.registered_address_in_full !== null &&
+			company.registered_address_in_full !== undefined &&
+			company.registered_address_in_full !== ""
+		) {
 			md += `## Registered Address\n\n${company.registered_address_in_full}\n\n`;
 		} else if (company.registered_address) {
 			const addr = company.registered_address;
@@ -177,9 +194,9 @@ export const handleOpenCorporates: SpecialHandler = async (
 		}
 
 		// Agent info
-		if (company.agent_name) {
+		if (company.agent_name !== null && company.agent_name !== undefined && company.agent_name !== "") {
 			md += `## Registered Agent\n\n**${company.agent_name}**`;
-			if (company.agent_address) {
+			if (company.agent_address !== null && company.agent_address !== undefined && company.agent_address !== "") {
 				md += `\n${company.agent_address}`;
 			}
 			md += "\n\n";
@@ -187,17 +204,25 @@ export const handleOpenCorporates: SpecialHandler = async (
 
 		// Officers/Directors
 		if (company.officers && company.officers.length > 0) {
-			const activeOfficers = company.officers.filter(o => !o.officer.inactive && !o.officer.end_date);
-			const inactiveOfficers = company.officers.filter(o => o.officer.inactive || o.officer.end_date);
+			const activeOfficers = company.officers.filter(
+				o =>
+					o.officer.inactive !== true &&
+					(o.officer.end_date === null || o.officer.end_date === undefined || o.officer.end_date === ""),
+			);
+			const inactiveOfficers = company.officers.filter(o => o.officer.inactive ?? o.officer.end_date);
 
 			if (activeOfficers.length > 0) {
 				md += `## Current Officers (${activeOfficers.length})\n\n`;
 				for (const { officer } of activeOfficers) {
 					md += `- **${officer.name}**`;
-					if (officer.position) md += ` - ${officer.position}`;
-					if (officer.start_date) md += ` (since ${officer.start_date})`;
-					if (officer.occupation) md += ` [${officer.occupation}]`;
-					if (officer.nationality) md += ` (${officer.nationality})`;
+					if (officer.position !== null && officer.position !== undefined && officer.position !== "")
+						md += ` - ${officer.position}`;
+					if (officer.start_date !== null && officer.start_date !== undefined && officer.start_date !== "")
+						md += ` (since ${officer.start_date})`;
+					if (officer.occupation !== null && officer.occupation !== undefined && officer.occupation !== "")
+						md += ` [${officer.occupation}]`;
+					if (officer.nationality !== null && officer.nationality !== undefined && officer.nationality !== "")
+						md += ` (${officer.nationality})`;
 					md += "\n";
 				}
 				md += "\n";
@@ -207,10 +232,18 @@ export const handleOpenCorporates: SpecialHandler = async (
 				md += `## Former Officers (${inactiveOfficers.length})\n\n`;
 				for (const { officer } of inactiveOfficers.slice(0, 10)) {
 					md += `- **${officer.name}**`;
-					if (officer.position) md += ` - ${officer.position}`;
-					if (officer.start_date && officer.end_date) {
+					if (officer.position !== null && officer.position !== undefined && officer.position !== "")
+						md += ` - ${officer.position}`;
+					if (
+						officer.start_date !== null &&
+						officer.start_date !== undefined &&
+						officer.start_date !== "" &&
+						officer.end_date !== null &&
+						officer.end_date !== undefined &&
+						officer.end_date !== ""
+					) {
 						md += ` (${officer.start_date} to ${officer.end_date})`;
-					} else if (officer.end_date) {
+					} else if (officer.end_date !== null && officer.end_date !== undefined && officer.end_date !== "") {
 						md += ` (until ${officer.end_date})`;
 					}
 					md += "\n";
@@ -227,8 +260,10 @@ export const handleOpenCorporates: SpecialHandler = async (
 			md += `## Industry Codes\n\n`;
 			for (const ic of company.industry_codes) {
 				md += `- **${ic.code}**`;
-				if (ic.description) md += `: ${ic.description}`;
-				if (ic.code_scheme_name) md += ` (${ic.code_scheme_name})`;
+				if (ic.description !== null && ic.description !== undefined && ic.description !== "")
+					md += `: ${ic.description}`;
+				if (ic.code_scheme_name !== null && ic.code_scheme_name !== undefined && ic.code_scheme_name !== "")
+					md += ` (${ic.code_scheme_name})`;
 				md += "\n";
 			}
 			md += "\n";
@@ -238,7 +273,7 @@ export const handleOpenCorporates: SpecialHandler = async (
 		if (company.identifiers && company.identifiers.length > 0) {
 			md += `## Identifiers\n\n`;
 			for (const id of company.identifiers) {
-				md += `- **${id.identifier_system_name || id.identifier_system_code}**: ${id.identifier_uid}\n`;
+				md += `- **${id.identifier_system_name ?? id.identifier_system_code}**: ${id.identifier_uid}\n`;
 			}
 			md += "\n";
 		}
@@ -248,7 +283,8 @@ export const handleOpenCorporates: SpecialHandler = async (
 			md += `## Previous Names\n\n`;
 			for (const pn of company.previous_names) {
 				md += `- ${pn.company_name}`;
-				if (pn.con_date) md += ` (until ${pn.con_date})`;
+				if (pn.con_date !== null && pn.con_date !== undefined && pn.con_date !== "")
+					md += ` (until ${pn.con_date})`;
 				md += "\n";
 			}
 			md += "\n";
@@ -259,7 +295,7 @@ export const handleOpenCorporates: SpecialHandler = async (
 			md += `## Alternative Names\n\n`;
 			for (const an of company.alternative_names) {
 				md += `- ${an.company_name}`;
-				if (an.type) md += ` (${an.type})`;
+				if (an.type !== null && an.type !== undefined && an.type !== "") md += ` (${an.type})`;
 				md += "\n";
 			}
 			md += "\n";
@@ -267,21 +303,26 @@ export const handleOpenCorporates: SpecialHandler = async (
 
 		// Source info
 		md += "---\n\n";
-		if (company.source?.publisher) {
+		if (
+			company.source?.publisher !== null &&
+			company.source?.publisher !== undefined &&
+			company.source?.publisher !== ""
+		) {
 			md += `**Source:** ${company.source.publisher}`;
-			if (company.source.url) md += ` ([registry](${company.source.url}))`;
+			if (company.source.url !== null && company.source.url !== undefined && company.source.url !== "")
+				md += ` ([registry](${company.source.url}))`;
 			md += "\n";
 		}
-		if (company.registry_url) {
+		if (company.registry_url !== null && company.registry_url !== undefined && company.registry_url !== "") {
 			md += `**Official Registry:** ${company.registry_url}\n`;
 		}
-		if (company.retrieved_at) {
+		if (company.retrieved_at !== null && company.retrieved_at !== undefined && company.retrieved_at !== "") {
 			md += `**Data Retrieved:** ${company.retrieved_at}\n`;
 		}
 
 		return buildResult(md, {
 			url,
-			finalUrl: company.opencorporates_url || url,
+			finalUrl: company.opencorporates_url ?? url,
 			method: "opencorporates",
 			fetchedAt,
 			notes: ["Fetched via OpenCorporates API"],

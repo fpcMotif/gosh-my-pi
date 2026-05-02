@@ -24,7 +24,7 @@ describe("applyPatch adversarial inputs", () => {
 		const filePath = path.join(tempDir, "same.txt");
 		await Bun.write(filePath, "foo\n");
 
-		await expect(
+		expect(
 			applyPatch({ path: "same.txt", op: "update", rename: "same.txt", diff: "@@\n-foo\n+bar" }, { cwd: tempDir }),
 		).rejects.toThrow(ApplyPatchError);
 
@@ -53,7 +53,7 @@ describe("applyPatch adversarial inputs", () => {
 		const filePath = path.join(tempDir, "single.txt");
 		await Bun.write(filePath, "foo\nbar\n");
 
-		await expect(
+		expect(
 			applyPatch(
 				{
 					path: "single.txt",
@@ -101,7 +101,7 @@ describe("applyPatch adversarial inputs", () => {
 		const filePath = path.join(tempDir, "ambiguous-context.ts");
 		await Bun.write(filePath, "if (a) {\n  return foo;\n}\nif (b) {\n  return foo;\n}\n");
 
-		await expect(
+		expect(
 			applyPatch(
 				{
 					path: "ambiguous-context.ts",
@@ -117,7 +117,7 @@ describe("applyPatch adversarial inputs", () => {
 		const filePath = path.join(tempDir, "ambiguous-prefix.ts");
 		await Bun.write(filePath, "const enabled = true;\nconst enabled = true; // secondary\n");
 
-		await expect(
+		expect(
 			applyPatch(
 				{
 					path: "ambiguous-prefix.ts",
@@ -133,7 +133,7 @@ describe("applyPatch adversarial inputs", () => {
 		const filePath = path.join(tempDir, "line-hint.txt");
 		await Bun.write(filePath, "a\nb\n");
 
-		await expect(
+		expect(
 			applyPatch(
 				{
 					path: "line-hint.txt",

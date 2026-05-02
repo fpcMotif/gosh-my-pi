@@ -23,7 +23,7 @@ export function formatDebugLogExpandedLines(line: string, maxWidth: number): str
 export function parseDebugLogTimestampMs(line: string): number | undefined {
 	try {
 		const parsed: unknown = JSON.parse(line);
-		if (!parsed || typeof parsed !== "object") {
+		if (parsed === null || parsed === undefined || typeof parsed !== "object") {
 			return undefined;
 		}
 
@@ -42,7 +42,7 @@ export function parseDebugLogTimestampMs(line: string): number | undefined {
 export function parseDebugLogPid(line: string): number | undefined {
 	try {
 		const parsed: unknown = JSON.parse(line);
-		if (!parsed || typeof parsed !== "object") {
+		if (parsed === null || parsed === undefined || typeof parsed !== "object") {
 			return undefined;
 		}
 

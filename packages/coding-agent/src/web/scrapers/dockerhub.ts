@@ -86,7 +86,7 @@ export const handleDockerHub: SpecialHandler = async (
 		const fullName = namespace === "library" ? repo.name : `${namespace}/${repo.name}`;
 		let md = `# ${fullName}\n\n`;
 
-		if (repo.description) {
+		if (repo.description !== null && repo.description !== undefined && repo.description !== "") {
 			md += `${repo.description}\n\n`;
 		}
 
@@ -94,13 +94,13 @@ export const handleDockerHub: SpecialHandler = async (
 		const stats: string[] = [];
 		if (repo.pull_count !== undefined) stats.push(`**Pulls:** ${formatNumber(repo.pull_count)}`);
 		if (repo.star_count !== undefined) stats.push(`**Stars:** ${formatNumber(repo.star_count)}`);
-		if (repo.is_official) stats.push("**Official Image**");
-		if (repo.is_automated) stats.push("**Automated Build**");
+		if (repo.is_official === true) stats.push("**Official Image**");
+		if (repo.is_automated === true) stats.push("**Automated Build**");
 		if (stats.length > 0) {
 			md += `${stats.join(" · ")}\n`;
 		}
 
-		if (repo.last_updated) {
+		if (repo.last_updated !== null && repo.last_updated !== undefined && repo.last_updated !== "") {
 			md += `**Last Updated:** ${formatIsoDate(repo.last_updated)}\n`;
 		}
 

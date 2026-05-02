@@ -4,7 +4,7 @@ import { initTheme } from "../../../src/modes/theme/theme";
 import type { SessionInfo } from "../../../src/session/session-manager";
 
 beforeAll(() => {
-	initTheme();
+	void initTheme();
 });
 
 afterEach(() => {

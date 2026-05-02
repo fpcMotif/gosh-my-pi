@@ -19,7 +19,7 @@ const ReportToolIssueParams = Type.Object({
 });
 
 export function isAutoQaEnabled(settings?: Settings): boolean {
-	return $flag("PI_AUTO_QA") || !!settings?.get("dev.autoqa");
+	return $flag("PI_AUTO_QA") || settings?.get("dev.autoqa") === true;
 }
 
 export function getAutoQaDbPath(): string {

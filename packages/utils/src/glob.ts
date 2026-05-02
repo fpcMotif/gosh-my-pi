@@ -71,19 +71,10 @@ function parseGitignorePatterns(content: string, gitignoreDir: string, baseDir: 
 				patterns.push(pattern);
 			}
 		} else {
-			// Unrooted pattern: match anywhere in the tree
-			if (pattern.includes("/")) {
-				// Contains slash: match from any directory level
-				patterns.push(`**/${pattern}`);
-				if (isDirectoryOnly) {
-					patterns.push(`**/${pattern}/**`);
-				}
-			} else {
-				// No slash: match file/dir name anywhere
-				patterns.push(`**/${pattern}`);
-				if (isDirectoryOnly) {
-					patterns.push(`**/${pattern}/**`);
-				}
+			// Unrooted pattern: match anywhere in the tree (slash or no slash, same handling)
+			patterns.push(`**/${pattern}`);
+			if (isDirectoryOnly) {
+				patterns.push(`**/${pattern}/**`);
 			}
 		}
 	}
@@ -100,28 +91,29 @@ export async function loadGitignorePatterns(baseDir: string): Promise<string[]> 
 	const patterns: string[] = [];
 	const absoluteBase = path.resolve(baseDir);
 
-	let current = absoluteBase;
 	const maxDepth = 50; // Prevent infinite loops
-
-	for (let i = 0; i < maxDepth; i++) {
-		const gitignorePath = path.join(current, ".gitignore");
-
-		try {
-			const content = await Bun.file(gitignorePath).text();
-			const filePatterns = parseGitignorePatterns(content, current, absoluteBase);
-			patterns.push(...filePatterns);
-		} catch {
-			// .gitignore doesn't exist or can't be read, continue
+	const dirChain: string[] = [];
+	{
+		let current = absoluteBase;
+		for (let i = 0; i < maxDepth; i++) {
+			dirChain.push(current);
+			const parent = path.dirname(current);
+			if (parent === current) break;
+			current = parent;
 		}
-
-		const parent = path.dirname(current);
-		if (parent === current) {
-			// Reached filesystem root
-			break;
-		}
-		current = parent;
 	}
 
+	const reads = await Promise.all(
+		dirChain.map(async dir => {
+			try {
+				const content = await Bun.file(path.join(dir, ".gitignore")).text();
+				return parseGitignorePatterns(content, dir, absoluteBase);
+			} catch {
+				return [] as string[];
+			}
+		}),
+	);
+	for (const filePatterns of reads) patterns.push(...filePatterns);
 	return patterns;
 }
 
@@ -130,60 +122,66 @@ export async function loadGitignorePatterns(baseDir: string): Promise<string[]> 
  * Returns paths relative to the provided cwd (or getProjectDir()).
  * Errors and abort/timeouts are surfaced to the caller.
  */
-export async function globPaths(patterns: string | string[], options: GlobPathsOptions = {}): Promise<string[]> {
-	const { cwd, exclude, signal, timeoutMs, dot, onlyFiles = true, gitignore } = options;
-
-	// Build exclude list: always exclude .git, exclude node_modules unless pattern references it
-	const patternArray = Array.isArray(patterns) ? patterns : [patterns];
+async function buildEffectiveExclude(options: GlobPathsOptions, patternArray: string[]): Promise<string[]> {
+	const { cwd, exclude, gitignore } = options;
 	const mentionsNodeModules = patternArray.some(p => p.includes("node_modules"));
-
 	const baseExclude = mentionsNodeModules ? [...ALWAYS_IGNORED] : [...ALWAYS_IGNORED, ...NODE_MODULES_IGNORED];
-	let effectiveExclude = exclude ? [...baseExclude, ...exclude] : baseExclude;
-
-	if (gitignore) {
+	let effective = exclude === undefined ? baseExclude : [...baseExclude, ...exclude];
+	if (gitignore === true) {
 		const gitignorePatterns = await loadGitignorePatterns(cwd ?? getProjectDir());
-		effectiveExclude = [...effectiveExclude, ...gitignorePatterns];
+		effective = [...effective, ...gitignorePatterns];
 	}
+	return effective;
+}
 
+function combineSignals(signal: AbortSignal | undefined, timeoutMs: number | undefined): AbortSignal | undefined {
+	const timeoutSignal = timeoutMs !== undefined && timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined;
+	if (signal !== undefined && timeoutSignal !== undefined) return AbortSignal.any([signal, timeoutSignal]);
+	return signal ?? timeoutSignal;
+}
+
+function isExcluded(normalized: string, excludePatterns: string[]): boolean {
+	for (const excludePattern of excludePatterns) {
+		if (new Glob(excludePattern).match(normalized)) return true;
+	}
+	return false;
+}
+
+function checkAborted(combinedSignal: AbortSignal | undefined): void {
+	if (combinedSignal?.aborted !== true) return;
+	const reason = combinedSignal.reason;
+	if (reason instanceof Error) throw reason;
+	throw new DOMException("Aborted", "AbortError");
+}
+
+async function scanPattern(
+	pattern: string,
+	base: string,
+	dot: boolean | undefined,
+	onlyFiles: boolean,
+	excludePatterns: string[],
+	combinedSignal: AbortSignal | undefined,
+): Promise<string[]> {
+	const glob = new Glob(pattern);
+	const scanOptions = { cwd: base, dot, onlyFiles, throwErrorOnBrokenSymlink: false };
+	const out: string[] = [];
+	for await (const entry of glob.scan(scanOptions)) {
+		checkAborted(combinedSignal);
+		const normalized = entry.replace(/\\/g, "/");
+		if (!isExcluded(normalized, excludePatterns)) out.push(normalized);
+	}
+	return out;
+}
+
+export async function globPaths(patterns: string | string[], options: GlobPathsOptions = {}): Promise<string[]> {
+	const { cwd, signal, timeoutMs, dot, onlyFiles = true } = options;
+	const patternArray = Array.isArray(patterns) ? patterns : [patterns];
+	const effectiveExclude = await buildEffectiveExclude(options, patternArray);
 	const base = cwd ?? getProjectDir();
-	const allResults: string[] = [];
+	const combinedSignal = combineSignals(signal, timeoutMs);
 
-	// Combine timeout and abort signals
-	const timeoutSignal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined;
-	const combinedSignal =
-		signal && timeoutSignal ? AbortSignal.any([signal, timeoutSignal]) : (signal ?? timeoutSignal);
-
-	for (const pattern of patternArray) {
-		const glob = new Glob(pattern);
-		const scanOptions = {
-			cwd: base,
-			dot,
-			onlyFiles,
-			throwErrorOnBrokenSymlink: false,
-		};
-
-		for await (const entry of glob.scan(scanOptions)) {
-			if (combinedSignal?.aborted) {
-				const reason = combinedSignal.reason;
-				if (reason instanceof Error) throw reason;
-				throw new DOMException("Aborted", "AbortError");
-			}
-
-			// Check exclusion patterns
-			const normalized = entry.replace(/\\/g, "/");
-			let excluded = false;
-			for (const excludePattern of effectiveExclude) {
-				const excludeGlob = new Glob(excludePattern);
-				if (excludeGlob.match(normalized)) {
-					excluded = true;
-					break;
-				}
-			}
-			if (!excluded) {
-				allResults.push(normalized);
-			}
-		}
-	}
-
-	return allResults;
+	const groups = await Promise.all(
+		patternArray.map(p => scanPattern(p, base, dot, onlyFiles, effectiveExclude, combinedSignal)),
+	);
+	return groups.flat();
 }

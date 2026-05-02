@@ -58,8 +58,8 @@ function parseMessage(
 
 async function writeMessage(sink: DapWriteSink, message: DapRequestMessage | DapResponseMessage): Promise<void> {
 	const content = JSON.stringify(message);
-	sink.write(`Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n`);
-	sink.write(content);
+	void sink.write(`Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n`);
+	void sink.write(content);
 	await sink.flush();
 }
 
@@ -122,7 +122,7 @@ export class DapClient {
 			detached: true,
 		});
 		const client = new DapClient(adapter, cwd, proc);
-		proc.exited.then(() => {
+		void proc.exited.then(() => {
 			client.#handleProcessExit();
 		});
 		void client.#startMessageReader();
@@ -181,7 +181,7 @@ export class DapClient {
 
 		const { readable, writeSink, socket } = await connectSocket({ unix: socketPath });
 		const client = new DapClient(adapter, cwd, proc, { readable, writeSink, socket });
-		proc.exited.then(() => client.#handleProcessExit());
+		void proc.exited.then(() => client.#handleProcessExit());
 		void client.#startMessageReader();
 		return client;
 	}
@@ -236,7 +236,7 @@ export class DapClient {
 
 		const { readable, writeSink, socket } = wrapBunSocket(rawSocket);
 		const client = new DapClient(adapter, cwd, proc, { readable, writeSink, socket });
-		proc.exited.then(() => client.#handleProcessExit());
+		void proc.exited.then(() => client.#handleProcessExit());
 		void client.#startMessageReader();
 		return client;
 	}
@@ -293,7 +293,7 @@ export class DapClient {
 		signal?: AbortSignal,
 		timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
 	): Promise<TBody> {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			throw signal.reason instanceof Error ? signal.reason : new ToolAbortError();
 		}
 		const { promise, resolve, reject } = Promise.withResolvers<TBody>();
@@ -333,7 +333,7 @@ export class DapClient {
 		signal?: AbortSignal,
 		timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
 	): Promise<TBody> {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			throw signal.reason instanceof Error ? signal.reason : new ToolAbortError();
 		}
 		if (this.#disposed) {
@@ -397,7 +397,7 @@ export class DapClient {
 			request_seq: request.seq,
 			success,
 			command: request.command,
-			...(message ? { message } : {}),
+			...(message !== null && message !== undefined && message !== "" ? { message } : {}),
 			...(body !== undefined ? { body } : {}),
 		};
 		await writeMessage(this.#writeSink, response);
@@ -599,7 +599,7 @@ async function connectSocket(options: { unix: string }): Promise<SocketTransport
 		},
 	});
 
-	Bun.connect({
+	void Bun.connect({
 		unix: options.unix,
 		socket: {
 			open(socket) {

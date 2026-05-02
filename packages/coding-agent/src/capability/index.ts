@@ -107,9 +107,10 @@ async function loadImpl<T>(
 	const allItems: Array<T & { _source: SourceMeta; _shadowed?: boolean }> = [];
 	const allWarnings: string[] = [];
 	const contributingProviders: string[] = [];
-	const disabledExtensionIds = options.includeDisabled
-		? new Set<string>()
-		: new Set<string>(options.disabledExtensions ?? settings?.get("disabledExtensions") ?? []);
+	const disabledExtensionIds =
+		options.includeDisabled === true
+			? new Set<string>()
+			: new Set<string>(options.disabledExtensions ?? settings?.get("disabledExtensions") ?? []);
 
 	const results = await Promise.all(
 		providers.map(async provider => {
@@ -130,7 +131,7 @@ async function loadImpl<T>(
 	for (const entry of results) {
 		const { provider } = entry;
 		if ("error" in entry) {
-			allWarnings.push(`[${provider.displayName}] Failed to load: ${entry.error}`);
+			allWarnings.push(`[${provider.displayName}] Failed to load: ${String(entry.error)}`);
 			continue;
 		}
 
@@ -150,7 +151,12 @@ async function loadImpl<T>(
 			}
 
 			const extensionId = capability.toExtensionId?.(itemWithSource);
-			if (extensionId && disabledExtensionIds.has(extensionId)) {
+			if (
+				extensionId !== null &&
+				extensionId !== undefined &&
+				extensionId !== "" &&
+				disabledExtensionIds.has(extensionId)
+			) {
 				continue;
 			}
 
@@ -183,10 +189,10 @@ async function loadImpl<T>(
 	}
 
 	// Validate items (only non-shadowed items)
-	if (capability.validate && !options.includeInvalid) {
+	if (capability.validate && options.includeInvalid !== true) {
 		for (let i = deduped.length - 1; i >= 0; i--) {
 			const error = capability.validate(deduped[i]);
-			if (error) {
+			if (error !== null && error !== undefined && error !== "") {
 				const source = deduped[i]._source;
 				allWarnings.push(
 					`[${source?.providerName ?? "unknown"}] Invalid item at ${source?.path ?? "unknown"}: ${error}`,
@@ -418,7 +424,7 @@ export function reset(): void {
  * @param filePath - Absolute or relative path to invalidate
  */
 export function invalidate(filePath: string, cwd?: string): void {
-	const resolved = cwd ? path.resolve(cwd, filePath) : filePath;
+	const resolved = cwd !== null && cwd !== undefined && cwd !== "" ? path.resolve(cwd, filePath) : filePath;
 	invalidateFs(resolved);
 }
 

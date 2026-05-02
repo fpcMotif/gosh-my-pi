@@ -2512,8 +2512,8 @@ describe("openai-codex streaming", () => {
 			#listeners = new Map<string, Set<WsListener>>();
 
 			constructor(
-				public readonly url: string,
-				public readonly options?: { headers?: Record<string, string> },
+				readonly url: string,
+				readonly options?: { headers?: Record<string, string> },
 			) {
 				constructorCount += 1;
 				setTimeout(() => {

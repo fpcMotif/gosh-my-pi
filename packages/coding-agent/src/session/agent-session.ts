@@ -138,7 +138,7 @@ import type { CheckpointState } from "../tools/checkpoint";
 import { outputMeta } from "../tools/output-meta";
 import { normalizeLocalScheme, resolveToCwd } from "../tools/path-utils";
 import { isAutoQaEnabled } from "../tools/report-tool-issue";
-import { getLatestTodoPhasesFromEntries, type TodoItem, type TodoPhase } from "../tools/todo-write";
+import type { TodoItem, TodoPhase } from "../tools/todo-write";
 import { ToolError } from "../tools/tool-errors";
 import { clampTimeout } from "../tools/tool-timeouts";
 import { parseCommandArgs } from "../utils/command-args";
@@ -166,6 +166,14 @@ import {
 	type FileMentionMessage,
 	type PythonExecutionMessage,
 } from "./messages";
+import { PendingSessionMessages } from "./pending-session-messages";
+import {
+	type ActiveRetryFallbackState,
+	formatRetryFallbackSelector,
+	parseRetryFallbackSelector,
+	RetryFallbackPolicy,
+	type RetryFallbackSelector,
+} from "./retry-fallback-policy";
 import { formatSessionDumpText } from "./session-dump-format";
 import type {
 	BranchSummaryEntry,
@@ -176,6 +184,7 @@ import type {
 } from "./session-manager";
 import { getLatestCompactionEntry } from "./session-manager";
 import { ToolChoiceQueue } from "./tool-choice-queue";
+import { TodoPhaseState } from "./todo-phase-state";
 
 /** Session-specific events that extend the core AgentEvent */
 export type AgentSessionEvent =
@@ -345,51 +354,6 @@ interface HandoffOptions {
 
 const AUTO_HANDOFF_THRESHOLD_FOCUS = prompt.render(autoHandoffThresholdFocusPrompt);
 
-type RetryFallbackChains = Record<string, string[]>;
-
-type RetryFallbackRevertPolicy = "never" | "cooldown-expiry";
-
-interface RetryFallbackSelector {
-	raw: string;
-	provider: string;
-	id: string;
-	thinkingLevel: ThinkingLevel | undefined;
-}
-
-interface ActiveRetryFallbackState {
-	role: string;
-	originalSelector: string;
-	originalThinkingLevel: ThinkingLevel | undefined;
-	lastAppliedFallbackThinkingLevel: ThinkingLevel | undefined;
-}
-
-function parseRetryFallbackSelector(selector: string): RetryFallbackSelector | undefined {
-	const trimmed = selector.trim();
-	if (!trimmed) return undefined;
-	const parsed = parseModelString(trimmed);
-	if (!parsed) return undefined;
-	return {
-		raw: trimmed,
-		provider: parsed.provider,
-		id: parsed.id,
-		thinkingLevel: parsed.thinkingLevel,
-	};
-}
-
-function formatRetryFallbackSelector(model: Model, thinkingLevel: ThinkingLevel | undefined): string {
-	const selector = formatModelString(model);
-	return thinkingLevel ? `${selector}:${thinkingLevel}` : selector;
-}
-
-function formatRetryFallbackBaseSelector(selector: RetryFallbackSelector): string {
-	return `${selector.provider}/${selector.id}`;
-}
-
-/** Composite key for auto-clear timers, keyed by phase name + task content. */
-function todoClearKey(phaseName: string, taskContent: string): string {
-	return `${phaseName}\u0000${taskContent}`;
-}
-
 const noOpUIContext: ExtensionUIContext = {
 	select: async (_title, _options, _dialogOptions) => undefined,
 	confirm: async (_title, _message, _dialogOptions) => false,
@@ -441,13 +405,7 @@ export class AgentSession {
 	#unsubscribeAgent?: () => void;
 	#eventListeners: AgentSessionEventListener[] = [];
 
-	/** Tracks pending steering messages for UI display. Removed when delivered. */
-	#steeringMessages: string[] = [];
-	/** Tracks pending follow-up messages for UI display. Removed when delivered. */
-	#followUpMessages: string[] = [];
-	/** Messages queued to be included with the next user prompt as context ("asides"). */
-	#pendingNextTurnMessages: CustomMessage[] = [];
-	#scheduledHiddenNextTurnGeneration: number | undefined = undefined;
+	#pendingMessages = new PendingSessionMessages();
 	#planModeState: PlanModeState | undefined;
 	#planReferenceSent = false;
 	#planReferencePath = "local://PLAN.md";
@@ -469,10 +427,10 @@ export class AgentSession {
 	#retryPromise: Promise<void> | undefined = undefined;
 	#retryResolve: (() => void) | undefined = undefined;
 	#activeRetryFallback: ActiveRetryFallbackState | undefined = undefined;
+	#retryFallbackPolicy: RetryFallbackPolicy;
 	// Todo completion reminder state
 	#todoReminderCount = 0;
-	#todoPhases: TodoPhase[] = [];
-	#todoClearTimers = new Map<string, Timer>();
+	#todoPhaseState: TodoPhaseState;
 	#toolChoiceQueue = new ToolChoiceQueue();
 
 	// Bash execution state
@@ -596,7 +554,15 @@ export class AgentSession {
 		this.#customCommands = config.customCommands ?? [];
 		this.#skillsSettings = config.skillsSettings;
 		this.#modelRegistry = config.modelRegistry;
-		this.#validateRetryFallbackChains();
+		this.#retryFallbackPolicy = new RetryFallbackPolicy({
+			settings: this.settings,
+			modelRegistry: this.#modelRegistry,
+		});
+		this.configWarnings.push(...this.#retryFallbackPolicy.validateChains());
+		this.#todoPhaseState = new TodoPhaseState({
+			getClearDelaySec: () => this.settings.get("tasks.todoClearDelay"),
+			onAutoClear: () => this.#emit({ type: "todo_auto_clear" }),
+		});
 		this.#toolRegistry = config.toolRegistry ?? new Map();
 		this.#transformContext = config.transformContext ?? (messages => messages);
 		this.#onPayload = config.onPayload;
@@ -765,17 +731,7 @@ export class AgentSession {
 		if (event.type === "message_start" && event.message.role === "user") {
 			const messageText = this.#getUserMessageText(event.message);
 			if (messageText) {
-				// Check steering queue first
-				const steeringIndex = this.#steeringMessages.indexOf(messageText);
-				if (steeringIndex !== -1) {
-					this.#steeringMessages.splice(steeringIndex, 1);
-				} else {
-					// Check follow-up queue
-					const followUpIndex = this.#followUpMessages.indexOf(messageText);
-					if (followUpIndex !== -1) {
-						this.#followUpMessages.splice(followUpIndex, 1);
-					}
-				}
+				this.#pendingMessages.removeVisibleMessage(messageText);
 			}
 		}
 
@@ -817,7 +773,7 @@ export class AgentSession {
 				this.#toolChoiceQueue.resolve();
 			}
 		}
-		if (event.type === "tool_execution_end" && event.toolName === "yield" && !event.isError) {
+		if (event.type === "tool_execution_end" && event.toolName === "yield" && event.isError !== true) {
 			this.#lastSuccessfulYieldToolCallId = event.toolCallId;
 		}
 		if (event.type === "turn_end" && this.#pendingRewindReport) {
@@ -924,7 +880,7 @@ export class AgentSession {
 				event.assistantMessageEvent.type === "toolcall_delta" ||
 				event.assistantMessageEvent.type === "toolcall_end")
 		) {
-			void this.#preCacheStreamingEditFile(event);
+			this.#preCacheStreamingEditFile(event);
 		}
 
 		if (
@@ -1005,18 +961,20 @@ export class AgentSession {
 					content?: Array<TextContent | ImageContent>;
 				};
 				// Invalidate streaming edit cache when edit tool completes to prevent stale data
-				if (toolName === "edit" && details?.path) {
+				if (toolName === "edit" && details?.path !== null && details?.path !== undefined && details?.path !== "") {
 					this.#invalidateFileCacheForPath(details.path);
 				}
-				if (toolName === "todo_write" && !isError && Array.isArray(details?.phases)) {
+				if (toolName === "todo_write" && isError !== true && Array.isArray(details?.phases)) {
 					this.setTodoPhases(details.phases);
 				}
-				if (toolName === "todo_write" && isError) {
+				if (toolName === "todo_write" && isError === true) {
 					const errorText = content?.find(part => part.type === "text")?.text;
 					const reminderText = [
 						"<system-reminder>",
 						"todo_write failed, so todo progress is not visible to the user.",
-						errorText ? `Failure: ${errorText}` : "Failure: todo_write returned an error.",
+						errorText !== null && errorText !== undefined && errorText !== ""
+							? `Failure: ${errorText}`
+							: "Failure: todo_write returned an error.",
 						"Fix the todo payload and call todo_write again before continuing.",
 						"</system-reminder>",
 					].join("\n");
@@ -1030,7 +988,7 @@ export class AgentSession {
 						{ deliverAs: "nextTurn" },
 					);
 				}
-				if (toolName === "checkpoint" && !isError) {
+				if (toolName === "checkpoint" && isError !== true) {
 					const checkpointEntryId = this.sessionManager.getEntries().at(-1)?.id ?? null;
 					this.#checkpointState = {
 						checkpointMessageCount: this.agent.state.messages.length,
@@ -1039,7 +997,7 @@ export class AgentSession {
 					};
 					this.#pendingRewindReport = undefined;
 				}
-				if (toolName === "rewind" && !isError && this.#checkpointState) {
+				if (toolName === "rewind" && isError !== true && this.#checkpointState) {
 					const detailReport = typeof details?.report === "string" ? details.report.trim() : "";
 					const textReport = content?.find(part => part.type === "text")?.text?.trim() ?? "";
 					const report = detailReport || textReport;
@@ -1067,7 +1025,7 @@ export class AgentSession {
 			if (
 				msg.stopReason === "error" &&
 				msg.provider === "github-copilot" &&
-				msg.errorMessage?.includes("GitHub Copilot authentication failed")
+				msg.errorMessage?.includes("GitHub Copilot authentication failed") === true
 			) {
 				await this.#modelRegistry.authStorage.remove("github-copilot");
 			}
@@ -1310,7 +1268,7 @@ export class AgentSession {
 	}
 
 	#extractTtsrRuleNames(details: unknown): string[] {
-		if (!details || typeof details !== "object" || Array.isArray(details)) {
+		if (details === null || details === undefined || typeof details !== "object" || Array.isArray(details)) {
 			return [];
 		}
 		const rules = (details as { rules?: unknown }).rules;
@@ -1428,7 +1386,7 @@ export class AgentSession {
 
 	/** Extract path-like arguments from tool call payload for TTSR glob matching. */
 	#extractTtsrFilePathsFromArgs(args: unknown): string[] | undefined {
-		if (!args || typeof args !== "object" || Array.isArray(args)) {
+		if (args === null || args === undefined || typeof args !== "object" || Array.isArray(args)) {
 			return undefined;
 		}
 
@@ -1538,7 +1496,7 @@ export class AgentSession {
 		if ("old_text" in args || "new_text" in args) return undefined;
 
 		const path = typeof args.path === "string" ? args.path : undefined;
-		if (!path) return undefined;
+		if (path === null || path === undefined || path === "") return undefined;
 
 		// `local://` URLs (e.g. local://PLAN.md for plan-mode) resolve to a real
 		// on-disk artifacts path; pre-caching works as long as we ask the
@@ -1563,10 +1521,10 @@ export class AgentSession {
 	#abortStreamingEditForAutoGeneratedPath(toolCall: ToolCall, path: string, resolvedPath: string): void {
 		if (this.#lastStreamingEditToolCallId === toolCall.id) return;
 		this.#lastStreamingEditToolCallId = toolCall.id;
-		void assertEditableFile(resolvedPath, path).catch(err => {
+		void assertEditableFile(resolvedPath, path).catch(error => {
 			// peekFile and other I/O can reject with ENOENT, etc. Only ToolError means
 			// auto-generated detection; other failures are left for the edit tool.
-			if (!(err instanceof ToolError)) return;
+			if (!(error instanceof ToolError)) return;
 			if (this.#lastStreamingEditToolCallId !== toolCall.id) return;
 
 			if (!this.#streamingEditAbortTriggered) {
@@ -1676,11 +1634,16 @@ export class AgentSession {
 		if (assistantEvent.type !== "toolcall_end" && assistantEvent.type !== "toolcall_delta") return;
 
 		const streamingEdit = this.#getStreamingEditToolCall(event);
-		if (!streamingEdit?.toolCall.id) return;
+		if (
+			streamingEdit?.toolCall.id === null ||
+			streamingEdit?.toolCall.id === undefined ||
+			streamingEdit?.toolCall.id === ""
+		)
+			return;
 
 		const { toolCall, path, resolvedPath, diff, op, rename } = streamingEdit;
-		if (!diff) return;
-		if (op && op !== "update") return;
+		if (diff === null || diff === undefined || diff === "") return;
+		if (op !== null && op !== undefined && op !== "" && op !== "update") return;
 
 		if (!diff.includes("\n")) return;
 		const lastNewlineIndex = diff.lastIndexOf("\n");
@@ -1713,7 +1676,7 @@ export class AgentSession {
 			}
 			if (cachedContent !== undefined) {
 				const missing = removedLines.find(line => !cachedContent.includes(normalizeToLF(line)));
-				if (missing) {
+				if (missing !== null && missing !== undefined && missing !== "") {
 					this.#streamingEditAbortTriggered = true;
 					logger.warn("Streaming edit aborted due to patch preview failure", {
 						toolCallId: toolCall.id,
@@ -1744,7 +1707,7 @@ export class AgentSession {
 			const { text } = stripBom(await Bun.file(resolvedPath).text());
 			const normalizedContent = normalizeToLF(text);
 			const missing = removedLines.find(line => !normalizedContent.includes(normalizeToLF(line)));
-			if (missing) {
+			if (missing !== null && missing !== undefined && missing !== "") {
 				this.#streamingEditAbortTriggered = true;
 				logger.warn("Streaming edit aborted due to patch preview failure", {
 					toolCallId,
@@ -1753,10 +1716,10 @@ export class AgentSession {
 				});
 				this.agent.abort();
 			}
-		} catch (err) {
+		} catch (error) {
 			// Ignore ENOENT (file not found) - let the edit tool handle missing files
 			// Also ignore other errors during async fallback
-			if (!isEnoent(err)) {
+			if (!isEnoent(error)) {
 				// Log unexpected errors but don't abort
 			}
 		}
@@ -1948,14 +1911,14 @@ export class AgentSession {
 	async dispose(): Promise<void> {
 		this.#pythonExecutionDisposing = true;
 		try {
-			if (this.#extensionRunner?.hasHandlers("session_shutdown")) {
+			if (this.#extensionRunner?.hasHandlers("session_shutdown") === true) {
 				await this.#extensionRunner.emit({ type: "session_shutdown" });
 			}
 		} catch (error) {
 			logger.warn("Failed to emit session_shutdown event", { error: String(error) });
 		}
 		await this.#cancelPostPromptTasks();
-		this.#clearTodoClearTimers();
+		this.#todoPhaseState.dispose();
 		const drained = await this.#asyncJobManager?.dispose({ timeoutMs: 3_000 });
 		const deliveryState = this.#asyncJobManager?.getDeliveryState();
 		if (drained === false && deliveryState) {
@@ -2074,7 +2037,7 @@ export class AgentSession {
 		sessionFile: string | null | undefined,
 		toolNames: Iterable<string>,
 	): void {
-		if (!sessionFile) return;
+		if (sessionFile === null || sessionFile === undefined || sessionFile === "") return;
 		this.#sessionDefaultSelectedMCPToolNames.set(
 			path.resolve(sessionFile),
 			this.#filterSelectableMCPToolNames(toolNames),
@@ -2082,7 +2045,7 @@ export class AgentSession {
 	}
 
 	#getSessionDefaultSelectedMCPToolNames(sessionFile: string | null | undefined): string[] {
-		if (!sessionFile) return [];
+		if (sessionFile === null || sessionFile === undefined || sessionFile === "") return [];
 		return this.#sessionDefaultSelectedMCPToolNames.get(path.resolve(sessionFile)) ?? [];
 	}
 
@@ -2351,7 +2314,7 @@ export class AgentSession {
 			name => previousRpcHostToolNames.has(name) && this.#rpcHostToolNames.has(name),
 		);
 		const autoActivatedRpcToolNames = rpcTools
-			.filter(tool => !tool.hidden && !previousRpcHostToolNames.has(tool.name))
+			.filter(tool => tool.hidden !== true && !previousRpcHostToolNames.has(tool.name))
 			.map(tool => tool.name);
 		await this.#applyActiveToolsByName(
 			Array.from(new Set([...activeNonRpcToolNames, ...preservedRpcToolNames, ...autoActivatedRpcToolNames])),
@@ -2457,7 +2420,7 @@ export class AgentSession {
 
 	setPlanModeState(state: PlanModeState | undefined): void {
 		this.#planModeState = state;
-		if (state?.enabled) {
+		if (state?.enabled === true) {
 			this.#planReferenceSent = false;
 			this.#planReferencePath = state.planFilePath;
 		}
@@ -2542,7 +2505,7 @@ export class AgentSession {
 	 * @returns The plan mode message, or null if plan mode is not enabled.
 	 */
 	async #buildPlanReferenceMessage(): Promise<CustomMessage | null> {
-		if (this.#planModeState?.enabled) return null;
+		if (this.#planModeState?.enabled === true) return null;
 		if (this.#planReferenceSent) return null;
 
 		const planFilePath = this.#planReferencePath;
@@ -2576,7 +2539,7 @@ export class AgentSession {
 
 	async #buildPlanModeMessage(): Promise<CustomMessage | null> {
 		const state = this.#planModeState;
-		if (!state?.enabled) return null;
+		if (state?.enabled !== true) return null;
 		const sessionPlanUrl = "local://PLAN.md";
 		const resolvedPlanPath = state.planFilePath.startsWith("local:")
 			? resolveLocalUrlToPath(normalizeLocalScheme(state.planFilePath), this.#localProtocolOptions())
@@ -2663,17 +2626,25 @@ export class AgentSession {
 		// Skip eager todo prelude when the user has already queued a directive
 		const hasPendingUserDirective = this.#toolChoiceQueue.inspect().includes("user-force");
 		const eagerTodoPrelude =
-			!options?.synthetic && !hasPendingUserDirective ? this.#createEagerTodoPrelude(expandedText) : undefined;
+			options?.synthetic !== true && !hasPendingUserDirective
+				? this.#createEagerTodoPrelude(expandedText)
+				: undefined;
 
 		const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
 		if (options?.images) {
 			userContent.push(...options.images);
 		}
 
-		const promptAttribution = options?.attribution ?? (options?.synthetic ? "agent" : "user");
-		const message = options?.synthetic
-			? { role: "developer" as const, content: userContent, attribution: promptAttribution, timestamp: Date.now() }
-			: { role: "user" as const, content: userContent, attribution: promptAttribution, timestamp: Date.now() };
+		const promptAttribution = options?.attribution ?? (options?.synthetic === true ? "agent" : "user");
+		const message =
+			options?.synthetic === true
+				? {
+						role: "developer" as const,
+						content: userContent,
+						attribution: promptAttribution,
+						timestamp: Date.now(),
+					}
+				: { role: "user" as const, content: userContent, attribution: promptAttribution, timestamp: Date.now() };
 
 		if (eagerTodoPrelude) {
 			this.#toolChoiceQueue.pushOnce(eagerTodoPrelude.toolChoice, {
@@ -2691,7 +2662,7 @@ export class AgentSession {
 			// (e.g., compaction aborted, validation failed).
 			this.#toolChoiceQueue.removeByLabel("eager-todo");
 		}
-		if (!options?.synthetic) {
+		if (options?.synthetic !== true) {
 			await this.#enforcePlanModeToolDecision();
 		}
 	}
@@ -2761,7 +2732,7 @@ export class AgentSession {
 
 			// Validate API key
 			const apiKey = await this.#modelRegistry.getApiKey(this.model, this.sessionId);
-			if (!apiKey) {
+			if (apiKey === null || apiKey === undefined || apiKey === "") {
 				throw new Error(
 					`No API key found for ${this.model.provider}.\n\n` +
 						`Use /login, set an API key environment variable, or create ${getAgentDbPath()}`,
@@ -2770,7 +2741,7 @@ export class AgentSession {
 
 			// Check if we need to compact before sending (catches aborted responses)
 			const lastAssistant = this.#findLastAssistantMessage();
-			if (lastAssistant && !options?.skipCompactionCheck) {
+			if (lastAssistant && options?.skipCompactionCheck !== true) {
 				await this.#checkCompaction(lastAssistant, false);
 			}
 
@@ -2797,10 +2768,9 @@ export class AgentSession {
 			}
 
 			// Inject any pending "nextTurn" messages as context alongside the user message
-			for (const msg of this.#pendingNextTurnMessages) {
+			for (const msg of this.#pendingMessages.takeNextTurn()) {
 				messages.push(msg);
 			}
-			this.#pendingNextTurnMessages = [];
 
 			// Auto-read @filepath mentions
 			const fileMentions = extractFileMentions(expandedText);
@@ -2849,7 +2819,7 @@ export class AgentSession {
 
 			const agentPromptOptions = options?.toolChoice ? { toolChoice: options.toolChoice } : undefined;
 			await this.#promptAgentWithIdleRetry(messages, agentPromptOptions);
-			if (!options?.skipPostPromptRecoveryWait) {
+			if (options?.skipPostPromptRecoveryWait !== true) {
 				await this.#waitForPostPromptRecovery();
 			}
 		} finally {
@@ -2877,12 +2847,12 @@ export class AgentSession {
 		try {
 			await command.handler(args, ctx);
 			return true;
-		} catch (err) {
+		} catch (error) {
 			// Emit error via extension runner
 			this.#extensionRunner.emitError({
 				extensionPath: `command:${commandName}`,
 				event: "command",
-				error: err instanceof Error ? err.message : String(err),
+				error: error instanceof Error ? error.message : String(error),
 			});
 			return true;
 		}
@@ -2978,16 +2948,16 @@ export class AgentSession {
 			// If result is a string, it's a prompt to send to LLM
 			// If void/undefined, command handled everything
 			return result ?? "";
-		} catch (err) {
+		} catch (error) {
 			// Emit error via extension runner
 			if (this.#extensionRunner) {
 				this.#extensionRunner.emitError({
 					extensionPath: `custom-command:${commandName}`,
 					event: "command",
-					error: err instanceof Error ? err.message : String(err),
+					error: error instanceof Error ? error.message : String(error),
 				});
 			} else {
-				const message = err instanceof Error ? err.message : String(err);
+				const message = error instanceof Error ? error.message : String(error);
 				logger.error("Custom command failed", { commandName, error: message });
 			}
 			return ""; // Command was handled (with error)
@@ -3023,7 +2993,7 @@ export class AgentSession {
 	 */
 	async #queueSteer(text: string, images?: ImageContent[]): Promise<void> {
 		const displayText = text || (images && images.length > 0 ? "[Image]" : "");
-		this.#steeringMessages.push(displayText);
+		this.#pendingMessages.addSteering(displayText);
 		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
 		if (images && images.length > 0) {
 			content.push(...images);
@@ -3041,7 +3011,7 @@ export class AgentSession {
 	 */
 	async #queueFollowUp(text: string, images?: ImageContent[]): Promise<void> {
 		const displayText = text || (images && images.length > 0 ? "[Image]" : "");
-		this.#followUpMessages.push(displayText);
+		this.#pendingMessages.addFollowUp(displayText);
 		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
 		if (images && images.length > 0) {
 			content.push(...images);
@@ -3083,19 +3053,16 @@ export class AgentSession {
 	}
 
 	#queueHiddenNextTurnMessage(message: CustomMessage, triggerTurn: boolean): void {
-		this.#pendingNextTurnMessages.push(message);
+		this.#pendingMessages.addNextTurn(message);
 		if (!triggerTurn) return;
 		const generation = this.#promptGeneration;
-		if (this.#scheduledHiddenNextTurnGeneration === generation) {
+		if (!this.#pendingMessages.scheduleHiddenNextTurn(generation)) {
 			return;
 		}
-		this.#scheduledHiddenNextTurnGeneration = generation;
 		this.#schedulePostPromptTask(
 			async () => {
-				if (this.#scheduledHiddenNextTurnGeneration === generation) {
-					this.#scheduledHiddenNextTurnGeneration = undefined;
-				}
-				if (this.#pendingNextTurnMessages.length === 0) {
+				this.#pendingMessages.clearScheduledHiddenNextTurn(generation);
+				if (!this.#pendingMessages.hasNextTurn()) {
 					return;
 				}
 				try {
@@ -3107,21 +3074,18 @@ export class AgentSession {
 			{
 				generation,
 				onSkip: () => {
-					if (this.#scheduledHiddenNextTurnGeneration === generation) {
-						this.#scheduledHiddenNextTurnGeneration = undefined;
-					}
+					this.#pendingMessages.clearScheduledHiddenNextTurn(generation);
 				},
 			},
 		);
 	}
 
 	async #promptQueuedHiddenNextTurnMessages(): Promise<void> {
-		if (this.#pendingNextTurnMessages.length === 0) {
+		if (!this.#pendingMessages.hasNextTurn()) {
 			return;
 		}
 
-		const queuedMessages = [...this.#pendingNextTurnMessages];
-		this.#pendingNextTurnMessages = [];
+		const queuedMessages = this.#pendingMessages.takeNextTurn();
 		const message = queuedMessages[queuedMessages.length - 1];
 		if (!message) {
 			return;
@@ -3135,7 +3099,7 @@ export class AgentSession {
 				skipPostPromptRecoveryWait: true,
 			});
 		} catch (error) {
-			this.#pendingNextTurnMessages = [...queuedMessages, ...this.#pendingNextTurnMessages];
+			this.#pendingMessages.restoreNextTurn(queuedMessages);
 			throw error;
 		}
 	}
@@ -3203,7 +3167,7 @@ export class AgentSession {
 		}
 
 		if (options?.deliverAs === "nextTurn") {
-			if (options?.triggerTurn) {
+			if (options?.triggerTurn === true) {
 				await this.agent.prompt(appMessage);
 				return;
 			}
@@ -3218,7 +3182,7 @@ export class AgentSession {
 			return;
 		}
 
-		if (options?.triggerTurn) {
+		if (options?.triggerTurn === true) {
 			await this.agent.prompt(appMessage);
 			return;
 		}
@@ -3277,22 +3241,19 @@ export class AgentSession {
 	 * Useful for restoring to editor when user aborts.
 	 */
 	clearQueue(): { steering: string[]; followUp: string[] } {
-		const steering = [...this.#steeringMessages];
-		const followUp = [...this.#followUpMessages];
-		this.#steeringMessages = [];
-		this.#followUpMessages = [];
+		const messages = this.#pendingMessages.clearVisibleQueues();
 		this.agent.clearAllQueues();
-		return { steering, followUp };
+		return messages;
 	}
 
 	/** Number of pending messages (includes steering, follow-up, and next-turn messages) */
 	get queuedMessageCount(): number {
-		return this.#steeringMessages.length + this.#followUpMessages.length + this.#pendingNextTurnMessages.length;
+		return this.#pendingMessages.count;
 	}
 
 	/** Get pending messages (read-only) */
 	getQueuedMessages(): { steering: readonly string[]; followUp: readonly string[] } {
-		return { steering: this.#steeringMessages, followUp: this.#followUpMessages };
+		return this.#pendingMessages.getVisibleMessages();
 	}
 
 	/**
@@ -3301,16 +3262,16 @@ export class AgentSession {
 	 */
 	popLastQueuedMessage(): string | undefined {
 		// Pop from steering first (LIFO)
-		if (this.#steeringMessages.length > 0) {
-			const message = this.#steeringMessages.pop();
+		const steeringMessage = this.#pendingMessages.popSteering();
+		if (steeringMessage !== undefined) {
 			this.agent.popLastSteer();
-			return message;
+			return steeringMessage;
 		}
 		// Then from follow-up
-		if (this.#followUpMessages.length > 0) {
-			const message = this.#followUpMessages.pop();
+		const followUpMessage = this.#pendingMessages.popFollowUp();
+		if (followUpMessage !== undefined) {
 			this.agent.popLastFollowUp();
-			return message;
+			return followUpMessage;
 		}
 		return undefined;
 	}
@@ -3330,95 +3291,15 @@ export class AgentSession {
 	}
 
 	getTodoPhases(): TodoPhase[] {
-		return this.#cloneTodoPhases(this.#todoPhases);
+		return this.#todoPhaseState.get();
 	}
 
 	setTodoPhases(phases: TodoPhase[]): void {
-		this.#todoPhases = this.#cloneTodoPhases(phases);
-		this.#scheduleTodoAutoClear(phases);
+		this.#todoPhaseState.set(phases);
 	}
 
 	#syncTodoPhasesFromBranch(): void {
-		const phases = getLatestTodoPhasesFromEntries(this.sessionManager.getBranch());
-		// Strip completed/abandoned tasks — they were done in a previous run,
-		// so the auto-clear grace period has already elapsed.
-		for (const phase of phases) {
-			phase.tasks = phase.tasks.filter(t => t.status !== "completed" && t.status !== "abandoned");
-		}
-		this.setTodoPhases(phases.filter(p => p.tasks.length > 0));
-	}
-
-	#cloneTodoPhases(phases: TodoPhase[]): TodoPhase[] {
-		return phases.map(phase => ({
-			name: phase.name,
-			tasks: phase.tasks.map(task => {
-				const out: TodoItem = { content: task.content, status: task.status };
-				if (task.notes && task.notes.length > 0) out.notes = [...task.notes];
-				return out;
-			}),
-		}));
-	}
-
-	/** Schedule auto-removal of completed/abandoned tasks after a delay. */
-	#scheduleTodoAutoClear(phases: TodoPhase[]): void {
-		const delaySec = this.settings.get("tasks.todoClearDelay") ?? 60;
-		if (delaySec < 0) return; // "Never" — no auto-clear
-		const delayMs = delaySec * 1000;
-		const doneKeys = new Set<string>();
-		for (const phase of phases) {
-			for (const task of phase.tasks) {
-				if (task.status === "completed" || task.status === "abandoned") {
-					doneKeys.add(todoClearKey(phase.name, task.content));
-				}
-			}
-		}
-
-		// Cancel timers for tasks that are no longer done (e.g. status was reverted)
-		for (const [key, timer] of this.#todoClearTimers) {
-			if (!doneKeys.has(key)) {
-				clearTimeout(timer);
-				this.#todoClearTimers.delete(key);
-			}
-		}
-
-		// Schedule new timers for newly-done tasks
-		for (const key of doneKeys) {
-			if (this.#todoClearTimers.has(key)) continue;
-			if (delayMs === 0) {
-				// Instant — run synchronously on next microtask to batch removals
-				const timer = setTimeout(() => this.#runTodoAutoClear(key), 0);
-				this.#todoClearTimers.set(key, timer);
-			} else {
-				const timer = setTimeout(() => this.#runTodoAutoClear(key), delayMs);
-				this.#todoClearTimers.set(key, timer);
-			}
-		}
-	}
-
-	/** Remove a single completed task and notify the UI. */
-	#runTodoAutoClear(key: string): void {
-		this.#todoClearTimers.delete(key);
-		let removed = false;
-		for (const phase of this.#todoPhases) {
-			const idx = phase.tasks.findIndex(t => todoClearKey(phase.name, t.content) === key);
-			if (idx !== -1 && (phase.tasks[idx].status === "completed" || phase.tasks[idx].status === "abandoned")) {
-				phase.tasks.splice(idx, 1);
-				removed = true;
-				break;
-			}
-		}
-		if (!removed) return;
-
-		// Remove empty phases
-		this.#todoPhases = this.#todoPhases.filter(p => p.tasks.length > 0);
-		this.#emit({ type: "todo_auto_clear" });
-	}
-
-	#clearTodoClearTimers(): void {
-		for (const timer of this.#todoClearTimers.values()) {
-			clearTimeout(timer);
-		}
-		this.#todoClearTimers.clear();
+		this.#todoPhaseState.syncFromBranch(this.sessionManager.getBranch());
 	}
 
 	/**
@@ -3427,7 +3308,7 @@ export class AgentSession {
 	async abort(): Promise<void> {
 		this.abortRetry();
 		this.#promptGeneration++;
-		this.#scheduledHiddenNextTurnGeneration = undefined;
+		this.#pendingMessages.clearScheduledHiddenNextTurn();
 		this.abortCompaction();
 		this.abortHandoff();
 		this.abortBash();
@@ -3466,13 +3347,13 @@ export class AgentSession {
 			: undefined;
 
 		// Emit session_before_switch event with reason "new" (can be cancelled)
-		if (this.#extensionRunner?.hasHandlers("session_before_switch")) {
+		if (this.#extensionRunner?.hasHandlers("session_before_switch") === true) {
 			const result = (await this.#extensionRunner.emit({
 				type: "session_before_switch",
 				reason: "new",
 			})) as SessionBeforeSwitchResult | undefined;
 
-			if (result?.cancel) {
+			if (result?.cancel === true) {
 				return false;
 			}
 		}
@@ -3482,11 +3363,16 @@ export class AgentSession {
 		this.#asyncJobManager?.cancelAll();
 		this.#closeAllProviderSessions("new session");
 		this.agent.reset();
-		if (options?.drop && previousSessionFile) {
+		if (
+			options?.drop === true &&
+			previousSessionFile !== null &&
+			previousSessionFile !== undefined &&
+			previousSessionFile !== ""
+		) {
 			try {
 				await this.sessionManager.dropSession(previousSessionFile);
-			} catch (err) {
-				logger.error("Failed to delete session during /drop", { err });
+			} catch (error) {
+				logger.error("Failed to delete session during /drop", { error });
 			}
 		} else {
 			await this.sessionManager.flush();
@@ -3494,10 +3380,7 @@ export class AgentSession {
 		await this.sessionManager.newSession(options);
 		this.setTodoPhases([]);
 		this.agent.sessionId = this.sessionManager.getSessionId();
-		this.#steeringMessages = [];
-		this.#followUpMessages = [];
-		this.#pendingNextTurnMessages = [];
-		this.#scheduledHiddenNextTurnGeneration = undefined;
+		this.#pendingMessages.reset();
 
 		this.sessionManager.appendThinkingLevelChange(this.thinkingLevel);
 		this.sessionManager.appendServiceTierChange(this.serviceTier ?? null);
@@ -3546,13 +3429,13 @@ export class AgentSession {
 		const previousSessionFile = this.sessionFile;
 
 		// Emit session_before_switch event with reason "fork" (can be cancelled)
-		if (this.#extensionRunner?.hasHandlers("session_before_switch")) {
+		if (this.#extensionRunner?.hasHandlers("session_before_switch") === true) {
 			const result = (await this.#extensionRunner.emit({
 				type: "session_before_switch",
 				reason: "fork",
 			})) as SessionBeforeSwitchResult | undefined;
 
-			if (result?.cancel) {
+			if (result?.cancel === true) {
 				return false;
 			}
 		}
@@ -3575,12 +3458,12 @@ export class AgentSession {
 			if (oldDirStat.isDirectory()) {
 				await fs.promises.cp(oldArtifactDir, newArtifactDir, { recursive: true });
 			}
-		} catch (err) {
-			if (!isEnoent(err)) {
+		} catch (error) {
+			if (!isEnoent(error)) {
 				logger.warn("Failed to copy artifacts during fork", {
 					oldArtifactDir,
 					newArtifactDir,
-					error: err instanceof Error ? err.message : String(err),
+					error: error instanceof Error ? error.message : String(error),
 				});
 			}
 		}
@@ -3616,7 +3499,7 @@ export class AgentSession {
 	): Promise<void> {
 		const previousEditMode = this.#resolveActiveEditMode();
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
-		if (!apiKey) {
+		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
@@ -3643,7 +3526,7 @@ export class AgentSession {
 	async setModelTemporary(model: Model, thinkingLevel?: ThinkingLevel): Promise<void> {
 		const previousEditMode = this.#resolveActiveEditMode();
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
-		if (!apiKey) {
+		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
@@ -3699,7 +3582,7 @@ export class AgentSession {
 				role === "default"
 					? (this.settings.getModelRole("default") ?? `${currentModel.provider}/${currentModel.id}`)
 					: this.settings.getModelRole(role);
-			if (!roleModelStr) continue;
+			if (roleModelStr === null || roleModelStr === undefined || roleModelStr === "") continue;
 
 			const resolved = resolveModelRoleValue(roleModelStr, availableModels, {
 				settings: this.settings,
@@ -3719,7 +3602,10 @@ export class AgentSession {
 		if (roleModels.length <= 1) return undefined;
 
 		const lastRole = this.sessionManager.getLastModelChangeRole();
-		let currentIndex = lastRole ? roleModels.findIndex(entry => entry.role === lastRole) : -1;
+		let currentIndex =
+			lastRole !== null && lastRole !== undefined && lastRole !== ""
+				? roleModels.findIndex(entry => entry.role === lastRole)
+				: -1;
 		if (currentIndex === -1) {
 			currentIndex = roleModels.findIndex(entry => modelsAreEqual(entry.model, currentModel));
 		}
@@ -3728,7 +3614,7 @@ export class AgentSession {
 		const nextIndex = (currentIndex + 1) % roleModels.length;
 		const next = roleModels[nextIndex];
 
-		if (options?.temporary) {
+		if (options?.temporary === true) {
 			await this.setModelTemporary(next.model, next.explicitThinkingLevel ? next.thinkingLevel : undefined);
 		} else {
 			await this.setModel(next.model, next.role);
@@ -3754,7 +3640,7 @@ export class AgentSession {
 				apiKeysByProvider.set(provider, apiKey);
 			}
 
-			if (apiKey) {
+			if (apiKey !== null && apiKey !== undefined && apiKey !== "") {
 				result.push(scoped);
 			}
 		}
@@ -3803,7 +3689,7 @@ export class AgentSession {
 		const nextModel = availableModels[nextIndex];
 
 		const apiKey = await this.#modelRegistry.getApiKey(nextModel, this.sessionId);
-		if (!apiKey) {
+		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new Error(`No API key for ${nextModel.provider}/${nextModel.id}`);
 		}
 
@@ -3854,11 +3740,11 @@ export class AgentSession {
 	 * @returns New level, or undefined if model doesn't support thinking
 	 */
 	cycleThinkingLevel(): ThinkingLevel | undefined {
-		if (!this.model?.reasoning) return undefined;
+		if (this.model?.reasoning !== true) return undefined;
 
 		const levels = [ThinkingLevel.Off, ...this.getAvailableThinkingLevels()];
 		const currentLevel = this.thinkingLevel === ThinkingLevel.Inherit ? ThinkingLevel.Off : this.thinkingLevel;
-		const currentIndex = currentLevel ? levels.indexOf(currentLevel) : -1;
+		const currentIndex = currentLevel !== undefined ? levels.indexOf(currentLevel) : -1;
 		const nextIndex = (currentIndex + 1) % levels.length;
 		const nextLevel = levels[nextIndex];
 		if (!nextLevel) return undefined;
@@ -3968,7 +3854,7 @@ export class AgentSession {
 			const compactionSettings = this.settings.getGroup("compaction");
 			const compactionModel = this.model;
 			const apiKey = await this.#modelRegistry.getApiKey(compactionModel, this.sessionId);
-			if (!apiKey) {
+			if (apiKey === null || apiKey === undefined || apiKey === "") {
 				throw new Error(`No API key for ${compactionModel.provider}`);
 			}
 
@@ -3990,7 +3876,7 @@ export class AgentSession {
 			let hookPrompt: string | undefined;
 			let preserveData: Record<string, unknown> | undefined;
 
-			if (this.#extensionRunner?.hasHandlers("session_before_compact")) {
+			if (this.#extensionRunner?.hasHandlers("session_before_compact") === true) {
 				const result = (await this.#extensionRunner.emit({
 					type: "session_before_compact",
 					preparation,
@@ -3999,7 +3885,7 @@ export class AgentSession {
 					signal: compactionAbortController.signal,
 				})) as SessionBeforeCompactResult | undefined;
 
-				if (result?.cancel) {
+				if (result?.cancel === true) {
 					throw new Error("Compaction cancelled");
 				}
 
@@ -4051,7 +3937,7 @@ export class AgentSession {
 				firstKeptEntryId = result.firstKeptEntryId;
 				tokensBefore = result.tokensBefore;
 				details = result.details;
-				preserveData = { ...(preserveData ?? {}), ...(result.preserveData ?? {}) };
+				preserveData = { ...preserveData, ...result.preserveData };
 			}
 
 			if (compactionAbortController.signal.aborted) {
@@ -4251,7 +4137,7 @@ export class AgentSession {
 			if (handoffCancelled || handoffSignal.aborted) {
 				throw new Error("Handoff cancelled");
 			}
-			if (!handoffText) {
+			if (handoffText === null || handoffText === undefined || handoffText === "") {
 				return undefined;
 			}
 
@@ -4261,19 +4147,16 @@ export class AgentSession {
 			await this.sessionManager.newSession();
 			this.agent.reset();
 			this.agent.sessionId = this.sessionManager.getSessionId();
-			this.#steeringMessages = [];
-			this.#followUpMessages = [];
-			this.#pendingNextTurnMessages = [];
-			this.#scheduledHiddenNextTurnGeneration = undefined;
+			this.#pendingMessages.reset();
 			this.#todoReminderCount = 0;
 
 			// Inject the handoff document as a custom message
 			const handoffContent = `<handoff-context>\n${handoffText}\n</handoff-context>\n\nThe above is a handoff document from a previous session. Use this context to continue the work seamlessly.`;
 			this.sessionManager.appendCustomMessageEntry("handoff", handoffContent, true, undefined, "agent");
 			let savedPath: string | undefined;
-			if (options?.autoTriggered && this.settings.get("compaction.handoffSaveToDisk")) {
+			if (options?.autoTriggered === true && this.settings.get("compaction.handoffSaveToDisk")) {
 				const artifactsDir = this.sessionManager.getArtifactsDir();
-				if (artifactsDir) {
+				if (artifactsDir !== null && artifactsDir !== undefined && artifactsDir !== "") {
 					const fileTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
 					const handoffFilePath = path.join(artifactsDir, `handoff-${fileTimestamp}.md`);
 					try {
@@ -4335,7 +4218,7 @@ export class AgentSession {
 		const compactionEntry = getLatestCompactionEntry(this.sessionManager.getBranch());
 		const errorIsFromBeforeCompaction =
 			compactionEntry !== null && assistantMessage.timestamp < new Date(compactionEntry.timestamp).getTime();
-		if (sameModel && !errorIsFromBeforeCompaction && isContextOverflow(assistantMessage, contextWindow)) {
+		if (sameModel === true && !errorIsFromBeforeCompaction && isContextOverflow(assistantMessage, contextWindow)) {
 			// Remove the error message from agent state (it IS saved to session for history,
 			// but we don't want it in context for the retry)
 			const messages = this.agent.state.messages;
@@ -4379,7 +4262,7 @@ export class AgentSession {
 	}
 	#assistantEndedWithSuccessfulYield(assistantMessage: AssistantMessage): boolean {
 		const toolCallId = this.#lastSuccessfulYieldToolCallId;
-		if (!toolCallId) return false;
+		if (toolCallId === null || toolCallId === undefined || toolCallId === "") return false;
 		const lastToolCall = assistantMessage.content
 			.slice()
 			.reverse()
@@ -4438,7 +4321,7 @@ export class AgentSession {
 		this.#pendingRewindReport = undefined;
 	}
 	async #enforcePlanModeToolDecision(): Promise<void> {
-		if (!this.#planModeState?.enabled) {
+		if (this.#planModeState?.enabled !== true) {
 			return;
 		}
 		const assistantMessage = this.#findLastAssistantMessage();
@@ -4482,7 +4365,7 @@ export class AgentSession {
 			return undefined;
 		}
 
-		if (this.#planModeState?.enabled) {
+		if (this.#planModeState?.enabled === true) {
 			return undefined;
 		}
 		if (this.getTodoPhases().length > 0) {
@@ -4656,7 +4539,7 @@ export class AgentSession {
 		if (modelsAreEqual(candidate, currentModel)) return undefined;
 		if (candidate.contextWindow <= contextWindow) return undefined;
 		const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
-		if (!apiKey) return undefined;
+		if (apiKey === null || apiKey === undefined || apiKey === "") return undefined;
 		return candidate;
 	}
 
@@ -4707,7 +4590,7 @@ export class AgentSession {
 		if (Array.isArray(value)) {
 			return value.map(item => this.#normalizeProviderReplayValue(item));
 		}
-		if (value && typeof value === "object") {
+		if (value !== null && value !== undefined && typeof value === "object") {
 			return Object.fromEntries(
 				Object.entries(value).map(([key, entryValue]) => [key, this.#normalizeProviderReplayValue(entryValue)]),
 			);
@@ -4860,14 +4743,14 @@ export class AgentSession {
 			return formatModelSelectorValue(modelKey, thinkingLevelOverride);
 		}
 		const existingRoleValue = this.settings.getModelRole(role);
-		if (!existingRoleValue) return modelKey;
+		if (existingRoleValue === null || existingRoleValue === undefined || existingRoleValue === "") return modelKey;
 
 		const thinkingLevel = extractExplicitThinkingSelector(existingRoleValue, this.settings);
 		return formatModelSelectorValue(modelKey, thinkingLevel);
 	}
 	#resolveContextPromotionConfiguredTarget(currentModel: Model, availableModels: Model[]): Model | undefined {
 		const configuredTarget = currentModel.contextPromotionTarget?.trim();
-		if (!configuredTarget) return undefined;
+		if (configuredTarget === null || configuredTarget === undefined || configuredTarget === "") return undefined;
 
 		const parsed = parseModelString(configuredTarget);
 		if (parsed) {
@@ -4889,7 +4772,7 @@ export class AgentSession {
 					(currentModel ? `${currentModel.provider}/${currentModel.id}` : undefined))
 				: this.settings.getModelRole(role);
 
-		if (!roleModelStr) {
+		if (roleModelStr === null || roleModelStr === undefined || roleModelStr === "") {
 			return { model: undefined, thinkingLevel: undefined, explicitThinkingLevel: false, warning: undefined };
 		}
 
@@ -5053,7 +4936,7 @@ export class AgentSession {
 			let hookPrompt: string | undefined;
 			let preserveData: Record<string, unknown> | undefined;
 
-			if (this.#extensionRunner?.hasHandlers("session_before_compact")) {
+			if (this.#extensionRunner?.hasHandlers("session_before_compact") === true) {
 				const hookResult = (await this.#extensionRunner.emit({
 					type: "session_before_compact",
 					preparation,
@@ -5062,7 +4945,7 @@ export class AgentSession {
 					signal: autoCompactionSignal,
 				})) as SessionBeforeCompactResult | undefined;
 
-				if (hookResult?.cancel) {
+				if (hookResult?.cancel === true) {
 					await this.#emitSessionEvent({
 						type: "auto_compaction_end",
 						action,
@@ -5114,7 +4997,7 @@ export class AgentSession {
 
 				for (const candidate of candidates) {
 					const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
-					if (!apiKey) continue;
+					if (apiKey === null || apiKey === undefined || apiKey === "") continue;
 
 					let attempt = 0;
 					while (true) {
@@ -5183,7 +5066,7 @@ export class AgentSession {
 				}
 
 				if (!compactResult) {
-					if (lastError) {
+					if (lastError !== null && lastError !== undefined) {
 						throw lastError;
 					}
 					throw new Error("Compaction failed: no available model");
@@ -5194,7 +5077,7 @@ export class AgentSession {
 				firstKeptEntryId = compactResult.firstKeptEntryId;
 				tokensBefore = compactResult.tokensBefore;
 				details = compactResult.details;
-				preserveData = { ...(preserveData ?? {}), ...(compactResult.preserveData ?? {}) };
+				preserveData = { ...preserveData, ...compactResult.preserveData };
 			}
 
 			if (autoCompactionSignal.aborted) {
@@ -5322,7 +5205,13 @@ export class AgentSession {
 	 * Usage-limit errors are retryable because the retry handler performs credential switching.
 	 */
 	#isRetryableError(message: AssistantMessage): boolean {
-		if (message.stopReason !== "error" || !message.errorMessage) return false;
+		if (
+			message.stopReason !== "error" ||
+			message.errorMessage === null ||
+			message.errorMessage === undefined ||
+			message.errorMessage === ""
+		)
+			return false;
 
 		// Context overflow is handled by compaction, not retry
 		const contextWindow = this.model?.contextWindow ?? 0;
@@ -5354,118 +5243,8 @@ export class AgentSession {
 		);
 	}
 
-	#getRetryFallbackChains(): RetryFallbackChains {
-		const configuredChains = this.settings.get("retry.fallbackChains");
-		if (!configuredChains || typeof configuredChains !== "object") return {};
-		return configuredChains as RetryFallbackChains;
-	}
-
-	#validateRetryFallbackChains(): void {
-		const configuredChains = this.settings.get("retry.fallbackChains");
-		if (configuredChains === undefined) return;
-		if (!configuredChains || typeof configuredChains !== "object" || Array.isArray(configuredChains)) {
-			const msg = "retry.fallbackChains must be a mapping of role names to selector arrays.";
-			logger.warn(msg);
-			this.configWarnings.push(msg);
-			return;
-		}
-
-		for (const [role, chain] of Object.entries(configuredChains)) {
-			if (!Array.isArray(chain)) {
-				const msg = `Fallback chain for role '${role}' must be an array of selector strings.`;
-				logger.warn(msg);
-				this.configWarnings.push(msg);
-				continue;
-			}
-			for (const selectorStr of chain) {
-				if (typeof selectorStr !== "string") {
-					const msg = `Fallback chain for role '${role}' contains a non-string selector.`;
-					logger.warn(msg);
-					this.configWarnings.push(msg);
-					continue;
-				}
-				const parsed = parseRetryFallbackSelector(selectorStr);
-				if (!parsed) {
-					const msg = `Invalid fallback selector format in role '${role}': ${selectorStr}`;
-					logger.warn(msg);
-					this.configWarnings.push(msg);
-					continue;
-				}
-				const exists = this.#modelRegistry.find(parsed.provider, parsed.id);
-				if (!exists) {
-					const msg = `Fallback chain for role '${role}' references unknown model: ${selectorStr}`;
-					logger.warn(msg);
-					this.configWarnings.push(msg);
-				}
-			}
-		}
-	}
-
-	#getRetryFallbackRevertPolicy(): RetryFallbackRevertPolicy {
-		return this.settings.get("retry.fallbackRevertPolicy") === "never" ? "never" : "cooldown-expiry";
-	}
-
-	#getRetryFallbackPrimarySelector(role: string): RetryFallbackSelector | undefined {
-		const configuredSelector = this.settings.getModelRole(role);
-		return configuredSelector ? parseRetryFallbackSelector(configuredSelector) : undefined;
-	}
-
 	#clearActiveRetryFallback(): void {
 		this.#activeRetryFallback = undefined;
-	}
-
-	#isRetryFallbackSelectorSuppressed(selector: RetryFallbackSelector): boolean {
-		return this.#modelRegistry.isSelectorSuppressed(selector.raw);
-	}
-
-	#noteRetryFallbackCooldown(currentSelector: string, retryAfterMs: number | undefined, errorMessage: string): void {
-		let cooldownMs = retryAfterMs;
-		if (!cooldownMs || cooldownMs <= 0) {
-			const reason = parseRateLimitReason(errorMessage);
-			cooldownMs = reason === "UNKNOWN" ? 5 * 60 * 1000 : calculateRateLimitBackoffMs(reason);
-		}
-		this.#modelRegistry.suppressSelector(currentSelector, Date.now() + cooldownMs);
-	}
-
-	#resolveRetryFallbackRole(currentSelector: string): string | undefined {
-		const parsedCurrent = parseRetryFallbackSelector(currentSelector);
-		if (!parsedCurrent) return undefined;
-		const currentBaseSelector = formatRetryFallbackBaseSelector(parsedCurrent);
-		for (const role of Object.keys(this.#getRetryFallbackChains())) {
-			const primarySelector = this.#getRetryFallbackPrimarySelector(role);
-			if (!primarySelector) continue;
-			if (primarySelector.raw === currentSelector) return role;
-			if (formatRetryFallbackBaseSelector(primarySelector) === currentBaseSelector) return role;
-		}
-		return undefined;
-	}
-
-	#getRetryFallbackEffectiveChain(role: string): RetryFallbackSelector[] {
-		const primarySelector = this.#getRetryFallbackPrimarySelector(role);
-		if (!primarySelector) return [];
-		const chain = [primarySelector];
-		const seen = new Set<string>([primarySelector.raw]);
-		for (const selector of this.#getRetryFallbackChains()[role] ?? []) {
-			const parsed = parseRetryFallbackSelector(selector);
-			if (!parsed || seen.has(parsed.raw)) continue;
-			seen.add(parsed.raw);
-			chain.push(parsed);
-		}
-		return chain;
-	}
-
-	#findRetryFallbackCandidates(role: string, currentSelector: string): RetryFallbackSelector[] {
-		const chain = this.#getRetryFallbackEffectiveChain(role);
-		if (chain.length <= 1) return [];
-		const parsedCurrent = parseRetryFallbackSelector(currentSelector);
-		const currentBaseSelector = parsedCurrent ? formatRetryFallbackBaseSelector(parsedCurrent) : undefined;
-		const exactIndex = chain.findIndex(selector => selector.raw === currentSelector);
-		if (exactIndex >= 0) return chain.slice(exactIndex + 1);
-		const baseIndex = currentBaseSelector
-			? chain.findIndex(selector => formatRetryFallbackBaseSelector(selector) === currentBaseSelector)
-			: -1;
-		if (baseIndex >= 0) return chain.slice(baseIndex + 1);
-		return chain.slice(1);
 	}
 
 	async #applyRetryFallbackCandidate(
@@ -5478,7 +5257,7 @@ export class AgentSession {
 			throw new Error(`Retry fallback model not found: ${selector.raw}`);
 		}
 		const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
-		if (!apiKey) {
+		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new Error(`No API key for retry fallback ${selector.raw}`);
 		}
 
@@ -5508,15 +5287,15 @@ export class AgentSession {
 	}
 
 	async #tryRetryModelFallback(currentSelector: string): Promise<boolean> {
-		const role = this.#activeRetryFallback?.role ?? this.#resolveRetryFallbackRole(currentSelector);
-		if (!role) return false;
+		const role = this.#activeRetryFallback?.role ?? this.#retryFallbackPolicy.resolveRole(currentSelector);
+		if (role === null || role === undefined || role === "") return false;
 
-		for (const selector of this.#findRetryFallbackCandidates(role, currentSelector)) {
-			if (this.#isRetryFallbackSelectorSuppressed(selector)) continue;
+		for (const selector of this.#retryFallbackPolicy.findCandidates(role, currentSelector)) {
+			if (this.#retryFallbackPolicy.isSelectorSuppressed(selector)) continue;
 			const candidate = this.#modelRegistry.find(selector.provider, selector.id);
 			if (!candidate) continue;
 			const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
-			if (!apiKey) continue;
+			if (apiKey === null || apiKey === undefined || apiKey === "") continue;
 			await this.#applyRetryFallbackCandidate(role, selector, currentSelector);
 			return true;
 		}
@@ -5526,7 +5305,7 @@ export class AgentSession {
 
 	async #maybeRestoreRetryFallbackPrimary(): Promise<void> {
 		if (!this.#activeRetryFallback) return;
-		if (this.#getRetryFallbackRevertPolicy() !== "cooldown-expiry") return;
+		if (this.#retryFallbackPolicy.getRevertPolicy() !== "cooldown-expiry") return;
 
 		const {
 			originalSelector: originalSelectorRaw,
@@ -5543,17 +5322,17 @@ export class AgentSession {
 		if (!currentModel) return;
 		const currentSelector = formatRetryFallbackSelector(currentModel, this.thinkingLevel);
 		if (currentSelector === originalSelector.raw) {
-			if (!this.#isRetryFallbackSelectorSuppressed(originalSelector)) {
+			if (!this.#retryFallbackPolicy.isSelectorSuppressed(originalSelector)) {
 				this.#clearActiveRetryFallback();
 			}
 			return;
 		}
-		if (this.#isRetryFallbackSelectorSuppressed(originalSelector)) return;
+		if (this.#retryFallbackPolicy.isSelectorSuppressed(originalSelector)) return;
 
 		const primaryModel = this.#modelRegistry.find(originalSelector.provider, originalSelector.id);
 		if (!primaryModel) return;
 		const apiKey = await this.#modelRegistry.getApiKey(primaryModel, this.sessionId);
-		if (!apiKey) return;
+		if (apiKey === null || apiKey === undefined || apiKey === "") return;
 
 		const currentThinkingLevel = this.thinkingLevel;
 		const thinkingToApply =
@@ -5643,7 +5422,7 @@ export class AgentSession {
 			return false;
 		}
 
-		const errorMessage = message.errorMessage || "Unknown error";
+		const errorMessage = message.errorMessage ?? "Unknown error";
 		const parsedRetryAfterMs = this.#parseRetryAfterMsFromError(errorMessage);
 		let delayMs = retrySettings.baseDelayMs * 2 ** (this.#retryAttempt - 1);
 		let switchedCredential = false;
@@ -5669,12 +5448,17 @@ export class AgentSession {
 		}
 
 		const currentSelector = this.model ? formatRetryFallbackSelector(this.model, this.thinkingLevel) : undefined;
-		if (!switchedCredential && currentSelector) {
-			this.#noteRetryFallbackCooldown(currentSelector, parsedRetryAfterMs, errorMessage);
+		if (!switchedCredential && currentSelector !== null && currentSelector !== undefined && currentSelector !== "") {
+			this.#retryFallbackPolicy.noteCooldown(currentSelector, parsedRetryAfterMs, errorMessage);
 			switchedModel = await this.#tryRetryModelFallback(currentSelector);
 			if (switchedModel) {
 				delayMs = 0;
-			} else if (parsedRetryAfterMs && parsedRetryAfterMs > delayMs) {
+			} else if (
+				parsedRetryAfterMs !== null &&
+				parsedRetryAfterMs !== undefined &&
+				parsedRetryAfterMs !== 0 &&
+				parsedRetryAfterMs > delayMs
+			) {
 				delayMs = parsedRetryAfterMs;
 			}
 		}
@@ -5741,9 +5525,9 @@ export class AgentSession {
 			try {
 				await this.agent.prompt(messages, options);
 				return;
-			} catch (err) {
-				if (!(err instanceof AgentBusyError)) {
-					throw err;
+			} catch (error) {
+				if (!(error instanceof AgentBusyError)) {
+					throw error;
 				}
 				if (Date.now() >= deadline) {
 					throw new Error("Timed out waiting for prior agent run to finish before prompting.");
@@ -5797,7 +5581,7 @@ export class AgentSession {
 		const excludeFromContext = options?.excludeFromContext === true;
 		const cwd = this.sessionManager.getCwd();
 
-		if (this.#extensionRunner?.hasHandlers("user_bash")) {
+		if (this.#extensionRunner?.hasHandlers("user_bash") === true) {
 			const hookResult = await this.#extensionRunner.emitUserBash({
 				type: "user_bash",
 				command,
@@ -5919,7 +5703,7 @@ export class AgentSession {
 
 		const abortController = new AbortController();
 		const execution = (async (): Promise<PythonResult> => {
-			if (this.#extensionRunner?.hasHandlers("user_python")) {
+			if (this.#extensionRunner?.hasHandlers("user_python") === true) {
 				const hookResult = await this.#extensionRunner.emitUserPython({
 					type: "user_python",
 					code,
@@ -5935,7 +5719,10 @@ export class AgentSession {
 
 			// Use the same session ID as the Python tool for kernel sharing
 			const sessionFile = this.sessionManager.getSessionFile();
-			const sessionId = sessionFile ? `session:${sessionFile}:cwd:${cwd}` : `cwd:${cwd}`;
+			const sessionId =
+				sessionFile !== null && sessionFile !== undefined && sessionFile !== ""
+					? `session:${sessionFile}:cwd:${cwd}`
+					: `cwd:${cwd}`;
 			const result = await executePythonCommand(code, {
 				cwd,
 				sessionId,
@@ -6206,7 +5993,7 @@ export class AgentSession {
 			throw new Error("No active model on session");
 		}
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
-		if (!apiKey) {
+		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
@@ -6239,7 +6026,7 @@ export class AgentSession {
 				break;
 			}
 			if (event.type === "error") {
-				throw new Error(event.error.errorMessage || "Ephemeral turn failed");
+				throw new Error(event.error.errorMessage ?? "Ephemeral turn failed");
 			}
 		}
 
@@ -6339,7 +6126,7 @@ export class AgentSession {
 	 */
 	async reload(): Promise<void> {
 		const sessionFile = this.sessionFile;
-		if (!sessionFile) return;
+		if (sessionFile === null || sessionFile === undefined || sessionFile === "") return;
 		await this.switchSession(sessionFile);
 	}
 
@@ -6351,18 +6138,19 @@ export class AgentSession {
 	 */
 	async switchSession(sessionPath: string): Promise<boolean> {
 		const previousSessionFile = this.sessionManager.getSessionFile();
-		const switchingToDifferentSession = previousSessionFile
-			? path.resolve(previousSessionFile) !== path.resolve(sessionPath)
-			: true;
+		const switchingToDifferentSession =
+			previousSessionFile !== null && previousSessionFile !== undefined && previousSessionFile !== ""
+				? path.resolve(previousSessionFile) !== path.resolve(sessionPath)
+				: true;
 		// Emit session_before_switch event (can be cancelled)
-		if (this.#extensionRunner?.hasHandlers("session_before_switch")) {
+		if (this.#extensionRunner?.hasHandlers("session_before_switch") === true) {
 			const result = (await this.#extensionRunner.emit({
 				type: "session_before_switch",
 				reason: "resume",
 				targetSessionFile: sessionPath,
 			})) as SessionBeforeSwitchResult | undefined;
 
-			if (result?.cancel) {
+			if (result?.cancel === true) {
 				return false;
 			}
 		}
@@ -6378,10 +6166,7 @@ export class AgentSession {
 		// the existing message objects is sufficient and avoids structured-clone failures for
 		// extension/custom metadata that is valid to persist but not cloneable.
 		const previousAgentMessages = [...this.agent.state.messages];
-		const previousSteeringMessages = [...this.#steeringMessages];
-		const previousFollowUpMessages = [...this.#followUpMessages];
-		const previousPendingNextTurnMessages = [...this.#pendingNextTurnMessages];
-		const previousScheduledHiddenNextTurnGeneration = this.#scheduledHiddenNextTurnGeneration;
+		const previousPendingMessages = this.#pendingMessages.capture();
 		const previousModel = this.model;
 		const previousThinkingLevel = this.#thinkingLevel;
 		const previousServiceTier = this.agent.serviceTier;
@@ -6389,14 +6174,12 @@ export class AgentSession {
 		const previousTools = [...this.agent.state.tools];
 		const previousBaseSystemPrompt = this.#baseSystemPrompt;
 		const previousSystemPrompt = this.agent.state.systemPrompt;
-		const previousFallbackSelectedMCPToolNames = previousSessionFile
-			? this.#getSessionDefaultSelectedMCPToolNames(previousSessionFile)
-			: undefined;
+		const previousFallbackSelectedMCPToolNames =
+			previousSessionFile !== null && previousSessionFile !== undefined && previousSessionFile !== ""
+				? this.#getSessionDefaultSelectedMCPToolNames(previousSessionFile)
+				: undefined;
 
-		this.#steeringMessages = [];
-		this.#followUpMessages = [];
-		this.#pendingNextTurnMessages = [];
-		this.#scheduledHiddenNextTurnGeneration = undefined;
+		this.#pendingMessages.reset();
 
 		try {
 			await this.sessionManager.setSessionFile(sessionPath);
@@ -6466,9 +6249,9 @@ export class AgentSession {
 			this.agent.setThinkingLevel(toReasoningEffort(nextThinkingLevel));
 			this.agent.serviceTier = hasServiceTierEntry
 				? sessionContext.serviceTier
-				: configuredServiceTier === "none"
+				: (configuredServiceTier === "none"
 					? undefined
-					: configuredServiceTier;
+					: configuredServiceTier);
 
 			this.#reconnectToAgent();
 			return true;
@@ -6495,10 +6278,7 @@ export class AgentSession {
 			this.#baseSystemPrompt = previousBaseSystemPrompt;
 			this.agent.setSystemPrompt(previousSystemPrompt);
 			this.agent.replaceMessages(previousAgentMessages);
-			this.#steeringMessages = previousSteeringMessages;
-			this.#followUpMessages = previousFollowUpMessages;
-			this.#pendingNextTurnMessages = previousPendingNextTurnMessages;
-			this.#scheduledHiddenNextTurnGeneration = previousScheduledHiddenNextTurnGeneration;
+			this.#pendingMessages.restore(previousPendingMessages);
 			if (previousModel) {
 				this.agent.setModel(previousModel);
 			}
@@ -6507,7 +6287,7 @@ export class AgentSession {
 			this.agent.serviceTier = previousServiceTier;
 			this.#syncTodoPhasesFromBranch();
 			this.#reconnectToAgent();
-			if (restoreMcpError) {
+			if (restoreMcpError !== null && restoreMcpError !== undefined) {
 				throw restoreMcpError;
 			}
 			throw error;
@@ -6539,27 +6319,26 @@ export class AgentSession {
 		let skipConversationRestore = false;
 
 		// Emit session_before_branch event (can be cancelled)
-		if (this.#extensionRunner?.hasHandlers("session_before_branch")) {
+		if (this.#extensionRunner?.hasHandlers("session_before_branch") === true) {
 			const result = (await this.#extensionRunner.emit({
 				type: "session_before_branch",
 				entryId,
 			})) as SessionBeforeBranchResult | undefined;
 
-			if (result?.cancel) {
+			if (result?.cancel === true) {
 				return { selectedText, cancelled: true };
 			}
 			skipConversationRestore = result?.skipConversationRestore ?? false;
 		}
 
 		// Clear pending messages (bound to old session state)
-		this.#pendingNextTurnMessages = [];
-		this.#scheduledHiddenNextTurnGeneration = undefined;
+		this.#pendingMessages.clearNextTurn();
 
 		// Flush pending writes before branching
 		await this.sessionManager.flush();
 		this.#asyncJobManager?.cancelAll();
 
-		if (!selectedEntry.parentId) {
+		if (selectedEntry.parentId === null || selectedEntry.parentId === undefined || selectedEntry.parentId === "") {
 			await this.sessionManager.newSession({ parentSession: previousSessionFile });
 		} else {
 			this.sessionManager.createBranchedSession(selectedEntry.parentId);
@@ -6620,7 +6399,7 @@ export class AgentSession {
 		}
 
 		// Model required for summarization
-		if (options.summarize && !this.model) {
+		if (options.summarize === true && !this.model) {
 			throw new Error("No model available for summarization");
 		}
 
@@ -6651,18 +6430,18 @@ export class AgentSession {
 		let fromExtension = false;
 
 		// Emit session_before_tree event
-		if (this.#extensionRunner?.hasHandlers("session_before_tree")) {
+		if (this.#extensionRunner?.hasHandlers("session_before_tree") === true) {
 			const result = (await this.#extensionRunner.emit({
 				type: "session_before_tree",
 				preparation,
 				signal: this.#branchSummaryAbortController.signal,
 			})) as SessionBeforeTreeResult | undefined;
 
-			if (result?.cancel) {
+			if (result?.cancel === true) {
 				return { cancelled: true };
 			}
 
-			if (result?.summary && options.summarize) {
+			if (result?.summary && options.summarize === true) {
 				hookSummary = result.summary;
 				fromExtension = true;
 			}
@@ -6671,10 +6450,10 @@ export class AgentSession {
 		// Run default summarizer if needed
 		let summaryText: string | undefined;
 		let summaryDetails: unknown;
-		if (options.summarize && entriesToSummarize.length > 0 && !hookSummary) {
+		if (options.summarize === true && entriesToSummarize.length > 0 && !hookSummary) {
 			const model = this.model!;
 			const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
-			if (!apiKey) {
+			if (apiKey === null || apiKey === undefined || apiKey === "") {
 				throw new Error(`No API key for ${model.provider}`);
 			}
 			const branchSummarySettings = this.settings.getGroup("branchSummary");
@@ -6686,10 +6465,10 @@ export class AgentSession {
 				reserveTokens: branchSummarySettings.reserveTokens,
 			});
 			this.#branchSummaryAbortController = undefined;
-			if (result.aborted) {
+			if (result.aborted === true) {
 				return { cancelled: true, aborted: true };
 			}
-			if (result.error) {
+			if (result.error !== null && result.error !== undefined && result.error !== "") {
 				throw new Error(result.error);
 			}
 			summaryText = result.summary;
@@ -6728,7 +6507,7 @@ export class AgentSession {
 		// Switch leaf (with or without summary)
 		// Summary is attached at the navigation target position (newLeafId), not the old branch
 		let summaryEntry: BranchSummaryEntry | undefined;
-		if (summaryText) {
+		if (summaryText !== null && summaryText !== undefined && summaryText !== "") {
 			// Create summary at target position (can be null for root)
 			const summaryId = this.sessionManager.branchWithSummary(newLeafId, summaryText, summaryDetails, fromExtension);
 			summaryEntry = this.sessionManager.getEntry(summaryId) as BranchSummaryEntry;
@@ -6753,13 +6532,14 @@ export class AgentSession {
 		// Emit session_tree event; only handlers can mutate session entries, so skip
 		// the emit and the context rebuild when no handlers are registered (mirrors
 		// the session_before_tree guard above).
-		if (this.#extensionRunner?.hasHandlers("session_tree")) {
+		if (this.#extensionRunner?.hasHandlers("session_tree") === true) {
 			await this.#extensionRunner.emit({
 				type: "session_tree",
 				newLeafId: this.sessionManager.getLeafId(),
 				oldLeafId,
 				summaryEntry,
-				fromExtension: summaryText ? fromExtension : undefined,
+				fromExtension:
+					summaryText !== null && summaryText !== undefined && summaryText !== "" ? fromExtension : undefined,
 			});
 			const rawContext = this.sessionManager.buildSessionContext();
 			return { editorText, cancelled: false, summaryEntry, sessionContext: rawContext };
@@ -6816,10 +6596,10 @@ export class AgentSession {
 
 		let totalPremiumRequests = 0;
 		const getTaskToolUsage = (details: unknown): Usage | undefined => {
-			if (!details || typeof details !== "object") return undefined;
+			if (details === null || details === undefined || typeof details !== "object") return undefined;
 			const record = details as Record<string, unknown>;
 			const usage = record.usage;
-			if (!usage || typeof usage !== "object") return undefined;
+			if (usage === null || usage === undefined || typeof usage !== "object") return undefined;
 			return usage as Usage;
 		};
 

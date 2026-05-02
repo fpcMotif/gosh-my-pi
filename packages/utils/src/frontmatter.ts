@@ -32,7 +32,7 @@ export class FrontmatterError extends Error {
 		error: Error,
 		readonly source?: unknown,
 	) {
-		super(`Failed to parse YAML frontmatter (${source}): ${error.message}`, { cause: error });
+		super(`Failed to parse YAML frontmatter (${String(source)}): ${error.message}`, { cause: error });
 		this.name = "FrontmatterError";
 	}
 
@@ -42,9 +42,13 @@ export class FrontmatterError extends Error {
 		if (this.source !== undefined) {
 			details.push(`Source: ${JSON.stringify(this.source)}`);
 		}
-		if (this.cause && typeof this.cause === "object" && "stack" in this.cause && this.cause.stack) {
-			details.push(`Stack:\n${this.cause.stack}`);
-		} else if (this.stack) {
+		const causeStack =
+			this.cause !== null && this.cause !== undefined && typeof this.cause === "object" && "stack" in this.cause
+				? this.cause.stack
+				: undefined;
+		if (typeof causeStack === "string" && causeStack !== "") {
+			details.push(`Stack:\n${causeStack}`);
+		} else if (this.stack !== null && this.stack !== undefined && this.stack !== "") {
 			details.push(`Stack:\n${this.stack}`);
 		}
 		return details.join("\n\n");
@@ -90,29 +94,46 @@ export function parseFrontmatter(
 	const body = normalized.slice(endIndex + 4).trim();
 
 	try {
-		// Replace tabs with spaces for YAML compatibility, use failsafe mode for robustness
 		const loaded = YAML.parse(metadata.replaceAll("\t", "  ")) as Record<string, unknown> | null;
 		return { frontmatter: normalizeKeys({ ...frontmatter, ...loaded }), body };
 	} catch (error) {
-		const err = new FrontmatterError(
-			error instanceof Error ? error : new Error(`YAML: ${error}`),
-			loc ?? `Inline '${truncate(content, 64)}'`,
-		);
-		if (level === "warn" || level === "fatal") {
-			logger.warn("Failed to parse YAML frontmatter", { err: err.toString() });
-		}
-		if (level === "fatal") {
-			throw err;
-		}
-
-		// Simple YAML parsing - just key: value pairs
-		for (const line of metadata.split("\n")) {
-			const match = line.match(/^([\w-]+):\s*(.*)$/);
-			if (match) {
-				frontmatter[match[1]] = match[2].trim();
-			}
-		}
-
-		return { frontmatter: normalizeKeys(frontmatter) as Record<string, unknown>, body };
+		return handleFrontmatterParseError({ error, content, metadata, loc, level, frontmatter, body });
 	}
+}
+
+interface FrontmatterFallbackArgs {
+	error: unknown;
+	content: string;
+	metadata: string;
+	loc: string | undefined;
+	level: NonNullable<FrontmatterOptions["level"]>;
+	frontmatter: Record<string, unknown>;
+	body: string;
+}
+
+function handleFrontmatterParseError(args: FrontmatterFallbackArgs): {
+	frontmatter: Record<string, unknown>;
+	body: string;
+} {
+	const { error, content, metadata, loc, level, frontmatter, body } = args;
+	const err = new FrontmatterError(
+		error instanceof Error ? error : new Error(`YAML: ${String(error)}`),
+		loc ?? `Inline '${truncate(content, 64)}'`,
+	);
+	if (level === "warn" || level === "fatal") {
+		logger.warn("Failed to parse YAML frontmatter", { err: err.toString() });
+	}
+	if (level === "fatal") {
+		throw err;
+	}
+
+	// Simple YAML parsing - just key: value pairs
+	for (const line of metadata.split("\n")) {
+		const match = line.match(/^([\w-]+):\s*(.*)$/);
+		if (match) {
+			frontmatter[match[1]] = match[2].trim();
+		}
+	}
+
+	return { frontmatter: normalizeKeys(frontmatter) as Record<string, unknown>, body };
 }

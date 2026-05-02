@@ -163,7 +163,7 @@ async function renderGitHubIssue(
 			: `/repos/${gh.owner}/${gh.repo}/issues/${gh.number}`;
 
 	const result = await fetchGitHubApi(endpoint, timeout, signal);
-	if (!result.ok || !result.data) return { content: "", ok: false };
+	if (!result.ok || result.data === null || result.data === undefined) return { content: "", ok: false };
 
 	const issue = result.data as {
 		title: string;
@@ -185,7 +185,7 @@ async function renderGitHubIssue(
 		md += `Labels: ${issue.labels.map(l => l.name).join(", ")}\n`;
 	}
 	md += `\n---\n\n`;
-	md += issue.body || "*No description provided.*";
+	md += issue.body ?? "*No description provided.*";
 	md += `\n\n---\n\n`;
 
 	// Fetch comments if any
@@ -230,7 +230,7 @@ async function renderGitHubIssuesList(
 	let md = `# ${gh.owner}/${gh.repo} - Open Issues\n\n`;
 
 	for (const issue of issues) {
-		if (issue.pull_request) continue; // Skip PRs in issues list
+		if (issue.pull_request !== null && issue.pull_request !== undefined) continue; // Skip PRs in issues list
 		const labels = issue.labels.length > 0 ? ` [${issue.labels.map(l => l.name).join(", ")}]` : "";
 		md += `- **#${issue.number}** ${issue.title}${labels}\n`;
 		md += `  by @${issue.user.login} · ${issue.comments} comments · ${issue.created_at}\n\n`;
@@ -256,8 +256,8 @@ async function renderGitHubTree(
 		default_branch: string;
 	};
 
-	const ref = gh.ref || repo.default_branch;
-	const dirPath = gh.path || "";
+	const ref = gh.ref ?? repo.default_branch;
+	const dirPath = gh.path ?? "";
 
 	let md = `# ${repo.full_name}/${dirPath || "(root)"}\n\n`;
 	md += `**Branch:** ${ref}\n\n`;
@@ -288,7 +288,7 @@ async function renderGitHubTree(
 		md += "```\n";
 		for (const item of items) {
 			const prefix = item.type === "dir" ? "[dir] " : "      ";
-			const size = item.size ? ` (${item.size} bytes)` : "";
+			const size = item.size !== null && item.size !== undefined && item.size !== 0 ? ` (${item.size} bytes)` : "";
 			md += `${prefix}${item.name}${item.type === "file" ? size : ""}\n`;
 		}
 		md += "```\n\n";
@@ -332,9 +332,11 @@ async function renderGitHubRepo(
 	};
 
 	let md = `# ${repo.full_name}\n\n`;
-	if (repo.description) md += `${repo.description}\n\n`;
+	if (repo.description !== null && repo.description !== undefined && repo.description !== "")
+		md += `${repo.description}\n\n`;
 	md += `Stars: ${repo.stargazers_count} · Forks: ${repo.forks_count} · Issues: ${repo.open_issues_count}\n`;
-	if (repo.language) md += `Language: ${repo.language}\n`;
+	if (repo.language !== null && repo.language !== undefined && repo.language !== "")
+		md += `Language: ${repo.language}\n`;
 	if (repo.license) md += `License: ${repo.license.name}\n`;
 	md += `\n---\n\n`;
 
@@ -344,7 +346,7 @@ async function renderGitHubRepo(
 		timeout,
 		signal,
 	);
-	if (treeResult.ok && treeResult.data) {
+	if (treeResult.ok && treeResult.data !== null && treeResult.data !== undefined) {
 		const tree = (treeResult.data as { tree: Array<{ path: string; type: string }> }).tree;
 		md += `## Files\n\n`;
 		md += "```\n";
@@ -360,7 +362,7 @@ async function renderGitHubRepo(
 
 	// Fetch README
 	const readmeResult = await fetchGitHubApi(`/repos/${gh.owner}/${gh.repo}/readme`, timeout, signal);
-	if (readmeResult.ok && readmeResult.data) {
+	if (readmeResult.ok && readmeResult.data !== null && readmeResult.data !== undefined) {
 		const readme = readmeResult.data as { content: string; encoding: string };
 		if (readme.encoding === "base64") {
 			const decoded = Buffer.from(readme.content, "base64").toString("utf-8");

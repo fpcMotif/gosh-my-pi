@@ -62,7 +62,7 @@ export function resolveSkillUrlToPath(url: string, skills: readonly Skill[]): st
 	}
 
 	// Combine any colon suffix (line range like ":1-5") with the path segment
-	const rawPath = (parsed[2] ?? "") + (suffix ? `/${suffix}` : "");
+	const rawPath = (parsed[2] ?? "") + (suffix !== null && suffix !== undefined && suffix !== "" ? `/${suffix}` : "");
 	const hasRelativePath = rawPath !== "" && rawPath !== "/";
 
 	if (!hasRelativePath) {
@@ -77,8 +77,8 @@ export function resolveSkillUrlToPath(url: string, skills: readonly Skill[]): st
 	}
 	try {
 		validateRelativePath(relativePath);
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		throw new ToolError(message);
 	}
 
@@ -169,13 +169,13 @@ async function resolveInternalUrlToPath(
 			);
 		}
 		const resolvedLocalPath = resolveLocalUrlToPath(url, localOptions);
-		if (ensureLocalParentDirs) {
+		if (ensureLocalParentDirs === true) {
 			await fs.mkdir(path.dirname(resolvedLocalPath), { recursive: true });
 		}
 		return resolvedLocalPath;
 	}
 
-	if (!internalRouter?.canHandle(url)) {
+	if (internalRouter?.canHandle(url) !== true) {
 		throw new ToolError(
 			`Cannot resolve ${scheme}:// URL in bash command: ${url}\n` +
 				"Internal URL router is unavailable for this protocol in the current session.",
@@ -190,7 +190,7 @@ async function resolveInternalUrlToPath(
 		throw new ToolError(`Failed to resolve ${scheme}:// URL in bash command: ${url}\n${message}`);
 	}
 
-	if (!resource.sourcePath) {
+	if (resource.sourcePath === null || resource.sourcePath === undefined || resource.sourcePath === "") {
 		throw new ToolError(`${scheme}:// URL resolved without a filesystem path and cannot be used in bash: ${url}`);
 	}
 
@@ -240,7 +240,7 @@ export async function expandInternalUrls(command: string, options: InternalUrlEx
 			options.localOptions,
 			options.ensureLocalParentDirs,
 		);
-		const replacement = options.noEscape ? resolvedPath : shellEscape(resolvedPath);
+		const replacement = options.noEscape === true ? resolvedPath : shellEscape(resolvedPath);
 		expanded = `${expanded.slice(0, index)}${replacement}${expanded.slice(index + token.length)}`;
 	}
 

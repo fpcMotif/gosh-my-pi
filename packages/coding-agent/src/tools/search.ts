@@ -101,7 +101,7 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 				throw new ToolError("Pattern must not be empty");
 			}
 
-			const normalizedSkip = skip === undefined ? 0 : Number.isFinite(skip) ? Math.floor(skip) : Number.NaN;
+			const normalizedSkip = skip === undefined ? 0 : (Number.isFinite(skip) ? Math.floor(skip) : Number.NaN);
 			if (normalizedSkip < 0 || !Number.isFinite(normalizedSkip)) {
 				throw new ToolError("Skip must be a non-negative number");
 			}
@@ -123,12 +123,12 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 				throw new ToolError("`path` must be a non-empty path or glob");
 			}
 			const internalRouter = this.session.internalRouter;
-			if (internalRouter?.canHandle(rawPath)) {
+			if (internalRouter?.canHandle(rawPath) === true) {
 				if (hasGlobPathChars(rawPath)) {
 					throw new ToolError(`Glob patterns are not supported for internal URLs: ${rawPath}`);
 				}
 				const resource = await internalRouter.resolve(rawPath);
-				if (!resource.sourcePath) {
+				if (resource.sourcePath === null || resource.sourcePath === undefined || resource.sourcePath === "") {
 					throw new ToolError(`Cannot search internal URL without a backing file: ${rawPath}`);
 				}
 				searchPath = resource.sourcePath;
@@ -216,11 +216,11 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 						undefined,
 					);
 				}
-			} catch (err) {
-				if (err instanceof Error && err.message.startsWith("regex parse error")) {
-					throw new ToolError(err.message);
+			} catch (error) {
+				if (error instanceof Error && error.message.startsWith("regex parse error")) {
+					throw new ToolError(error.message);
 				}
-				throw err;
+				throw error;
 			}
 
 			const formatPath = (filePath: string): string =>
@@ -311,7 +311,7 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 						}
 					}
 					pushLine(match.lineNumber, match.line, true);
-					if (match.truncated) {
+					if (match.truncated === true) {
 						linesTruncated = true;
 					}
 					if (match.contextAfter) {
@@ -341,13 +341,15 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 					displayLines.push(...rendered.display);
 				}
 			}
-			if (matchLimitReached || result.limitReached) {
+			if (matchLimitReached || result.limitReached === true) {
 				outputLines.push("", limitMessage);
 			}
 			const rawOutput = outputLines.join("\n");
 			const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 			const output = truncation.content;
-			const truncated = Boolean(matchLimitReached || result.limitReached || truncation.truncated || linesTruncated);
+			const truncated = Boolean(
+				matchLimitReached || (result.limitReached ?? truncation.truncated ?? linesTruncated),
+			);
 			const details: SearchToolDetails = {
 				scopePath,
 				matchCount: selectedMatches.length,
@@ -359,15 +361,15 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 				})),
 				truncated,
 				matchLimitReached: matchLimitReached ? effectiveLimit : undefined,
-				resultLimitReached: result.limitReached ? internalLimit : undefined,
+				resultLimitReached: result.limitReached === true ? internalLimit : undefined,
 				displayContent: displayLines.join("\n"),
 			};
-			if (truncation.truncated) details.truncation = truncation;
+			if (truncation.truncated === true) details.truncation = truncation;
 			if (linesTruncated) details.linesTruncated = true;
 			const resultBuilder = toolResult(details)
 				.text(output)
 				.limits({ columnMax: linesTruncated ? DEFAULT_MAX_COLUMN : undefined });
-			if (truncation.truncated) {
+			if (truncation.truncated === true) {
 				resultBuilder.truncation(truncation, { direction: "head" });
 			}
 			return resultBuilder.done();
@@ -393,8 +395,8 @@ export const searchToolRenderer = {
 	inline: true,
 	renderCall(args: SearchRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const meta: string[] = [];
-		if (args.path) meta.push(`in ${args.path}`);
-		if (args.i) meta.push("case:insensitive");
+		if (args.path !== null && args.path !== undefined && args.path !== "") meta.push(`in ${args.path}`);
+		if (args.i === true) meta.push("case:insensitive");
 		if (args.gitignore === false) meta.push("gitignore:false");
 		if (args.skip !== undefined && args.skip > 0) meta.push(`skip:${args.skip}`);
 
@@ -422,7 +424,12 @@ export const searchToolRenderer = {
 
 		if (!hasDetailedData) {
 			const textContent = result.details?.displayContent ?? result.content?.find(c => c.type === "text")?.text;
-			if (!textContent || textContent === "No matches found") {
+			if (
+				textContent === null ||
+				textContent === undefined ||
+				textContent === "" ||
+				textContent === "No matches found"
+			) {
 				return new Text(formatEmptyMessage("No matches found", uiTheme), 0, 0);
 			}
 			const lines = textContent.split("\n").filter(line => line.trim() !== "");
@@ -476,7 +483,8 @@ export const searchToolRenderer = {
 
 		const summaryParts = [formatCount("match", matchCount), formatCount("file", fileCount)];
 		const meta = [...summaryParts];
-		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
+		if (details?.scopePath !== null && details?.scopePath !== undefined && details?.scopePath !== "")
+			meta.push(`in ${details.scopePath}`);
 		if (truncated) meta.push(uiTheme.fg("warning", "truncated"));
 		const description = args?.pattern ?? undefined;
 		const header = renderStatusLine(
@@ -511,11 +519,14 @@ export const searchToolRenderer = {
 		const renderedMatchLimit = details?.matchLimitReached ?? limits?.matchLimit?.reached;
 		const renderedResultLimit = details?.resultLimitReached ?? limits?.resultLimit?.reached;
 		const truncationReasons: string[] = [];
-		if (renderedMatchLimit) truncationReasons.push(`first ${renderedMatchLimit} matches`);
-		if (renderedResultLimit) truncationReasons.push(`first ${renderedResultLimit} results`);
+		if (renderedMatchLimit !== null && renderedMatchLimit !== undefined && renderedMatchLimit !== 0)
+			truncationReasons.push(`first ${renderedMatchLimit} matches`);
+		if (renderedResultLimit !== null && renderedResultLimit !== undefined && renderedResultLimit !== 0)
+			truncationReasons.push(`first ${renderedResultLimit} results`);
 		if (truncation) truncationReasons.push(truncation.truncatedBy === "lines" ? "line limit" : "size limit");
 		if (limits?.columnTruncated) truncationReasons.push(`line length ${limits.columnTruncated.maxColumn}`);
-		if (truncation?.artifactId) truncationReasons.push(formatFullOutputReference(truncation.artifactId));
+		if (truncation?.artifactId !== null && truncation?.artifactId !== undefined && truncation?.artifactId !== "")
+			truncationReasons.push(formatFullOutputReference(truncation.artifactId));
 
 		const extraLines =
 			truncationReasons.length > 0 ? [uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)] : [];

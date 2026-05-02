@@ -75,7 +75,7 @@ describe("RpcHostToolBridge", () => {
 			},
 		});
 
-		await expect(execution).resolves.toEqual({
+		expect(execution).resolves.toEqual({
 			content: [{ type: "text", text: "5" }],
 		});
 	});
@@ -110,7 +110,7 @@ describe("RpcHostToolBridge", () => {
 			type: "host_tool_cancel",
 			targetId: request.id,
 		});
-		await expect(execution).rejects.toThrow('Host tool "host_wait" was aborted');
+		expect(execution).rejects.toThrow('Host tool "host_wait" was aborted');
 	});
 });
 

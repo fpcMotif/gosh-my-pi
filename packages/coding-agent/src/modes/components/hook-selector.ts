@@ -95,7 +95,13 @@ export class HookSelectorComponent extends Container {
 		this.addChild(this.#titleComponent);
 		this.addChild(new Spacer(1));
 
-		if (opts?.timeout && opts.timeout > 0 && opts.tui) {
+		if (
+			opts?.timeout !== null &&
+			opts?.timeout !== undefined &&
+			opts?.timeout !== 0 &&
+			opts.timeout > 0 &&
+			opts.tui
+		) {
 			this.#countdown = new CountdownTimer(
 				opts.timeout,
 				opts.tui,
@@ -113,7 +119,7 @@ export class HookSelectorComponent extends Container {
 			);
 		}
 
-		if (opts?.outline) {
+		if (opts?.outline === true) {
 			this.#outlinedList = new OutlinedList();
 			this.addChild(this.#outlinedList);
 		} else {

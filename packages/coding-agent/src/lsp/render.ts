@@ -38,40 +38,52 @@ function sanitizeInlineText(value: string): string {
 
 export function renderCall(args: LspParams, _options: RenderResultOptions, theme: Theme): Text {
 	const actionLabel = (args.action ?? "request").replace(/_/g, " ");
-	const queryPreview = args.query ? truncateToWidth(args.query, TRUNCATE_LENGTHS.SHORT) : undefined;
-	const symbolPreview = args.symbol
-		? truncateToWidth(sanitizeInlineText(args.symbol), TRUNCATE_LENGTHS.SHORT)
-		: undefined;
+	const queryPreview =
+		args.query !== null && args.query !== undefined && args.query !== ""
+			? truncateToWidth(args.query, TRUNCATE_LENGTHS.SHORT)
+			: undefined;
+	const symbolPreview =
+		args.symbol !== null && args.symbol !== undefined && args.symbol !== ""
+			? truncateToWidth(sanitizeInlineText(args.symbol), TRUNCATE_LENGTHS.SHORT)
+			: undefined;
 
 	let target: string | undefined;
 	let hasFileTarget = false;
 
-	if (args.file) {
+	if (args.file !== null && args.file !== undefined && args.file !== "") {
 		target = shortenPath(args.file);
 		hasFileTarget = true;
 	}
 
 	if (hasFileTarget && args.line !== undefined) {
 		target += `:${args.line}`;
-		if (symbolPreview) {
+		if (symbolPreview !== null && symbolPreview !== undefined && symbolPreview !== "") {
 			target += ` (${symbolPreview})`;
 		}
-	} else if (!target && args.line !== undefined) {
+	} else if ((target === null || target === undefined || target === "") && args.line !== undefined) {
 		target = `line ${args.line}`;
-		if (symbolPreview) {
+		if (symbolPreview !== null && symbolPreview !== undefined && symbolPreview !== "") {
 			target += ` (${symbolPreview})`;
 		}
 	}
 
 	const meta: string[] = [];
-	if (queryPreview && target) meta.push(`query:${queryPreview}`);
-	if (args.new_name) meta.push(`new:${args.new_name}`);
+	if (
+		queryPreview !== null &&
+		queryPreview !== undefined &&
+		queryPreview !== "" &&
+		target !== null &&
+		target !== undefined &&
+		target !== ""
+	)
+		meta.push(`query:${queryPreview}`);
+	if (args.new_name !== null && args.new_name !== undefined && args.new_name !== "") meta.push(`new:${args.new_name}`);
 	if (args.apply !== undefined) meta.push(`apply:${args.apply ? "true" : "false"}`);
 
 	const descriptionParts = [actionLabel];
-	if (target) {
+	if (target !== null && target !== undefined && target !== "") {
 		descriptionParts.push(target);
-	} else if (queryPreview) {
+	} else if (queryPreview !== null && queryPreview !== undefined && queryPreview !== "") {
 		descriptionParts.push(queryPreview);
 	}
 
@@ -103,7 +115,14 @@ export function renderResult(
 	args?: LspParams,
 ): Component {
 	const content = result.content?.[0];
-	if (!content || content.type !== "text" || !("text" in content) || !content.text) {
+	if (
+		!content ||
+		content.type !== "text" ||
+		!("text" in content) ||
+		content.text === null ||
+		content.text === undefined ||
+		content.text === ""
+	) {
 		const icon = formatStatusIcon("warning", theme, options.spinnerFrame);
 		const header = `${icon} LSP`;
 		return new Text([header, theme.fg("dim", "No result")].join("\n"), 0, 0);
@@ -123,17 +142,19 @@ export function renderResult(
 	// Static request info
 	const request = args ?? result.details?.request;
 	const requestLines: string[] = [];
-	if (request?.file) {
+	if (request?.file !== null && request?.file !== undefined && request?.file !== "") {
 		requestLines.push(theme.fg("toolOutput", request.file));
 	}
 	if (request?.line !== undefined) {
 		requestLines.push(theme.fg("dim", `line ${request.line}`));
 	}
-	if (request?.symbol) {
+	if (request?.symbol !== null && request?.symbol !== undefined && request?.symbol !== "") {
 		requestLines.push(theme.fg("dim", `symbol: ${sanitizeInlineText(request.symbol)}`));
 	}
-	if (request?.query) requestLines.push(theme.fg("dim", `query: ${request.query}`));
-	if (request?.new_name) requestLines.push(theme.fg("dim", `new name: ${request.new_name}`));
+	if (request?.query !== null && request?.query !== undefined && request?.query !== "")
+		requestLines.push(theme.fg("dim", `query: ${request.query}`));
+	if (request?.new_name !== null && request?.new_name !== undefined && request?.new_name !== "")
+		requestLines.push(theme.fg("dim", `new name: ${request.new_name}`));
 	if (request?.apply !== undefined) requestLines.push(theme.fg("dim", `apply: ${request.apply ? "true" : "false"}`));
 
 	const outputBlock = new CachedOutputBlock();
@@ -155,7 +176,7 @@ export function renderResult(
 				label = "Diagnostics";
 				const errorCount = errorMatch ? Number.parseInt(errorMatch[1], 10) : 0;
 				const warnCount = warningMatch ? Number.parseInt(warningMatch[1], 10) : 0;
-				state = errorCount > 0 ? "error" : warnCount > 0 ? "warning" : "success";
+				state = errorCount > 0 ? "error" : (warnCount > 0 ? "warning" : "success");
 				bodyLines = renderDiagnostics(errorMatch, warningMatch, lines, expanded, theme);
 			} else if (refMatch) {
 				label = "References";
@@ -169,7 +190,7 @@ export function renderResult(
 			}
 
 			const actionLabel = (request?.action ?? result.details?.action ?? label.toLowerCase()).replace(/_/g, " ");
-			const status = isPartial ? "running" : result.isError ? "error" : "success";
+			const status = isPartial ? "running" : (result.isError === true ? "error" : "success");
 			const icon = formatStatusIcon(status, theme, spinnerFrame);
 			const header = `${icon} LSP ${actionLabel}`;
 
@@ -319,9 +340,9 @@ function renderDiagnostics(
 	const icon =
 		errorCount > 0
 			? theme.styledSymbol("status.error", "error")
-			: warnCount > 0
+			: (warnCount > 0
 				? theme.styledSymbol("status.warning", "warning")
-				: theme.styledSymbol("status.success", "success");
+				: theme.styledSymbol("status.success", "success"));
 
 	const meta: string[] = [];
 	if (errorCount > 0) meta.push(`${errorCount} error${errorCount !== 1 ? "s" : ""}`);
@@ -593,9 +614,9 @@ function renderGeneric(text: string, lines: string[], expanded: boolean, theme: 
 	const icon =
 		hasError && !hasSuccess
 			? theme.styledSymbol("status.error", "error")
-			: hasSuccess && !hasError
+			: (hasSuccess && !hasError
 				? theme.styledSymbol("status.success", "success")
-				: theme.styledSymbol("status.info", "accent");
+				: theme.styledSymbol("status.info", "accent"));
 
 	if (expanded) {
 		let output = `${icon} ${theme.fg("dim", "Output")}`;

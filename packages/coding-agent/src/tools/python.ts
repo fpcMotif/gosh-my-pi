@@ -99,7 +99,7 @@ function renderJsonTree(value: unknown, theme: Theme, expanded: boolean, maxDept
 
 	const renderNode = (node: unknown, prefix: string, depth: number, isLast: boolean, label?: string): string[] => {
 		const branch = getTreeBranch(isLast, theme);
-		const displayLabel = label ? `${label}: ` : "";
+		const displayLabel = label !== null && label !== undefined && label !== "" ? `${label}: ` : "";
 
 		if (depth >= maxDepth || node === null || typeof node !== "object") {
 			return [`${prefix}${branch} ${displayLabel}${formatJsonScalar(node)}`];
@@ -196,7 +196,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 
 		const execution = (async (): Promise<AgentToolResult<PythonToolDetails | undefined>> => {
 			try {
-				if (signal?.aborted) {
+				if (signal !== undefined && signal.aborted) {
 					throw new ToolAbortError();
 				}
 				session.assertPythonExecutionAllowed?.();
@@ -259,7 +259,10 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 						pushUpdate();
 					},
 				});
-				const sessionId = sessionFile ? `session:${sessionFile}:cwd:${session.cwd}` : `cwd:${session.cwd}`;
+				const sessionId =
+					sessionFile !== null && sessionFile !== undefined && sessionFile !== ""
+						? `session:${sessionFile}:cwd:${session.cwd}`
+						: `cwd:${session.cwd}`;
 
 				if (getPreludeDocs().length === 0) {
 					const warmup = await warmPythonEnvironment(
@@ -409,9 +412,9 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 						const outputText =
 							cells.length > 1
 								? `${combinedOutput}\n\nCell ${i + 1} failed (exit code ${result.exitCode}). Earlier cells succeeded—their state persists. Fix only cell ${i + 1}.`
-								: combinedOutput
+								: (combinedOutput
 									? `${combinedOutput}\n\nCommand exited with code ${result.exitCode}`
-									: `Command exited with code ${result.exitCode}`;
+									: `Command exited with code ${result.exitCode}`);
 
 						const rawSummary = (await finalizeOutput()) ?? {
 							output: "",
@@ -570,128 +573,135 @@ function formatStatusEvent(event: PythonStatusEvent, theme: Theme): string {
 	const parts: string[] = [];
 
 	// Error handling
-	if (data.error) {
+	if (data.error !== null && data.error !== undefined) {
 		return `${icon} ${theme.fg("warning", op)}: ${theme.fg("dim", String(data.error))}`;
 	}
 
 	// Build description based on common fields
 	switch (op) {
 		case "read":
-			parts.push(`${data.chars} chars`);
-			if (data.path) parts.push(`from ${shortenPath(String(data.path))}`);
+			parts.push(`${String(data.chars)} chars`);
+			if (data.path !== null && data.path !== undefined) parts.push(`from ${shortenPath(String(data.path))}`);
 			break;
 		case "write":
 		case "append":
-			parts.push(`${data.chars} chars`);
-			if (data.path) parts.push(`to ${shortenPath(String(data.path))}`);
+			parts.push(`${String(data.chars)} chars`);
+			if (data.path !== null && data.path !== undefined) parts.push(`to ${shortenPath(String(data.path))}`);
 			break;
 		case "cat":
-			parts.push(`${data.files} file${(data.files as number) !== 1 ? "s" : ""}`);
-			parts.push(`${data.chars} chars`);
+			parts.push(`${String(data.files)} file${(data.files as number) !== 1 ? "s" : ""}`);
+			parts.push(`${String(data.chars)} chars`);
 			break;
 		case "find":
 		case "glob":
-			parts.push(`${data.count} match${(data.count as number) !== 1 ? "es" : ""}`);
-			if (data.pattern) parts.push(`for "${truncateToWidth(String(data.pattern), 20)}"`);
+			parts.push(`${String(data.count)} match${(data.count as number) !== 1 ? "es" : ""}`);
+			if (data.pattern !== null && data.pattern !== undefined)
+				parts.push(`for "${truncateToWidth(String(data.pattern), 20)}"`);
 			break;
 		case "grep":
-			parts.push(`${data.count} match${(data.count as number) !== 1 ? "es" : ""}`);
-			if (data.path) parts.push(`in ${shortenPath(String(data.path))}`);
+			parts.push(`${String(data.count)} match${(data.count as number) !== 1 ? "es" : ""}`);
+			if (data.path !== null && data.path !== undefined) parts.push(`in ${shortenPath(String(data.path))}`);
 			break;
 		case "rgrep":
-			parts.push(`${data.count} match${(data.count as number) !== 1 ? "es" : ""}`);
-			if (data.pattern) parts.push(`for "${truncateToWidth(String(data.pattern), 20)}"`);
+			parts.push(`${String(data.count)} match${(data.count as number) !== 1 ? "es" : ""}`);
+			if (data.pattern !== null && data.pattern !== undefined)
+				parts.push(`for "${truncateToWidth(String(data.pattern), 20)}"`);
 			break;
 		case "ls":
-			parts.push(`${data.count} entr${(data.count as number) !== 1 ? "ies" : "y"}`);
+			parts.push(`${String(data.count)} entr${(data.count as number) !== 1 ? "ies" : "y"}`);
 			break;
 		case "env":
 			if (data.action === "set") {
-				parts.push(`set ${data.key}=${truncateToWidth(String(data.value ?? ""), 30)}`);
+				parts.push(`set ${String(data.key)}=${truncateToWidth(String(data.value ?? ""), 30)}`);
 			} else if (data.action === "get") {
-				parts.push(`${data.key}=${truncateToWidth(String(data.value ?? ""), 30)}`);
+				parts.push(`${String(data.key)}=${truncateToWidth(String(data.value ?? ""), 30)}`);
 			} else {
-				parts.push(`${data.count} variable${(data.count as number) !== 1 ? "s" : ""}`);
+				parts.push(`${String(data.count)} variable${(data.count as number) !== 1 ? "s" : ""}`);
 			}
 			break;
 		case "stat":
-			if (data.is_dir) {
+			if (data.is_dir !== null && data.is_dir !== undefined) {
 				parts.push("directory");
 			} else {
-				parts.push(`${data.size} bytes`);
+				parts.push(`${String(data.size)} bytes`);
 			}
-			if (data.path) parts.push(shortenPath(String(data.path)));
+			if (data.path !== null && data.path !== undefined) parts.push(shortenPath(String(data.path)));
 			break;
 		case "replace":
 		case "sed":
-			parts.push(`${data.count} replacement${(data.count as number) !== 1 ? "s" : ""}`);
-			if (data.path) parts.push(`in ${shortenPath(String(data.path))}`);
+			parts.push(`${String(data.count)} replacement${(data.count as number) !== 1 ? "s" : ""}`);
+			if (data.path !== null && data.path !== undefined) parts.push(`in ${shortenPath(String(data.path))}`);
 			break;
 		case "rsed":
-			parts.push(`${data.count} replacement${(data.count as number) !== 1 ? "s" : ""}`);
-			if (data.files) parts.push(`in ${data.files} file${(data.files as number) !== 1 ? "s" : ""}`);
+			parts.push(`${String(data.count)} replacement${(data.count as number) !== 1 ? "s" : ""}`);
+			if (data.files !== null && data.files !== undefined)
+				parts.push(`in ${String(data.files)} file${(data.files as number) !== 1 ? "s" : ""}`);
 			break;
 		case "git_status":
-			if (data.clean) {
+			if (data.clean !== null && data.clean !== undefined) {
 				parts.push("clean");
 			} else {
 				const statusParts: string[] = [];
-				if (data.staged) statusParts.push(`${data.staged} staged`);
-				if (data.modified) statusParts.push(`${data.modified} modified`);
-				if (data.untracked) statusParts.push(`${data.untracked} untracked`);
+				if (data.staged !== null && data.staged !== undefined) statusParts.push(`${String(data.staged)} staged`);
+				if (data.modified !== null && data.modified !== undefined)
+					statusParts.push(`${String(data.modified)} modified`);
+				if (data.untracked !== null && data.untracked !== undefined)
+					statusParts.push(`${String(data.untracked)} untracked`);
 				parts.push(statusParts.join(", ") || "unknown");
 			}
-			if (data.branch) parts.push(`on ${data.branch}`);
+			if (data.branch !== null && data.branch !== undefined) parts.push(`on ${String(data.branch)}`);
 			break;
 		case "git_log":
-			parts.push(`${data.commits} commit${(data.commits as number) !== 1 ? "s" : ""}`);
+			parts.push(`${String(data.commits)} commit${(data.commits as number) !== 1 ? "s" : ""}`);
 			break;
 		case "git_diff":
-			parts.push(`${data.lines} line${(data.lines as number) !== 1 ? "s" : ""}`);
-			if (data.staged) parts.push("(staged)");
+			parts.push(`${String(data.lines)} line${(data.lines as number) !== 1 ? "s" : ""}`);
+			if (data.staged !== null && data.staged !== undefined) parts.push("(staged)");
 			break;
 		case "diff":
-			if (data.identical) {
+			if (data.identical !== null && data.identical !== undefined) {
 				parts.push("files identical");
 			} else {
 				parts.push("files differ");
 			}
 			break;
 		case "batch":
-			parts.push(`${data.files} file${(data.files as number) !== 1 ? "s" : ""} processed`);
+			parts.push(`${String(data.files)} file${(data.files as number) !== 1 ? "s" : ""} processed`);
 			break;
 		case "wc":
-			parts.push(`${data.lines}L ${data.words}W ${data.chars}C`);
+			parts.push(`${String(data.lines)}L ${String(data.words)}W ${String(data.chars)}C`);
 			break;
 		case "lines":
-			parts.push(`${data.count} line${(data.count as number) !== 1 ? "s" : ""}`);
-			if (data.start && data.end) parts.push(`(${data.start}-${data.end})`);
+			parts.push(`${String(data.count)} line${(data.count as number) !== 1 ? "s" : ""}`);
+			if (data.start !== null && data.start !== undefined && data.end !== null && data.end !== undefined)
+				parts.push(`(${String(data.start)}-${String(data.end)})`);
 			break;
 		case "delete_lines":
 		case "delete_matching":
-			parts.push(`${data.count} line${(data.count as number) !== 1 ? "s" : ""} deleted`);
+			parts.push(`${String(data.count)} line${(data.count as number) !== 1 ? "s" : ""} deleted`);
 			break;
 		case "insert_at":
-			parts.push(`${data.lines_inserted} line${(data.lines_inserted as number) !== 1 ? "s" : ""} inserted`);
+			parts.push(`${String(data.lines_inserted)} line${(data.lines_inserted as number) !== 1 ? "s" : ""} inserted`);
 			break;
 		case "cd":
 		case "pwd":
 		case "mkdir":
 		case "touch":
-			if (data.path) parts.push(shortenPath(String(data.path)));
+			if (data.path !== null && data.path !== undefined) parts.push(shortenPath(String(data.path)));
 			break;
 		case "rm":
 		case "mv":
 		case "cp":
-			if (data.src) parts.push(`${shortenPath(String(data.src))} → ${shortenPath(String(data.dst))}`);
-			else if (data.path) parts.push(shortenPath(String(data.path)));
+			if (data.src !== null && data.src !== undefined)
+				parts.push(`${shortenPath(String(data.src))} → ${shortenPath(String(data.dst))}`);
+			else if (data.path !== null && data.path !== undefined) parts.push(shortenPath(String(data.path)));
 			break;
 		default:
 			// Generic formatting for other operations
 			if (data.count !== undefined) {
 				parts.push(String(data.count));
 			}
-			if (data.path) {
+			if (data.path !== null && data.path !== undefined) {
 				parts.push(shortenPath(String(data.path)));
 			}
 	}
@@ -734,13 +744,13 @@ function formatStatusEventExpanded(event: PythonStatusEvent, theme: Theme): stri
 	switch (op) {
 		case "find":
 		case "glob":
-			if (data.matches) addItems(data.matches as unknown[], m => String(m));
+			if (data.matches !== null && data.matches !== undefined) addItems(data.matches as unknown[], m => String(m));
 			break;
 		case "ls":
-			if (data.items) addItems(data.items as unknown[], m => String(m));
+			if (data.items !== null && data.items !== undefined) addItems(data.items as unknown[], m => String(m));
 			break;
 		case "grep":
-			if (data.hits) {
+			if (data.hits !== null && data.hits !== undefined) {
 				addItems(data.hits as unknown[], h => {
 					const hit = h as { line: number; text: string };
 					return `${hit.line}: ${truncateToWidth(hit.text, 60)}`;
@@ -748,7 +758,7 @@ function formatStatusEventExpanded(event: PythonStatusEvent, theme: Theme): stri
 			}
 			break;
 		case "rgrep":
-			if (data.hits) {
+			if (data.hits !== null && data.hits !== undefined) {
 				addItems(data.hits as unknown[], h => {
 					const hit = h as { file: string; line: number; text: string };
 					return `${shortenPath(hit.file)}:${hit.line}: ${truncateToWidth(hit.text, 50)}`;
@@ -756,7 +766,7 @@ function formatStatusEventExpanded(event: PythonStatusEvent, theme: Theme): stri
 			}
 			break;
 		case "rsed":
-			if (data.changed) {
+			if (data.changed !== null && data.changed !== undefined) {
 				addItems(data.changed as unknown[], c => {
 					const change = c as { file: string; count: number };
 					return `${shortenPath(change.file)}: ${change.count} replacement${change.count !== 1 ? "s" : ""}`;
@@ -764,10 +774,10 @@ function formatStatusEventExpanded(event: PythonStatusEvent, theme: Theme): stri
 			}
 			break;
 		case "env":
-			if (data.keys) addItems(data.keys as unknown[], k => String(k), 10);
+			if (data.keys !== null && data.keys !== undefined) addItems(data.keys as unknown[], k => String(k), 10);
 			break;
 		case "git_log":
-			if (data.entries) {
+			if (data.entries !== null && data.entries !== undefined) {
 				addItems(data.entries as unknown[], e => {
 					const entry = e as { sha: string; subject: string };
 					return `${entry.sha} ${truncateToWidth(entry.subject, 50)}`;
@@ -775,10 +785,11 @@ function formatStatusEventExpanded(event: PythonStatusEvent, theme: Theme): stri
 			}
 			break;
 		case "git_status":
-			if (data.files) addItems(data.files as unknown[], f => String(f));
+			if (data.files !== null && data.files !== undefined) addItems(data.files as unknown[], f => String(f));
 			break;
 		case "git_branch":
-			if (data.branches) addItems(data.branches as unknown[], b => String(b));
+			if (data.branches !== null && data.branches !== undefined)
+				addItems(data.branches as unknown[], b => String(b));
 			break;
 		case "read":
 		case "cat":
@@ -789,7 +800,7 @@ function formatStatusEventExpanded(event: PythonStatusEvent, theme: Theme): stri
 		case "lines":
 		case "git_diff":
 		case "sh":
-			if (data.preview) addPreview(String(data.preview));
+			if (data.preview !== null && data.preview !== undefined) addPreview(String(data.preview));
 			break;
 	}
 
@@ -842,7 +853,7 @@ function formatCellOutputLines(
 		return { lines: [], hiddenCount: 0 };
 	}
 
-	if (cell.hasMarkdown && cell.status !== "error") {
+	if (cell.hasMarkdown === true && cell.status !== "error") {
 		const md = new Markdown(cell.output, 0, 0, getMarkdownTheme());
 		const allLines = md.render(width);
 		const displayLines = expanded ? allLines : allLines.slice(-previewLines);
@@ -867,7 +878,7 @@ export const pythonToolRenderer = {
 		const cwd = getProjectDir();
 		let displayWorkdir = args.cwd;
 
-		if (displayWorkdir) {
+		if (displayWorkdir !== null && displayWorkdir !== undefined && displayWorkdir !== "") {
 			const resolvedCwd = path.resolve(cwd);
 			const resolvedWorkdir = path.resolve(displayWorkdir);
 			if (resolvedWorkdir === resolvedCwd) {
@@ -882,10 +893,16 @@ export const pythonToolRenderer = {
 			}
 		}
 
-		const workdirLabel = displayWorkdir ? `cd ${displayWorkdir}` : undefined;
+		const workdirLabel =
+			displayWorkdir !== null && displayWorkdir !== undefined && displayWorkdir !== ""
+				? `cd ${displayWorkdir}`
+				: undefined;
 		if (cells.length === 0) {
 			const prompt = uiTheme.fg("accent", ">>>");
-			const prefix = workdirLabel ? `${uiTheme.fg("dim", `${workdirLabel} && `)}` : "";
+			const prefix =
+				workdirLabel !== null && workdirLabel !== undefined && workdirLabel !== ""
+					? `${uiTheme.fg("dim", `${workdirLabel} && `)}`
+					: "";
 			const text = formatTitle(`${prompt} ${prefix}…`, uiTheme);
 			return new Text(text, 0, 0);
 		}
@@ -904,7 +921,14 @@ export const pythonToolRenderer = {
 					const cell = cells[i];
 					const cellTitle = cell.title;
 					const combinedTitle =
-						cellTitle && workdirLabel ? `${workdirLabel} · ${cellTitle}` : (cellTitle ?? workdirLabel);
+						cellTitle !== null &&
+						cellTitle !== undefined &&
+						cellTitle !== "" &&
+						workdirLabel !== null &&
+						workdirLabel !== undefined &&
+						workdirLabel !== ""
+							? `${workdirLabel} · ${cellTitle}`
+							: (cellTitle ?? workdirLabel);
 					const cellLines = renderCodeCell(
 						{
 							code: cell.code,
@@ -1021,10 +1045,10 @@ export const pythonToolRenderer = {
 						}
 						lines.push(...jsonLines);
 					}
-					if (timeoutLine) {
+					if (timeoutLine !== null && timeoutLine !== undefined && timeoutLine !== "") {
 						lines.push(timeoutLine);
 					}
-					if (warningLine) {
+					if (warningLine !== null && warningLine !== undefined && warningLine !== "") {
 						lines.push(warningLine);
 					}
 					cached = { key, width, result: lines };
@@ -1095,7 +1119,7 @@ export const pythonToolRenderer = {
 					cachedPreviewLines = previewLines;
 				}
 				const outputLines: string[] = [];
-				if (cachedSkipped && cachedSkipped > 0) {
+				if (cachedSkipped !== null && cachedSkipped !== undefined && cachedSkipped !== 0 && cachedSkipped > 0) {
 					outputLines.push("");
 					const skippedLine = uiTheme.fg(
 						"dim",
@@ -1110,10 +1134,10 @@ export const pythonToolRenderer = {
 						outputLines.push(truncateToWidth(statusLine, width));
 					}
 				}
-				if (timeoutLine) {
+				if (timeoutLine !== null && timeoutLine !== undefined && timeoutLine !== "") {
 					outputLines.push(truncateToWidth(timeoutLine, width));
 				}
-				if (warningLine) {
+				if (warningLine !== null && warningLine !== undefined && warningLine !== "") {
 					outputLines.push(truncateToWidth(warningLine, width));
 				}
 				return outputLines;

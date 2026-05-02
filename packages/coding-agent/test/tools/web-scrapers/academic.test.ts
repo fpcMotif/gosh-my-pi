@@ -5,7 +5,10 @@ import { handlePubMed } from "@oh-my-pi/pi-coding-agent/web/scrapers/pubmed";
 import { handleSemanticScholar } from "@oh-my-pi/pi-coding-agent/web/scrapers/semantic-scholar";
 import type { RenderResult } from "@oh-my-pi/pi-coding-agent/web/scrapers/types";
 
-const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
+const SKIP =
+	Bun.env.WEB_FETCH_INTEGRATION === null ||
+	Bun.env.WEB_FETCH_INTEGRATION === undefined ||
+	Bun.env.WEB_FETCH_INTEGRATION === "";
 
 describe.skipIf(SKIP)("handleSemanticScholar", () => {
 	it("returns null for non-S2 URLs", async () => {
@@ -23,9 +26,9 @@ describe.skipIf(SKIP)("handleSemanticScholar", () => {
 		expect(result?.method).toBe("semantic-scholar");
 		// API may be rate-limited or fail, verify handler structure
 		if (
-			!result?.content.includes("Too Many Requests") &&
-			!result?.content.includes("Failed to fetch") &&
-			!result?.content.includes("Failed to parse")
+			result?.content.includes("Too Many Requests") !== true &&
+			result?.content.includes("Failed to fetch") !== true &&
+			result?.content.includes("Failed to parse") !== true
 		) {
 			expect(result?.content).toContain("Attention");
 			expect(result?.contentType).toBe("text/markdown");
@@ -54,9 +57,9 @@ describe.skipIf(SKIP)("handleSemanticScholar", () => {
 			expect(result?.method).toBe("semantic-scholar");
 			// API may be rate-limited or fail
 			if (
-				!result?.content.includes("Too Many Requests") &&
-				!result?.content.includes("Failed to fetch") &&
-				!result?.content.includes("Failed to parse")
+				result?.content.includes("Too Many Requests") !== true &&
+				result?.content.includes("Failed to fetch") !== true &&
+				result?.content.includes("Failed to parse") !== true
 			) {
 				expect(result?.content).toContain("Attention");
 			}
@@ -70,7 +73,10 @@ describe.skipIf(SKIP)("handleSemanticScholar", () => {
 		);
 		expect(result).not.toBeNull();
 		// Only check metadata if API call succeeded (not rate-limited)
-		if (!result?.content.includes("Too Many Requests") && !result?.content.includes("Failed to fetch")) {
+		if (
+			result?.content.includes("Too Many Requests") !== true &&
+			result?.content.includes("Failed to fetch") !== true
+		) {
 			expect(result?.content).toMatch(/Year:/);
 			expect(result?.content).toMatch(/Citations:/);
 			expect(result?.content).toMatch(/Authors:/);
@@ -128,7 +134,7 @@ describe.skipIf(SKIP)("handlePubMed", () => {
 	it("includes metadata fields", async () => {
 		const result = await fetchKnownPubMed();
 		expect(result).not.toBeNull();
-		if (result?.content.includes("Authors:")) {
+		if (result?.content.includes("Authors:") === true) {
 			expect(result.content).toMatch(/Journal:/);
 		} else {
 			expect(result?.content).toContain("PMID:");
@@ -161,7 +167,10 @@ describe.skipIf(SKIP)("handleArxiv", () => {
 		expect(result?.method).toBe("arxiv");
 		expect(result?.contentType).toBe("text/markdown");
 		// API may be rate-limited or fail
-		if (!result?.content.includes("Too Many Requests") && !result?.content.includes("Failed to fetch")) {
+		if (
+			result?.content.includes("Too Many Requests") !== true &&
+			result?.content.includes("Failed to fetch") !== true
+		) {
 			expect(result?.content).toContain("Attention");
 			expect(result?.content).toContain("arXiv:");
 			expect(result?.content).toContain("1706.03762");
@@ -173,7 +182,10 @@ describe.skipIf(SKIP)("handleArxiv", () => {
 		const result = await handleArxiv("https://arxiv.org/pdf/1706.03762", 30000);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("arxiv");
-		if (!result?.content.includes("Too Many Requests") && !result?.content.includes("Failed to fetch")) {
+		if (
+			result?.content.includes("Too Many Requests") !== true &&
+			result?.content.includes("Failed to fetch") !== true
+		) {
 			expect(result?.content).toContain("Attention");
 			expect(result?.notes?.some(n => n.includes("PDF"))).toBe(true);
 		}
@@ -183,7 +195,10 @@ describe.skipIf(SKIP)("handleArxiv", () => {
 		const result = await handleArxiv("https://arxiv.org/abs/1706.03762", 30000);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("arxiv");
-		if (!result?.content.includes("Too Many Requests") && !result?.content.includes("Failed to fetch")) {
+		if (
+			result?.content.includes("Too Many Requests") !== true &&
+			result?.content.includes("Failed to fetch") !== true
+		) {
 			expect(result?.content).toContain("1706.03762");
 		}
 	});
@@ -191,7 +206,10 @@ describe.skipIf(SKIP)("handleArxiv", () => {
 	it("includes paper metadata", async () => {
 		const result = await handleArxiv("https://arxiv.org/abs/1706.03762", 30000);
 		expect(result).not.toBeNull();
-		if (!result?.content.includes("Too Many Requests") && !result?.content.includes("Failed to fetch")) {
+		if (
+			result?.content.includes("Too Many Requests") !== true &&
+			result?.content.includes("Failed to fetch") !== true
+		) {
 			expect(result?.content).toMatch(/Authors:/);
 			expect(result?.content).toContain("Vaswani");
 			expect(result?.content).toMatch(/Abstract/);
@@ -220,7 +238,10 @@ describe.skipIf(SKIP)("handleIacr", () => {
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("iacr");
 		expect(result?.contentType).toBe("text/markdown");
-		if (!result?.content.includes("Too Many Requests") && !result?.content.includes("Failed to fetch")) {
+		if (
+			result?.content.includes("Too Many Requests") !== true &&
+			result?.content.includes("Failed to fetch") !== true
+		) {
 			expect(result?.content).toContain("ePrint:");
 			expect(result?.content).toContain("2023/123");
 		}
@@ -230,7 +251,10 @@ describe.skipIf(SKIP)("handleIacr", () => {
 	it("includes paper metadata", async () => {
 		const result = await handleIacr("https://eprint.iacr.org/2023/123", 30000);
 		expect(result).not.toBeNull();
-		if (!result?.content.includes("Too Many Requests") && !result?.content.includes("Failed to fetch")) {
+		if (
+			result?.content.includes("Too Many Requests") !== true &&
+			result?.content.includes("Failed to fetch") !== true
+		) {
 			expect(result?.content).toContain("ePrint:");
 			expect(result?.content).toMatch(/Abstract/);
 		}
@@ -248,7 +272,10 @@ describe.skipIf(SKIP)("handleIacr", () => {
 		const result = await handleIacr("https://eprint.iacr.org/2023/123.pdf", 30000);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("iacr");
-		if (!result?.content.includes("Too Many Requests") && !result?.content.includes("Failed to fetch")) {
+		if (
+			result?.content.includes("Too Many Requests") !== true &&
+			result?.content.includes("Failed to fetch") !== true
+		) {
 			expect(result?.notes?.some(n => n.includes("PDF"))).toBe(true);
 		}
 	});

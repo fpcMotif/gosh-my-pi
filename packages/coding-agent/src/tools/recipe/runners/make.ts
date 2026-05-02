@@ -20,8 +20,8 @@ async function findMakefile(cwd: string): Promise<string | null> {
 		try {
 			const stat = await fs.stat(candidate);
 			if (stat.isFile()) return candidate;
-		} catch (err) {
-			if (!isEnoent(err)) throw err;
+		} catch (error) {
+			if (!isEnoent(error)) throw error;
 		}
 	}
 	return null;
@@ -33,7 +33,8 @@ function isVariableAssignment(line: string, name: string): boolean {
 
 function parsePhonyTargets(line: string): string[] {
 	const match = PHONY_PATTERN.exec(line);
-	if (!match?.groups?.targets) return [];
+	if (match?.groups?.targets === null || match?.groups?.targets === undefined || match?.groups?.targets === "")
+		return [];
 	return match.groups.targets
 		.split(/\s+/u)
 		.map(target => target.trim())
@@ -52,10 +53,11 @@ function parseMakeTargets(text: string): RunnerTask[] {
 
 		const match = TARGET_PATTERN.exec(line);
 		const name = match?.groups?.name;
-		if (!name || name === ".PHONY" || isVariableAssignment(line, name)) continue;
+		if (name === null || name === undefined || name === "" || name === ".PHONY" || isVariableAssignment(line, name))
+			continue;
 		if (targets.has(name)) continue;
 		const rawDoc = match?.groups?.doc?.trim();
-		const doc = rawDoc && rawDoc.length > 0 ? rawDoc : undefined;
+		const doc = rawDoc !== null && rawDoc !== undefined && rawDoc !== "" && rawDoc.length > 0 ? rawDoc : undefined;
 		targets.set(name, { name, doc, order, phony: false });
 		order += 1;
 	}
@@ -77,7 +79,7 @@ function parseMakeTargets(text: string): RunnerTask[] {
 			if (!hasPhonyTargets || target.phony) {
 				return [{ name: target.name, doc: target.doc, parameters: [] }];
 			}
-			if (!target.doc) return [];
+			if (target.doc === null || target.doc === undefined || target.doc === "") return [];
 			return [{ name: target.name, doc: `${target.doc} (file target)`, parameters: [] }];
 		});
 }
@@ -87,14 +89,14 @@ export const makeRunner: TaskRunner = {
 	label: "Make",
 	async detect(cwd: string): Promise<DetectedRunner | null> {
 		try {
-			if (!$which("make")) return null;
+			if ($which("make") === undefined || $which("make") === "") return null;
 			const makefile = await findMakefile(cwd);
-			if (!makefile) return null;
+			if (makefile === null || makefile === undefined || makefile === "") return null;
 			const tasks = parseMakeTargets(await Bun.file(makefile).text());
 			if (tasks.length === 0) return null;
 			return { id: "make", label: "Make", commandPrefix: "make", tasks };
-		} catch (err) {
-			logger.debug("make runner probe failed", { error: err instanceof Error ? err.message : String(err) });
+		} catch (error) {
+			logger.debug("make runner probe failed", { error: error instanceof Error ? error.message : String(error) });
 			return null;
 		}
 	},

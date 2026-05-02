@@ -44,7 +44,7 @@ const MARKETPLACE_HOSTS = new Set(["marketplace.visualstudio.com", "www.marketpl
 function getItemName(parsed: URL): string | null {
 	if (!parsed.pathname.startsWith("/items")) return null;
 	const itemName = parsed.searchParams.get("itemName");
-	if (!itemName) return null;
+	if (itemName === null || itemName === undefined || itemName === "") return null;
 	const decoded = decodeURIComponent(itemName);
 	if (!decoded.includes(".")) return null;
 	return decoded;
@@ -54,7 +54,13 @@ function toStatMap(stats: MarketplaceStatistic[] | undefined): Map<string, numbe
 	const map = new Map<string, number>();
 	if (!stats) return map;
 	for (const stat of stats) {
-		if (!stat.statisticName || typeof stat.value !== "number") continue;
+		if (
+			stat.statisticName === null ||
+			stat.statisticName === undefined ||
+			stat.statisticName === "" ||
+			typeof stat.value !== "number"
+		)
+			continue;
 		map.set(stat.statisticName.trim().toLowerCase(), stat.value);
 	}
 	return map;
@@ -80,14 +86,16 @@ function extractRepoLink(properties: MarketplaceProperty[] | undefined): string 
 	for (const prop of properties) {
 		const key = prop.key?.trim().toLowerCase();
 		const value = prop.value?.trim();
-		if (!key || !value) continue;
+		if (key === null || key === undefined || key === "" || value === null || value === undefined || value === "")
+			continue;
 		if (!value.startsWith("http")) continue;
 		if (key.includes("links.source") || key.includes("repository")) return value;
 	}
 	for (const prop of properties) {
 		const key = prop.key?.trim().toLowerCase();
 		const value = prop.value?.trim();
-		if (!key || !value) continue;
+		if (key === null || key === undefined || key === "" || value === null || value === undefined || value === "")
+			continue;
 		if (!value.startsWith("http")) continue;
 		if (key === "source" || key.endsWith(".source")) return value;
 	}
@@ -107,7 +115,7 @@ export const handleVscodeMarketplace: SpecialHandler = async (
 		if (!MARKETPLACE_HOSTS.has(parsed.hostname)) return null;
 
 		const itemName = getItemName(parsed);
-		if (!itemName) return null;
+		if (itemName === null || itemName === undefined || itemName === "") return null;
 
 		const [publisherFromUrl, ...nameParts] = itemName.split(".");
 		const extensionFromUrl = nameParts.join(".");
@@ -149,7 +157,11 @@ export const handleVscodeMarketplace: SpecialHandler = async (
 		const publisherName = extension.publisher?.publisherName ?? publisherFromUrl;
 		const publisherDisplayName = extension.publisher?.displayName;
 		const publisherLabel =
-			publisherDisplayName && publisherName && publisherDisplayName !== publisherName
+			publisherDisplayName !== null &&
+			publisherDisplayName !== undefined &&
+			publisherDisplayName !== "" &&
+			publisherName &&
+			publisherDisplayName !== publisherName
 				? `${publisherDisplayName} (${publisherName})`
 				: (publisherDisplayName ?? publisherName);
 
@@ -165,15 +177,21 @@ export const handleVscodeMarketplace: SpecialHandler = async (
 		const identifier = publisherName && extensionName ? `${publisherName}.${extensionName}` : itemName;
 
 		let md = `# ${displayName}\n\n`;
-		if (description) md += `${description}\n\n`;
+		if (description !== null && description !== undefined && description !== "") md += `${description}\n\n`;
 		md += `**Identifier:** ${identifier}\n`;
 		if (publisherLabel) md += `**Publisher:** ${publisherLabel}\n`;
-		if (version) md += `**Version:** ${version}\n`;
+		if (version !== null && version !== undefined && version !== "") md += `**Version:** ${version}\n`;
 		if (installs !== undefined) md += `**Installs:** ${formatNumber(installs)}\n`;
-		if (ratingLabel) md += `**Rating:** ${ratingLabel}\n`;
-		if (extension.categories?.length) md += `**Categories:** ${extension.categories.join(", ")}\n`;
-		if (extension.tags?.length) md += `**Tags:** ${extension.tags.join(", ")}\n`;
-		if (repoLink) md += `**Repository:** ${repoLink}\n`;
+		if (ratingLabel !== null && ratingLabel !== undefined && ratingLabel !== "") md += `**Rating:** ${ratingLabel}\n`;
+		if (
+			extension.categories?.length !== null &&
+			extension.categories?.length !== undefined &&
+			extension.categories?.length !== 0
+		)
+			md += `**Categories:** ${extension.categories.join(", ")}\n`;
+		if (extension.tags?.length !== null && extension.tags?.length !== undefined && extension.tags?.length !== 0)
+			md += `**Tags:** ${extension.tags.join(", ")}\n`;
+		if (repoLink !== null && repoLink !== undefined && repoLink !== "") md += `**Repository:** ${repoLink}\n`;
 
 		return buildResult(md, {
 			url,

@@ -16,7 +16,7 @@ const EDIT_MODE_IDS = {
 export const EDIT_MODES = Object.keys(EDIT_MODE_IDS) as EditMode[];
 
 export function normalizeEditMode(mode?: string | null): EditMode | undefined {
-	if (!mode) return undefined;
+	if (mode === null || mode === undefined || mode === "") return undefined;
 	return EDIT_MODE_IDS[mode as keyof typeof EDIT_MODE_IDS];
 }
 
@@ -39,11 +39,11 @@ export function resolveEditMode(session: EditModeSessionLike): EditMode {
 	if (envMode) return envMode;
 
 	if (!$flag("PI_STRICT_EDIT_MODE")) {
-		if (activeModel?.includes("spark")) return "apply_patch";
-		if (activeModel?.includes("nano")) return "replace";
-		if (activeModel?.includes("mini")) return "replace";
-		if (activeModel?.includes("haiku")) return "replace";
-		if (activeModel?.includes("flash")) return "replace";
+		if (activeModel?.includes("spark") === true) return "apply_patch";
+		if (activeModel?.includes("nano") === true) return "replace";
+		if (activeModel?.includes("mini") === true) return "replace";
+		if (activeModel?.includes("haiku") === true) return "replace";
+		if (activeModel?.includes("flash") === true) return "replace";
 	}
 
 	const settingsMode = normalizeEditMode(String(session.settings.get("edit.mode") ?? ""));

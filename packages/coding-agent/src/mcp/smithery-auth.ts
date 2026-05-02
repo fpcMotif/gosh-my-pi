@@ -4,7 +4,7 @@ import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 const SMITHERY_AUTH_FILENAME = "smithery.json";
-const SMITHERY_URL = process.env.SMITHERY_URL || "https://smithery.ai";
+const SMITHERY_URL = process.env.SMITHERY_URL ?? "https://smithery.ai";
 
 type SmitheryCliAuthSession = {
 	sessionId: string;
@@ -26,7 +26,7 @@ function getSmitheryAuthPath(): string {
 }
 
 function normalizeApiKey(value: string | undefined): string | undefined {
-	if (!value) return undefined;
+	if (value === null || value === undefined || value === "") return undefined;
 	const trimmed = value.trim();
 	return trimmed.length > 0 ? trimmed : undefined;
 }
@@ -63,7 +63,7 @@ export async function pollSmitheryCliAuthSession(
 
 export async function getSmitheryApiKey(): Promise<string | undefined> {
 	const envKey = normalizeApiKey(process.env.SMITHERY_API_KEY);
-	if (envKey) return envKey;
+	if (envKey !== null && envKey !== undefined && envKey !== "") return envKey;
 
 	const authPath = getSmitheryAuthPath();
 	try {
@@ -78,7 +78,7 @@ export async function getSmitheryApiKey(): Promise<string | undefined> {
 
 export async function saveSmitheryApiKey(apiKey: string): Promise<void> {
 	const normalized = normalizeApiKey(apiKey);
-	if (!normalized) {
+	if (normalized === null || normalized === undefined || normalized === "") {
 		throw new Error("Smithery API key cannot be empty.");
 	}
 

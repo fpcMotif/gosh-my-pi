@@ -54,8 +54,8 @@ async function loadCommandModule(
 		}
 
 		return { commands, error: null };
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		return { commands: null, error: `Failed to load command: ${message}` };
 	}
 }
@@ -196,7 +196,7 @@ export async function loadCustomCommands(options: LoadCustomCommandsOptions = {}
 	for (const { path: commandPath, source } of paths) {
 		const { commands: loadedCommands, error } = await loadCommandModule(commandPath, cwd, sharedApi);
 
-		if (error) {
+		if (error !== null && error !== undefined && error !== "") {
 			errors.push({ path: commandPath, error });
 			continue;
 		}

@@ -74,7 +74,7 @@ export async function mapWithConcurrencyLimit<T, R>(
 		await Promise.race([Promise.all(workers), firstErrorPromise]);
 	} catch (error) {
 		// If aborted, don't rethrow - return partial results
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			return { results, aborted: true };
 		}
 		throw error;

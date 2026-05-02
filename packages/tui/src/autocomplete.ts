@@ -220,7 +220,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 
 		// Check for @ file reference (fuzzy search) - must be after a delimiter or at start
 		const atPrefix = this.#extractAtPrefix(textBeforeCursor);
-		if (atPrefix) {
+		if (atPrefix !== null && atPrefix !== undefined && atPrefix !== "") {
 			const { rawPrefix, isQuotedPrefix } = parsePathPrefix(atPrefix);
 			const suggestions =
 				rawPrefix.length > 0
@@ -256,7 +256,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 						// Match name or description
 						if (fuzzyMatch(lowerPrefix, name.toLowerCase())) return true;
 						const desc = cmd.description?.toLowerCase();
-						return desc ? fuzzyMatch(lowerPrefix, desc) : false;
+						return desc !== null && desc !== undefined && desc !== "" ? fuzzyMatch(lowerPrefix, desc) : false;
 					})
 					.map(cmd => {
 						const name = "name" in cmd ? cmd.name : cmd.value;
@@ -269,7 +269,9 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 							value: name,
 							label: "name" in cmd ? cmd.name : cmd.label,
 							score: Math.max(nameScore, descScore),
-							...(cmd.description && { description: cmd.description }),
+							...(cmd.description !== null &&
+								cmd.description !== undefined &&
+								cmd.description !== "" && { description: cmd.description }),
 						};
 					})
 					.sort((a, b) => b.score - a.score)
@@ -281,29 +283,28 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 					items: matches,
 					prefix: textBeforeCursor,
 				};
-			} else {
-				// Space found - complete command arguments
-				const commandName = textBeforeCursor.slice(1, spaceIndex); // Command without "/"
-				const argumentText = textBeforeCursor.slice(spaceIndex + 1); // Text after space
-
-				const command = this.#commands.find(cmd => {
-					const name = "name" in cmd ? cmd.name : cmd.value;
-					return name === commandName;
-				});
-				if (!command || !("getArgumentCompletions" in command) || !command.getArgumentCompletions) {
-					return null; // No argument completion for this command
-				}
-
-				const argumentSuggestions = command.getArgumentCompletions(argumentText);
-				if (!argumentSuggestions || argumentSuggestions.length === 0) {
-					return null;
-				}
-
-				return {
-					items: argumentSuggestions,
-					prefix: argumentText,
-				};
 			}
+			// Space found - complete command arguments
+			const commandName = textBeforeCursor.slice(1, spaceIndex); // Command without "/"
+			const argumentText = textBeforeCursor.slice(spaceIndex + 1); // Text after space
+
+			const command = this.#commands.find(cmd => {
+				const name = "name" in cmd ? cmd.name : cmd.value;
+				return name === commandName;
+			});
+			if (!command || !("getArgumentCompletions" in command) || !command.getArgumentCompletions) {
+				return null; // No argument completion for this command
+			}
+
+			const argumentSuggestions = command.getArgumentCompletions(argumentText);
+			if (!argumentSuggestions || argumentSuggestions.length === 0) {
+				return null;
+			}
+
+			return {
+				items: argumentSuggestions,
+				prefix: argumentText,
+			};
 		}
 
 		// Check for file paths - triggered by Tab or if we detect a path pattern
@@ -376,8 +377,8 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		}
 
 		// Check if we're in a slash command context (beforePrefix contains "/command ")
-		const textBeforeCursor = currentLine.slice(0, cursorCol);
-		if (textBeforeCursor.includes("/") && textBeforeCursor.includes(" ")) {
+		const textBeforeCursor = new Set(currentLine.slice(0, cursorCol));
+		if (textBeforeCursor.has("/") && textBeforeCursor.has(" ")) {
 			// This is likely a command argument completion
 			const newLine = beforePrefix + item.value + afterCursor;
 			const newLines = [...lines];
@@ -405,7 +406,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	// Extract @ prefix for fuzzy file suggestions
 	#extractAtPrefix(text: string): string | null {
 		const quotedPrefix = extractQuotedPrefix(text);
-		if (quotedPrefix?.startsWith('@"')) {
+		if (quotedPrefix?.startsWith('@"') === true) {
 			return quotedPrefix;
 		}
 
@@ -422,7 +423,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	// Extract a path-like prefix from the text before cursor
 	#extractPathPrefix(text: string, forceExtract: boolean = false): string | null {
 		const quotedPrefix = extractQuotedPrefix(text);
-		if (quotedPrefix) {
+		if (quotedPrefix !== null && quotedPrefix !== undefined && quotedPrefix !== "") {
 			return quotedPrefix;
 		}
 
@@ -524,7 +525,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	}
 
 	invalidateDirCache(dir?: string): void {
-		if (dir) {
+		if (dir !== null && dir !== undefined && dir !== "") {
 			this.#dirCache.delete(dir);
 		} else {
 			this.#dirCache.clear();

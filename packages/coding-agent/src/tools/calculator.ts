@@ -127,7 +127,7 @@ function tokenizeExpression(expression: string): Token[] {
 				while (i < expression.length) {
 					const digit = expression[i];
 					const valid =
-						prefix === "x" ? isHexDigit(digit) : prefix === "b" ? isBinaryDigit(digit) : isOctalDigit(digit);
+						prefix === "x" ? isHexDigit(digit) : (prefix === "b" ? isBinaryDigit(digit) : isOctalDigit(digit));
 					if (!valid) break;
 					hasDigit = true;
 					i += 1;
@@ -447,7 +447,10 @@ export const calculatorToolRenderer = {
 	renderCall(args: CalculatorRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const count = args.calculations?.length ?? 0;
 		const firstExpression = args.calculations?.[0]?.expression;
-		const description = firstExpression ? truncateToWidth(firstExpression, TRUNCATE_LENGTHS.TITLE) : undefined;
+		const description =
+			firstExpression !== null && firstExpression !== undefined && firstExpression !== ""
+				? truncateToWidth(firstExpression, TRUNCATE_LENGTHS.TITLE)
+				: undefined;
 		const meta = count > 0 ? [formatCount("calc", count)] : [];
 		const text = renderStatusLine({ icon: "pending", title: "Calc", description, meta }, uiTheme);
 		return new Text(text, 0, 0);
@@ -465,7 +468,7 @@ export const calculatorToolRenderer = {
 	): Component {
 		const details = result.details;
 		const textContent = result.content?.find(c => c.type === "text")?.text ?? "";
-		if (result.isError) {
+		if (result.isError === true) {
 			const header = renderStatusLine({ icon: "error", title: "Calc" }, uiTheme);
 			const renderedLines = [header, formatErrorMessage(textContent, uiTheme)];
 			return {

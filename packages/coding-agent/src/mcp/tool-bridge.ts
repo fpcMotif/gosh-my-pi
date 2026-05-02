@@ -87,7 +87,7 @@ function formatMCPContent(content: MCPContent[]): string {
 				parts.push(`[Image: ${item.mimeType}]`);
 				break;
 			case "resource":
-				if (item.resource.text) {
+				if (item.resource.text !== null && item.resource.text !== undefined && item.resource.text !== "") {
 					parts.push(`[Resource: ${item.resource.uri}]\n${item.resource.text}`);
 				} else {
 					parts.push(`[Resource: ${item.resource.uri}]`);
@@ -116,7 +116,7 @@ function buildResult(
 		provider,
 		providerName,
 	};
-	if (result.isError) {
+	if (result.isError === true) {
 		return { content: [{ type: "text", text: `Error: ${text}` }], details };
 	}
 	return { content: [{ type: "text", text }], details };
@@ -141,7 +141,7 @@ function buildErrorResult(
 function rethrowIfAborted(error: unknown, signal?: AbortSignal): void {
 	if (error instanceof ToolAbortError) throw error;
 	if (error instanceof Error && error.name === "AbortError") throw new ToolAbortError();
-	if (signal?.aborted) throw new ToolAbortError();
+	if (signal !== undefined && signal.aborted) throw new ToolAbortError();
 }
 
 async function reconnectWithAbort(reconnect: MCPReconnect, signal?: AbortSignal): Promise<MCPServerConnection | null> {

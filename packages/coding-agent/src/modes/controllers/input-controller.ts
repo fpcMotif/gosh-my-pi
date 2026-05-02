@@ -210,9 +210,9 @@ export class InputController {
 			const runner = this.ctx.session.extensionRunner;
 			let inputImages = this.ctx.pendingImages.length > 0 ? [...this.ctx.pendingImages] : undefined;
 
-			if (runner?.hasHandlers("input")) {
+			if (runner?.hasHandlers("input") === true) {
 				const result = await runner.emitInput(text, inputImages, "interactive");
-				if (result?.handled) {
+				if (result?.handled === true) {
 					this.ctx.editor.setText("");
 					this.ctx.pendingImages = [];
 					return;
@@ -246,7 +246,7 @@ export class InputController {
 				const commandName = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
 				const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
 				const skillPath = this.ctx.skillCommands?.get(commandName);
-				if (skillPath) {
+				if (skillPath !== null && skillPath !== undefined && skillPath !== "") {
 					this.ctx.editor.addToHistory(text);
 					this.ctx.editor.setText("");
 					try {
@@ -274,8 +274,8 @@ export class InputController {
 							},
 							{ streamingBehavior: "followUp" },
 						);
-					} catch (err) {
-						this.ctx.showError(`Failed to load skill: ${err instanceof Error ? err.message : String(err)}`);
+					} catch (error) {
+						this.ctx.showError(`Failed to load skill: ${error instanceof Error ? error.message : String(error)}`);
 					}
 					return;
 				}
@@ -357,11 +357,16 @@ export class InputController {
 
 			// Generate session title on first message
 			const hasUserMessages = this.ctx.session.messages.some((m: AgentMessage) => m.role === "user");
-			if (!hasUserMessages && !this.ctx.sessionManager.getSessionName() && !$env.PI_NO_TITLE) {
+			if (
+				!hasUserMessages &&
+				(this.ctx.sessionManager.getSessionName() === undefined ||
+					this.ctx.sessionManager.getSessionName() === "") &&
+				!$env.PI_NO_TITLE
+			) {
 				const registry = this.ctx.session.modelRegistry;
 				generateSessionTitle(text, registry, this.ctx.settings, this.ctx.session.sessionId, this.ctx.session.model)
 					.then(async title => {
-						if (title) {
+						if (title !== null && title !== undefined && title !== "") {
 							const applied = await this.ctx.sessionManager.setSessionName(title, "auto");
 							if (applied) {
 								setSessionTerminalTitle(
@@ -459,8 +464,8 @@ export class InputController {
 		const allQueued = [...steering, ...followUp];
 		if (allQueued.length === 0) {
 			this.ctx.updatePendingMessagesDisplay();
-			if (options?.abort) {
-				this.ctx.session.abort();
+			if (options?.abort === true) {
+				void this.ctx.session.abort();
 			}
 			return 0;
 		}
@@ -469,8 +474,8 @@ export class InputController {
 		const combinedText = [queuedText, currentText].filter(t => t.trim()).join("\n\n");
 		this.ctx.editor.setText(combinedText);
 		this.ctx.updatePendingMessagesDisplay();
-		if (options?.abort) {
-			this.ctx.session.abort();
+		if (options?.abort === true) {
+			void this.ctx.session.abort();
 		}
 		return allQueued.length;
 	}
@@ -605,7 +610,7 @@ export class InputController {
 			return;
 		}
 		try {
-			copyToClipboard(text);
+			void copyToClipboard(text);
 			const sanitized = sanitizeText(text);
 			const preview = sanitized.length > 30 ? `${sanitized.slice(0, 30)}...` : sanitized;
 			this.ctx.showStatus(`Copied line: ${preview}`);
@@ -622,7 +627,7 @@ export class InputController {
 			return;
 		}
 		try {
-			copyToClipboard(text);
+			void copyToClipboard(text);
 			const sanitized = sanitizeText(text);
 			const preview = sanitized.length > 30 ? `${sanitized.slice(0, 30)}...` : sanitized;
 			this.ctx.showStatus(`Copied: ${preview}`);
@@ -638,6 +643,7 @@ export class InputController {
 		} else {
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorBorderColor();
+			this.ctx.refreshSessionChrome?.();
 		}
 	}
 
@@ -652,13 +658,14 @@ export class InputController {
 
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorBorderColor();
+			this.ctx.refreshSessionChrome?.();
 			const roleLabel = result.role === "default" ? "default" : result.role;
 			const roleLabelStyled = theme.bold(theme.fg("accent", roleLabel));
 			const thinkingStr =
 				result.model.thinking && result.thinkingLevel !== ThinkingLevel.Off
 					? ` (thinking: ${result.thinkingLevel})`
 					: "";
-			const tempLabel = options?.temporary ? " (temporary)" : "";
+			const tempLabel = options?.temporary === true ? " (temporary)" : "";
 			const cycleSeparator = theme.fg("dim", " > ");
 			const cycleLabel = cycleOrder
 				.map(role => {
@@ -719,7 +726,7 @@ export class InputController {
 
 	async #openEditorTerminalHandle(): Promise<fs.FileHandle | null> {
 		const terminalPath = this.#getEditorTerminalPath();
-		if (!terminalPath) {
+		if (terminalPath === null || terminalPath === undefined || terminalPath === "") {
 			return null;
 		}
 		try {
@@ -731,7 +738,7 @@ export class InputController {
 
 	async openExternalEditor(): Promise<void> {
 		const editorCmd = getEditorCommand();
-		if (!editorCmd) {
+		if (editorCmd === null || editorCmd === undefined || editorCmd === "") {
 			this.ctx.showWarning("No editor configured. Set $VISUAL or $EDITOR environment variable.");
 			return;
 		}
@@ -774,13 +781,13 @@ export class InputController {
 			this.ctx.editor.setCustomKeyHandler(keyId, () => {
 				const ctx = runner.createCommandContext();
 				try {
-					shortcut.handler(ctx);
-				} catch (err) {
+					void shortcut.handler(ctx);
+				} catch (error) {
 					runner.emitError({
 						extensionPath: shortcut.extensionPath,
 						event: "shortcut",
-						error: err instanceof Error ? err.message : String(err),
-						stack: err instanceof Error ? err.stack : undefined,
+						error: error instanceof Error ? error.message : String(error),
+						stack: error instanceof Error ? error.stack : undefined,
 					});
 				}
 			});

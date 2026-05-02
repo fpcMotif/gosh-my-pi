@@ -99,7 +99,7 @@ export function collectEntriesForBranchSummary(
 	targetId: string,
 ): CollectEntriesResult {
 	// If no old position, nothing to summarize
-	if (!oldLeafId) {
+	if (oldLeafId === null || oldLeafId === undefined || oldLeafId === "") {
 		return { entries: [], commonAncestorId: null };
 	}
 
@@ -120,7 +120,7 @@ export function collectEntriesForBranchSummary(
 	const entries: SessionEntry[] = [];
 	let current: string | null = oldLeafId;
 
-	while (current && current !== commonAncestorId) {
+	while (current !== null && current !== undefined && current !== "" && current !== commonAncestorId) {
 		const entry = session.getEntry(current);
 		if (!entry) break;
 		entries.push(entry);
@@ -195,7 +195,12 @@ export function prepareBranchEntries(entries: SessionEntry[], tokenBudget: numbe
 	// This ensures we capture cumulative file tracking from nested branch summaries
 	// Only extract from pi-generated summaries (fromExtension !== true), not extension-generated ones
 	for (const entry of entries) {
-		if (entry.type === "branch_summary" && !entry.fromExtension && entry.details) {
+		if (
+			entry.type === "branch_summary" &&
+			entry.fromExtension !== true &&
+			entry.details !== null &&
+			entry.details !== undefined
+		) {
 			const details = entry.details as BranchSummaryDetails;
 			if (Array.isArray(details.readFiles)) {
 				for (const f of details.readFiles) fileOps.read.add(f);
@@ -276,7 +281,7 @@ export async function generateBranchSummary(
 	const conversationText = serializeConversation(llmMessages);
 
 	// Build prompt
-	const instructions = customInstructions || BRANCH_SUMMARY_PROMPT;
+	const instructions = customInstructions ?? BRANCH_SUMMARY_PROMPT;
 	const promptText = `<conversation>\n${conversationText}\n</conversation>\n\n${instructions}`;
 
 	const summarizationMessages = [
@@ -299,7 +304,7 @@ export async function generateBranchSummary(
 		return { aborted: true };
 	}
 	if (response.stopReason === "error") {
-		return { error: response.errorMessage || "Summarization failed" };
+		return { error: response.errorMessage ?? "Summarization failed" };
 	}
 
 	let summary = response.content

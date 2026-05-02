@@ -88,9 +88,16 @@ export class AgentParsingError extends Error {
 		if (this.source !== undefined) {
 			details.push(`Source: ${JSON.stringify(this.source)}`);
 		}
-		if (this.cause && typeof this.cause === "object" && "stack" in this.cause && this.cause.stack) {
-			details.push(`Stack:\n${this.cause.stack}`);
-		} else if (this.stack) {
+		if (
+			this.cause !== null &&
+			this.cause !== undefined &&
+			typeof this.cause === "object" &&
+			"stack" in this.cause &&
+			this.cause.stack !== null &&
+			this.cause.stack !== undefined
+		) {
+			details.push(`Stack:\n${String(this.cause.stack)}`);
+		} else if (this.stack !== null && this.stack !== undefined && this.stack !== "") {
 			details.push(`Stack:\n${this.stack}`);
 		}
 		return details.join("\n\n");

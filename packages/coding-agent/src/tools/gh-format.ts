@@ -4,7 +4,7 @@
  * run-watch renderer.
  */
 export function formatShortSha(value: string | undefined): string | undefined {
-	if (!value) {
+	if (value === null || value === undefined || value === "") {
 		return undefined;
 	}
 

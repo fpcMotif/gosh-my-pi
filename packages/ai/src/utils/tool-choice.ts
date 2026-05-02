@@ -30,7 +30,12 @@ function extractFunctionName(choice: ToolChoice): string | undefined {
 	if (typeof choice === "string") return undefined;
 	if (choice.type === "tool" && "name" in choice) return choice.name;
 	if (choice.type === "function") {
-		if ("function" in choice && choice.function && typeof choice.function === "object") {
+		if (
+			"function" in choice &&
+			choice.function !== null &&
+			choice.function !== undefined &&
+			typeof choice.function === "object"
+		) {
 			return (choice.function as { name?: string }).name;
 		}
 		if ("name" in choice) return choice.name;
@@ -44,14 +49,14 @@ function extractFunctionName(choice: ToolChoice): string | undefined {
  * - { type: "tool", name } → { type: "function", function: { name } }
  */
 export function mapToOpenAICompletionsToolChoice(choice?: ToolChoice): OpenAICompletionsToolChoice {
-	if (!choice) return undefined;
+	if (choice === undefined) return undefined;
 	if (typeof choice === "string") {
 		if (choice === "any") return "required";
 		if (choice === "auto" || choice === "none" || choice === "required") return choice;
 		return undefined;
 	}
 	const name = extractFunctionName(choice);
-	return name ? { type: "function", function: { name } } : undefined;
+	return name !== null && name !== undefined && name !== "" ? { type: "function", function: { name } } : undefined;
 }
 
 /**
@@ -72,14 +77,14 @@ export function isForcedToolChoice(choice: unknown): boolean {
  * - { type: "tool", name } → { type: "function", name } (flat structure)
  */
 export function mapToOpenAIResponsesToolChoice(choice?: ToolChoice): OpenAIResponsesToolChoice {
-	if (!choice) return undefined;
+	if (choice === undefined) return undefined;
 	if (typeof choice === "string") {
 		if (choice === "any") return "required";
 		if (choice === "auto" || choice === "none" || choice === "required") return choice;
 		return undefined;
 	}
 	const name = extractFunctionName(choice);
-	return name ? { type: "function", name } : undefined;
+	return name !== null && name !== undefined && name !== "" ? { type: "function", name } : undefined;
 }
 
 /**
@@ -88,12 +93,12 @@ export function mapToOpenAIResponsesToolChoice(choice?: ToolChoice): OpenAIRespo
  * - { type: "function", ... } → { type: "tool", name }
  */
 export function mapToAnthropicToolChoice(choice?: ToolChoice): AnthropicToolChoice {
-	if (!choice) return undefined;
+	if (choice === undefined) return undefined;
 	if (typeof choice === "string") {
 		if (choice === "required") return "any";
 		if (choice === "auto" || choice === "none" || choice === "any") return choice;
 		return undefined;
 	}
 	const name = extractFunctionName(choice);
-	return name ? { type: "tool", name } : undefined;
+	return name !== null && name !== undefined && name !== "" ? { type: "tool", name } : undefined;
 }

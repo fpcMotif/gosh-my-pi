@@ -101,7 +101,7 @@ export function createInitExperimentTool(
 		defaultInactive: true,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const workDirError = validateWorkDir(ctx.cwd);
-			if (workDirError) {
+			if (workDirError !== null && workDirError !== undefined && workDirError !== "") {
 				return {
 					content: [{ type: "text", text: `Error: ${workDirError}` }],
 				};
@@ -133,10 +133,9 @@ export function createInitExperimentTool(
 						{
 							type: "text",
 							text:
-								abandonSummary +
-								`Error: run #${pendingRun.runNumber} has not been logged yet.\n` +
+								`${abandonSummary}Error: run #${pendingRun.runNumber} has not been logged yet.\n` +
 								`Pending: command="${pendingRun.command}"${metricInfo}, ${passedInfo}\n` +
-								"Call log_experiment before re-initializing, or pass abandon_unlogged_runs=true.",
+								`Call log_experiment before re-initializing, or pass abandon_unlogged_runs=true.`,
 						},
 					],
 				};
@@ -154,15 +153,21 @@ export function createInitExperimentTool(
 			const benchmarkContract = contractResult.contract.benchmark;
 			const expectedDirection = benchmarkContract.direction ?? "lower";
 			const expectedMetricUnit = benchmarkContract.metricUnit;
-			if (benchmarkContract.command && !isAutoresearchShCommand(benchmarkContract.command)) {
+			if (
+				benchmarkContract.command !== null &&
+				benchmarkContract.command !== undefined &&
+				benchmarkContract.command !== "" &&
+				!isAutoresearchShCommand(benchmarkContract.command)
+			) {
 				return {
 					content: [
 						{
 							type: "text",
 							text:
-								abandonSummary +
-								"Error: Benchmark.command in autoresearch.md must invoke `autoresearch.sh` directly. " +
-								"Move the real workload into `autoresearch.sh` and re-run init_experiment.",
+								`${
+									abandonSummary
+								}Error: Benchmark.command in autoresearch.md must invoke \`autoresearch.sh\` directly. ` +
+								`Move the real workload into \`autoresearch.sh\` and re-run init_experiment.`,
 						},
 					],
 				};
@@ -173,15 +178,25 @@ export function createInitExperimentTool(
 				const metricName = params.metric_name?.trim();
 				const benchmarkCommand = params.benchmark_command?.trim();
 				const scopePaths = params.scope_paths;
-				if (!metricName || !benchmarkCommand || !scopePaths || scopePaths.length === 0) {
+				if (
+					metricName === null ||
+					metricName === undefined ||
+					metricName === "" ||
+					benchmarkCommand === null ||
+					benchmarkCommand === undefined ||
+					benchmarkCommand === "" ||
+					!scopePaths ||
+					scopePaths.length === 0
+				) {
 					return {
 						content: [
 							{
 								type: "text",
 								text:
-									abandonSummary +
-									"Error: when from_autoresearch_md is false or omitted, metric_name, benchmark_command, and scope_paths are required and must match autoresearch.md. " +
-									"Alternatively pass from_autoresearch_md=true with only name (plus optional flags).",
+									`${
+										abandonSummary
+									}Error: when from_autoresearch_md is false or omitted, metric_name, benchmark_command, and scope_paths are required and must match autoresearch.md. ` +
+									`Alternatively pass from_autoresearch_md=true with only name (plus optional flags).`,
 							},
 						],
 					};
@@ -192,8 +207,7 @@ export function createInitExperimentTool(
 							{
 								type: "text",
 								text:
-									abandonSummary +
-									"Error: benchmark_command does not match autoresearch.md. " +
+									`${abandonSummary}Error: benchmark_command does not match autoresearch.md. ` +
 									`Expected: ${benchmarkContract.command ?? "(missing)"}\nReceived: ${params.benchmark_command}`,
 							},
 						],
@@ -205,8 +219,7 @@ export function createInitExperimentTool(
 							{
 								type: "text",
 								text:
-									abandonSummary +
-									"Error: metric_name does not match autoresearch.md. " +
+									`${abandonSummary}Error: metric_name does not match autoresearch.md. ` +
 									`Expected: ${benchmarkContract.primaryMetric ?? "(missing)"}\nReceived: ${params.metric_name}`,
 							},
 						],
@@ -218,8 +231,7 @@ export function createInitExperimentTool(
 							{
 								type: "text",
 								text:
-									abandonSummary +
-									"Error: metric_unit does not match autoresearch.md. " +
+									`${abandonSummary}Error: metric_unit does not match autoresearch.md. ` +
 									`Expected: ${expectedMetricUnit || "(empty)"}\nReceived: ${params.metric_unit ?? "(empty)"}`,
 							},
 						],
@@ -231,8 +243,7 @@ export function createInitExperimentTool(
 							{
 								type: "text",
 								text:
-									abandonSummary +
-									"Error: direction does not match autoresearch.md. " +
+									`${abandonSummary}Error: direction does not match autoresearch.md. ` +
 									`Expected: ${expectedDirection}\nReceived: ${params.direction ?? "lower"}`,
 							},
 						],
@@ -244,8 +255,7 @@ export function createInitExperimentTool(
 							{
 								type: "text",
 								text:
-									abandonSummary +
-									"Error: scope_paths do not match autoresearch.md. " +
+									`${abandonSummary}Error: scope_paths do not match autoresearch.md. ` +
 									`Expected: ${contractResult.contract.scopePaths.join(", ")}`,
 							},
 						],
@@ -257,8 +267,7 @@ export function createInitExperimentTool(
 							{
 								type: "text",
 								text:
-									abandonSummary +
-									"Error: off_limits do not match autoresearch.md. " +
+									`${abandonSummary}Error: off_limits do not match autoresearch.md. ` +
 									`Expected: ${contractResult.contract.offLimits.join(", ") || "(empty)"}`,
 							},
 						],
@@ -270,8 +279,7 @@ export function createInitExperimentTool(
 							{
 								type: "text",
 								text:
-									abandonSummary +
-									"Error: constraints do not match autoresearch.md. " +
+									`${abandonSummary}Error: constraints do not match autoresearch.md. ` +
 									`Expected: ${contractResult.contract.constraints.join(", ") || "(empty)"}`,
 							},
 						],
@@ -300,9 +308,9 @@ export function createInitExperimentTool(
 						content: [
 							{
 								type: "text",
-								text:
-									abandonSummary +
-									`Experiment session already initialized with matching contract. Continuing segment ${state.currentSegment}.`,
+								text: `${
+									abandonSummary
+								}Experiment session already initialized with matching contract. Continuing segment ${state.currentSegment}.`,
 							},
 						],
 						details: { state: cloneExperimentState(state) },

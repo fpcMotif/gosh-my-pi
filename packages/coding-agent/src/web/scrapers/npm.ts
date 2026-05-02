@@ -61,7 +61,8 @@ export const handleNpm: SpecialHandler = async (
 		if (!pkg) return null;
 
 		let md = `# ${pkg.name}\n\n`;
-		if (pkg.description) md += `${pkg.description}\n\n`;
+		if (pkg.description !== null && pkg.description !== undefined && pkg.description !== "")
+			md += `${pkg.description}\n\n`;
 
 		md += `**Latest:** ${pkg.version || "unknown"}`;
 		if (pkg.license) {
@@ -74,11 +75,15 @@ export const handleNpm: SpecialHandler = async (
 		}
 		md += "\n";
 
-		if (pkg.homepage) md += `**Homepage:** ${pkg.homepage}\n`;
+		if (pkg.homepage !== null && pkg.homepage !== undefined && pkg.homepage !== "")
+			md += `**Homepage:** ${pkg.homepage}\n`;
 		const repoUrl = typeof pkg.repository === "string" ? pkg.repository : pkg.repository?.url;
-		if (repoUrl) md += `**Repository:** ${repoUrl.replace(/^git\+/, "").replace(/\.git$/, "")}\n`;
-		if (pkg.keywords?.length) md += `**Keywords:** ${pkg.keywords.join(", ")}\n`;
-		if (pkg.maintainers?.length) md += `**Maintainers:** ${pkg.maintainers.map(m => m.name).join(", ")}\n`;
+		if (repoUrl !== null && repoUrl !== undefined && repoUrl !== "")
+			md += `**Repository:** ${repoUrl.replace(/^git\+/, "").replace(/\.git$/, "")}\n`;
+		if (pkg.keywords?.length !== null && pkg.keywords?.length !== undefined && pkg.keywords?.length !== 0)
+			md += `**Keywords:** ${pkg.keywords.join(", ")}\n`;
+		if (pkg.maintainers?.length !== null && pkg.maintainers?.length !== undefined && pkg.maintainers?.length !== 0)
+			md += `**Maintainers:** ${pkg.maintainers.map(m => m.name).join(", ")}\n`;
 
 		if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
 			md += `\n## Dependencies\n\n`;
@@ -87,7 +92,7 @@ export const handleNpm: SpecialHandler = async (
 			}
 		}
 
-		if (pkg.readme) {
+		if (pkg.readme !== null && pkg.readme !== undefined && pkg.readme !== "") {
 			md += `\n---\n\n## README\n\n${pkg.readme}\n`;
 		}
 

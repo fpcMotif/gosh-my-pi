@@ -95,7 +95,7 @@ export const handleOpenLibrary: SpecialHandler = async (
 			md = await fetchByIsbn(isbnMatch[1], timeout, signal);
 		}
 
-		if (!md) return null;
+		if (md === null || md === undefined || md === "") return null;
 
 		return buildResult(md, { url, method: "openlibrary", fetchedAt, notes: ["Fetched via Open Library API"] });
 	} catch {}
@@ -114,7 +114,7 @@ async function fetchWork(workId: string, timeout: number, signal?: AbortSignal):
 	let md = `# ${work.title}\n\n`;
 
 	// Fetch author names if we have author keys
-	if (work.authors?.length) {
+	if (work.authors?.length !== null && work.authors?.length !== undefined && work.authors?.length !== 0) {
 		const authorNames = await fetchAuthorNames(
 			work.authors.map(a => a.author.key),
 			timeout,
@@ -125,11 +125,11 @@ async function fetchWork(workId: string, timeout: number, signal?: AbortSignal):
 		}
 	}
 
-	if (work.first_publish_date) {
+	if (work.first_publish_date !== null && work.first_publish_date !== undefined && work.first_publish_date !== "") {
 		md += `**First Published:** ${work.first_publish_date}\n`;
 	}
 
-	if (work.covers?.length) {
+	if (work.covers?.length !== null && work.covers?.length !== undefined && work.covers?.length !== 0) {
 		const coverId = work.covers[0];
 		md += `**Cover:** https://covers.openlibrary.org/b/id/${coverId}-L.jpg\n`;
 	}
@@ -138,11 +138,11 @@ async function fetchWork(workId: string, timeout: number, signal?: AbortSignal):
 	md += "\n";
 
 	const description = extractDescription(work.description);
-	if (description) {
+	if (description !== null && description !== undefined && description !== "") {
 		md += `## Description\n\n${description}\n\n`;
 	}
 
-	if (work.subjects?.length) {
+	if (work.subjects?.length !== null && work.subjects?.length !== undefined && work.subjects?.length !== 0) {
 		md += `## Subjects\n\n${work.subjects.slice(0, 20).join(", ")}\n`;
 	}
 
@@ -160,7 +160,7 @@ async function fetchEdition(editionId: string, timeout: number, signal?: AbortSi
 	let md = `# ${edition.title}\n\n`;
 
 	// Fetch author names
-	if (edition.authors?.length) {
+	if (edition.authors?.length !== null && edition.authors?.length !== undefined && edition.authors?.length !== 0) {
 		const authorNames = await fetchAuthorNames(
 			edition.authors.map(a => a.key),
 			timeout,
@@ -171,15 +171,19 @@ async function fetchEdition(editionId: string, timeout: number, signal?: AbortSi
 		}
 	}
 
-	if (edition.publishers?.length) {
+	if (
+		edition.publishers?.length !== null &&
+		edition.publishers?.length !== undefined &&
+		edition.publishers?.length !== 0
+	) {
 		md += `**Publishers:** ${edition.publishers.join(", ")}\n`;
 	}
 
-	if (edition.publish_date) {
+	if (edition.publish_date !== null && edition.publish_date !== undefined && edition.publish_date !== "") {
 		md += `**Published:** ${edition.publish_date}\n`;
 	}
 
-	if (edition.number_of_pages) {
+	if (edition.number_of_pages !== null && edition.number_of_pages !== undefined && edition.number_of_pages !== 0) {
 		md += `**Pages:** ${edition.number_of_pages}\n`;
 	}
 
@@ -188,14 +192,14 @@ async function fetchEdition(editionId: string, timeout: number, signal?: AbortSi
 		md += `**ISBN:** ${isbns[0]}\n`;
 	}
 
-	if (edition.covers?.length) {
+	if (edition.covers?.length !== null && edition.covers?.length !== undefined && edition.covers?.length !== 0) {
 		const coverId = edition.covers[0];
 		md += `**Cover:** https://covers.openlibrary.org/b/id/${coverId}-L.jpg\n`;
 	}
 
 	md += `**Open Library:** https://openlibrary.org/books/${editionId}\n`;
 
-	if (edition.works?.length) {
+	if (edition.works?.length !== null && edition.works?.length !== undefined && edition.works?.length !== 0) {
 		const workKey = edition.works[0].key.replace("/works/", "");
 		md += `**Work:** https://openlibrary.org/works/${workKey}\n`;
 	}
@@ -203,11 +207,11 @@ async function fetchEdition(editionId: string, timeout: number, signal?: AbortSi
 	md += "\n";
 
 	const description = extractDescription(edition.description);
-	if (description) {
+	if (description !== null && description !== undefined && description !== "") {
 		md += `## Description\n\n${description}\n\n`;
 	}
 
-	if (edition.subjects?.length) {
+	if (edition.subjects?.length !== null && edition.subjects?.length !== undefined && edition.subjects?.length !== 0) {
 		md += `## Subjects\n\n${edition.subjects.slice(0, 20).join(", ")}\n`;
 	}
 
@@ -245,19 +249,19 @@ async function fetchByIsbn(isbn: string, timeout: number, signal?: AbortSignal):
 			}>;
 		}>(searchResult.content);
 		const doc = searchData?.docs?.[0];
-		if (!doc?.title) {
+		if (doc?.title === null || doc?.title === undefined || doc?.title === "") {
 			return `# Open Library Book\n\n**ISBN:** ${isbn}\n\nBook details are currently unavailable from Open Library.\n`;
 		}
 
 		let fallbackMd = `# ${doc.title}\n\n`;
-		if (doc.author_name?.length) {
+		if (doc.author_name?.length !== null && doc.author_name?.length !== undefined && doc.author_name?.length !== 0) {
 			fallbackMd += `**Authors:** ${doc.author_name.join(", ")}\n`;
 		}
-		if (doc.first_publish_year) {
+		if (doc.first_publish_year !== null && doc.first_publish_year !== undefined && doc.first_publish_year !== 0) {
 			fallbackMd += `**First Published:** ${doc.first_publish_year}\n`;
 		}
 		fallbackMd += `**ISBN:** ${isbn}\n`;
-		if (doc.key) {
+		if (doc.key !== null && doc.key !== undefined && doc.key !== "") {
 			fallbackMd += `**Open Library:** https://openlibrary.org${doc.key}\n`;
 		}
 
@@ -266,35 +270,38 @@ async function fetchByIsbn(isbn: string, timeout: number, signal?: AbortSignal):
 
 	let md = `# ${book.title}\n\n`;
 
-	if (book.authors?.length) {
+	if (book.authors?.length !== null && book.authors?.length !== undefined && book.authors?.length !== 0) {
 		md += `**Authors:** ${book.authors.map(a => a.name).join(", ")}\n`;
 	}
 
-	if (book.publishers?.length) {
+	if (book.publishers?.length !== null && book.publishers?.length !== undefined && book.publishers?.length !== 0) {
 		md += `**Publishers:** ${book.publishers.map(p => p.name).join(", ")}\n`;
 	}
 
-	if (book.publish_date) {
+	if (book.publish_date !== null && book.publish_date !== undefined && book.publish_date !== "") {
 		md += `**Published:** ${book.publish_date}\n`;
 	}
 
-	if (book.number_of_pages) {
+	if (book.number_of_pages !== null && book.number_of_pages !== undefined && book.number_of_pages !== 0) {
 		md += `**Pages:** ${book.number_of_pages}\n`;
 	}
 
 	md += `**ISBN:** ${isbn}\n`;
 
-	if (book.cover?.large || book.cover?.medium) {
-		md += `**Cover:** ${book.cover.large || book.cover.medium}\n`;
+	if (
+		book.cover?.large ??
+		(book.cover?.medium !== null && book.cover?.medium !== undefined && book.cover?.medium !== "")
+	) {
+		md += `**Cover:** ${book.cover.large ?? book.cover.medium}\n`;
 	}
 
-	if (book.url) {
+	if (book.url !== null && book.url !== undefined && book.url !== "") {
 		md += `**Open Library:** ${book.url}\n`;
 	}
 
 	md += "\n";
 
-	if (book.subjects?.length) {
+	if (book.subjects?.length !== null && book.subjects?.length !== undefined && book.subjects?.length !== 0) {
 		md += `## Subjects\n\n${book.subjects
 			.slice(0, 20)
 			.map(s => s.name)
@@ -315,7 +322,7 @@ async function fetchAuthorNames(authorKeys: string[], timeout: number, signal?: 
 			const result = await loadPage(apiUrl, { timeout: Math.min(timeout, 5), signal });
 			if (result.ok) {
 				const author = JSON.parse(result.content) as { name?: string };
-				return author.name || null;
+				return author.name ?? null;
 			}
 		} catch {}
 		return null;
@@ -323,7 +330,7 @@ async function fetchAuthorNames(authorKeys: string[], timeout: number, signal?: 
 
 	const results = await Promise.all(promises);
 	for (const name of results) {
-		if (name) names.push(name);
+		if (name !== null && name !== undefined && name !== "") names.push(name);
 	}
 
 	return names;

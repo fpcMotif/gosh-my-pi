@@ -24,7 +24,7 @@ function createWebsetTool(
 		async execute(_toolCallId, params, _onUpdate, _ctx, _signal) {
 			try {
 				const apiKey = findApiKey();
-				if (!apiKey) {
+				if (apiKey === null || apiKey === undefined || apiKey === "") {
 					return {
 						content: [{ type: "text" as const, text: "Error: EXA_API_KEY not found" }],
 						details: { error: "EXA_API_KEY not found", toolName: name },

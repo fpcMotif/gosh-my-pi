@@ -66,9 +66,9 @@ function trackPromise<T>(promise: Promise<T>): TrackedPromise<T> {
 			tracked.status = "fulfilled";
 			tracked.value = value;
 		},
-		reason => {
+		error => {
 			tracked.status = "rejected";
-			tracked.reason = reason;
+			tracked.reason = error;
 		},
 	);
 	return tracked;
@@ -170,7 +170,11 @@ export class MCPManager {
 		this.#onPromptsChanged = handler;
 		// Fire immediately for servers that already have prompts loaded
 		for (const [name, connection] of this.#connections) {
-			if (connection.prompts?.length) {
+			if (
+				connection.prompts?.length !== null &&
+				connection.prompts?.length !== undefined &&
+				connection.prompts?.length !== 0
+			) {
 				handler(name);
 			}
 		}
@@ -214,7 +218,7 @@ export class MCPManager {
 		if (enabled) {
 			// Subscribe to all connected servers that support it
 			for (const [name, connection] of this.#connections) {
-				if (connection.capabilities.resources?.subscribe && connection.resources) {
+				if (connection.capabilities.resources?.subscribe === true && connection.resources) {
 					const uris = connection.resources.map(r => r.uri);
 					this.#subscribeAndTrack(name, connection, uris, notificationEpoch);
 				}
@@ -504,7 +508,7 @@ export class MCPManager {
 			case MCPNotificationMethods.RESOURCES_UPDATED: {
 				const uri = (params as { uri?: string })?.uri;
 				const subscribed = this.#subscribedResources.get(serverName);
-				if (uri && subscribed?.has(uri)) {
+				if (uri !== null && uri !== undefined && uri !== "" && subscribed?.has(uri) === true) {
 					this.#onResourcesChanged?.(serverName, uri);
 				}
 				break;
@@ -649,7 +653,12 @@ export class MCPManager {
 		if (hadTools) this.#onToolsChanged?.(this.#tools);
 
 		// Notify prompt consumers so stale commands are cleared
-		if (connection?.prompts?.length) this.#onPromptsChanged?.(name);
+		if (
+			connection?.prompts?.length !== null &&
+			connection?.prompts?.length !== undefined &&
+			connection?.prompts?.length !== 0
+		)
+			this.#onPromptsChanged?.(name);
 	}
 
 	/**
@@ -831,7 +840,7 @@ export class MCPManager {
 			try {
 				const [resources] = await Promise.all([listResources(connection), listResourceTemplates(connection)]);
 
-				if (this.#notificationsEnabled && connection.capabilities.resources?.subscribe) {
+				if (this.#notificationsEnabled && connection.capabilities.resources?.subscribe === true) {
 					const uris = resources.map(r => r.uri);
 					const notificationEpoch = this.#notificationsEpoch;
 					this.#subscribeAndTrack(name, connection, uris, notificationEpoch);
@@ -897,7 +906,7 @@ export class MCPManager {
 
 			// Reload
 			const [resources] = await Promise.all([listResources(connection), listResourceTemplates(connection)]);
-			if (this.#notificationsEnabled && connection.capabilities.resources?.subscribe) {
+			if (this.#notificationsEnabled && connection.capabilities.resources?.subscribe === true) {
 				const newUris = new Set(resources.map(r => r.uri));
 				const oldUris = this.#subscribedResources.get(name);
 				const notificationEpoch = this.#notificationsEpoch;
@@ -1016,7 +1025,11 @@ export class MCPManager {
 	getServerInstructions(): Map<string, string> {
 		const instructions = new Map<string, string>();
 		for (const [name, connection] of this.#connections) {
-			if (connection.instructions) {
+			if (
+				connection.instructions !== null &&
+				connection.instructions !== undefined &&
+				connection.instructions !== ""
+			) {
 				instructions.set(name, connection.instructions);
 			}
 		}
@@ -1040,7 +1053,13 @@ export class MCPManager {
 		let resolved: MCPServerConfig = { ...config };
 
 		const auth = config.auth;
-		if (auth?.type === "oauth" && auth.credentialId && this.#authStorage) {
+		if (
+			auth?.type === "oauth" &&
+			auth.credentialId !== null &&
+			auth.credentialId !== undefined &&
+			auth.credentialId !== "" &&
+			this.#authStorage
+		) {
 			const credentialId = auth.credentialId;
 			try {
 				let credential = this.#authStorage.get(credentialId);
@@ -1050,7 +1069,13 @@ export class MCPManager {
 					const REFRESH_BUFFER_MS = 5 * 60_000;
 					const shouldRefresh =
 						forceRefresh || (credential.expires && Date.now() >= credential.expires - REFRESH_BUFFER_MS);
-					if (shouldRefresh && credential.refresh && auth.tokenUrl) {
+					if (
+						shouldRefresh &&
+						credential.refresh &&
+						auth.tokenUrl !== null &&
+						auth.tokenUrl !== undefined &&
+						auth.tokenUrl !== ""
+					) {
 						try {
 							const refreshed = await refreshMCPOAuthToken(
 								auth.tokenUrl,
@@ -1097,7 +1122,8 @@ export class MCPManager {
 				const nextEnv: Record<string, string> = {};
 				for (const [key, value] of Object.entries(resolved.env)) {
 					const resolvedValue = await resolveConfigValue(value);
-					if (resolvedValue) nextEnv[key] = resolvedValue;
+					if (resolvedValue !== null && resolvedValue !== undefined && resolvedValue !== "")
+						nextEnv[key] = resolvedValue;
 				}
 				resolved = { ...resolved, env: nextEnv };
 			}
@@ -1106,7 +1132,8 @@ export class MCPManager {
 				const nextHeaders: Record<string, string> = {};
 				for (const [key, value] of Object.entries(resolved.headers)) {
 					const resolvedValue = await resolveConfigValue(value);
-					if (resolvedValue) nextHeaders[key] = resolvedValue;
+					if (resolvedValue !== null && resolvedValue !== undefined && resolvedValue !== "")
+						nextHeaders[key] = resolvedValue;
 				}
 				resolved = { ...resolved, headers: nextHeaders };
 			}

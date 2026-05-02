@@ -35,7 +35,7 @@ export default class Agents extends Command {
 
 	async run(): Promise<void> {
 		const { args, flags } = await this.parse(Agents);
-		if (!args.action) {
+		if (args.action === null || args.action === undefined || args.action === "") {
 			renderCommandHelp("omp", "agents", Agents);
 			return;
 		}

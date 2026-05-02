@@ -80,7 +80,9 @@ export class EventController {
 	#trackReadToolCall(toolCallId: string, args: unknown): void {
 		if (!toolCallId) return;
 		const normalizedArgs =
-			args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
+			args !== null && args !== undefined && typeof args === "object" && !Array.isArray(args)
+				? (args as Record<string, unknown>)
+				: {};
 		this.#readToolCallArgs.set(toolCallId, normalizedArgs);
 		const assistantComponent = this.ctx.streamingComponent ?? this.#lastAssistantComponent;
 		if (assistantComponent) {
@@ -112,7 +114,7 @@ export class EventController {
 	}
 	#updateWorkingMessageFromIntent(intent: string | undefined): void {
 		const trimmed = intent?.trim();
-		if (!trimmed || trimmed === this.#lastIntent) return;
+		if (trimmed === null || trimmed === undefined || trimmed === "" || trimmed === this.#lastIntent) return;
 		this.#lastIntent = trimmed;
 		this.ctx.setWorkingMessage(`${trimmed} (esc to interrupt)`);
 	}
@@ -187,7 +189,7 @@ export class EventController {
 			// paths already cleared the editor at submit time; clearing again here
 			// would race with the user typing the next prompt while the previous
 			// large redraw lands and erase their in-progress draft (#783).
-			if (!event.message.synthetic) {
+			if (event.message.synthetic !== true) {
 				if (!wasLocallySubmitted) {
 					this.ctx.editor.setText("");
 				}
@@ -295,7 +297,7 @@ export class EventController {
 				if (typeof tool?.intent !== "function") continue;
 				try {
 					const derived = tool.intent(args as never)?.trim();
-					if (derived) {
+					if (derived !== null && derived !== undefined && derived !== "") {
 						this.#updateWorkingMessageFromIntent(derived);
 					}
 				} catch {
@@ -456,20 +458,18 @@ export class EventController {
 			}
 		}
 		// Update todo display when todo_write tool completes
-		if (event.toolName === "todo_write" && !event.isError) {
+		if (event.toolName === "todo_write" && event.isError !== true) {
 			const details = event.result.details as { phases?: TodoPhase[] } | undefined;
 			if (details?.phases) {
 				this.ctx.setTodos(details.phases);
 			}
-		} else if (event.toolName === "todo_write" && event.isError) {
-			const textContent = event.result.content.find(
-				(content: { type: string; text?: string }) => content.type === "text",
-			)?.text;
+		} else if (event.toolName === "todo_write" && event.isError === true) {
+			const textContent = (event.result.content.find(c => c.type === "text") as any)?.text;
 			this.ctx.showWarning(
-				`Todo update failed${textContent ? `: ${textContent}` : ". Progress may be stale until todo_write succeeds."}`,
+				`Todo update failed${textContent !== null && textContent !== undefined ? `: ${textContent}` : ". Progress may be stale until todo_write succeeds."}`,
 			);
 		}
-		if (event.toolName === "exit_plan_mode" && !event.isError) {
+		if (event.toolName === "exit_plan_mode" && event.isError !== true) {
 			const details = event.result.details as ExitPlanModeDetails | undefined;
 			if (details) {
 				await this.ctx.handleExitPlanModeTool(details);
@@ -515,7 +515,7 @@ export class EventController {
 		};
 		this.ctx.statusContainer.clear();
 		const reasonText =
-			event.reason === "overflow" ? "Context overflow detected, " : event.reason === "idle" ? "Idle " : "";
+			event.reason === "overflow" ? "Context overflow detected, " : (event.reason === "idle" ? "Idle " : "");
 		const actionLabel = event.action === "handoff" ? "Auto-handoff" : "Auto context-full maintenance";
 		this.ctx.autoCompactionLoader = new Loader(
 			this.ctx.ui,
@@ -546,7 +546,7 @@ export class EventController {
 			this.ctx.rebuildChatFromMessages();
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorTopBorder();
-		} else if (event.errorMessage) {
+		} else if (event.errorMessage !== null && event.errorMessage !== undefined && event.errorMessage !== "") {
 			this.ctx.showWarning(event.errorMessage);
 		} else if (isHandoffAction) {
 			this.ctx.chatContainer.clear();
@@ -555,7 +555,7 @@ export class EventController {
 			this.ctx.updateEditorTopBorder();
 			await this.ctx.reloadTodos();
 			this.ctx.showStatus("Auto-handoff completed");
-		} else if (event.skipped) {
+		} else if (event.skipped === true) {
 			// Benign skip: no model selected, no candidate models available, or nothing
 			// to compact yet. Not a failure — suppress the warning.
 		} else {
@@ -594,7 +594,7 @@ export class EventController {
 			this.ctx.statusContainer.clear();
 		}
 		if (!event.success) {
-			this.ctx.showError(`Retry failed after ${event.attempt} attempts: ${event.finalError || "Unknown error"}`);
+			this.ctx.showError(`Retry failed after ${event.attempt} attempts: ${event.finalError ?? "Unknown error"}`);
 		}
 		this.ctx.ui.requestRender();
 	}
@@ -680,7 +680,7 @@ export class EventController {
 		if (notify === "off") return;
 		const title =
 			this.ctx.sessionManager.titleSource === "auto" ? undefined : this.ctx.sessionManager.getSessionName();
-		const message = title ? `${title}: Complete` : "Complete";
+		const message = title !== null && title !== undefined && title !== "" ? `${title}: Complete` : "Complete";
 		TERMINAL.sendNotification(message);
 	}
 

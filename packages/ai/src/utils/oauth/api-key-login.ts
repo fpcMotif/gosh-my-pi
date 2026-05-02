@@ -53,7 +53,7 @@ export function createApiKeyLogin(config: ApiKeyLoginConfig): (options: OAuthCon
 			placeholder: config.placeholder,
 		});
 
-		if (options.signal?.aborted) {
+		if (options.signal !== undefined && options.signal.aborted) {
 			throw new Error("Login cancelled");
 		}
 

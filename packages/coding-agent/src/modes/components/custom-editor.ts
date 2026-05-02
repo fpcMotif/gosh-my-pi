@@ -185,7 +185,7 @@ export class CustomEditor extends Editor {
 		// Intercept configured interrupt shortcut.
 		// Default behavior keeps autocomplete dismissal, but parent can prioritize global interrupt handling.
 		if (this.#matchesAction(data, "app.interrupt") && this.onEscape) {
-			if (!this.isShowingAutocomplete() || this.shouldBypassAutocompleteOnEscape?.()) {
+			if (!this.isShowingAutocomplete() || this.shouldBypassAutocompleteOnEscape?.() === true) {
 				this.onEscape();
 				return;
 			}

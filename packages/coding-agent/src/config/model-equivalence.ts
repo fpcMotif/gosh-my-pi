@@ -254,7 +254,7 @@ function getQualifiedNamespaceSuffixes(candidate: string): string[] {
 function extractUpstreamFamilyCandidate(candidate: string): string | undefined {
 	for (const pattern of FAMILY_EXTRACTION_PATTERNS) {
 		const match = pattern.exec(candidate);
-		if (match?.[1]) {
+		if (match?.[1] !== undefined && match?.[1] !== "") {
 			return match[1];
 		}
 	}
@@ -275,7 +275,7 @@ function getCandidatePenalty(candidate: string): number {
 	if (/-v\d+(?::\d+)?$/i.test(candidate)) {
 		penalty += 25;
 	}
-	if (stripTrailingMarker(candidate)) {
+	if (stripTrailingMarker(candidate) !== undefined && stripTrailingMarker(candidate) !== "") {
 		penalty += 20;
 	}
 	if (/[A-Z]/.test(candidate)) {
@@ -333,7 +333,7 @@ function getWrapperCanonicalCandidates(candidate: string): string[] {
 
 function getAnthropicAliasOfficial(candidate: string, officialIds: Set<string>): string | undefined {
 	const reordered = reorderAnthropicFamily(candidate);
-	if (!reordered) {
+	if (reordered === null || reordered === undefined || reordered === "") {
 		return undefined;
 	}
 	const candidates = [reordered, ...toggleShortVersionSeparators(reordered)].filter(officialId =>
@@ -386,7 +386,7 @@ function parseClaudeFamilyVersionSegments(candidate: string, prefix: string): nu
 
 function getClaudeFamilyAliasOfficial(candidate: string, officialIds: Set<string>): string | undefined {
 	const match = /^(?:anthropic\/)?(claude(?:-\d(?:[.-]\d+)?)?-(?:haiku|opus|sonnet))(?:-latest)?$/i.exec(candidate);
-	if (!match?.[1]) {
+	if (match?.[1] === undefined || match?.[1] === "") {
 		return undefined;
 	}
 	const familyPrefix = match[1].toLowerCase();
@@ -452,7 +452,7 @@ function getHeuristicCanonicalCandidates(modelId: string): string[] {
 
 	while (queue.length > 0) {
 		const candidate = queue.shift();
-		if (!candidate) {
+		if (candidate === null || candidate === undefined || candidate === "") {
 			continue;
 		}
 		const normalized = candidate.trim();
@@ -463,7 +463,7 @@ function getHeuristicCanonicalCandidates(modelId: string): string[] {
 		addCanonicalCandidate(candidates, normalized);
 
 		const lowercased = lowercaseCandidate(normalized);
-		if (lowercased) {
+		if (lowercased !== null && lowercased !== undefined && lowercased !== "") {
 			queue.push(lowercased);
 		}
 
@@ -481,7 +481,7 @@ function getHeuristicCanonicalCandidates(modelId: string): string[] {
 		}
 
 		const attachedFamilyVersion = insertAttachedFamilyVersionSeparator(normalized);
-		if (attachedFamilyVersion) {
+		if (attachedFamilyVersion !== null && attachedFamilyVersion !== undefined && attachedFamilyVersion !== "") {
 			queue.push(attachedFamilyVersion);
 		}
 
@@ -502,42 +502,42 @@ function getHeuristicCanonicalCandidates(modelId: string): string[] {
 		}
 
 		const strippedSyntheticPrefix = stripSyntheticPrefix(normalized);
-		if (strippedSyntheticPrefix) {
+		if (strippedSyntheticPrefix !== null && strippedSyntheticPrefix !== undefined && strippedSyntheticPrefix !== "") {
 			queue.push(strippedSyntheticPrefix);
 		}
 
 		const strippedLatest = stripLatestSuffix(normalized);
-		if (strippedLatest) {
+		if (strippedLatest !== null && strippedLatest !== undefined && strippedLatest !== "") {
 			queue.push(strippedLatest);
 		}
 
 		const strippedLegacyGlmTurbo = stripLegacyGlmTurboSuffix(normalized);
-		if (strippedLegacyGlmTurbo) {
+		if (strippedLegacyGlmTurbo !== null && strippedLegacyGlmTurbo !== undefined && strippedLegacyGlmTurbo !== "") {
 			queue.push(strippedLegacyGlmTurbo);
 		}
 
 		const extractedFamily = extractUpstreamFamilyCandidate(normalized);
-		if (extractedFamily) {
+		if (extractedFamily !== null && extractedFamily !== undefined && extractedFamily !== "") {
 			queue.push(extractedFamily);
 		}
 
 		const strippedProviderVersion = stripProviderVersionSuffix(normalized);
-		if (strippedProviderVersion) {
+		if (strippedProviderVersion !== null && strippedProviderVersion !== undefined && strippedProviderVersion !== "") {
 			queue.push(strippedProviderVersion);
 		}
 
 		const strippedDate = stripDateSuffix(normalized);
-		if (strippedDate) {
+		if (strippedDate !== null && strippedDate !== undefined && strippedDate !== "") {
 			queue.push(strippedDate);
 		}
 
 		const strippedMarker = stripTrailingMarker(normalized);
-		if (strippedMarker) {
+		if (strippedMarker !== null && strippedMarker !== undefined && strippedMarker !== "") {
 			queue.push(strippedMarker);
 		}
 
 		const reorderedAnthropic = reorderAnthropicFamily(normalized);
-		if (reorderedAnthropic) {
+		if (reorderedAnthropic !== null && reorderedAnthropic !== undefined && reorderedAnthropic !== "") {
 			queue.push(reorderedAnthropic);
 		}
 	}
@@ -582,12 +582,12 @@ function resolveCanonicalIdForModel(
 	}
 
 	const anthropicAlias = getAnthropicAliasOfficial(model.id, referenceData.officialIds);
-	if (anthropicAlias) {
+	if (anthropicAlias !== null && anthropicAlias !== undefined && anthropicAlias !== "") {
 		return { id: anthropicAlias, source: anthropicAlias === model.id ? "bundled" : "heuristic" };
 	}
 
 	const claudeFamilyAlias = getClaudeFamilyAliasOfficial(model.id, referenceData.officialIds);
-	if (claudeFamilyAlias) {
+	if (claudeFamilyAlias !== null && claudeFamilyAlias !== undefined && claudeFamilyAlias !== "") {
 		return { id: claudeFamilyAlias, source: claudeFamilyAlias === model.id ? "bundled" : "heuristic" };
 	}
 
@@ -595,9 +595,11 @@ function resolveCanonicalIdForModel(
 	const officialMatches = heuristicCandidates.filter(candidate => referenceData.officialIds.has(candidate));
 	const preferredFallback = getPreferredFallbackCanonicalCandidate(model.id, heuristicCandidates);
 	const match = selectBestOfficialCandidate(officialMatches);
-	if (match) {
+	if (match !== null && match !== undefined && match !== "") {
 		if (
-			preferredFallback &&
+			preferredFallback !== null &&
+			preferredFallback !== undefined &&
+			preferredFallback !== "" &&
 			(match.includes("/") || match.includes(":")) &&
 			compareCandidatePreference(preferredFallback, match) < 0
 		) {
@@ -606,7 +608,7 @@ function resolveCanonicalIdForModel(
 		return { id: match, source: match === model.id ? "bundled" : "heuristic" };
 	}
 
-	if (preferredFallback) {
+	if (preferredFallback !== null && preferredFallback !== undefined && preferredFallback !== "") {
 		return { id: preferredFallback, source: "heuristic" };
 	}
 

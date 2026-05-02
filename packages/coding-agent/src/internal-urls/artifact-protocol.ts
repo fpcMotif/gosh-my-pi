@@ -49,7 +49,7 @@ export class ArtifactProtocolHandler implements ProtocolHandler {
 
 	async resolve(url: InternalUrl): Promise<InternalResource> {
 		const artifactsDir = this.options.getArtifactsDir();
-		if (!artifactsDir) {
+		if (artifactsDir === null || artifactsDir === undefined || artifactsDir === "") {
 			throw new Error("No session - artifacts unavailable");
 		}
 
@@ -68,16 +68,16 @@ export class ArtifactProtocolHandler implements ProtocolHandler {
 		let files: string[];
 		try {
 			files = await fs.readdir(artifactsDir);
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				throw new Error("No artifacts directory found");
 			}
-			throw err;
+			throw error;
 		}
 
 		const match = files.find(f => f.startsWith(`${id}.`));
 
-		if (!match) {
+		if (match === null || match === undefined || match === "") {
 			const available = await listAvailableArtifacts(artifactsDir);
 			const availableStr = available.length > 0 ? available.join(", ") : "none";
 			throw new Error(`Artifact ${id} not found. Available: ${availableStr}`);

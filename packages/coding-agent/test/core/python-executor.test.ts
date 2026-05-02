@@ -17,8 +17,8 @@ describe("executePythonWithKernel", () => {
 		const kernel = new FakeKernel(
 			{ status: "ok", cancelled: false, timedOut: false, stdinRequested: false },
 			options => {
-				options?.onChunk?.("hello\n");
-				options?.onDisplay?.({ type: "json", data: { foo: "bar" } });
+				void options?.onChunk?.("hello\n");
+				void options?.onDisplay?.({ type: "json", data: { foo: "bar" } });
 			},
 		);
 
@@ -46,7 +46,7 @@ describe("executePythonWithKernel", () => {
 		const kernel = new FakeKernel(
 			{ status: "error", cancelled: false, timedOut: false, stdinRequested: false },
 			options => {
-				options?.onChunk?.("Traceback\n");
+				void options?.onChunk?.("Traceback\n");
 			},
 		);
 
@@ -61,7 +61,7 @@ describe("executePythonWithKernel", () => {
 		const kernel = new FakeKernel(
 			{ status: "ok", cancelled: false, timedOut: false, stdinRequested: false },
 			options => {
-				options?.onChunk?.("\u001b[31mred\r\n");
+				void options?.onChunk?.("\u001b[31mred\r\n");
 			},
 		);
 
@@ -74,7 +74,7 @@ describe("executePythonWithKernel", () => {
 		const kernel = new FakeKernel(
 			{ status: "ok", cancelled: true, timedOut: true, stdinRequested: false },
 			options => {
-				options?.onChunk?.("partial output\n");
+				void options?.onChunk?.("partial output\n");
 			},
 		);
 
@@ -89,7 +89,7 @@ describe("executePythonWithKernel", () => {
 		const kernel = new FakeKernel(
 			{ status: "ok", cancelled: true, timedOut: false, stdinRequested: false },
 			options => {
-				options?.onChunk?.("cancelled output\n");
+				void options?.onChunk?.("cancelled output\n");
 			},
 		);
 

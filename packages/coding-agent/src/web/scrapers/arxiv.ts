@@ -34,7 +34,7 @@ export const handleArxiv: SpecialHandler = async (
 		const doc = parseHTML(result.content).document;
 		const entry = doc.querySelector("entry");
 
-		if (!entry) return null;
+		if (entry === null || entry === undefined) return null;
 
 		const title = entry.querySelector("title")?.textContent?.trim()?.replace(/\s+/g, " ");
 		const summary = entry.querySelector("summary")?.textContent?.trim();
@@ -49,16 +49,16 @@ export const handleArxiv: SpecialHandler = async (
 			.filter((term): term is string => Boolean(term));
 		const pdfLink = entry.querySelector('link[title="pdf"]')?.getAttribute("href");
 
-		let md = `# ${title || "arXiv Paper"}\n\n`;
+		let md = `# ${title ?? "arXiv Paper"}\n\n`;
 		if (authors.length) md += `**Authors:** ${authors.join(", ")}\n`;
-		if (published) md += `**Published:** ${published}\n`;
+		if (published !== null && published !== undefined) md += `**Published:** ${published}\n`;
 		if (categories.length) md += `**Categories:** ${categories.join(", ")}\n`;
 		md += `**arXiv:** ${paperId}\n\n`;
-		md += `---\n\n## Abstract\n\n${summary || "No abstract available."}\n\n`;
+		md += `---\n\n## Abstract\n\n${summary ?? "No abstract available."}\n\n`;
 
 		// If it was a PDF link or we want full content, try to fetch and convert PDF
 		if (match[1] === "pdf" || parsed.pathname.includes(".pdf")) {
-			if (pdfLink) {
+			if (pdfLink !== null && pdfLink !== undefined) {
 				notes.push("Fetching PDF for full content...");
 				const pdfResult = await fetchBinary(pdfLink, timeout, signal);
 				if (pdfResult.ok) {

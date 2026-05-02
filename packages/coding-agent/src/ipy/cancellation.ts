@@ -18,10 +18,10 @@ export function getExecutionCancellationError(
 	signal: AbortSignal | undefined,
 	fallbackReason: string,
 ): Error {
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		return getAbortReason(signal, fallbackReason);
 	}
-	if (result.timedOut) {
+	if (result.timedOut === true) {
 		return createCancellationError("TimeoutError", fallbackReason);
 	}
 	return createCancellationError("AbortError", fallbackReason);

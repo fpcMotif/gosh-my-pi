@@ -46,9 +46,9 @@ export class BlobStore {
 			const file = Bun.file(blobPath);
 			const ab = await file.arrayBuffer();
 			return Buffer.from(ab);
-		} catch (err) {
-			if (isEnoent(err)) return null;
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) return null;
+			throw error;
 		}
 	}
 
@@ -107,7 +107,7 @@ export async function externalizeImageData(blobStore: BlobStore, base64Data: str
  */
 export async function resolveImageDataUrl(blobStore: BlobStore, data: string): Promise<string> {
 	const hash = parseBlobRef(data);
-	if (!hash) return data;
+	if (hash === null || hash === undefined || hash === "") return data;
 
 	const buffer = await blobStore.get(hash);
 	if (!buffer) {
@@ -124,7 +124,7 @@ export async function resolveImageDataUrl(blobStore: BlobStore, data: string): P
  */
 export async function resolveImageData(blobStore: BlobStore, data: string): Promise<string> {
 	const hash = parseBlobRef(data);
-	if (!hash) return data;
+	if (hash === null || hash === undefined || hash === "") return data;
 
 	const buffer = await blobStore.get(hash);
 	if (!buffer) {

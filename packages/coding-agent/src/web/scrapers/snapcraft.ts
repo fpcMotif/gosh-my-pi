@@ -64,8 +64,13 @@ interface SnapcraftResponse {
 function formatPublisher(publisher?: SnapcraftPublisher): string | null {
 	if (!publisher) return null;
 	const displayName = publisher["display-name"] ?? publisher.username ?? publisher.id;
-	if (!displayName) return null;
-	if (publisher.username && displayName !== publisher.username) {
+	if (displayName === null || displayName === undefined || displayName === "") return null;
+	if (
+		publisher.username !== null &&
+		publisher.username !== undefined &&
+		publisher.username !== "" &&
+		displayName !== publisher.username
+	) {
 		return `${displayName} (@${publisher.username})`;
 	}
 	return displayName;
@@ -73,9 +78,10 @@ function formatPublisher(publisher?: SnapcraftPublisher): string | null {
 
 function formatChannelName(channel?: SnapcraftChannel): string | null {
 	if (!channel) return null;
-	if (channel.name?.includes("/")) return channel.name;
-	if (channel.track && channel.risk) {
-		const branch = channel.branch ? `/${channel.branch}` : "";
+	if (channel.name?.includes("/") === true) return channel.name;
+	if (channel.track !== null && channel.track !== undefined && channel.track !== "" && channel.risk) {
+		const branch =
+			channel.branch !== null && channel.branch !== undefined && channel.branch !== "" ? `/${channel.branch}` : "";
 		return `${channel.track}/${channel.risk}${branch}`;
 	}
 	return channel.name ?? null;
@@ -136,7 +142,7 @@ export const handleSnapcraft: SpecialHandler = async (
 
 		const channelMap = data["channel-map"] ?? [];
 		let version = snapInfo.version ?? data.version;
-		if (!version && channelMap.length > 0) {
+		if ((version === null || version === undefined || version === "") && channelMap.length > 0) {
 			version = pickVersionFromChannels(channelMap);
 		}
 
@@ -145,21 +151,28 @@ export const handleSnapcraft: SpecialHandler = async (
 		const channels = new Map<string, { version?: string; architectures: Set<string> }>();
 		for (const entry of channelMap) {
 			const channelName = formatChannelName(entry.channel);
-			if (!channelName) continue;
+			if (channelName === null || channelName === undefined || channelName === "") continue;
 			const existing = channels.get(channelName) ?? { architectures: new Set<string>() };
-			if (!existing.version && entry.version) existing.version = entry.version;
-			if (entry.channel?.architecture) existing.architectures.add(entry.channel.architecture);
+			if ((existing.version === null || existing.version === undefined || existing.version === "") && entry.version)
+				existing.version = entry.version;
+			if (
+				entry.channel?.architecture !== null &&
+				entry.channel?.architecture !== undefined &&
+				entry.channel?.architecture !== ""
+			)
+				existing.architectures.add(entry.channel.architecture);
 			channels.set(channelName, existing);
 		}
 
 		let md = `# ${name}\n\n`;
-		if (summary) md += `${summary}\n\n`;
+		if (summary !== null && summary !== undefined && summary !== "") md += `${summary}\n\n`;
 
 		md += `**Version:** ${version ?? "unknown"}`;
-		if (confinement) md += ` · **Confinement:** ${confinement}`;
-		if (base) md += ` · **Base:** ${base}`;
+		if (confinement !== null && confinement !== undefined && confinement !== "")
+			md += ` · **Confinement:** ${confinement}`;
+		if (base !== null && base !== undefined && base !== "") md += ` · **Base:** ${base}`;
 		md += "\n";
-		if (publisher) md += `**Publisher:** ${publisher}\n`;
+		if (publisher !== null && publisher !== undefined && publisher !== "") md += `**Publisher:** ${publisher}\n`;
 		if (downloads !== null) md += `**Downloads:** ${formatNumber(downloads)}\n`;
 		md += "\n";
 
@@ -168,7 +181,8 @@ export const handleSnapcraft: SpecialHandler = async (
 			const sortedChannels = Array.from(channels.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 			for (const [channelName, info] of sortedChannels) {
 				const arches = Array.from(info.architectures).sort();
-				const versionSuffix = info.version ? `: ${info.version}` : "";
+				const versionSuffix =
+					info.version !== null && info.version !== undefined && info.version !== "" ? `: ${info.version}` : "";
 				const archSuffix = arches.length > 0 ? ` (${arches.join(", ")})` : "";
 				md += `- ${channelName}${versionSuffix}${archSuffix}\n`;
 			}
@@ -176,7 +190,7 @@ export const handleSnapcraft: SpecialHandler = async (
 		}
 
 		const descriptionText = description ?? summary;
-		if (descriptionText) {
+		if (descriptionText !== null && descriptionText !== undefined && descriptionText !== "") {
 			md += `## Description\n\n${descriptionText}\n`;
 		}
 

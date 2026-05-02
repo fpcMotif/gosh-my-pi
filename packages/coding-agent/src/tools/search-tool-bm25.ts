@@ -111,11 +111,15 @@ export function renderSearchToolBm25Description(discoverableTools: DiscoverableM
 }
 
 function renderMatchLines(match: SearchToolBm25Match, theme: Theme): string[] {
-	const safeServerName = match.server_name ? replaceTabs(match.server_name) : undefined;
+	const safeServerName =
+		match.server_name !== null && match.server_name !== undefined && match.server_name !== ""
+			? replaceTabs(match.server_name)
+			: undefined;
 	const safeLabel = replaceTabs(match.label);
 	const safeDescription = replaceTabs(match.description.trim());
 	const metaParts: string[] = [];
-	if (safeServerName) metaParts.push(theme.fg("muted", safeServerName));
+	if (safeServerName !== null && safeServerName !== undefined && safeServerName !== "")
+		metaParts.push(theme.fg("muted", safeServerName));
 	metaParts.push(theme.fg("dim", `score ${match.score.toFixed(3)}`));
 	const metaSep = theme.fg("dim", theme.sep.dot);
 	const metaSuffix = metaParts.length > 0 ? ` ${metaParts.join(metaSep)}` : "";
@@ -208,7 +212,7 @@ export class SearchToolBm25Tool implements AgentTool<typeof searchToolBm25Schema
 export const searchToolBm25Renderer = {
 	renderCall(args: SearchToolBm25Params, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const query = typeof args.query === "string" ? replaceTabs(args.query.trim()) : "";
-		const meta = args.limit ? [`limit:${args.limit}`] : [];
+		const meta = args.limit !== null && args.limit !== undefined && args.limit !== 0 ? [`limit:${args.limit}`] : [];
 		return new Text(
 			renderStatusLine(
 				{ icon: "pending", title: TOOL_DISCOVERY_TITLE, description: query || "(empty query)", meta },

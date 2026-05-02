@@ -33,7 +33,15 @@ const DEFAULT_AUTO_BACKGROUND_THRESHOLD_MS = 60_000;
 async function saveBashOriginalArtifact(session: ToolSession, originalText: string): Promise<string | undefined> {
 	try {
 		const alloc = await session.allocateOutputArtifact?.("bash-original");
-		if (!alloc?.path || !alloc.id) return undefined;
+		if (
+			alloc?.path === null ||
+			alloc?.path === undefined ||
+			alloc?.path === "" ||
+			alloc.id === null ||
+			alloc.id === undefined ||
+			alloc.id === ""
+		)
+			return undefined;
 		await Bun.write(alloc.path, originalText);
 		return alloc.id;
 	} catch {
@@ -208,7 +216,7 @@ function unescapePartialJsonString(value: string): string {
 }
 
 function extractPartialBashEnv(partialJson: string | undefined): Record<string, string> | undefined {
-	if (!partialJson) return undefined;
+	if (partialJson === null || partialJson === undefined || partialJson === "") return undefined;
 	const envStart = partialJson.search(/"env"\s*:\s*\{/u);
 	if (envStart === -1) return undefined;
 	const objectStart = partialJson.indexOf("{", envStart);
@@ -332,7 +340,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		if (trimmedPreview.length > 0) {
 			lines.push(trimmedPreview, "");
 		}
-		if (options.notices?.length) {
+		if (options.notices?.length !== null && options.notices?.length !== undefined && options.notices?.length !== 0) {
 			lines.push(...options.notices, "");
 		}
 		lines.push(`Background job ${jobId} started: ${label}`);
@@ -419,7 +427,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 			{
 				onProgress: async (text, details) => {
 					latestText = text;
-					await options.onUpdate?.({
+					options.onUpdate?.({
 						content: [{ type: "text", text }],
 						details: backgrounded ? ((details ?? {}) as BashToolDetails) : {},
 					});
@@ -443,7 +451,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		thresholdMs: number,
 		signal?: AbortSignal,
 	): Promise<ManagedBashJobCompletion | { kind: "running" } | { kind: "aborted" }> {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			return { kind: "aborted" };
 		}
 
@@ -493,7 +501,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		const env = normalizeBashEnv(rawEnv);
 
 		// Extract leading `cd <path> && ...` into cwd when the model ignores the cwd parameter.
-		if (!cwd) {
+		if (cwd === null || cwd === undefined || cwd === "") {
 			const cdMatch = command.match(/^cd\s+((?:[^&\\]|\\.)+?)\s*&&\s*/);
 			if (cdMatch) {
 				cwd = cdMatch[1].trim().replace(/^["']|["']$/g, "");
@@ -547,19 +555,20 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 			: undefined;
 
 		// Resolve protocol URLs (skill://, agent://, etc.) in extracted cwd.
-		if (cwd?.includes("://") || cwd?.includes("local:/")) {
+		if (cwd?.includes("://") ?? cwd?.includes("local:/") === true) {
 			cwd = await expandInternalUrls(cwd, { ...internalUrlOptions, noEscape: true });
 		}
 
-		const commandCwd = cwd ? resolveToCwd(cwd, this.session.cwd) : this.session.cwd;
+		const commandCwd =
+			cwd !== null && cwd !== undefined && cwd !== "" ? resolveToCwd(cwd, this.session.cwd) : this.session.cwd;
 		let cwdStat: fs.Stats;
 		try {
 			cwdStat = await fs.promises.stat(commandCwd);
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				throw new ToolError(`Working directory does not exist: ${commandCwd}`);
 			}
-			throw err;
+			throw error;
 		}
 		if (!cwdStat.isDirectory()) {
 			throw new ToolError(`Working directory is not a directory: ${commandCwd}`);
@@ -666,7 +675,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 					onMinimizedSave: originalText => saveBashOriginalArtifact(this.session, originalText),
 				});
 		if (result.cancelled) {
-			if (signal?.aborted) {
+			if (signal !== undefined && signal.aborted) {
 				throw new ToolAbortError(normalizeResultOutput(result) || "Command aborted");
 			}
 			throw new ToolError(normalizeResultOutput(result) || "Command aborted");
@@ -714,7 +723,7 @@ export interface ShellRendererConfig<TArgs> {
 }
 
 function getPartialJson<TArgs>(args: TArgs | undefined): string | undefined {
-	if (!args || typeof args !== "object" || !("__partialJson" in args)) return undefined;
+	if (args === null || args === undefined || typeof args !== "object" || !("__partialJson" in args)) return undefined;
 	const value = (args as { __partialJson?: unknown }).__partialJson;
 	return typeof value === "string" ? value : undefined;
 }
@@ -729,12 +738,14 @@ export function getBashEnvForDisplay(args: BashRenderArgs): Record<string, strin
 }
 
 export function formatBashCommand(args: BashRenderArgs): string {
-	const command = replaceTabs(args.command || "…");
+	const command = replaceTabs(args.command ?? "…");
 	const prompt = "$";
 	const cwd = getProjectDir();
 	const displayWorkdir = formatToolWorkingDirectory(args.cwd, cwd);
 	const renderedCommand = [formatBashEnvAssignments(getBashEnvForDisplay(args)), command].filter(Boolean).join(" ");
-	return displayWorkdir ? `${prompt} cd ${displayWorkdir} && ${renderedCommand}` : `${prompt} ${renderedCommand}`;
+	return displayWorkdir !== null && displayWorkdir !== undefined && displayWorkdir !== ""
+		? `${prompt} cd ${displayWorkdir} && ${renderedCommand}`
+		: `${prompt} ${renderedCommand}`;
 }
 
 function toBashRenderArgs<TArgs>(args: TArgs | undefined, config: ShellRendererConfig<TArgs>): BashRenderArgs {
@@ -767,9 +778,9 @@ export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
 			args?: TArgs,
 		): Component {
 			const renderArgs = toBashRenderArgs(args, config);
-			const cmdText = args ? formatBashCommand(renderArgs) : undefined;
+			const cmdText = args !== null && args !== undefined ? formatBashCommand(renderArgs) : undefined;
 			const isError = result.isError === true;
-			const icon = options.isPartial ? "pending" : isError ? "error" : "success";
+			const icon = options.isPartial ? "pending" : (isError ? "error" : "success");
 			const title = config.resolveTitle(args, options);
 			const header = renderStatusLine({ icon, title }, uiTheme);
 			const details = result.details;
@@ -792,9 +803,9 @@ export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
 					const requestedTimeoutSeconds = details?.requestedTimeoutSeconds;
 					const timeoutLabel =
 						typeof timeoutSeconds === "number"
-							? requestedTimeoutSeconds !== undefined && requestedTimeoutSeconds !== timeoutSeconds
+							? (requestedTimeoutSeconds !== undefined && requestedTimeoutSeconds !== timeoutSeconds
 								? `Timeout: ${timeoutSeconds}s (requested ${requestedTimeoutSeconds}s clamped)`
-								: `Timeout: ${timeoutSeconds}s`
+								: `Timeout: ${timeoutSeconds}s`)
 							: undefined;
 					const timeoutLine =
 						timeoutLabel !== undefined
@@ -815,7 +826,7 @@ export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
 						if (hasSixelOutput) {
 							outputLines.push(
 								...rawOutputLines.map((line, index) =>
-									sixelLineMask?.[index] ? line : uiTheme.fg("toolOutput", replaceTabs(line)),
+									sixelLineMask?.[index] === true ? line : uiTheme.fg("toolOutput", replaceTabs(line)),
 								),
 							);
 						} else if (expanded) {
@@ -837,15 +848,22 @@ export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
 							outputLines.push(...result.visualLines);
 						}
 					}
-					if (timeoutLine) outputLines.push(timeoutLine);
-					if (warningLine) outputLines.push(warningLine);
+					if (timeoutLine !== null && timeoutLine !== undefined && timeoutLine !== "")
+						outputLines.push(timeoutLine);
+					if (warningLine !== null && warningLine !== undefined && warningLine !== "")
+						outputLines.push(warningLine);
 
 					return outputBlock.render(
 						{
 							header,
-							state: options.isPartial ? "pending" : isError ? "error" : "success",
+							state: options.isPartial ? "pending" : (isError ? "error" : "success"),
 							sections: [
-								{ lines: cmdText ? [uiTheme.fg("dim", cmdText)] : [] },
+								{
+									lines:
+										cmdText !== null && cmdText !== undefined && cmdText !== ""
+											? [uiTheme.fg("dim", cmdText)]
+											: [],
+								},
 								{ label: uiTheme.fg("toolTitle", "Output"), lines: outputLines },
 							],
 							width,

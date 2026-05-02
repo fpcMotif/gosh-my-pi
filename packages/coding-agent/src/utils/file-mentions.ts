@@ -164,7 +164,7 @@ function buildTextOutput(textContent: string): { output: string; lineCount: numb
 	const totalFileLines = allLines.length;
 	const truncation = truncateHead(textContent);
 
-	if (truncation.firstLineExceedsLimit) {
+	if (truncation.firstLineExceedsLimit === true) {
 		const firstLine = allLines[0] ?? "";
 		const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
 		const snippet = truncateHeadBytes(firstLine, DEFAULT_MAX_BYTES);
@@ -185,7 +185,7 @@ function buildTextOutput(textContent: string): { output: string; lineCount: numb
 
 	let outputText = truncation.content;
 
-	if (truncation.truncated) {
+	if (truncation.truncated === true) {
 		outputText += formatHeadTruncationNotice(truncation, { startLine: 1, totalFileLines });
 	}
 
@@ -242,7 +242,7 @@ async function buildDirectoryListing(absolutePath: string): Promise<{ output: st
 	if (entryLimitReached) {
 		notices.push(`${DEFAULT_DIR_LIMIT} entries limit reached. Use limit=${DEFAULT_DIR_LIMIT * 2} for more`);
 	}
-	if (truncation.truncated) {
+	if (truncation.truncated === true) {
 		notices.push(`${formatBytes(DEFAULT_MAX_BYTES)} limit reached`);
 	}
 	if (notices.length > 0) {
@@ -262,7 +262,7 @@ export function extractFileMentions(text: string): string[] {
 		if (!isMentionBoundary(text, index)) continue;
 
 		const cleaned = sanitizeMentionPath(match[1]);
-		if (!cleaned) continue;
+		if (cleaned === null || cleaned === undefined || cleaned === "") continue;
 
 		mentions.push(cleaned);
 	}
@@ -292,7 +292,7 @@ export async function generateFileMentionMessages(
 
 	for (const filePath of filePaths) {
 		const resolvedPath = await resolveMentionPath(filePath, cwd, getMentionCandidates);
-		if (!resolvedPath) {
+		if (resolvedPath === null || resolvedPath === undefined || resolvedPath === "") {
 			continue;
 		}
 		const absolutePath = resolveReadPath(resolvedPath, cwd);
@@ -355,7 +355,7 @@ export async function generateFileMentionMessages(
 
 			const content = await Bun.file(absolutePath).text();
 			let { output, lineCount } = buildTextOutput(content);
-			if (options?.useHashLines) {
+			if (options?.useHashLines === true) {
 				output = formatHashLines(output);
 			}
 			files.push({ path: resolvedPath, content: output, lineCount });

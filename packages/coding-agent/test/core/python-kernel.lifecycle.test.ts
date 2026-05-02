@@ -220,7 +220,7 @@ describe("PythonKernel gateway lifecycle", () => {
 					const reason = options?.signal?.reason;
 					reject(reason instanceof Error ? reason : new Error("Python kernel startup aborted"));
 				};
-				if (options?.signal?.aborted) {
+				if (options?.signal !== undefined && options?.signal.aborted) {
 					onAbort();
 					return;
 				}
@@ -254,7 +254,7 @@ describe("PythonKernel gateway lifecycle", () => {
 		expect(settled).toBeInstanceOf(Error);
 		expect(settled).not.toBe(pending);
 		expect((settled as Error).message).toContain("cancel startup");
-		await expect(startPromise).rejects.toThrow("cancel startup");
+		expect(startPromise).rejects.toThrow("cancel startup");
 		expect(
 			env.fetchCalls.some(
 				call => call.url.endsWith("/api/kernels/kernel-stalled") && call.init?.method === "DELETE",
@@ -285,7 +285,7 @@ describe("PythonKernel gateway lifecycle", () => {
 			return createResponse({ ok: true }) as unknown as Response;
 		});
 
-		await expect(PythonKernel.start({ cwd: tempDir.path() })).rejects.toMatchObject({
+		expect(PythonKernel.start({ cwd: tempDir.path() })).rejects.toMatchObject({
 			name: "TimeoutError",
 			message: "Failed to initialize Python kernel environment",
 		});
@@ -321,7 +321,7 @@ describe("PythonKernel gateway lifecycle", () => {
 			return createResponse({ ok: true }) as unknown as Response;
 		});
 
-		await expect(PythonKernel.start({ cwd: tempDir.path() })).rejects.toMatchObject({
+		expect(PythonKernel.start({ cwd: tempDir.path() })).rejects.toMatchObject({
 			name: "TimeoutError",
 			message: "Failed to initialize Python kernel prelude",
 		});
@@ -349,9 +349,7 @@ describe("PythonKernel gateway lifecycle", () => {
 			return createResponse({ ok: true }) as unknown as Response;
 		});
 
-		await expect(PythonKernel.start({ cwd: tempDir.path() })).rejects.toThrow(
-			"Failed to create kernel on shared gateway",
-		);
+		expect(PythonKernel.start({ cwd: tempDir.path() })).rejects.toThrow("Failed to create kernel on shared gateway");
 	});
 
 	it("treats initial 404 and 410 shutdown responses as confirmed", async () => {
@@ -378,11 +376,11 @@ describe("PythonKernel gateway lifecycle", () => {
 
 			const kernel = await PythonKernel.start({ cwd: tempDir.path() });
 
-			await expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
+			expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
 			expect(deleteCalls).toBe(1);
 			expect(kernel.isAlive()).toBe(false);
 			expect(FakeWebSocket.instances.at(-1)?.readyState).toBe(FakeWebSocket.CLOSED);
-			await expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
+			expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
 			expect(deleteCalls).toBe(1);
 		}
 	});
@@ -433,14 +431,14 @@ describe("PythonKernel gateway lifecycle", () => {
 			500,
 			"timed out waiting for the first delete request to abort",
 		);
-		await expect(
+		expect(
 			expectResolvesWithin(shutdownPromise, 500, "kernel shutdown did not settle after timing out"),
 		).resolves.toEqual({
 			confirmed: false,
 		});
 		expect(kernel.isAlive()).toBe(false);
 		expect(FakeWebSocket.instances.at(-1)?.readyState).toBe(FakeWebSocket.CLOSED);
-		await expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
+		expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
 		expect(deleteCalls).toBe(2);
 	});
 	it("does not throw when shutdown API fails", async () => {
@@ -464,6 +462,6 @@ describe("PythonKernel gateway lifecycle", () => {
 
 		const kernel = await PythonKernel.start({ cwd: tempDir.path() });
 
-		await expect(kernel.shutdown()).resolves.toEqual({ confirmed: false });
+		expect(kernel.shutdown()).resolves.toEqual({ confirmed: false });
 	});
 });

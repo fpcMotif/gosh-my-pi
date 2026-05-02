@@ -249,7 +249,7 @@ describe("vim engine", () => {
 
 	it("renders literal spaces visibly in unsupported command errors", async () => {
 		const engine = createEngine("alpha");
-		await expect(engine.executeTokens(parseKeySequences(["z "]), "z ")).rejects.toThrow(/z<Space>/);
+		expect(engine.executeTokens(parseKeySequences(["z "]), "z ")).rejects.toThrow(/z<Space>/);
 	});
 });
 
@@ -373,7 +373,7 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "multi-step-error.ts" });
-		await expect(
+		expect(
 			tool.execute("bad", {
 				file: "multi-step-error.ts",
 				steps: [step(["1Go"], "first"), step(["o", "o"])],
@@ -431,7 +431,7 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "ambiguous.ts" });
-		await expect(tool.execute("bad", { file: "ambiguous.ts", steps: [step(["o", "o"])] })).rejects.toThrow(
+		expect(tool.execute("bad", { file: "ambiguous.ts", steps: [step(["o", "o"])] })).rejects.toThrow(
 			/entered INSERT mode/i,
 		);
 	});
@@ -442,9 +442,9 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "insert-boundary.ts" });
-		await expect(
-			tool.execute("edit", { file: "insert-boundary.ts", steps: [step(["2G", "o", "o"])] }),
-		).rejects.toThrow(/insert field|<Esc>/i);
+		expect(tool.execute("edit", { file: "insert-boundary.ts", steps: [step(["2G", "o", "o"])] })).rejects.toThrow(
+			/insert field|<Esc>/i,
+		);
 		const saved = await Bun.file(filePath).text();
 		expect(saved).toBe("alpha\nbeta\n");
 	});
@@ -471,7 +471,7 @@ describe("vim tool", () => {
 		const tool = new VimTool(createSession(tmpDir));
 
 		await tool.execute("open", { file: "bad-insert.ts" });
-		await expect(tool.execute("bad", { file: "bad-insert.ts", steps: [step([], "nope")] })).rejects.toThrow(
+		expect(tool.execute("bad", { file: "bad-insert.ts", steps: [step([], "nope")] })).rejects.toThrow(
 			/Insert payload requires INSERT mode/i,
 		);
 	});
@@ -607,8 +607,8 @@ describe("vim tool", () => {
 		await tool.execute("open", { file: "plan.ts" });
 		const moved = await tool.execute("move", { file: "plan.ts", steps: [step(["2G"])] });
 		expect(textResult(moved)).toContain("L2:1");
-		await expect(tool.execute("edit", { file: "plan.ts", steps: [step(["dd"])] })).rejects.toThrow(/Plan mode/i);
-		await expect(tool.execute("insert", { file: "plan.ts", steps: [step(["cc"], "blocked")] })).rejects.toThrow(
+		expect(tool.execute("edit", { file: "plan.ts", steps: [step(["dd"])] })).rejects.toThrow(/Plan mode/i);
+		expect(tool.execute("insert", { file: "plan.ts", steps: [step(["cc"], "blocked")] })).rejects.toThrow(
 			/Plan mode/i,
 		);
 	});

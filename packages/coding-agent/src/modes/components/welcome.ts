@@ -49,6 +49,10 @@ export class WelcomeComponent implements Component {
 		this.providerName = providerName;
 	}
 
+	setCwd(cwd: string): void {
+		this.#cwd = cwd;
+	}
+
 	setRecentSessions(sessions: RecentSession[]): void {
 		this.recentSessions = sessions;
 	}
@@ -147,9 +151,9 @@ export class WelcomeComponent implements Component {
 				const icon =
 					server.status === "ready"
 						? theme.styledSymbol("status.success", "success")
-						: server.status === "connecting"
+						: (server.status === "connecting"
 							? theme.styledSymbol("status.pending", "muted")
-							: theme.styledSymbol("status.error", "error");
+							: theme.styledSymbol("status.error", "error"));
 				const exts = server.fileTypes.slice(0, 3).join(" ");
 				lspLines.push(` ${icon} ${theme.fg("muted", server.name)} ${theme.fg("dim", exts)}`);
 			}
@@ -257,27 +261,15 @@ export class WelcomeComponent implements Component {
 		return result;
 	}
 
-	/** Fit string to exact width with ANSI-aware truncation/padding */
+	/**
+	 * Fit string to exact width with ANSI-aware, wide-char-aware
+	 * truncation/padding. Delegates to the native `truncateToWidth` so wide
+	 * graphemes (CJK, emoji) and ANSI escapes are accounted for correctly.
+	 */
 	#fitToWidth(str: string, width: number): string {
 		const visLen = visibleWidth(str);
 		if (visLen > width) {
-			const ellipsis = "…";
-			const ellipsisWidth = visibleWidth(ellipsis);
-			const maxWidth = Math.max(0, width - ellipsisWidth);
-			let truncated = "";
-			let currentWidth = 0;
-			let inEscape = false;
-			for (const char of str) {
-				if (char === "\x1b") inEscape = true;
-				if (inEscape) {
-					truncated += char;
-					if (char === "m") inEscape = false;
-				} else if (currentWidth < maxWidth) {
-					truncated += char;
-					currentWidth++;
-				}
-			}
-			return `${truncated}${ellipsis}`;
+			return truncateToWidth(str, width, undefined, true);
 		}
 		return str + padding(width - visLen);
 	}

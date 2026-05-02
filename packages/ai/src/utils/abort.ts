@@ -29,7 +29,7 @@ export function createAbortSourceTracker(callerSignal?: AbortSignal): AbortSourc
 			return requestSignal.reason === localAbortReason ? localAbortReason : undefined;
 		},
 		wasCallerAbort() {
-			if (!callerSignal?.aborted) return false;
+			if (callerSignal?.aborted !== true) return false;
 			return requestSignal.reason !== localAbortReason;
 		},
 	};

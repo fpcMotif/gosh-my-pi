@@ -18,7 +18,9 @@ function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
-	return value != null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+	return value !== null && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
 }
 
 function getSuccessDataSchema(parameters: Record<string, unknown>): Record<string, unknown> {
@@ -156,10 +158,10 @@ describe("YieldTool", () => {
 		expect(resultsSchema.elements).toBeUndefined();
 		expect(issueSchema.type).toBe("integer");
 
-		await expect(
+		expect(
 			tool.execute("call-mixed-valid", { result: { data: { results: [{ issue: 185 }] } } } as never),
 		).resolves.toBeDefined();
-		await expect(
+		expect(
 			tool.execute("call-mixed-invalid", { result: { data: { results: [{ issue: "185" }] } } } as never),
 		).rejects.toThrow("Output does not match schema");
 	});
@@ -214,7 +216,7 @@ describe("YieldTool", () => {
 		// validateToolArguments should succeed (no $ref to resolve)
 		const firstArgs = validateToolArguments(toolDefinition, firstCall);
 		// Runtime AJV still validates the original schema — token too short
-		await expect(tool.execute("call-ref-1", firstArgs as never)).rejects.toThrow("Output does not match schema");
+		expect(tool.execute("call-ref-1", firstArgs as never)).rejects.toThrow("Output does not match schema");
 
 		const secondCall: ToolCall = {
 			type: "toolCall",
@@ -338,7 +340,7 @@ describe("YieldTool", () => {
 		const tokenSchema = toRecord(toRecord(dataSchema.properties).token);
 
 		expect(tokenSchema.minLength).toBeUndefined();
-		await expect(tool.execute("call-short", { result: { data: { token: "ab" } } } as never)).rejects.toThrow(
+		expect(tool.execute("call-short", { result: { data: { token: "ab" } } } as never)).rejects.toThrow(
 			"Output does not match schema",
 		);
 
@@ -359,7 +361,7 @@ describe("YieldTool", () => {
 		};
 		const tool = new YieldTool(createSession({ outputSchema }));
 
-		await expect(tool.execute("call-short-1", { result: { data: { token: "ab" } } } as never)).rejects.toThrow(
+		expect(tool.execute("call-short-1", { result: { data: { token: "ab" } } } as never)).rejects.toThrow(
 			"Output does not match schema",
 		);
 
@@ -392,9 +394,9 @@ describe("YieldTool", () => {
 		const secondResult = await tool.execute("call-valid-2", { result: { data: { token: "abcde" } } } as never);
 		expect(secondResult.content).toEqual([{ type: "text", text: "Result submitted." }]);
 
-		await expect(
-			tool.execute("call-invalid-after-valid", { result: { data: { token: "ab" } } } as never),
-		).rejects.toThrow("Output does not match schema");
+		expect(tool.execute("call-invalid-after-valid", { result: { data: { token: "ab" } } } as never)).rejects.toThrow(
+			"Output does not match schema",
+		);
 	});
 
 	it("still throws structural errors after schema validation has been degraded", async () => {
@@ -410,20 +412,18 @@ describe("YieldTool", () => {
 		};
 		const tool = new YieldTool(createSession({ outputSchema }));
 
-		await expect(tool.execute("call-struct-1", { result: { data: { token: "ab" } } } as never)).rejects.toThrow(
+		expect(tool.execute("call-struct-1", { result: { data: { token: "ab" } } } as never)).rejects.toThrow(
 			"Output does not match schema",
 		);
-		await expect(
-			tool.execute("call-struct-2", { result: { data: { token: "ab" } } } as never),
-		).resolves.toBeDefined();
+		expect(tool.execute("call-struct-2", { result: { data: { token: "ab" } } } as never)).resolves.toBeDefined();
 
-		await expect(tool.execute("call-struct-missing", {} as never)).rejects.toThrow(
+		expect(tool.execute("call-struct-missing", {} as never)).rejects.toThrow(
 			"result must be an object containing either data or error",
 		);
 	});
 	it("rejects submissions without a result object", async () => {
 		const tool = new YieldTool(createSession());
-		await expect(tool.execute("call-3", {} as never)).rejects.toThrow(
+		expect(tool.execute("call-3", {} as never)).rejects.toThrow(
 			"result must be an object containing either data or error",
 		);
 	});

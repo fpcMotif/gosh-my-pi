@@ -56,12 +56,12 @@ export const handleIacr: SpecialHandler = async (
 		const keywords = doc.querySelector(".keywords")?.textContent?.replace("Keywords:", "").trim();
 		const pubDate = doc.querySelector('meta[name="citation_publication_date"]')?.getAttribute("content");
 
-		let md = `# ${title || "IACR ePrint Paper"}\n\n`;
+		let md = `# ${title ?? "IACR ePrint Paper"}\n\n`;
 		if (authors.length) md += `**Authors:** ${authors.join(", ")}\n`;
-		if (pubDate) md += `**Date:** ${pubDate}\n`;
+		if (pubDate !== null && pubDate !== undefined) md += `**Date:** ${pubDate}\n`;
 		md += `**ePrint:** ${paperId}\n`;
-		if (keywords) md += `**Keywords:** ${keywords}\n`;
-		md += `\n---\n\n## Abstract\n\n${abstract || "No abstract available."}\n\n`;
+		if (keywords !== null && keywords !== undefined) md += `**Keywords:** ${keywords}\n`;
+		md += `\n---\n\n## Abstract\n\n${abstract ?? "No abstract available."}\n\n`;
 
 		// If it was a PDF link, try to fetch and convert PDF
 		if (parsed.pathname.endsWith(".pdf")) {

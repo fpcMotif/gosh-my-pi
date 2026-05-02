@@ -1,35 +1,44 @@
 /**
  * Edit tool renderer and LSP batching helpers.
  */
-import { sanitizeText } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
+import { Text } from "@oh-my-pi/pi-tui";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { FileDiagnosticsResult } from "../lsp";
-import { renderDiff as renderDiffColored } from "../modes/components/diff";
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
 import type { OutputMeta } from "../tools/output-meta";
 import {
 	formatDiagnostics,
-	formatDiffStats,
-	formatExpandHint,
 	formatStatusIcon,
 	formatTitle,
-	getDiffStats,
 	getLspBatchRequest,
 	type LspBatchRequest,
-	PREVIEW_LIMITS,
-	replaceTabs,
-	shortenPath,
-	truncateDiffByHunk,
 } from "../tools/render-utils";
 import { type VimRenderArgs, vimToolRenderer } from "../tools/vim";
 import { Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
 import type { EditMode } from "../utils/edit-mode";
 import type { VimToolDetails } from "../vim/types";
 import type { DiffError, DiffResult } from "./diff";
-import { type ApplyPatchEntry, expandApplyPatchToEntries, expandApplyPatchToPreviewEntries } from "./modes/apply-patch";
 import type { Operation } from "./modes/patch";
+import {
+	CALL_TEXT_PREVIEW_WIDTH,
+	countEditFiles,
+	countLines,
+	type EditRenderArgs,
+	type EditRenderEntry,
+	filePathFromEditEntry,
+	formatEditPathDisplay,
+	formatMetadataLine,
+	getApplyPatchRenderSummary,
+	getAtomRenderSummary,
+	getCallPreview,
+	getOperationTitle,
+	getPartialJsonEditPath,
+	isNonEmpty,
+	renderDiffSection,
+	sanitizeRendererText,
+	wrapEditRendererLine,
+} from "./renderer-helpers";
 import type { PerFileDiffPreview } from "./streaming";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -78,43 +87,6 @@ export interface EditToolDetails {
 // TUI Renderer
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface EditRenderArgs {
-	path?: string;
-	file_path?: string;
-	oldText?: string;
-	newText?: string;
-	patch?: string;
-	input?: string;
-	all?: boolean;
-	// Patch mode fields
-	op?: Operation;
-	rename?: string;
-	diff?: string;
-	/**
-	 * Computed preview diff (used when tool args don't include a diff, e.g. hashline mode).
-	 */
-	previewDiff?: string;
-	__partialJson?: string;
-	// Hashline mode fields
-	edits?: EditRenderEntry[];
-}
-
-type EditRenderEntry = {
-	path?: string;
-	rename?: string;
-	move?: string;
-	op?: Operation;
-};
-
-interface AtomRenderSummary {
-	entries: Array<{ path: string }>;
-}
-
-interface ApplyPatchRenderSummary {
-	entries: ApplyPatchEntry[];
-	error?: string;
-}
-
 function isVimRenderArgs(args: EditRenderArgs | VimRenderArgs): args is VimRenderArgs {
 	return (
 		typeof args === "object" &&
@@ -127,7 +99,7 @@ function isVimRenderArgs(args: EditRenderArgs | VimRenderArgs): args is VimRende
 }
 
 function isVimToolDetails(details: unknown): details is VimToolDetails {
-	if (!details || typeof details !== "object" || Array.isArray(details)) {
+	if (details === null || details === undefined || typeof details !== "object" || Array.isArray(details)) {
 		return false;
 	}
 	const cursor = (details as { cursor?: unknown }).cursor;
@@ -152,73 +124,6 @@ export interface EditRenderContext {
 	renderDiff?: (diffText: string, options?: { filePath?: string }) => string;
 }
 
-const EDIT_STREAMING_PREVIEW_LINES = 12;
-const CALL_TEXT_PREVIEW_LINES = 6;
-const CALL_TEXT_PREVIEW_WIDTH = 80;
-
-/** Extract file path from an edit entry. */
-function filePathFromEditEntry(p: string | undefined): string | undefined {
-	return p ?? undefined;
-}
-
-function decodePartialJsonStringFragment(fragment: string): string {
-	// Trim a trailing partial escape so JSON.parse sees a well-formed string.
-	let text = fragment.replace(/\\u[0-9a-fA-F]{0,3}$/, "");
-	const trailingBackslashes = text.match(/\\+$/)?.[0].length ?? 0;
-	if (trailingBackslashes % 2 === 1) text = text.slice(0, -1);
-	try {
-		return JSON.parse(`"${text}"`) as string;
-	} catch {
-		// Streaming fragment isn't a valid JSON string yet; surface it raw rather
-		// than ad-hoc unescaping that mishandles surrogates and partial escapes.
-		return text;
-	}
-}
-
-function extractPartialJsonString(partialJson: string | undefined, key: string): string | undefined {
-	if (!partialJson) return undefined;
-	const pattern = new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)`, "u");
-	const match = pattern.exec(partialJson);
-	if (!match) return undefined;
-	return decodePartialJsonStringFragment(match[1]);
-}
-
-function getPartialJsonEditPath(args: EditRenderArgs): string | undefined {
-	return filePathFromEditEntry(extractPartialJsonString(args.__partialJson, "path"));
-}
-
-/** Count distinct file paths in an edits array. */
-function countEditFiles(edits: EditRenderEntry[]): number {
-	return new Set(edits.map(edit => filePathFromEditEntry(edit.path)).filter(Boolean)).size;
-}
-
-function countLines(text: string): number {
-	if (!text) return 0;
-	return text.split("\n").length;
-}
-
-function getOperationTitle(op: Operation | undefined): string {
-	return op === "create" ? "Create" : op === "delete" ? "Delete" : "Edit";
-}
-
-function formatEditPathDisplay(
-	rawPath: string,
-	uiTheme: Theme,
-	options?: { rename?: string; firstChangedLine?: number },
-): string {
-	let pathDisplay = rawPath ? uiTheme.fg("accent", shortenPath(rawPath)) : uiTheme.fg("toolOutput", "…");
-
-	if (options?.firstChangedLine) {
-		pathDisplay += uiTheme.fg("warning", `:${options.firstChangedLine}`);
-	}
-
-	if (options?.rename) {
-		pathDisplay += ` ${uiTheme.fg("dim", "→")} ${uiTheme.fg("accent", shortenPath(options.rename))}`;
-	}
-
-	return pathDisplay;
-}
-
 function formatEditDescription(
 	rawPath: string,
 	uiTheme: Theme,
@@ -232,203 +137,94 @@ function formatEditDescription(
 	};
 }
 
-function renderPlainTextPreview(text: string, uiTheme: Theme, filePath?: string): string {
-	const previewLines = sanitizeText(text).split("\n");
-	let preview = "\n\n";
-	for (const line of previewLines.slice(0, CALL_TEXT_PREVIEW_LINES)) {
-		preview += `${uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(line, filePath), CALL_TEXT_PREVIEW_WIDTH))}\n`;
-	}
-	if (previewLines.length > CALL_TEXT_PREVIEW_LINES) {
-		preview += uiTheme.fg("dim", `… ${previewLines.length - CALL_TEXT_PREVIEW_LINES} more lines`);
-	}
-	return preview.trimEnd();
+interface RenderCallContext {
+	args: EditRenderArgs;
+	uiTheme: Theme;
+	options: RenderResultOptions & { renderContext?: EditRenderContext };
 }
 
-function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, label = "streaming"): string {
-	if (!diff) return "";
-	const lines = diff.split("\n");
-	const total = lines.length;
-	const displayLines = lines.slice(-EDIT_STREAMING_PREVIEW_LINES);
-	const hidden = total - displayLines.length;
-	let text = "\n\n";
-	if (hidden > 0) {
-		text += uiTheme.fg("dim", `… (${hidden} earlier lines)\n`);
-	}
-	text += renderDiffColored(displayLines.join("\n"), { filePath: rawPath });
-	text += uiTheme.fg("dim", `\n… (${label})`);
-	return text;
+interface ResolvedCallContext {
+	rawPath: string;
+	rename: string | undefined;
+	op: Operation | undefined;
+	atomFileCount: number;
+	applyPatchFileCount: number;
+	applyPatchError: string | undefined;
+	editsFileCount: number;
 }
 
-function formatMetadataLine(lineCount: number | null, language: string | undefined, uiTheme: Theme): string {
-	const icon = uiTheme.getLangIcon(language);
-	if (lineCount !== null) {
-		return uiTheme.fg("dim", `${icon} ${lineCount} lines`);
-	}
-	return uiTheme.fg("dim", `${icon}`);
-}
-
-function formatMultiFileStreamingDiff(previews: PerFileDiffPreview[], uiTheme: Theme): string {
-	const parts: string[] = [];
-	for (const preview of previews) {
-		if (!preview.diff && !preview.error) continue;
-		const header = uiTheme.fg("dim", `\n\n\u2500\u2500 ${shortenPath(preview.path)} \u2500\u2500`);
-		if (preview.error) {
-			parts.push(`${header}\n${uiTheme.fg("error", replaceTabs(preview.error, preview.path))}`);
-			continue;
-		}
-		if (preview.diff) {
-			parts.push(`${header}${formatStreamingDiff(preview.diff, preview.path, uiTheme, "preview")}`);
-		}
-	}
-	return parts.join("");
-}
-
-function getCallPreview(
-	args: EditRenderArgs,
-	rawPath: string,
-	uiTheme: Theme,
-	renderContext: EditRenderContext | undefined,
-): string {
-	const multi = renderContext?.perFileDiffPreview;
-	if (multi && multi.length > 1 && multi.some(p => p.diff || p.error)) {
-		return formatMultiFileStreamingDiff(multi, uiTheme);
-	}
-	if (args.previewDiff) {
-		return formatStreamingDiff(args.previewDiff, rawPath, uiTheme, "preview");
-	}
-	if (args.diff && args.op) {
-		return formatStreamingDiff(args.diff, rawPath, uiTheme);
-	}
-	if (args.diff) {
-		return renderPlainTextPreview(args.diff, uiTheme, rawPath);
-	}
-	if (args.newText || args.patch) {
-		return renderPlainTextPreview(args.newText ?? args.patch ?? "", uiTheme, rawPath);
+function firstNonEmpty(...values: (string | undefined)[]): string {
+	for (const value of values) {
+		if (value !== undefined && value !== "") return value;
 	}
 	return "";
 }
 
-const MISSING_APPLY_PATCH_END_ERROR = "The last line of the patch must be '*** End Patch'";
-const ATOM_HEADER_PREFIX = "---";
-
-function normalizeAtomPreviewPath(rawPath: string): string {
-	const trimmed = rawPath.trim();
-	if (trimmed.length < 2) return trimmed;
-	const first = trimmed[0];
-	const last = trimmed[trimmed.length - 1];
-	if ((first === '"' || first === "'") && first === last) {
-		return trimmed.slice(1, -1);
+function firstDefined<T>(...values: (T | undefined)[]): T | undefined {
+	for (const value of values) {
+		if (value !== undefined) return value;
 	}
-	return trimmed;
+	return undefined;
 }
 
-function parseAtomPreviewHeader(line: string): string | null {
-	if (!line.startsWith(ATOM_HEADER_PREFIX)) return null;
-	let body = line.slice(ATOM_HEADER_PREFIX.length);
-	if (body.startsWith(" ")) body = body.slice(1);
-	const previewPath = normalizeAtomPreviewPath(body);
-	return previewPath.length > 0 ? previewPath : null;
+function getFirstEdit(args: EditRenderArgs): EditRenderEntry | undefined {
+	if (!Array.isArray(args.edits) || args.edits.length === 0) return undefined;
+	return args.edits[0];
 }
 
-function getAtomInputPaths(input: string): string[] {
-	const stripped = input.startsWith("\uFEFF") ? input.slice(1) : input;
-	const paths: string[] = [];
-	for (const rawLine of stripped.split("\n")) {
-		const line = rawLine.replace(/\r$/, "");
-		const path = parseAtomPreviewHeader(line);
-		if (path) paths.push(path);
-	}
-	return paths;
+function resolveCallContext(ctx: RenderCallContext): ResolvedCallContext {
+	const { args, options } = ctx;
+	const renderContext = options.renderContext;
+	const atomSummary = getAtomRenderSummary(args, renderContext?.editMode);
+	const applyPatchSummary = getApplyPatchRenderSummary(args, options.isPartial, renderContext?.editMode);
+	const firstApplyPatchEntry = applyPatchSummary?.entries[0];
+	const firstAtomEntry = atomSummary?.entries[0];
+	const firstEdit = getFirstEdit(args);
+	const rawPath = firstNonEmpty(
+		args.file_path,
+		args.path,
+		filePathFromEditEntry(firstEdit?.path),
+		getPartialJsonEditPath(args),
+		firstAtomEntry?.path,
+		firstApplyPatchEntry?.path,
+	);
+	const rename = firstDefined(args.rename, firstEdit?.rename, firstEdit?.move, firstApplyPatchEntry?.rename);
+	const op = firstDefined(args.op, firstEdit?.op, firstApplyPatchEntry?.op);
+	const editsFileCount = Array.isArray(args.edits) ? countEditFiles(args.edits) : 0;
+	return {
+		rawPath,
+		rename,
+		op,
+		atomFileCount: atomSummary?.entries.length ?? 0,
+		applyPatchFileCount: applyPatchSummary?.entries.length ?? 0,
+		applyPatchError: applyPatchSummary?.error,
+		editsFileCount,
+	};
 }
 
-function getAtomRenderSummary(args: EditRenderArgs, editMode: EditMode | undefined): AtomRenderSummary | undefined {
-	if (editMode !== "atom" || typeof args.input !== "string") {
-		return undefined;
+function buildRenderCallText(ctx: RenderCallContext, resolved: ResolvedCallContext): string {
+	const { args, options, uiTheme } = ctx;
+	const { rawPath, rename, op, atomFileCount, applyPatchFileCount, applyPatchError, editsFileCount } = resolved;
+	const { description } = formatEditDescription(rawPath, uiTheme, { rename });
+	const spinner =
+		options?.spinnerFrame === undefined ? "" : formatStatusIcon("running", uiTheme, options.spinnerFrame);
+	let text = `${formatTitle(getOperationTitle(op), uiTheme)} ${spinner === "" ? "" : `${spinner} `}${description}`;
+
+	let fileCount = atomFileCount > 0 ? atomFileCount : applyPatchFileCount;
+	if (editsFileCount > 0) {
+		fileCount = editsFileCount;
 	}
-	return { entries: getAtomInputPaths(args.input).map(path => ({ path })) };
-}
-
-function getApplyPatchRenderSummary(
-	args: EditRenderArgs,
-	isPartial: boolean,
-	editMode: EditMode | undefined,
-): ApplyPatchRenderSummary | undefined {
-	if (editMode !== undefined && editMode !== "apply_patch") {
-		return undefined;
+	if (fileCount > 1) {
+		text += uiTheme.fg("dim", ` (+${fileCount - 1} more)`);
 	}
-
-	if (typeof args.input !== "string") {
-		return undefined;
-	}
-
-	try {
-		return { entries: expandApplyPatchToEntries({ input: args.input }) };
-	} catch (err) {
-		const error = err instanceof Error ? err.message : String(err);
-		if (isPartial && error === MISSING_APPLY_PATCH_END_ERROR) {
-			return { entries: expandApplyPatchToPreviewEntries({ input: args.input }) };
-		}
-		return { entries: [], error };
-	}
-}
-
-function renderDiffSection(
-	diff: string,
-	rawPath: string,
-	expanded: boolean,
-	uiTheme: Theme,
-	renderDiffFn: (t: string, o?: { filePath?: string }) => string,
-): string {
-	let text = "";
-	const diffStats = getDiffStats(diff);
-	text += `\n${uiTheme.fg("dim", uiTheme.format.bracketLeft)}${formatDiffStats(
-		diffStats.added,
-		diffStats.removed,
-		diffStats.hunks,
-		uiTheme,
-	)}${uiTheme.fg("dim", uiTheme.format.bracketRight)}`;
-
-	const {
-		text: truncatedDiff,
-		hiddenHunks,
-		hiddenLines,
-	} = expanded
-		? { text: diff, hiddenHunks: 0, hiddenLines: 0 }
-		: truncateDiffByHunk(diff, PREVIEW_LIMITS.DIFF_COLLAPSED_HUNKS, PREVIEW_LIMITS.DIFF_COLLAPSED_LINES);
-
-	text += `\n\n${renderDiffFn(truncatedDiff, { filePath: rawPath })}`;
-	if (!expanded && (hiddenHunks > 0 || hiddenLines > 0)) {
-		const remainder: string[] = [];
-		if (hiddenHunks > 0) remainder.push(`${hiddenHunks} more hunks`);
-		if (hiddenLines > 0) remainder.push(`${hiddenLines} more lines`);
-		text += uiTheme.fg("toolOutput", `\n… (${remainder.join(", ")}) ${formatExpandHint(uiTheme)}`);
+	text += getCallPreview(args, rawPath, uiTheme, options.renderContext);
+	if (isNonEmpty(applyPatchError)) {
+		text += `\n\n${uiTheme.fg(
+			"error",
+			truncateToWidth(sanitizeRendererText(applyPatchError, rawPath), CALL_TEXT_PREVIEW_WIDTH),
+		)}`;
 	}
 	return text;
-}
-
-function wrapEditRendererLine(line: string, width: number): string[] {
-	if (width <= 0) return [line];
-	if (line.length === 0) return [""];
-
-	const startAnsi = line.match(/^((?:\x1b\[[0-9;]*m)*)/)?.[1] ?? "";
-	const bodyWithReset = line.slice(startAnsi.length);
-	const body = bodyWithReset.endsWith("\x1b[39m") ? bodyWithReset.slice(0, -"\x1b[39m".length) : bodyWithReset;
-	const diffMatch = /^([+\-\s])(\s*\d+)([|│])(.*)$/s.exec(body);
-
-	if (!diffMatch) {
-		return wrapTextWithAnsi(line, width);
-	}
-
-	const [, marker, lineNum, separator, content] = diffMatch;
-	const prefix = `${marker}${lineNum}${separator}`;
-	const prefixWidth = visibleWidth(prefix);
-	const contentWidth = Math.max(1, width - prefixWidth);
-	const continuationPrefix = `${" ".repeat(Math.max(0, prefixWidth - 1))}${separator}`;
-	const wrappedContent = wrapTextWithAnsi(content ?? "", contentWidth);
-
-	return wrappedContent.map(
-		(segment, index) => `${startAnsi}${index === 0 ? prefix : continuationPrefix}${segment}\x1b[39m`,
-	);
 }
 
 export const editToolRenderer = {
@@ -447,39 +243,8 @@ export const editToolRenderer = {
 		}
 
 		const editArgs = args as EditRenderArgs;
-		const atomSummary = getAtomRenderSummary(editArgs, renderContext?.editMode);
-		const applyPatchSummary = getApplyPatchRenderSummary(editArgs, options.isPartial, renderContext?.editMode);
-		const firstApplyPatchEntry = applyPatchSummary?.entries[0];
-		const firstAtomEntry = atomSummary?.entries[0];
-		// Extract path from first edit entry when top-level path is absent (new schema)
-		const firstEdit = Array.isArray(editArgs.edits) && editArgs.edits.length > 0 ? editArgs.edits[0] : undefined;
-		const rawPath =
-			editArgs.file_path ||
-			editArgs.path ||
-			filePathFromEditEntry(firstEdit?.path) ||
-			getPartialJsonEditPath(editArgs) ||
-			firstAtomEntry?.path ||
-			firstApplyPatchEntry?.path ||
-			"";
-		const rename = editArgs.rename || firstEdit?.rename || firstEdit?.move || firstApplyPatchEntry?.rename;
-		const op = editArgs.op || firstEdit?.op || firstApplyPatchEntry?.op;
-		const { description } = formatEditDescription(rawPath, uiTheme, { rename });
-		const spinner =
-			options?.spinnerFrame !== undefined ? formatStatusIcon("running", uiTheme, options.spinnerFrame) : "";
-		let text = `${formatTitle(getOperationTitle(op), uiTheme)} ${spinner ? `${spinner} ` : ""}${description}`;
-		// Show file count hint for multi-file edits
-		let fileCount = atomSummary?.entries.length ?? applyPatchSummary?.entries.length ?? 0;
-		if (Array.isArray(editArgs.edits)) {
-			fileCount = countEditFiles(editArgs.edits);
-		}
-		if (fileCount > 1) {
-			text += uiTheme.fg("dim", ` (+${fileCount - 1} more)`);
-		}
-		text += getCallPreview(editArgs, rawPath, uiTheme, renderContext);
-		if (applyPatchSummary?.error) {
-			text += `\n\n${uiTheme.fg("error", truncateToWidth(replaceTabs(applyPatchSummary.error, rawPath), CALL_TEXT_PREVIEW_WIDTH))}`;
-		}
-
+		const resolved = resolveCallContext({ args: editArgs, options, uiTheme });
+		const text = buildRenderCallText({ args: editArgs, options, uiTheme }, resolved);
 		return new Text(text, 0, 0);
 	},
 
@@ -506,6 +271,142 @@ export const editToolRenderer = {
 	},
 };
 
+interface SingleFileRenderInputs {
+	rawPath: string;
+	op: Operation | undefined;
+	rename: string | undefined;
+	language: string;
+	metadataLine: string;
+	isError: boolean;
+	errorText: string;
+}
+
+function resolveErrorText(
+	isError: boolean,
+	details: EditToolDetails | EditToolPerFileResult | undefined,
+	result: { content: Array<{ type: string; text?: string }> },
+): string {
+	if (!isError) return "";
+	const displayErrorText = details && "displayErrorText" in details ? details.displayErrorText : undefined;
+	if (isNonEmpty(displayErrorText)) return displayErrorText;
+	const detailsErrorText = details && "errorText" in details ? details.errorText : undefined;
+	if (isNonEmpty(detailsErrorText)) return detailsErrorText;
+	return result.content?.find(c => c.type === "text")?.text ?? "";
+}
+
+function resolveSingleFilePath(
+	args: EditRenderArgs | undefined,
+	firstEdit: EditRenderEntry | undefined,
+	details: EditToolDetails | EditToolPerFileResult | undefined,
+	atomFirstEntry: { path: string } | undefined,
+): string {
+	const detailsPath = details && "path" in details && details.path !== "" ? details.path : undefined;
+	return firstNonEmpty(
+		args?.file_path,
+		args?.path,
+		filePathFromEditEntry(firstEdit?.path),
+		detailsPath,
+		atomFirstEntry?.path,
+	);
+}
+
+function resolveSingleFileInputs(
+	result: {
+		content: Array<{ type: string; text?: string }>;
+		details?: EditToolDetails | EditToolPerFileResult;
+		isError?: boolean;
+	},
+	options: RenderResultOptions & { renderContext?: EditRenderContext },
+	uiTheme: Theme,
+	args?: EditRenderArgs,
+): SingleFileRenderInputs {
+	const details = result.details;
+	const detailsIsError = details !== undefined && "isError" in details && details.isError === true;
+	const isError = result.isError === true || detailsIsError;
+	const firstEdit = args?.edits?.[0];
+	const atomSummary = getAtomRenderSummary(args ?? {}, options.renderContext?.editMode);
+	const firstAtomEntry = atomSummary?.entries[0];
+	const rawPath = resolveSingleFilePath(args, firstEdit, details, firstAtomEntry);
+	const op = firstDefined(args?.op, firstEdit?.op, details?.op);
+	const rename = firstDefined(args?.rename, firstEdit?.rename, firstEdit?.move, details?.move);
+	const { language } = formatEditDescription(rawPath, uiTheme, { rename });
+
+	const editTextSource = firstDefined(args?.newText, args?.oldText, args?.diff, args?.patch);
+	const metadataLineCount = isNonEmpty(editTextSource) ? countLines(editTextSource) : null;
+	const metadataLine = op === "delete" ? "" : `\n${formatMetadataLine(metadataLineCount, language, uiTheme)}`;
+
+	const errorText = resolveErrorText(isError, details, result);
+
+	return { rawPath, op, rename, language, metadataLine, isError, errorText };
+}
+
+function renderDiffOrPreview(
+	uiTheme: Theme,
+	details: EditToolDetails | EditToolPerFileResult | undefined,
+	rawPath: string,
+	expanded: boolean,
+	editDiffPreview: DiffResult | DiffError | undefined,
+	renderDiffFn: (t: string, o?: { filePath?: string }) => string,
+): string {
+	if (isNonEmpty(details?.diff)) {
+		return renderDiffSection(details.diff, rawPath, expanded, uiTheme, renderDiffFn);
+	}
+	if (!editDiffPreview) return "";
+	if ("error" in editDiffPreview) {
+		return `\n\n${uiTheme.fg("error", sanitizeRendererText(editDiffPreview.error, rawPath))}`;
+	}
+	if (isNonEmpty(editDiffPreview.diff)) {
+		return renderDiffSection(editDiffPreview.diff, rawPath, expanded, uiTheme, renderDiffFn);
+	}
+	return "";
+}
+
+function renderSingleFileBody(
+	inputs: SingleFileRenderInputs,
+	width: number,
+	options: RenderResultOptions & { renderContext?: EditRenderContext },
+	uiTheme: Theme,
+	details: EditToolDetails | EditToolPerFileResult | undefined,
+): string[] {
+	const { rawPath, op, rename, metadataLine, isError, errorText } = inputs;
+	const { expanded, renderContext } = options;
+	const editDiffPreview = renderContext?.editDiffPreview;
+	const renderDiffFn = renderContext?.renderDiff ?? ((t: string) => t);
+
+	const previewLine =
+		editDiffPreview && "firstChangedLine" in editDiffPreview ? editDiffPreview.firstChangedLine : undefined;
+	const detailsLine = details && !isError ? details.firstChangedLine : undefined;
+	const firstChangedLine = firstDefined(previewLine, detailsLine);
+	const { description } = formatEditDescription(rawPath, uiTheme, { rename, firstChangedLine });
+
+	const header = renderStatusLine(
+		{
+			icon: isError ? "error" : "success",
+			title: getOperationTitle(op),
+			description,
+		},
+		uiTheme,
+	);
+	let text = header;
+	text += metadataLine;
+
+	if (isError) {
+		if (errorText !== "") {
+			text += `\n\n${uiTheme.fg("error", sanitizeRendererText(errorText, rawPath))}`;
+		}
+	} else {
+		text += renderDiffOrPreview(uiTheme, details, rawPath, expanded, editDiffPreview, renderDiffFn);
+	}
+
+	if (details?.diagnostics) {
+		text += formatDiagnostics(details.diagnostics, expanded, uiTheme, (fp: string) =>
+			uiTheme.getLangIcon(getLanguageFromPath(fp)),
+		);
+	}
+
+	return width > 0 ? text.split("\n").flatMap(line => wrapEditRendererLine(line, width)) : text.split("\n");
+}
+
 function renderSingleFileResult(
 	result: {
 		content: Array<{ type: string; text?: string }>;
@@ -516,81 +417,16 @@ function renderSingleFileResult(
 	uiTheme: Theme,
 	args?: EditRenderArgs,
 ): Component {
+	const inputs = resolveSingleFileInputs(result, options, uiTheme, args);
 	const details = result.details;
-	const isError = result.isError ?? (details && "isError" in details ? details.isError : false);
-	const firstEdit = args?.edits?.[0];
-	const atomSummary = getAtomRenderSummary(args ?? {}, options.renderContext?.editMode);
-	const firstAtomEntry = atomSummary?.entries[0];
-	const rawPath =
-		args?.file_path ||
-		args?.path ||
-		filePathFromEditEntry(firstEdit?.path) ||
-		(details && "path" in details ? details.path : "") ||
-		firstAtomEntry?.path ||
-		"";
-	const op = args?.op || firstEdit?.op || details?.op;
-	const rename = args?.rename || firstEdit?.rename || firstEdit?.move || details?.move;
-	const { language } = formatEditDescription(rawPath, uiTheme, { rename });
-
-	const editTextSource = args?.newText ?? args?.oldText ?? args?.diff ?? args?.patch;
-	const metadataLineCount = editTextSource ? countLines(editTextSource) : null;
-	const metadataLine = op !== "delete" ? `\n${formatMetadataLine(metadataLineCount, language, uiTheme)}` : "";
-
-	const displayErrorText = isError && details && "displayErrorText" in details ? details.displayErrorText : undefined;
-	const errorText = isError
-		? displayErrorText ||
-			(details && "errorText" in details && details.errorText) ||
-			(result.content?.find(c => c.type === "text")?.text ?? "")
-		: "";
-
 	let cached: RenderCache | undefined;
 
 	return {
 		render(width) {
-			const { expanded, renderContext } = options;
-			const editDiffPreview = renderContext?.editDiffPreview;
-			const renderDiffFn = renderContext?.renderDiff ?? ((t: string) => t);
-			const key = new Hasher().bool(expanded).u32(width).digest();
+			const key = new Hasher().bool(options.expanded).u32(width).digest();
 			if (cached?.key === key) return cached.lines;
 
-			const firstChangedLine =
-				(editDiffPreview && "firstChangedLine" in editDiffPreview ? editDiffPreview.firstChangedLine : undefined) ||
-				(details && !isError ? details.firstChangedLine : undefined);
-			const { description } = formatEditDescription(rawPath, uiTheme, { rename, firstChangedLine });
-
-			const header = renderStatusLine(
-				{
-					icon: isError ? "error" : "success",
-					title: getOperationTitle(op),
-					description,
-				},
-				uiTheme,
-			);
-			let text = header;
-			text += metadataLine;
-
-			if (isError) {
-				if (errorText) {
-					text += `\n\n${uiTheme.fg("error", replaceTabs(errorText, rawPath))}`;
-				}
-			} else if (details?.diff) {
-				text += renderDiffSection(details.diff, rawPath, expanded, uiTheme, renderDiffFn);
-			} else if (editDiffPreview) {
-				if ("error" in editDiffPreview) {
-					text += `\n\n${uiTheme.fg("error", replaceTabs(editDiffPreview.error, rawPath))}`;
-				} else if (editDiffPreview.diff) {
-					text += renderDiffSection(editDiffPreview.diff, rawPath, expanded, uiTheme, renderDiffFn);
-				}
-			}
-
-			if (details?.diagnostics) {
-				text += formatDiagnostics(details.diagnostics, expanded, uiTheme, (fp: string) =>
-					uiTheme.getLangIcon(getLanguageFromPath(fp)),
-				);
-			}
-
-			const lines =
-				width > 0 ? text.split("\n").flatMap(line => wrapEditRendererLine(line, width)) : text.split("\n");
+			const lines = renderSingleFileBody(inputs, width, options, uiTheme, details);
 			cached = { key, lines };
 			return lines;
 		},
@@ -630,7 +466,7 @@ function renderMultiFileResult(
 			if (remaining > 0) {
 				if (allLines.length > 0) allLines.push("");
 				const spinnerFrame = options.spinnerFrame;
-				const spinner = spinnerFrame !== undefined ? formatStatusIcon("running", uiTheme, spinnerFrame) : "";
+				const spinner = spinnerFrame === undefined ? "" : formatStatusIcon("running", uiTheme, spinnerFrame);
 				allLines.push(
 					renderStatusLine(
 						{
@@ -641,7 +477,7 @@ function renderMultiFileResult(
 						uiTheme,
 					),
 				);
-				if (spinner) {
+				if (spinner !== "") {
 					// Replace the pending icon with spinner on the last line
 					allLines[allLines.length - 1] = allLines[allLines.length - 1].replace(/^(?:\x1b\[[^m]*m)*./u, spinner);
 				}

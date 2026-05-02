@@ -25,13 +25,13 @@ export function parseUnreleasedSection(content: string): UnreleasedSection {
 		const sectionMatch = line.match(SECTION_PATTERN);
 		if (sectionMatch) {
 			currentSection = sectionMatch[1]?.trim() || null;
-			if (currentSection) {
+			if (currentSection !== null && currentSection !== undefined && currentSection !== "") {
 				entries[currentSection] = entries[currentSection] ?? [];
 			}
 			continue;
 		}
 
-		if (!currentSection) continue;
+		if (currentSection === null || currentSection === undefined || currentSection === "") continue;
 		const trimmed = line.trim();
 		if (!trimmed.startsWith("-")) continue;
 		const entry = trimmed.replace(/^[-*]\s*/, "");

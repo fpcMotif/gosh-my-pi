@@ -252,7 +252,7 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 		const params = rawParams as TaskParams;
 		const simpleMode = this.#getTaskSimpleMode();
 		const validationError = validateTaskModeParams(simpleMode, params);
-		if (validationError) {
+		if (validationError !== null && validationError !== undefined && validationError !== "") {
 			return createTaskModeError(validationError);
 		}
 
@@ -335,7 +335,7 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 
 		for (let i = 0; i < taskItems.length; i++) {
 			const taskItem = taskItems[i];
-			if (signal?.aborted) {
+			if (signal !== undefined && signal.aborted) {
 				failedSchedules.push(`${taskItem.id}: cancelled before scheduling`);
 				const progress = progressByTaskId.get(taskItem.id);
 				if (progress) {
@@ -376,11 +376,12 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 							const finalText = result.content.find(part => part.type === "text")?.text ?? "(no output)";
 							const singleResult = result.details?.results[0];
 							if (progress) {
-								progress.status = singleResult?.aborted
-									? "aborted"
-									: (singleResult?.exitCode ?? 0) === 0
-										? "completed"
-										: "failed";
+								progress.status =
+									singleResult !== undefined && singleResult.aborted
+										? "aborted"
+										: ((singleResult?.exitCode ?? 0) === 0
+											? "completed"
+											: "failed");
 								progress.durationMs = singleResult?.durationMs ?? Math.max(0, Date.now() - startedAt);
 								progress.tokens = singleResult?.tokens ?? 0;
 								progress.extractedToolData = singleResult?.extractedToolData;
@@ -569,14 +570,15 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 
 		const planModeState = this.session.getPlanModeState?.();
 		const planModeTools = ["read", "search", "find", "lsp", "web_search"];
-		const effectiveAgent: typeof agent = planModeState?.enabled
-			? {
-					...agent,
-					systemPrompt: `${planModeSubagentPrompt}\n\n${agent.systemPrompt}`,
-					tools: planModeTools,
-					spawns: undefined,
-				}
-			: agent;
+		const effectiveAgent: typeof agent =
+			planModeState?.enabled === true
+				? {
+						...agent,
+						systemPrompt: `${planModeSubagentPrompt}\n\n${agent.systemPrompt}`,
+						tools: planModeTools,
+						spawns: undefined,
+					}
+				: agent;
 
 		// Apply per-agent model override from settings (highest priority)
 		const agentModelOverrides = this.session.settings.get("task.agentModelOverrides");
@@ -669,8 +671,8 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 			try {
 				repoRoot = await getRepoRoot(this.session.cwd);
 				baseline = await captureBaseline(repoRoot);
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
 				return {
 					content: [
 						{
@@ -693,8 +695,8 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 			const resolvedIsolation = await resolveIsolationBackendForTaskExecution(isolationMode, isIsolated, repoRoot);
 			effectiveIsolationMode = resolvedIsolation.effectiveIsolationMode;
 			isolationBackendWarning = resolvedIsolation.warning;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
 			return {
 				content: [
 					{
@@ -712,9 +714,13 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 
 		// Derive artifacts directory
 		const sessionFile = this.session.getSessionFile();
-		const artifactsDir = sessionFile ? sessionFile.slice(0, -6) : null;
-		const tempArtifactsDir = artifactsDir ? null : path.join(os.tmpdir(), `omp-task-${Snowflake.next()}`);
-		const effectiveArtifactsDir = artifactsDir || tempArtifactsDir!;
+		const artifactsDir =
+			sessionFile !== null && sessionFile !== undefined && sessionFile !== "" ? sessionFile.slice(0, -6) : null;
+		const tempArtifactsDir =
+			artifactsDir !== null && artifactsDir !== undefined && artifactsDir !== ""
+				? null
+				: path.join(os.tmpdir(), `omp-task-${Snowflake.next()}`);
+		const effectiveArtifactsDir = artifactsDir ?? tempArtifactsDir!;
 
 		// Share the parent session's local:// root with subagents so they read/write the same scratch space
 		const localProtocolOptions: LocalProtocolOptions = {
@@ -741,7 +747,12 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 
 		try {
 			// Check self-recursion prevention
-			if (this.#blockedAgent && agentName === this.#blockedAgent) {
+			if (
+				this.#blockedAgent !== null &&
+				this.#blockedAgent !== undefined &&
+				this.#blockedAgent !== "" &&
+				agentName === this.#blockedAgent
+			) {
 				return {
 					content: [
 						{
@@ -782,7 +793,7 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 			await fs.mkdir(effectiveArtifactsDir, { recursive: true });
 			const compactContext = this.session.getCompactContext?.();
 			let contextFilePath: string | undefined;
-			if (compactContext) {
+			if (compactContext !== null && compactContext !== undefined && compactContext !== "") {
 				contextFilePath = path.join(effectiveArtifactsDir, "context.md");
 				await Bun.write(contextFilePath, compactContext);
 			}
@@ -844,7 +855,7 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 						thinkingLevel: thinkingLevelOverride,
 						outputSchema: effectiveOutputSchema,
 						sessionFile,
-						persistArtifacts: !!artifactsDir,
+						persistArtifacts: !(artifactsDir === null || artifactsDir === undefined || artifactsDir === ""),
 						artifactsDir: effectiveArtifactsDir,
 						contextFile: contextFilePath,
 						enableLsp: false,
@@ -870,7 +881,7 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 				const taskStart = Date.now();
 				let isolationDir: string | undefined;
 				try {
-					if (!repoRoot || !baseline) {
+					if (repoRoot === null || repoRoot === undefined || repoRoot === "" || !baseline) {
 						throw new Error("Isolated task execution not initialized.");
 					}
 					const taskBaseline = structuredClone(baseline);
@@ -898,7 +909,7 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 						thinkingLevel: thinkingLevelOverride,
 						outputSchema: effectiveOutputSchema,
 						sessionFile,
-						persistArtifacts: !!artifactsDir,
+						persistArtifacts: !(artifactsDir === null || artifactsDir === undefined || artifactsDir === ""),
 						artifactsDir: effectiveArtifactsDir,
 						contextFile: contextFilePath,
 						enableLsp: false,
@@ -944,11 +955,11 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 								branchName: commitResult?.branchName,
 								nestedPatches: commitResult?.nestedPatches,
 							};
-						} catch (mergeErr) {
+						} catch (error) {
 							// Agent succeeded but branch commit failed — clean up stale branch
 							const branchName = `omp/task/${task.id}`;
 							await git.branch.tryDelete(repoRoot, branchName);
-							const msg = mergeErr instanceof Error ? mergeErr.message : String(mergeErr);
+							const msg = error instanceof Error ? error.message : String(error);
 							return { ...result, error: `Merge failed: ${msg}` };
 						}
 					}
@@ -962,14 +973,14 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 								patchPath,
 								nestedPatches: delta.nestedPatches,
 							};
-						} catch (patchErr) {
-							const msg = patchErr instanceof Error ? patchErr.message : String(patchErr);
+						} catch (error) {
+							const msg = error instanceof Error ? error.message : String(error);
 							return { ...result, error: `Patch capture failed: ${msg}` };
 						}
 					}
 					return result;
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
 					return {
 						index,
 						id: task.id,
@@ -988,7 +999,7 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 						error: message,
 					};
 				} finally {
-					if (isolationDir) {
+					if (isolationDir !== null && isolationDir !== undefined && isolationDir !== "") {
 						if (effectiveIsolationMode === "fuse-overlay") {
 							await cleanupFuseOverlay(isolationDir);
 						} else if (effectiveIsolationMode === "fuse-projfs") {
@@ -1049,10 +1060,10 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 			const outputPaths: string[] = [];
 			const patchPaths: string[] = [];
 			for (const result of results) {
-				if (result.outputPath) {
+				if (result.outputPath !== null && result.outputPath !== undefined && result.outputPath !== "") {
 					outputPaths.push(result.outputPath);
 				}
-				if (result.patchPath) {
+				if (result.patchPath !== null && result.patchPath !== undefined && result.patchPath !== "") {
 					patchPaths.push(result.patchPath);
 				}
 			}
@@ -1060,12 +1071,19 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 			let mergeSummary = "";
 			let changesApplied: boolean | null = null;
 			let mergedBranchesForNestedPatches: Set<string> | null = null;
-			if (isIsolated && repoRoot) {
+			if (isIsolated && repoRoot !== null && repoRoot !== undefined && repoRoot !== "") {
 				try {
 					if (mergeMode === "branch") {
 						// Branch mode: merge task branches sequentially
 						const branchEntries = results
-							.filter(r => r.branchName && r.exitCode === 0 && !r.aborted)
+							.filter(
+								r =>
+									r.branchName !== null &&
+									r.branchName !== undefined &&
+									r.branchName !== "" &&
+									r.exitCode === 0 &&
+									r.aborted !== true,
+							)
 							.map(r => ({ branchName: r.branchName!, taskId: r.id, description: r.description }));
 
 						if (branchEntries.length === 0) {
@@ -1081,7 +1099,12 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 								const mergedPart =
 									mergeResult.merged.length > 0 ? `Merged: ${mergeResult.merged.join(", ")}.\n` : "";
 								const failedPart = `Failed: ${mergeResult.failed.join(", ")}.`;
-								const conflictPart = mergeResult.conflict ? `\nConflict: ${mergeResult.conflict}` : "";
+								const conflictPart =
+									mergeResult.conflict !== null &&
+									mergeResult.conflict !== undefined &&
+									mergeResult.conflict !== ""
+										? `\nConflict: ${mergeResult.conflict}`
+										: "";
 								mergeSummary = `\n\n<system-notification>Branch merge failed. ${mergedPart}${failedPart}${conflictPart}\nUnmerged branches remain for manual resolution.</system-notification>`;
 							}
 						}
@@ -1094,7 +1117,9 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 					} else {
 						// Patch mode: combine and apply patches
 						const patchesInOrder = results.map(result => result.patchPath).filter(Boolean) as string[];
-						const missingPatch = results.some(result => !result.patchPath);
+						const missingPatch = results.some(
+							result => result.patchPath === null || result.patchPath === undefined || result.patchPath === "",
+						);
 						if (missingPatch) {
 							changesApplied = false;
 						} else {
@@ -1141,24 +1166,35 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 							mergeSummary = `\n\n${notification}${patchList}`;
 						}
 					}
-				} catch (mergeErr) {
-					const msg = mergeErr instanceof Error ? mergeErr.message : String(mergeErr);
+				} catch (error) {
+					const msg = error instanceof Error ? error.message : String(error);
 					changesApplied = false;
 					mergeSummary = `\n\n<system-notification>Merge phase failed: ${msg}\nTask outputs are preserved but changes were not applied.</system-notification>`;
 				}
 			}
 
 			// Apply nested repo patches (separate from parent git)
-			if (isIsolated && repoRoot && (mergeMode === "branch" || changesApplied !== false)) {
+			if (
+				isIsolated &&
+				repoRoot !== null &&
+				repoRoot !== undefined &&
+				repoRoot !== "" &&
+				(mergeMode === "branch" || changesApplied !== false)
+			) {
 				const allNestedPatches = results
 					.filter(r => {
-						if (!r.nestedPatches || r.nestedPatches.length === 0 || r.exitCode !== 0 || r.aborted) {
+						if (!r.nestedPatches || r.nestedPatches.length === 0 || r.exitCode !== 0 || r.aborted === true) {
 							return false;
 						}
 						if (mergeMode !== "branch") {
 							return true;
 						}
-						if (!r.branchName || !mergedBranchesForNestedPatches) {
+						if (
+							r.branchName === null ||
+							r.branchName === undefined ||
+							r.branchName === "" ||
+							!mergedBranchesForNestedPatches
+						) {
 							return false;
 						}
 						return mergedBranchesForNestedPatches.has(r.branchName);
@@ -1187,18 +1223,22 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 			}
 
 			// Build final output - match plugin format
-			const cancelledCount = results.filter(r => r.aborted).length;
-			const successCount = results.filter(r => r.exitCode === 0 && !r.error && !r.aborted).length;
+			const cancelledCount = results.filter(r => r.aborted === true).length;
+			const successCount = results.filter(
+				r =>
+					r.exitCode === 0 && (r.error === null || r.error === undefined || r.error === "") && r.aborted !== true,
+			).length;
 			const totalDuration = Date.now() - startTime;
 
 			const summaries = results.map(r => {
-				const status = r.aborted
-					? "cancelled"
-					: r.exitCode === 0 && r.error
-						? "merge failed"
-						: r.exitCode === 0
-							? "completed"
-							: `failed (exit ${r.exitCode})`;
+				const status =
+					r.aborted === true
+						? "cancelled"
+						: r.exitCode === 0 && r.error !== null && r.error !== undefined && r.error !== ""
+							? "merge failed"
+							: r.exitCode === 0
+								? "completed"
+								: `failed (exit ${r.exitCode})`;
 				const output = r.output.trim() || r.stderr.trim() || "(no output)";
 				const outputCharCount = r.outputMeta?.charCount ?? output.length;
 				const fullOutputThreshold = 5000;
@@ -1225,7 +1265,7 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 				};
 			});
 
-			const outputIds = results.filter(r => !r.aborted || r.output.trim()).map(r => `agent://${r.id}`);
+			const outputIds = results.filter(r => r.aborted !== true || r.output.trim()).map(r => `agent://${r.id}`);
 			const backendSummaryPrefix = isolationBackendWarning ? `\n\n${isolationBackendWarning}` : "";
 			const summary = prompt.render(taskSummaryTemplate, {
 				successCount,
@@ -1241,7 +1281,10 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 
 			// Cleanup temp directory if used
 			const shouldCleanupTempArtifacts =
-				tempArtifactsDir && (!isIsolated || changesApplied === true || changesApplied === null);
+				tempArtifactsDir !== null &&
+				tempArtifactsDir !== undefined &&
+				tempArtifactsDir !== "" &&
+				(!isIsolated || changesApplied === true || changesApplied === null);
 			if (shouldCleanupTempArtifacts) {
 				await fs.rm(tempArtifactsDir, { recursive: true, force: true });
 			}
@@ -1250,15 +1293,15 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 				content: [{ type: "text", text: summary }],
 				details: {
 					projectAgentsDir,
-					results: results,
+					results,
 					totalDurationMs: totalDuration,
 					usage: hasAggregatedUsage ? aggregatedUsage : undefined,
 					outputPaths,
 				},
 			};
-		} catch (err) {
+		} catch (error) {
 			return {
-				content: [{ type: "text", text: `Task execution failed: ${err}` }],
+				content: [{ type: "text", text: `Task execution failed: ${String(error)}` }],
 				details: {
 					projectAgentsDir,
 					results: [],

@@ -24,6 +24,148 @@ export interface PrintModeOptions {
 	initialImages?: ImageContent[];
 }
 
+function buildExtensionActions(
+	session: AgentSession,
+): Parameters<NonNullable<AgentSession["extensionRunner"]>["initialize"]>[0] {
+	return {
+		sendMessage: (message, options) => {
+			session.sendCustomMessage(message, options).catch((error: unknown) => {
+				process.stderr.write(
+					`Extension sendMessage failed: ${error instanceof Error ? error.message : String(error)}\n`,
+				);
+			});
+		},
+		sendUserMessage: (content, options) => {
+			session.sendUserMessage(content, options).catch((error: unknown) => {
+				process.stderr.write(
+					`Extension sendUserMessage failed: ${error instanceof Error ? error.message : String(error)}\n`,
+				);
+			});
+		},
+		appendEntry: (customType, data) => {
+			session.sessionManager.appendCustomEntry(customType, data);
+		},
+		setLabel: (targetId, label) => {
+			session.sessionManager.appendLabelChange(targetId, label);
+		},
+		getActiveTools: () => session.getActiveToolNames(),
+		getAllTools: () => session.getAllToolNames(),
+		setActiveTools: (toolNames: string[]) => session.setActiveToolsByName(toolNames),
+		getCommands: () => [],
+		setModel: model => runExtensionSetModel(session, model),
+		getThinkingLevel: () => session.thinkingLevel,
+		setThinkingLevel: level => session.setThinkingLevel(level),
+		getSessionName: () => session.sessionManager.getSessionName(),
+		setSessionName: async name => {
+			await session.sessionManager.setSessionName(name, "user");
+		},
+	};
+}
+
+function setupExtensionRunner(session: AgentSession): void {
+	const extensionRunner = session.extensionRunner;
+	if (!extensionRunner) return;
+	extensionRunner.initialize(
+		// ExtensionActions
+		buildExtensionActions(session),
+		// ExtensionContextActions
+		{
+			getModel: () => session.model,
+			isIdle: () => !session.isStreaming,
+			abort: () => {
+				void session.abort();
+			},
+			hasPendingMessages: () => session.queuedMessageCount > 0,
+			shutdown: () => {},
+			getContextUsage: () => session.getContextUsage(),
+			getSystemPrompt: () => session.systemPrompt,
+			compact: instructionsOrOptions => runExtensionCompact(session, instructionsOrOptions),
+		},
+		// ExtensionCommandContextActions - commands invokable via prompt("/command")
+		{
+			getContextUsage: () => session.getContextUsage(),
+			waitForIdle: () => session.agent.waitForIdle(),
+			newSession: async options => {
+				const success = await session.newSession({ parentSession: options?.parentSession });
+				if (success && options?.setup) {
+					await options.setup(session.sessionManager);
+				}
+				return { cancelled: !success };
+			},
+			branch: async entryId => {
+				const result = await session.branch(entryId);
+				return { cancelled: result.cancelled };
+			},
+			navigateTree: async (targetId, options) => {
+				const result = await session.navigateTree(targetId, { summarize: options?.summarize });
+				return { cancelled: result.cancelled };
+			},
+			switchSession: async sessionPath => {
+				const success = await session.switchSession(sessionPath);
+				return { cancelled: !success };
+			},
+			reload: async () => {
+				await session.reload();
+			},
+			compact: instructionsOrOptions => runExtensionCompact(session, instructionsOrOptions),
+		},
+		// No UI context
+	);
+	extensionRunner.onError(err => {
+		process.stderr.write(`Extension error (${err.extensionPath}): ${err.error}\n`);
+	});
+}
+
+function writeAssistantMessageOutput(assistantMsg: AssistantMessage): void {
+	// Check for error/aborted
+	if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
+		const errorLine = sanitizeText(assistantMsg.errorMessage ?? `Request ${assistantMsg.stopReason}`);
+		const flushed = process.stderr.write(`${errorLine}\n`);
+		if (flushed) {
+			process.exitCode = 1;
+		} else {
+			process.stderr.once("drain", () => {
+				process.exitCode = 1;
+			});
+		}
+	}
+
+	if (
+		assistantMsg.errorMessage !== null &&
+		assistantMsg.errorMessage !== undefined &&
+		assistantMsg.errorMessage !== "" &&
+		assistantMsg.stopReason !== "error" &&
+		assistantMsg.stopReason !== "aborted"
+	) {
+		process.stderr.write(`${sanitizeText(assistantMsg.errorMessage)}\n`);
+	}
+
+	// Output text content
+	for (const content of assistantMsg.content) {
+		if (content.type === "text") {
+			process.stdout.write(`${sanitizeText(content.text)}\n`);
+		}
+	}
+}
+
+async function sendAllPrompts(
+	session: AgentSession,
+	initialMessage: string | undefined,
+	initialImages: ImageContent[] | undefined,
+	messages: string[],
+): Promise<void> {
+	// Send initial message with attachments
+	if (initialMessage !== undefined) {
+		await session.prompt(initialMessage, { images: initialImages });
+	}
+
+	// Send remaining messages sequentially (each prompt depends on prior agent state)
+	await messages.reduce<Promise<void>>(async (prev, message) => {
+		await prev;
+		await session.prompt(message);
+	}, Promise.resolve());
+}
+
 /**
  * Run in print (single-shot) mode.
  * Sends prompts to the agent and outputs the result.
@@ -38,86 +180,11 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 			process.stdout.write(`${JSON.stringify(header)}\n`);
 		}
 	}
+
 	// Set up extensions for print mode (no UI, no command context)
+	setupExtensionRunner(session);
 	const extensionRunner = session.extensionRunner;
 	if (extensionRunner) {
-		extensionRunner.initialize(
-			// ExtensionActions
-			{
-				sendMessage: (message, options) => {
-					session.sendCustomMessage(message, options).catch(e => {
-						process.stderr.write(`Extension sendMessage failed: ${e instanceof Error ? e.message : String(e)}\n`);
-					});
-				},
-				sendUserMessage: (content, options) => {
-					session.sendUserMessage(content, options).catch(e => {
-						process.stderr.write(
-							`Extension sendUserMessage failed: ${e instanceof Error ? e.message : String(e)}\n`,
-						);
-					});
-				},
-				appendEntry: (customType, data) => {
-					session.sessionManager.appendCustomEntry(customType, data);
-				},
-				setLabel: (targetId, label) => {
-					session.sessionManager.appendLabelChange(targetId, label);
-				},
-				getActiveTools: () => session.getActiveToolNames(),
-				getAllTools: () => session.getAllToolNames(),
-				setActiveTools: (toolNames: string[]) => session.setActiveToolsByName(toolNames),
-				getCommands: () => [],
-				setModel: model => runExtensionSetModel(session, model),
-				getThinkingLevel: () => session.thinkingLevel,
-				setThinkingLevel: level => session.setThinkingLevel(level),
-				getSessionName: () => session.sessionManager.getSessionName(),
-				setSessionName: async name => {
-					await session.sessionManager.setSessionName(name, "user");
-				},
-			},
-			// ExtensionContextActions
-			{
-				getModel: () => session.model,
-				isIdle: () => !session.isStreaming,
-				abort: () => session.abort(),
-				hasPendingMessages: () => session.queuedMessageCount > 0,
-				shutdown: () => {},
-				getContextUsage: () => session.getContextUsage(),
-				getSystemPrompt: () => session.systemPrompt,
-				compact: instructionsOrOptions => runExtensionCompact(session, instructionsOrOptions),
-			},
-			// ExtensionCommandContextActions - commands invokable via prompt("/command")
-			{
-				getContextUsage: () => session.getContextUsage(),
-				waitForIdle: () => session.agent.waitForIdle(),
-				newSession: async options => {
-					const success = await session.newSession({ parentSession: options?.parentSession });
-					if (success && options?.setup) {
-						await options.setup(session.sessionManager);
-					}
-					return { cancelled: !success };
-				},
-				branch: async entryId => {
-					const result = await session.branch(entryId);
-					return { cancelled: result.cancelled };
-				},
-				navigateTree: async (targetId, options) => {
-					const result = await session.navigateTree(targetId, { summarize: options?.summarize });
-					return { cancelled: result.cancelled };
-				},
-				switchSession: async sessionPath => {
-					const success = await session.switchSession(sessionPath);
-					return { cancelled: !success };
-				},
-				reload: async () => {
-					await session.reload();
-				},
-				compact: instructionsOrOptions => runExtensionCompact(session, instructionsOrOptions),
-			},
-			// No UI context
-		);
-		extensionRunner.onError(err => {
-			process.stderr.write(`Extension error (${err.extensionPath}): ${err.error}\n`);
-		});
 		// Emit session_start event
 		await extensionRunner.emit({
 			type: "session_start",
@@ -132,15 +199,7 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 		}
 	});
 
-	// Send initial message with attachments
-	if (initialMessage !== undefined) {
-		await session.prompt(initialMessage, { images: initialImages });
-	}
-
-	// Send remaining messages
-	for (const message of messages) {
-		await session.prompt(message);
-	}
+	await sendAllPrompts(session, initialMessage, initialImages, messages);
 
 	// In text mode, output final response
 	if (mode === "text") {
@@ -148,33 +207,7 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 		const lastMessage = state.messages[state.messages.length - 1];
 
 		if (lastMessage?.role === "assistant") {
-			const assistantMsg = lastMessage as AssistantMessage;
-
-			// Check for error/aborted
-			if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
-				const errorLine = sanitizeText(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`);
-				const flushed = process.stderr.write(`${errorLine}\n`);
-				if (flushed) {
-					process.exit(1);
-				} else {
-					process.stderr.once("drain", () => process.exit(1));
-				}
-			}
-
-			if (
-				assistantMsg.errorMessage &&
-				assistantMsg.stopReason !== "error" &&
-				assistantMsg.stopReason !== "aborted"
-			) {
-				process.stderr.write(`${sanitizeText(assistantMsg.errorMessage)}\n`);
-			}
-
-			// Output text content
-			for (const content of assistantMsg.content) {
-				if (content.type === "text") {
-					process.stdout.write(`${sanitizeText(content.text)}\n`);
-				}
-			}
+			writeAssistantMessageOutput(lastMessage as AssistantMessage);
 		}
 	}
 

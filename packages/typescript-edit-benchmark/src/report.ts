@@ -32,13 +32,13 @@ function escapeMarkdown(text: string): string {
 }
 
 function getStringField(value: unknown, field: string): string | null {
-	if (!value || typeof value !== "object") return null;
+	if (value === null || value === undefined || typeof value !== "object") return null;
 	const fieldValue = (value as Record<string, unknown>)[field];
 	return typeof fieldValue === "string" ? fieldValue : null;
 }
 
 function formatEditArgsBlock(args: unknown): string {
-	if (!args || typeof args !== "object") return "—";
+	if (args === null || args === undefined || typeof args !== "object") return "—";
 	const diff = getStringField(args, "diff");
 	if (diff !== null) {
 		return diff;
@@ -108,9 +108,9 @@ export function generateReport(result: BenchmarkResult): string {
 	lines.push(`| Max Turns | ${config.maxTurns ?? "unset"} |`);
 	lines.push(`| No-op Retry Limit | ${config.noOpRetryLimit ?? 2} |`);
 	lines.push(`| Mutation Scope Window | ${config.mutationScopeWindow ?? 20} |`);
-	lines.push(`| Require Edit Tool | ${config.requireEditToolCall ? "yes" : "no"} |`);
-	lines.push(`| Require Read Tool | ${config.requireReadToolCall ? "yes" : "no"} |`);
-	lines.push(`| No-Edit Baseline | ${config.noEditRequired ? "yes" : "no"} |`);
+	lines.push(`| Require Edit Tool | ${config.requireEditToolCall === true ? "yes" : "no"} |`);
+	lines.push(`| Require Read Tool | ${config.requireReadToolCall === true ? "yes" : "no"} |`);
+	lines.push(`| No-Edit Baseline | ${config.noEditRequired === true ? "yes" : "no"} |`);
 	lines.push("");
 
 	lines.push("## Summary");
@@ -293,7 +293,10 @@ export function generateReport(result: BenchmarkResult): string {
 
 			for (const run of task.runs) {
 				const status = run.success ? "✅" : "❌";
-				const error = run.error ? truncate(escapeMarkdown(run.error), 50) : "—";
+				const error =
+					run.error !== null && run.error !== undefined && run.error !== ""
+						? truncate(escapeMarkdown(run.error), 50)
+						: "—";
 				lines.push(
 					`| ${run.runIndex + 1} | ${status} | ${error} | ${formatNumber(run.tokens.input)} / ${formatNumber(run.tokens.output)} | ${formatDuration(run.duration)} |`,
 				);
@@ -321,7 +324,10 @@ export function generateReport(result: BenchmarkResult): string {
 				lines.push("|-----|--------|-------|-----------------|------|");
 
 				for (const run of task.runs) {
-					const error = run.error ? truncate(escapeMarkdown(run.error), 50) : "—";
+					const error =
+						run.error !== null && run.error !== undefined && run.error !== ""
+							? truncate(escapeMarkdown(run.error), 50)
+							: "—";
 					lines.push(
 						`| ${run.runIndex + 1} | ❌ | ${error} | ${formatNumber(run.tokens.input)} / ${formatNumber(run.tokens.output)} | ${formatDuration(run.duration)} |`,
 					);
@@ -336,8 +342,10 @@ export function generateReport(result: BenchmarkResult): string {
 				lines.push("");
 			}
 
-			const sampleResponse = task.runs.find(r => r.agentResponse)?.agentResponse;
-			if (sampleResponse) {
+			const sampleResponse = task.runs.find(
+				r => r.agentResponse !== undefined && r.agentResponse !== "",
+			)?.agentResponse;
+			if (sampleResponse !== null && sampleResponse !== undefined && sampleResponse !== "") {
 				lines.push("**Sample agent response (run 1):**");
 				lines.push("```");
 				lines.push(truncate(sampleResponse, 500));
@@ -345,8 +353,8 @@ export function generateReport(result: BenchmarkResult): string {
 				lines.push("");
 			}
 
-			const sampleDiff = task.runs.find(r => r.diff)?.diff;
-			if (sampleDiff) {
+			const sampleDiff = task.runs.find(r => r.diff !== undefined && r.diff !== "")?.diff;
+			if (sampleDiff !== null && sampleDiff !== undefined && sampleDiff !== "") {
 				lines.push("**Diff (expected vs actual):**");
 				lines.push("```diff");
 				lines.push(truncate(sampleDiff, 2000));
@@ -378,7 +386,7 @@ function appendCategorySummary(lines: string[], tasks: TaskResult[]): void {
 	const difficultyByCategory = new Map<string, number[]>();
 
 	for (const task of tasks) {
-		const metadata = task.runs.find(run => run.mutationCategory || run.difficultyScore !== undefined);
+		const metadata = task.runs.find(run => run.mutationCategory ?? run.difficultyScore !== undefined);
 		const category = metadata?.mutationCategory ?? "unknown";
 		if (typeof metadata?.difficultyScore === "number") {
 			const scores = difficultyByCategory.get(category) ?? [];

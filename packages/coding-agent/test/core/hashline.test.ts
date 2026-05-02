@@ -684,9 +684,9 @@ describe("applyHashlineEdits — errors", () => {
 		try {
 			applyHashlineEdits(content, edits);
 			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(HashlineMismatchError);
-			const msg = (err as HashlineMismatchError).message;
+		} catch (error) {
+			expect(error).toBeInstanceOf(HashlineMismatchError);
+			const msg = (error as HashlineMismatchError).message;
 			// Mismatched line uses leading `*` and `|` separator (grep-style)
 			const correctHash = computeLineHash(2, "bbb");
 			expect(msg).toContain(`*2${correctHash}|bbb`);
@@ -707,9 +707,9 @@ describe("applyHashlineEdits — errors", () => {
 		try {
 			applyHashlineEdits(content, edits);
 			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(HashlineMismatchError);
-			const e = err as HashlineMismatchError;
+		} catch (error) {
+			expect(error).toBeInstanceOf(HashlineMismatchError);
+			const e = error as HashlineMismatchError;
 			expect(e.mismatches).toHaveLength(2);
 			expect(e.mismatches[0].line).toBe(2);
 			expect(e.mismatches[1].line).toBe(4);

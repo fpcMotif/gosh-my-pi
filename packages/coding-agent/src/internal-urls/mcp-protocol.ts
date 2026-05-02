@@ -39,7 +39,7 @@ function resolveTargetServer(mcpManager: MCPManager, uri: string): string | unde
 	const servers = mcpManager.getConnectedServers();
 	for (const name of servers) {
 		const serverResources = mcpManager.getServerResources(name);
-		if (serverResources?.resources.some(r => r.uri === uri)) {
+		if (serverResources?.resources.some(r => r.uri === uri) === true) {
 			return name;
 		}
 	}
@@ -117,7 +117,7 @@ export class McpProtocolHandler implements ProtocolHandler {
 
 		const uri = extractResourceUri(url);
 		const targetServer = resolveTargetServer(mcpManager, uri);
-		if (!targetServer) {
+		if (targetServer === null || targetServer === undefined || targetServer === "") {
 			throw new Error(
 				`No MCP server has resource "${uri}".\n\nAvailable resources:\n${formatAvailableResources(mcpManager)}`,
 			);
@@ -139,7 +139,7 @@ export class McpProtocolHandler implements ProtocolHandler {
 		for (const item of result.contents) {
 			if (item.text !== undefined && item.text !== null) {
 				textParts.push(item.text);
-			} else if (item.blob) {
+			} else if (item.blob !== null && item.blob !== undefined && item.blob !== "") {
 				textParts.push(`[Binary content: ${item.mimeType ?? "unknown"}, base64 length ${item.blob.length}]`);
 			}
 		}

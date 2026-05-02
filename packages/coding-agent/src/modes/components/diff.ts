@@ -25,11 +25,7 @@ function visualizeIndent(text: string, filePath?: string): string {
 	const tabMarker = `${DIM}${" ".repeat(leftPadding)}→${" ".repeat(rightPadding)}${DIM_OFF}`;
 	let visible = "";
 	for (const ch of indent) {
-		if (ch === "\t") {
-			visible += tabMarker;
-		} else {
-			visible += `${DIM}·${DIM_OFF}`;
-		}
+		visible += ch === "\t" ? tabMarker : `${DIM}·${DIM_OFF}`;
 	}
 	return `${visible}${replaceTabs(rest, filePath)}`;
 }
@@ -62,28 +58,28 @@ function renderIntraLineDiff(oldContent: string, newContent: string): { removedL
 	let isFirstAdded = true;
 
 	for (const part of wordDiff) {
-		if (part.removed) {
+		if (part.removed === true) {
 			let value = part.value;
 			// Strip leading whitespace from the first removed part
 			if (isFirstRemoved) {
-				const leadingWs = value.match(/^(\s*)/)?.[1] || "";
+				const leadingWs = value.match(/^(\s*)/)?.[1] ?? "";
 				value = value.slice(leadingWs.length);
 				removedLine += leadingWs;
 				isFirstRemoved = false;
 			}
-			if (value) {
+			if (value !== "") {
 				removedLine += theme.inverse(value);
 			}
-		} else if (part.added) {
+		} else if (part.added === true) {
 			let value = part.value;
 			// Strip leading whitespace from the first added part
 			if (isFirstAdded) {
-				const leadingWs = value.match(/^(\s*)/)?.[1] || "";
+				const leadingWs = value.match(/^(\s*)/)?.[1] ?? "";
 				value = value.slice(leadingWs.length);
 				addedLine += leadingWs;
 				isFirstAdded = false;
 			}
-			if (value) {
+			if (value !== "") {
 				addedLine += theme.inverse(value);
 			}
 		} else {
@@ -98,6 +94,58 @@ function renderIntraLineDiff(oldContent: string, newContent: string): { removedL
 export interface RenderDiffOptions {
 	/** File path used to resolve indentation (.editorconfig + defaults) */
 	filePath?: string;
+}
+
+type DiffLineEntry = { lineNum: string; content: string };
+
+function collectPrefixedLines(
+	lines: string[],
+	startIndex: number,
+	prefix: "-" | "+",
+): { entries: DiffLineEntry[]; nextIndex: number } {
+	const entries: DiffLineEntry[] = [];
+	let i = startIndex;
+	while (i < lines.length) {
+		const p = parseDiffLine(lines[i]);
+		if (!p || p.prefix !== prefix) break;
+		entries.push({ lineNum: p.lineNum, content: p.content });
+		i++;
+	}
+	return { entries, nextIndex: i };
+}
+
+function renderRemovedAddedBlock(
+	removedLines: DiffLineEntry[],
+	addedLines: DiffLineEntry[],
+	formatLine: (prefix: CodeFrameMarker, lineNum: string, content: string) => string,
+	options: RenderDiffOptions,
+	result: string[],
+): void {
+	if (removedLines.length === 1 && addedLines.length === 1) {
+		const removed = removedLines[0];
+		const added = addedLines[0];
+		const { removedLine, addedLine } = renderIntraLineDiff(replaceTabs(removed.content), replaceTabs(added.content));
+		result.push(
+			theme.fg("toolDiffRemoved", formatLine("-", removed.lineNum, visualizeIndent(removedLine, options.filePath))),
+		);
+		result.push(
+			theme.fg("toolDiffAdded", formatLine("+", added.lineNum, visualizeIndent(addedLine, options.filePath))),
+		);
+		return;
+	}
+	for (const removed of removedLines) {
+		result.push(
+			theme.fg(
+				"toolDiffRemoved",
+				formatLine("-", removed.lineNum, visualizeIndent(removed.content, options.filePath)),
+			),
+		);
+	}
+	for (const added of addedLines) {
+		result.push(
+			theme.fg("toolDiffAdded", formatLine("+", added.lineNum, visualizeIndent(added.content, options.filePath))),
+		);
+	}
 }
 
 /**
@@ -145,75 +193,18 @@ export function renderDiff(diffText: string, options: RenderDiffOptions = {}): s
 		}
 
 		if (parsed.prefix === "-") {
-			const removedLines: { lineNum: string; content: string }[] = [];
-			while (i < lines.length) {
-				const p = parseDiffLine(lines[i]);
-				if (!p || p.prefix !== "-") break;
-				removedLines.push({ lineNum: p.lineNum, content: p.content });
-				i++;
-			}
-
-			const addedLines: { lineNum: string; content: string }[] = [];
-			while (i < lines.length) {
-				const p = parseDiffLine(lines[i]);
-				if (!p || p.prefix !== "+") break;
-				addedLines.push({ lineNum: p.lineNum, content: p.content });
-				i++;
-			}
-
-			if (removedLines.length === 1 && addedLines.length === 1) {
-				const removed = removedLines[0];
-				const added = addedLines[0];
-
-				const { removedLine, addedLine } = renderIntraLineDiff(
-					replaceTabs(removed.content),
-					replaceTabs(added.content),
-				);
-
-				result.push(
-					theme.fg(
-						"toolDiffRemoved",
-						formatLine("-", removed.lineNum, visualizeIndent(removedLine, options.filePath)),
-					),
-				);
-				result.push(
-					theme.fg("toolDiffAdded", formatLine("+", added.lineNum, visualizeIndent(addedLine, options.filePath))),
-				);
-			} else {
-				for (const removed of removedLines) {
-					result.push(
-						theme.fg(
-							"toolDiffRemoved",
-							formatLine("-", removed.lineNum, visualizeIndent(removed.content, options.filePath)),
-						),
-					);
-				}
-				for (const added of addedLines) {
-					result.push(
-						theme.fg(
-							"toolDiffAdded",
-							formatLine("+", added.lineNum, visualizeIndent(added.content, options.filePath)),
-						),
-					);
-				}
-			}
-		} else if (parsed.prefix === "+") {
-			result.push(
-				theme.fg(
-					"toolDiffAdded",
-					formatLine("+", parsed.lineNum, visualizeIndent(parsed.content, options.filePath)),
-				),
-			);
-			i++;
-		} else {
-			result.push(
-				theme.fg(
-					"toolDiffContext",
-					formatLine(" ", parsed.lineNum, visualizeIndent(parsed.content, options.filePath)),
-				),
-			);
-			i++;
+			const removedResult = collectPrefixedLines(lines, i, "-");
+			const addedResult = collectPrefixedLines(lines, removedResult.nextIndex, "+");
+			i = addedResult.nextIndex;
+			renderRemovedAddedBlock(removedResult.entries, addedResult.entries, formatLine, options, result);
+			continue;
 		}
+		const themeColor = parsed.prefix === "+" ? "toolDiffAdded" : "toolDiffContext";
+		const marker: CodeFrameMarker = parsed.prefix === "+" ? "+" : " ";
+		result.push(
+			theme.fg(themeColor, formatLine(marker, parsed.lineNum, visualizeIndent(parsed.content, options.filePath))),
+		);
+		i++;
 	}
 
 	return result.join("\n");

@@ -33,7 +33,7 @@ export const handleRawg: SpecialHandler = async (
 		if (!isRawgHostname(parsed.hostname)) return null;
 
 		const slug = extractGameSlug(parsed.pathname);
-		if (!slug) return null;
+		if (slug === null || slug === undefined || slug === "") return null;
 
 		const fetchedAt = new Date().toISOString();
 		const apiUrl = `https://api.rawg.io/api/games/${encodeURIComponent(slug)}`;
@@ -46,10 +46,11 @@ export const handleRawg: SpecialHandler = async (
 
 		if (requiresApiKey(game)) return null;
 
-		const title = game.name?.trim() || slug;
+		const title = game.name?.trim() ?? slug;
 		let md = `# ${title}\n\n`;
 
-		if (game.released) md += `**Released:** ${game.released}\n`;
+		if (game.released !== null && game.released !== undefined && game.released !== "")
+			md += `**Released:** ${game.released}\n`;
 		if (typeof game.rating === "number" && !Number.isNaN(game.rating)) {
 			md += `**Rating:** ${game.rating.toFixed(2)} / 5\n`;
 		}
@@ -64,7 +65,7 @@ export const handleRawg: SpecialHandler = async (
 		md += "\n";
 
 		const description = extractDescription(game);
-		if (description) {
+		if (description !== null && description !== undefined && description !== "") {
 			md += `## Description\n\n${description}\n`;
 		}
 
@@ -92,19 +93,20 @@ function requiresApiKey(game: RawgGameResponse): boolean {
 }
 
 function extractDescription(game: RawgGameResponse): string | null {
-	if (game.description_raw) return game.description_raw.trim();
-	if (!game.description) return null;
+	if (game.description_raw !== null && game.description_raw !== undefined && game.description_raw !== "")
+		return game.description_raw.trim();
+	if (game.description === null || game.description === undefined || game.description === "") return null;
 
 	const markdown = htmlToBasicMarkdown(game.description).trim();
 	return markdown || null;
 }
 
 function collectNames(values?: Array<string | undefined>): string[] {
-	if (!values?.length) return [];
+	if (values?.length === null || values?.length === undefined || values?.length === 0) return [];
 	const names = new Set<string>();
 	for (const value of values) {
 		const trimmed = value?.trim();
-		if (trimmed) names.add(trimmed);
+		if (trimmed !== null && trimmed !== undefined && trimmed !== "") names.add(trimmed);
 	}
 	return Array.from(names);
 }

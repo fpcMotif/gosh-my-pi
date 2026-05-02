@@ -77,7 +77,7 @@ export class InspectImageTool implements AgentTool<typeof inspectImageSchema, In
 
 		const matchPreferences = { usageOrder: this.session.settings.getStorage()?.getModelUsageOrder() };
 		const resolvePattern = (pattern: string | undefined): Model<Api> | undefined => {
-			if (!pattern) return undefined;
+			if (pattern === null || pattern === undefined || pattern === "") return undefined;
 			const expanded = expandRoleAlias(pattern, this.session.settings);
 			return resolveModelFromString(expanded, availableModels, matchPreferences, modelRegistry);
 		};
@@ -99,7 +99,7 @@ export class InspectImageTool implements AgentTool<typeof inspectImageSchema, In
 		}
 
 		const apiKey = await modelRegistry.getApiKey(model);
-		if (!apiKey) {
+		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new ToolError(
 				`No API key available for ${model.provider}/${model.id}. Configure credentials for this provider or choose another vision-capable model.`,
 			);

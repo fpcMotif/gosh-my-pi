@@ -61,8 +61,8 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 	}
 
 	updateArgs(args: ReadRenderArgs, toolCallId?: string): void {
-		if (!toolCallId) return;
-		const rawPath = args.file_path || args.path || "";
+		if (toolCallId === null || toolCallId === undefined || toolCallId === "") return;
+		const rawPath = args.file_path ?? args.path ?? "";
 		const entry: ReadEntry = this.#entries.get(toolCallId) ?? {
 			toolCallId,
 			path: rawPath,
@@ -80,7 +80,7 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 		isPartial = false,
 		toolCallId?: string,
 	): void {
-		if (!toolCallId) return;
+		if (toolCallId === null || toolCallId === undefined || toolCallId === "") return;
 		const entry = this.#entries.get(toolCallId);
 		if (!entry) return;
 		if (isPartial) return;
@@ -92,7 +92,7 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 		} else {
 			entry.correctedFrom = undefined;
 		}
-		entry.status = result.isError ? "error" : suffixResolution ? "warning" : "success";
+		entry.status = result.isError === true ? "error" : (suffixResolution ? "warning" : "success");
 		// Store the text content for preview/expanded display
 		const textContent = result.content?.find(c => c.type === "text")?.text;
 		if (textContent !== undefined) {
@@ -172,8 +172,11 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 	#addContentPreview(entry: ReadEntry): void {
 		const lang = getLanguageFromPath(entry.path);
 		const filePath = shortenPath(entry.path);
-		const selectionSuffix = entry.sel ? `:${entry.sel}` : "";
-		const correctionSuffix = entry.correctedFrom ? ` (corrected from ${shortenPath(entry.correctedFrom)})` : "";
+		const selectionSuffix = entry.sel !== null && entry.sel !== undefined && entry.sel !== "" ? `:${entry.sel}` : "";
+		const correctionSuffix =
+			entry.correctedFrom !== null && entry.correctedFrom !== undefined && entry.correctedFrom !== ""
+				? ` (corrected from ${shortenPath(entry.correctedFrom)})`
+				: "";
 		const title = filePath ? `Read ${filePath}${selectionSuffix}${correctionSuffix}` : `Read${selectionSuffix}`;
 		let cachedWidth: number | undefined;
 		let cachedLines: string[] | undefined;
@@ -211,10 +214,10 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 	#formatPath(entry: ReadEntry): string {
 		const filePath = shortenPath(entry.path);
 		let pathDisplay = filePath ? theme.fg("accent", filePath) : theme.fg("toolOutput", "…");
-		if (entry.sel) {
+		if (entry.sel !== null && entry.sel !== undefined && entry.sel !== "") {
 			pathDisplay += theme.fg("warning", `:${entry.sel}`);
 		}
-		if (entry.correctedFrom) {
+		if (entry.correctedFrom !== null && entry.correctedFrom !== undefined && entry.correctedFrom !== "") {
 			pathDisplay += theme.fg("dim", ` (corrected from ${shortenPath(entry.correctedFrom)})`);
 		}
 		return pathDisplay;

@@ -57,7 +57,7 @@ export async function listModels(modelRegistry: ModelRegistry, searchPattern?: s
 	}
 
 	let filteredModels: Model<Api>[] = models;
-	if (searchPattern) {
+	if (searchPattern !== null && searchPattern !== undefined && searchPattern !== "") {
 		filteredModels = fuzzyFilter(models, searchPattern, model => `${model.provider} ${model.id}`);
 	}
 
@@ -96,7 +96,7 @@ export async function listModels(modelRegistry: ModelRegistry, searchPattern?: s
 		model: model.id,
 		context: formatNumber(model.contextWindow),
 		maxOut: formatNumber(model.maxTokens),
-		thinking: model.thinking ? getSupportedEfforts(model).join(",") : model.reasoning ? "yes" : "-",
+		thinking: model.thinking ? getSupportedEfforts(model).join(",") : (model.reasoning ? "yes" : "-"),
 		images: model.input.includes("image") ? "yes" : "no",
 	})) satisfies ProviderRow[];
 

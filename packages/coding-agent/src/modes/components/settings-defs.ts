@@ -62,7 +62,7 @@ export type SettingDef = BooleanSettingDef | EnumSettingDef | SubmenuSettingDef 
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CONDITIONS: Record<string, () => boolean> = {
-	hasImageProtocol: () => !!TERMINAL.imageProtocol,
+	hasImageProtocol: () => !(TERMINAL.imageProtocol === undefined),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -370,7 +370,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "on", label: "On", description: "Force websockets for OpenAI Codex models" },
 	],
 	// Default thinking level
-	defaultThinkingLevel: [...THINKING_EFFORTS.map(getThinkingLevelMetadata)],
+	defaultThinkingLevel: THINKING_EFFORTS.map(getThinkingLevelMetadata),
 	// Temperature
 	temperature: [
 		{ value: "-1", label: "Default", description: "Use provider default" },
@@ -472,13 +472,12 @@ function createSubmenuSettingDef(base: Omit<SettingDef, "type" | "options">, pro
 				return provider();
 			},
 		};
-	} else {
-		return {
-			...base,
-			type: "submenu",
-			options: provider,
-		};
 	}
+	return {
+		...base,
+		type: "submenu",
+		options: provider,
+	};
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -493,7 +492,8 @@ function pathToSettingDef(path: SettingPath): SettingDef | null {
 	const base = { path, label: ui.label, description: ui.description, tab: ui.tab };
 
 	// Check for condition
-	const condition = ui.condition ? CONDITIONS[ui.condition] : undefined;
+	const condition =
+		ui.condition !== null && ui.condition !== undefined && ui.condition !== "" ? CONDITIONS[ui.condition] : undefined;
 
 	if (schemaType === "boolean") {
 		return { ...base, type: "boolean", condition };
@@ -503,7 +503,7 @@ function pathToSettingDef(path: SettingPath): SettingDef | null {
 		const values = getEnumValues(path) ?? [];
 
 		// If marked as submenu, use submenu type
-		if (ui.submenu) {
+		if (ui.submenu === true) {
 			const provider = OPTION_PROVIDERS[path];
 			if (!provider) return null;
 			return createSubmenuSettingDef(base, provider);
@@ -512,14 +512,14 @@ function pathToSettingDef(path: SettingPath): SettingDef | null {
 		return { ...base, type: "enum", values };
 	}
 
-	if (schemaType === "number" && ui.submenu) {
+	if (schemaType === "number" && ui.submenu === true) {
 		const provider = OPTION_PROVIDERS[path];
 		if (provider) {
 			return createSubmenuSettingDef(base, provider);
 		}
 	}
 
-	if (schemaType === "string" && ui.submenu) {
+	if (schemaType === "string" && ui.submenu === true) {
 		const provider = OPTION_PROVIDERS[path];
 		if (provider) {
 			return createSubmenuSettingDef(base, provider);

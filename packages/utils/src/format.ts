@@ -73,7 +73,7 @@ export function formatCount(label: string, count: number): string {
  * Format age from seconds to human-readable string.
  */
 export function formatAge(ageSeconds: number | null | undefined): string {
-	if (!ageSeconds) return "";
+	if (ageSeconds === null || ageSeconds === undefined || ageSeconds === 0) return "";
 	const mins = Math.floor(ageSeconds / 60);
 	const hours = Math.floor(mins / 60);
 	const days = Math.floor(hours / 24);

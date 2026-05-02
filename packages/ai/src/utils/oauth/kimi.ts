@@ -114,7 +114,17 @@ async function requestDeviceAuthorization(): Promise<{
 	const verificationUri = payload.verification_uri;
 	const verificationUriComplete = payload.verification_uri_complete;
 
-	if (!userCode || !deviceCode || !verificationUri) {
+	if (
+		userCode === null ||
+		userCode === undefined ||
+		userCode === "" ||
+		deviceCode === null ||
+		deviceCode === undefined ||
+		deviceCode === "" ||
+		verificationUri === null ||
+		verificationUri === undefined ||
+		verificationUri === ""
+	) {
 		throw new Error("Kimi device authorization response missing required fields");
 	}
 
@@ -126,19 +136,24 @@ async function requestDeviceAuthorization(): Promise<{
 		userCode,
 		deviceCode,
 		verificationUri,
-		verificationUriComplete: verificationUriComplete || verificationUri,
+		verificationUriComplete: verificationUriComplete ?? verificationUri,
 		expiresInMs,
 		intervalMs,
 	};
 }
 
 function parseTokenPayload(payload: TokenResponse, refreshTokenFallback?: string): OAuthCredentials {
-	if (!payload.access_token || typeof payload.expires_in !== "number") {
+	if (
+		payload.access_token === null ||
+		payload.access_token === undefined ||
+		payload.access_token === "" ||
+		typeof payload.expires_in !== "number"
+	) {
 		throw new Error("Kimi token response missing required fields");
 	}
 
 	const refresh = payload.refresh_token ?? refreshTokenFallback;
-	if (!refresh) {
+	if (refresh === null || refresh === undefined || refresh === "") {
 		throw new Error("Kimi token response missing refresh token");
 	}
 
@@ -159,7 +174,7 @@ async function pollForToken(
 	let waitMs = Math.max(1000, intervalMs);
 
 	while (Date.now() < deadline) {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			throw new Error("Login cancelled");
 		}
 
@@ -177,7 +192,12 @@ async function pollForToken(
 		});
 
 		const payload = (await response.json()) as TokenResponse;
-		if (response.ok && payload.access_token) {
+		if (
+			response.ok &&
+			payload.access_token !== null &&
+			payload.access_token !== undefined &&
+			payload.access_token !== ""
+		) {
 			return parseTokenPayload(payload);
 		}
 
@@ -190,7 +210,8 @@ async function pollForToken(
 		if (error === "slow_down") {
 			waitMs += 5000;
 			const retryAfter = typeof payload.interval === "number" ? payload.interval * 1000 : undefined;
-			if (retryAfter && retryAfter > waitMs) waitMs = retryAfter;
+			if (retryAfter !== null && retryAfter !== undefined && retryAfter !== 0 && retryAfter > waitMs)
+				waitMs = retryAfter;
 			await abortableSleep(waitMs, signal);
 			continue;
 		}
@@ -203,7 +224,12 @@ async function pollForToken(
 			throw new Error("Kimi device authorization denied");
 		}
 
-		const description = payload.error_description ? `: ${payload.error_description}` : "";
+		const description =
+			payload.error_description !== null &&
+			payload.error_description !== undefined &&
+			payload.error_description !== ""
+				? `: ${payload.error_description}`
+				: "";
 		throw new Error(`Kimi device flow failed: ${error ?? response.status}${description}`);
 	}
 
@@ -242,7 +268,12 @@ export async function refreshKimiToken(refreshToken: string): Promise<OAuthCrede
 
 	if (!response.ok) {
 		const payload = (await response.json().catch(() => undefined)) as TokenResponse | undefined;
-		const description = payload?.error_description ? `: ${payload.error_description}` : "";
+		const description =
+			payload?.error_description !== null &&
+			payload?.error_description !== undefined &&
+			payload?.error_description !== ""
+				? `: ${payload.error_description}`
+				: "";
 		throw new Error(`Kimi token refresh failed: ${response.status}${description}`);
 	}
 

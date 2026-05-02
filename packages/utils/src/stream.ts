@@ -37,10 +37,10 @@ export async function* readLines(stream: ReadableStream<Uint8Array>, signal?: Ab
 				yield tail;
 			}
 		}
-	} catch (err) {
+	} catch (error) {
 		// Abort errors are expected — just stop the generator.
-		if (signal?.aborted) return;
-		throw err;
+		if (signal !== undefined && signal.aborted) return;
+		throw error;
 	}
 }
 
@@ -59,16 +59,16 @@ export async function* readJsonl<T>(stream: ReadableStream<Uint8Array>, signal?:
 				if (values.length > 0) {
 					yield* values as T[];
 				}
-				if (error) throw error;
+				if (error !== null && error !== undefined) throw error;
 				if (!done) {
 					throw new Error("JSONL stream ended unexpectedly");
 				}
 			}
 		}
-	} catch (err) {
+	} catch (error) {
 		// Abort errors are expected — just stop the generator.
-		if (signal?.aborted) return;
-		throw err;
+		if (signal !== undefined && signal.aborted) return;
+		throw error;
 	}
 }
 
@@ -142,8 +142,8 @@ class ConcatSink {
 	}
 
 	flush(): Uint8Array | undefined {
-		if (!this.#length) return undefined;
-		return this.#space!.subarray(0, this.#length);
+		if (this.#length === 0 || this.#space === undefined) return undefined;
+		return this.#space.subarray(0, this.#length);
 	}
 
 	clear() {
@@ -178,7 +178,7 @@ class ConcatSink {
 			if (values.length > 0) {
 				yield* values as T[];
 			}
-			if (error) throw error;
+			if (error !== null && error !== undefined) throw error;
 			if (done) return;
 			this.reset(chunk.subarray(read, end));
 			return;
@@ -195,7 +195,7 @@ class ConcatSink {
 		if (values.length > 0) {
 			yield* values as T[];
 		}
-		if (error) throw error;
+		if (error !== null && error !== undefined) throw error;
 		if (done) {
 			this.#length = 0;
 			return;
@@ -267,11 +267,11 @@ export async function* readSseJson<T>(stream: ReadableStream<Uint8Array>, signal
 				yield* processLine(tail);
 			}
 		}
-	} catch (err) {
-		if (err === kDoneError) return;
+	} catch (error) {
+		if (error === kDoneError) return;
 		// Abort errors are expected — just stop the generator.
-		if (signal?.aborted) return;
-		throw err;
+		if (signal !== undefined && signal.aborted) return;
+		throw error;
 	}
 	if (!jsonBuffer.isEmpty) {
 		throw new Error("SSE stream ended unexpectedly");
@@ -296,13 +296,13 @@ export function parseJsonlLenient<T>(buffer: string): T[] {
 		const { values, error, read, done } = parseJsonlChunkCompat(buffer);
 		if (values.length > 0) {
 			const ext = values as T[];
-			if (!entries) {
+			if (entries === undefined) {
 				entries = ext;
 			} else {
 				entries.push(...ext);
 			}
 		}
-		if (error) {
+		if (error !== null && error !== undefined) {
 			const nextNewline = buffer.indexOf("\n", read);
 			if (nextNewline === -1) break;
 			buffer = buffer.substring(nextNewline + 1);

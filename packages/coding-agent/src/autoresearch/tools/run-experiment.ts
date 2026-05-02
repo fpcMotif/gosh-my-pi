@@ -85,7 +85,7 @@ export function createRunExperimentTool(
 		defaultInactive: true,
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const workDirError = validateWorkDir(ctx.cwd);
-			if (workDirError) {
+			if (workDirError !== null && workDirError !== undefined && workDirError !== "") {
 				return {
 					content: [{ type: "text", text: `Error: ${workDirError}` }],
 				};
@@ -98,7 +98,13 @@ export function createRunExperimentTool(
 			const autoresearchScriptPath = path.join(workDir, "autoresearch.sh");
 
 			const forceCommand = params.force === true;
-			if (!forceCommand && state.benchmarkCommand && params.command.trim() !== state.benchmarkCommand) {
+			if (
+				!forceCommand &&
+				state.benchmarkCommand !== null &&
+				state.benchmarkCommand !== undefined &&
+				state.benchmarkCommand !== "" &&
+				params.command.trim() !== state.benchmarkCommand
+			) {
 				return {
 					content: [
 						{
@@ -304,7 +310,7 @@ export function createRunExperimentTool(
 				metricName: state.metricName,
 				metricUnit: state.metricUnit,
 				preRunDirtyPaths,
-				truncation: llmTruncation.truncated ? llmTruncation : undefined,
+				truncation: llmTruncation.truncated === true ? llmTruncation : undefined,
 				fullOutputPath: execution.logPath,
 			};
 			runtime.lastRunSummary = {
@@ -358,7 +364,12 @@ export function createRunExperimentTool(
 
 			const commandWarnings: string[] = [];
 			if (forceCommand) {
-				if (state.benchmarkCommand && params.command.trim() !== state.benchmarkCommand) {
+				if (
+					state.benchmarkCommand !== null &&
+					state.benchmarkCommand !== undefined &&
+					state.benchmarkCommand !== "" &&
+					params.command.trim() !== state.benchmarkCommand
+				) {
 					commandWarnings.push(
 						`Warning: command override (force=true). Segment benchmark is ${state.benchmarkCommand}; ran ${params.command}.`,
 					);
@@ -410,7 +421,11 @@ export function createRunExperimentTool(
 				options.expanded ? details.tailOutput : details.tailOutput.split("\n").slice(-5).join("\n"),
 			);
 			const suffix =
-				options.expanded && details.truncation && details.fullOutputPath
+				options.expanded &&
+				details.truncation &&
+				details.fullOutputPath !== null &&
+				details.fullOutputPath !== undefined &&
+				details.fullOutputPath !== ""
 					? `\n${theme.fg("warning", `Full output: ${shortenPath(details.fullOutputPath)}`)}`
 					: "";
 			return new Text(preview ? `${statusText}\n${theme.fg("dim", preview)}${suffix}` : statusText, 0, 0);
@@ -489,15 +504,15 @@ async function executeProcess(options: {
 			runDirectory: path.dirname(options.logPath),
 			fullOutputPath: options.logPath,
 			tailOutput: tail.content,
-			truncation: tail.truncated ? tail : undefined,
+			truncation: tail.truncated === true ? tail : undefined,
 		};
 	};
 
 	const killTreeWithEscalation = (): void => {
-		if (!child.pid) return;
+		if (child.pid === null || child.pid === undefined || child.pid === 0) return;
 		killTree(child.pid);
 		forceKillTimeout = setTimeout(() => {
-			if (child.pid) killTree(child.pid, "SIGKILL");
+			if (child.pid !== null && child.pid !== undefined && child.pid !== 0) killTree(child.pid, "SIGKILL");
 		}, 1_000);
 		forceKillTimeout.unref?.();
 	};
@@ -519,7 +534,7 @@ async function executeProcess(options: {
 	const abortHandler = (): void => {
 		killTreeWithEscalation();
 	};
-	if (options.signal?.aborted) {
+	if (options.signal !== undefined && options.signal.aborted) {
 		abortHandler();
 	} else {
 		options.signal?.addEventListener("abort", abortHandler, { once: true });
@@ -539,7 +554,7 @@ async function executeProcess(options: {
 	child.on("close", async code => {
 		try {
 			await closeWriteStream();
-			if (options.signal?.aborted) {
+			if (options.signal !== undefined && options.signal.aborted) {
 				finish(() => reject(new Error("aborted")));
 				return;
 			}
@@ -621,13 +636,18 @@ function buildRunText(details: RunDetails, outputPreview: string, bestMetric: nu
 	}
 	lines.push("");
 	lines.push(outputPreview);
-	if (details.truncation && details.fullOutputPath) {
+	if (
+		details.truncation &&
+		details.fullOutputPath !== null &&
+		details.fullOutputPath !== undefined &&
+		details.fullOutputPath !== ""
+	) {
 		lines.push("");
 		lines.push(
 			`Output truncated (${formatBytes(EXPERIMENT_MAX_BYTES)} limit). Full output: ${details.fullOutputPath}`,
 		);
 	}
-	if (details.checksLogPath) {
+	if (details.checksLogPath !== null && details.checksLogPath !== undefined && details.checksLogPath !== "") {
 		lines.push(`Checks log: ${details.checksLogPath}`);
 	}
 	if (details.checksPass === false && details.checksOutput.length > 0) {

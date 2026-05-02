@@ -171,7 +171,7 @@ registerProvider<SlashCommand>(slashCommandCapability.id, {
 async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFile>> {
 	const load = async (filePath: string, level: "user" | "project"): Promise<ContextFile | null> => {
 		const content = await readFile(filePath);
-		if (!content) return null;
+		if (content === null || content === undefined || content === "") return null;
 		// filePath is <ancestor>/.agent(s)/AGENTS.md — go up past the config dir to the ancestor
 		const ancestorDir = path.dirname(path.dirname(filePath));
 		const depth = level === "project" ? calculateDepth(ctx.cwd, ancestorDir, path.sep) : undefined;
@@ -198,7 +198,7 @@ registerProvider<ContextFile>(contextFileCapability.id, {
 async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemPrompt>> {
 	const load = async (filePath: string, level: "user" | "project"): Promise<SystemPrompt | null> => {
 		const content = await readFile(filePath);
-		if (!content) return null;
+		if (content === null || content === undefined || content === "") return null;
 		return { path: filePath, content, level, _source: createSourceMeta(PROVIDER_ID, filePath, level) };
 	};
 

@@ -99,7 +99,7 @@ export const handleRfc: SpecialHandler = async (
 		const parsed = new URL(url);
 		const rfcNumber = extractRfcNumber(parsed);
 
-		if (!rfcNumber) return null;
+		if (rfcNumber === null || rfcNumber === undefined || rfcNumber === "") return null;
 
 		const fetchedAt = new Date().toISOString();
 		const notes: string[] = [];
@@ -129,49 +129,87 @@ export const handleRfc: SpecialHandler = async (
 			md += `# RFC ${rfcNumber}: ${metadata.title}\n\n`;
 
 			// Authors
-			if (metadata.authors?.length) {
+			if (
+				metadata.authors?.length !== null &&
+				metadata.authors?.length !== undefined &&
+				metadata.authors?.length !== 0
+			) {
 				const authorList = metadata.authors
-					.map(a => (a.affiliation ? `${a.name} (${a.affiliation})` : a.name))
+					.map(a =>
+						a.affiliation !== null && a.affiliation !== undefined && a.affiliation !== ""
+							? `${a.name} (${a.affiliation})`
+							: a.name,
+					)
 					.join(", ");
 				md += `**Authors:** ${authorList}\n`;
 			}
 
 			// Publication info
-			if (metadata.pub_date) md += `**Published:** ${metadata.pub_date}\n`;
-			if (metadata.current_status) md += `**Status:** ${metadata.current_status}\n`;
-			if (metadata.stream) md += `**Stream:** ${metadata.stream}\n`;
-			if (metadata.area) md += `**Area:** ${metadata.area}\n`;
-			if (metadata.wg_acronym) md += `**Working Group:** ${metadata.wg_acronym}\n`;
-			if (metadata.page_count) md += `**Pages:** ${metadata.page_count}\n`;
+			if (metadata.pub_date !== null && metadata.pub_date !== undefined && metadata.pub_date !== "")
+				md += `**Published:** ${metadata.pub_date}\n`;
+			if (
+				metadata.current_status !== null &&
+				metadata.current_status !== undefined &&
+				metadata.current_status !== ""
+			)
+				md += `**Status:** ${metadata.current_status}\n`;
+			if (metadata.stream !== null && metadata.stream !== undefined && metadata.stream !== "")
+				md += `**Stream:** ${metadata.stream}\n`;
+			if (metadata.area !== null && metadata.area !== undefined && metadata.area !== "")
+				md += `**Area:** ${metadata.area}\n`;
+			if (metadata.wg_acronym !== null && metadata.wg_acronym !== undefined && metadata.wg_acronym !== "")
+				md += `**Working Group:** ${metadata.wg_acronym}\n`;
+			if (metadata.page_count !== null && metadata.page_count !== undefined && metadata.page_count !== 0)
+				md += `**Pages:** ${metadata.page_count}\n`;
 
 			// Related RFCs
-			if (metadata.obsoletes?.length) {
+			if (
+				metadata.obsoletes?.length !== null &&
+				metadata.obsoletes?.length !== undefined &&
+				metadata.obsoletes?.length !== 0
+			) {
 				md += `**Obsoletes:** ${metadata.obsoletes.join(", ")}\n`;
 			}
-			if (metadata.obsoleted_by?.length) {
+			if (
+				metadata.obsoleted_by?.length !== null &&
+				metadata.obsoleted_by?.length !== undefined &&
+				metadata.obsoleted_by?.length !== 0
+			) {
 				md += `**Obsoleted by:** ${metadata.obsoleted_by.join(", ")}\n`;
 			}
-			if (metadata.updates?.length) {
+			if (
+				metadata.updates?.length !== null &&
+				metadata.updates?.length !== undefined &&
+				metadata.updates?.length !== 0
+			) {
 				md += `**Updates:** ${metadata.updates.join(", ")}\n`;
 			}
-			if (metadata.updated_by?.length) {
+			if (
+				metadata.updated_by?.length !== null &&
+				metadata.updated_by?.length !== undefined &&
+				metadata.updated_by?.length !== 0
+			) {
 				md += `**Updated by:** ${metadata.updated_by.join(", ")}\n`;
 			}
 
 			// Keywords
-			if (metadata.keywords?.length) {
+			if (
+				metadata.keywords?.length !== null &&
+				metadata.keywords?.length !== undefined &&
+				metadata.keywords?.length !== 0
+			) {
 				md += `**Keywords:** ${metadata.keywords.join(", ")}\n`;
 			}
 
 			// Errata
-			if (metadata.errata_url) {
+			if (metadata.errata_url !== null && metadata.errata_url !== undefined && metadata.errata_url !== "") {
 				md += `**Errata:** ${metadata.errata_url}\n`;
 			}
 
 			md += "\n";
 
 			// Abstract from metadata
-			if (metadata.abstract) {
+			if (metadata.abstract !== null && metadata.abstract !== undefined && metadata.abstract !== "") {
 				md += `## Abstract\n\n${metadata.abstract}\n\n`;
 			}
 

@@ -66,17 +66,18 @@ export const handleAur: SpecialHandler = async (
 		const pkg = data.results[0];
 
 		let md = `# ${pkg.Name}\n\n`;
-		if (pkg.Description) md += `${pkg.Description}\n\n`;
+		if (pkg.Description !== null && pkg.Description !== undefined && pkg.Description !== "")
+			md += `${pkg.Description}\n\n`;
 
 		// Package info
 		md += `**Version:** ${pkg.Version}`;
-		if (pkg.OutOfDate) {
+		if (pkg.OutOfDate !== null && pkg.OutOfDate !== undefined && pkg.OutOfDate !== 0) {
 			const outOfDateDate = formatIsoDate(pkg.OutOfDate * 1000);
 			md += ` (flagged out-of-date: ${outOfDateDate})`;
 		}
 		md += "\n";
 
-		if (pkg.Maintainer) {
+		if (pkg.Maintainer !== null && pkg.Maintainer !== undefined && pkg.Maintainer !== "") {
 			md += `**Maintainer:** [${pkg.Maintainer}](https://aur.archlinux.org/account/${pkg.Maintainer})\n`;
 		} else {
 			md += "**Maintainer:** Orphaned\n";
@@ -89,33 +90,39 @@ export const handleAur: SpecialHandler = async (
 		const firstSubmitted = formatIsoDate(pkg.FirstSubmitted * 1000);
 		md += `**Last Updated:** ${lastModified} · **First Submitted:** ${firstSubmitted}\n`;
 
-		if (pkg.License?.length) md += `**License:** ${pkg.License.join(", ")}\n`;
-		if (pkg.URL) md += `**Upstream:** ${pkg.URL}\n`;
-		if (pkg.Keywords?.length) md += `**Keywords:** ${pkg.Keywords.join(", ")}\n`;
+		if (pkg.License?.length !== null && pkg.License?.length !== undefined && pkg.License?.length !== 0)
+			md += `**License:** ${pkg.License.join(", ")}\n`;
+		if (pkg.URL !== null && pkg.URL !== undefined && pkg.URL !== "") md += `**Upstream:** ${pkg.URL}\n`;
+		if (pkg.Keywords?.length !== null && pkg.Keywords?.length !== undefined && pkg.Keywords?.length !== 0)
+			md += `**Keywords:** ${pkg.Keywords.join(", ")}\n`;
 
 		// Dependencies
-		if (pkg.Depends?.length) {
+		if (pkg.Depends?.length !== null && pkg.Depends?.length !== undefined && pkg.Depends?.length !== 0) {
 			md += `\n## Dependencies (${pkg.Depends.length})\n\n`;
 			for (const dep of pkg.Depends) {
 				md += `- ${dep}\n`;
 			}
 		}
 
-		if (pkg.MakeDepends?.length) {
+		if (pkg.MakeDepends?.length !== null && pkg.MakeDepends?.length !== undefined && pkg.MakeDepends?.length !== 0) {
 			md += `\n## Make Dependencies (${pkg.MakeDepends.length})\n\n`;
 			for (const dep of pkg.MakeDepends) {
 				md += `- ${dep}\n`;
 			}
 		}
 
-		if (pkg.OptDepends?.length) {
+		if (pkg.OptDepends?.length !== null && pkg.OptDepends?.length !== undefined && pkg.OptDepends?.length !== 0) {
 			md += `\n## Optional Dependencies\n\n`;
 			for (const dep of pkg.OptDepends) {
 				md += `- ${dep}\n`;
 			}
 		}
 
-		if (pkg.CheckDepends?.length) {
+		if (
+			pkg.CheckDepends?.length !== null &&
+			pkg.CheckDepends?.length !== undefined &&
+			pkg.CheckDepends?.length !== 0
+		) {
 			md += `\n## Check Dependencies\n\n`;
 			for (const dep of pkg.CheckDepends) {
 				md += `- ${dep}\n`;
@@ -123,21 +130,21 @@ export const handleAur: SpecialHandler = async (
 		}
 
 		// Package relationships
-		if (pkg.Provides?.length) {
+		if (pkg.Provides?.length !== null && pkg.Provides?.length !== undefined && pkg.Provides?.length !== 0) {
 			md += `\n## Provides\n\n`;
 			for (const p of pkg.Provides) {
 				md += `- ${p}\n`;
 			}
 		}
 
-		if (pkg.Conflicts?.length) {
+		if (pkg.Conflicts?.length !== null && pkg.Conflicts?.length !== undefined && pkg.Conflicts?.length !== 0) {
 			md += `\n## Conflicts\n\n`;
 			for (const c of pkg.Conflicts) {
 				md += `- ${c}\n`;
 			}
 		}
 
-		if (pkg.Replaces?.length) {
+		if (pkg.Replaces?.length !== null && pkg.Replaces?.length !== undefined && pkg.Replaces?.length !== 0) {
 			md += `\n## Replaces\n\n`;
 			for (const r of pkg.Replaces) {
 				md += `- ${r}\n`;

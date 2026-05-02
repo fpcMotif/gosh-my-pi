@@ -64,9 +64,9 @@ export class PluginManager {
 		const lockPath = getPluginsLockfile();
 		try {
 			return await Bun.file(lockPath).json();
-		} catch (err) {
-			if (isEnoent(err)) return { plugins: {}, settings: {} };
-			logger.warn("Failed to load plugin runtime config", { path: lockPath, error: String(err) });
+		} catch (error) {
+			if (isEnoent(error)) return { plugins: {}, settings: {} };
+			logger.warn("Failed to load plugin runtime config", { path: lockPath, error: String(error) });
 			return { plugins: {}, settings: {} };
 		}
 	}
@@ -87,9 +87,9 @@ export class PluginManager {
 		const overridesPath = getProjectPluginOverridesPath(this.#cwd);
 		try {
 			return await Bun.file(overridesPath).json();
-		} catch (err) {
-			if (isEnoent(err)) return {};
-			logger.warn("Failed to load project plugin overrides", { path: overridesPath, error: String(err) });
+		} catch (error) {
+			if (isEnoent(error)) return {};
+			logger.warn("Failed to load project plugin overrides", { path: overridesPath, error: String(error) });
 			return {};
 		}
 	}
@@ -107,8 +107,8 @@ export class PluginManager {
 		const pkgJsonPath = getPluginsPackageJson();
 		try {
 			await Bun.file(pkgJsonPath).json();
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				await Bun.write(
 					pkgJsonPath,
 					JSON.stringify(
@@ -123,7 +123,7 @@ export class PluginManager {
 				);
 				return;
 			}
-			throw err;
+			throw error;
 		}
 	}
 
@@ -144,7 +144,7 @@ export class PluginManager {
 
 		await this.#ensurePackageJson();
 
-		if (options.dryRun) {
+		if (options.dryRun === true) {
 			return {
 				name: spec.packageName,
 				version: "0.0.0-dryrun",
@@ -177,11 +177,11 @@ export class PluginManager {
 		let pkg: { name: string; version: string; omp?: PluginManifest; pi?: PluginManifest };
 		try {
 			pkg = await Bun.file(pkgPath).json();
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				throw new Error(`Package installed but package.json not found at ${pkgPath}`);
 			}
-			throw err;
+			throw error;
 		}
 		const manifest: PluginManifest = pkg.omp || pkg.pi || { version: pkg.version };
 		manifest.version = pkg.version;
@@ -265,9 +265,9 @@ export class PluginManager {
 		let pkg: { dependencies?: Record<string, string> };
 		try {
 			pkg = await Bun.file(pkgJsonPath).json();
-		} catch (err) {
-			if (isEnoent(err)) return [];
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) return [];
+			throw error;
 		}
 
 		const deps = pkg.dependencies || {};
@@ -280,9 +280,9 @@ export class PluginManager {
 			let pluginPkg: { version: string; omp?: PluginManifest; pi?: PluginManifest };
 			try {
 				pluginPkg = await Bun.file(pluginPkgPath).json();
-			} catch (err) {
-				if (isEnoent(err)) continue;
-				throw err;
+			} catch (error) {
+				if (isEnoent(error)) continue;
+				throw error;
 			}
 			const manifest: PluginManifest = pluginPkg.omp || pluginPkg.pi || { version: pluginPkg.version };
 			manifest.version = pluginPkg.version;
@@ -320,11 +320,11 @@ export class PluginManager {
 		let pkg: { name?: string; version: string; omp?: PluginManifest; pi?: PluginManifest };
 		try {
 			pkg = await Bun.file(pkgFilePath).json();
-		} catch (err) {
-			if (isEnoent(err)) throw new Error(`package.json not found at ${absolutePath}`);
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) throw new Error(`package.json not found at ${absolutePath}`);
+			throw error;
 		}
-		if (!pkg.name) {
+		if (pkg.name === null || pkg.name === undefined || pkg.name === "") {
 			throw new Error("package.json must have a name field");
 		}
 
@@ -344,8 +344,8 @@ export class PluginManager {
 			if (stats.isSymbolicLink() || stats.isDirectory()) {
 				await fs.promises.unlink(linkPath);
 			}
-		} catch (err) {
-			if (!isEnoent(err)) throw err;
+		} catch (error) {
+			if (!isEnoent(error)) throw error;
 		}
 
 		await fs.promises.symlink(absolutePath, linkPath);
@@ -493,12 +493,12 @@ export class PluginManager {
 		let hasPkgJson = true;
 		try {
 			pkg = await Bun.file(pkgJsonPath).json();
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				hasPkgJson = false;
 				pkg = {};
 			} else {
-				throw err;
+				throw error;
 			}
 		}
 		checks.push({
@@ -512,7 +512,7 @@ export class PluginManager {
 		const hasNodeModules = fs.existsSync(nodeModulesPath);
 		checks.push({
 			name: "node_modules",
-			status: hasNodeModules ? "ok" : hasPkgJson ? "error" : "warning",
+			status: hasNodeModules ? "ok" : (hasPkgJson ? "error" : "warning"),
 			message: hasNodeModules ? "Found" : "Missing (run npm install in plugins dir)",
 		});
 
@@ -529,10 +529,10 @@ export class PluginManager {
 			let pluginPkg: { version: string; description?: string; omp?: PluginManifest; pi?: PluginManifest };
 			try {
 				pluginPkg = await Bun.file(pluginPkgPath).json();
-			} catch (err) {
-				if (isEnoent(err)) {
+			} catch (error) {
+				if (isEnoent(error)) {
 					if (!fs.existsSync(pluginPath)) {
-						const fixed = options.fix ? await this.#fixMissingPlugin() : false;
+						const fixed = options.fix === true ? await this.#fixMissingPlugin() : false;
 						checks.push({
 							name: `plugin:${name}`,
 							status: "error",
@@ -548,7 +548,7 @@ export class PluginManager {
 					}
 					continue;
 				}
-				throw err;
+				throw error;
 			}
 			const hasManifest = !!(pluginPkg.omp || pluginPkg.pi);
 			const manifest: PluginManifest | undefined = pluginPkg.omp || pluginPkg.pi;
@@ -557,12 +557,12 @@ export class PluginManager {
 				name: `plugin:${name}`,
 				status: hasManifest ? "ok" : "warning",
 				message: hasManifest
-					? `v${pluginPkg.version}${pluginPkg.description ? ` - ${pluginPkg.description}` : ""}`
+					? `v${pluginPkg.version}${pluginPkg.description !== null && pluginPkg.description !== undefined && pluginPkg.description !== "" ? ` - ${pluginPkg.description}` : ""}`
 					: `v${pluginPkg.version} - No omp/pi manifest (not an omp plugin)`,
 			});
 
 			// Check tools path exists if specified
-			if (manifest?.tools) {
+			if (manifest?.tools !== null && manifest?.tools !== undefined && manifest?.tools !== "") {
 				const toolsPath = path.join(pluginPath, manifest.tools);
 				if (!fs.existsSync(toolsPath)) {
 					checks.push({
@@ -574,7 +574,7 @@ export class PluginManager {
 			}
 
 			// Check hooks path exists if specified
-			if (manifest?.hooks) {
+			if (manifest?.hooks !== null && manifest?.hooks !== undefined && manifest?.hooks !== "") {
 				const hooksPath = path.join(pluginPath, manifest.hooks);
 				if (!fs.existsSync(hooksPath)) {
 					checks.push({
@@ -604,7 +604,7 @@ export class PluginManager {
 			if (runtimeState?.enabledFeatures && manifest?.features) {
 				for (const feat of runtimeState.enabledFeatures) {
 					if (!(feat in manifest.features)) {
-						const fixed = options.fix ? await this.#removeInvalidFeature(name, feat) : false;
+						const fixed = options.fix === true ? await this.#removeInvalidFeature(name, feat) : false;
 						checks.push({
 							name: `plugin:${name}:feature:${feat}`,
 							status: "warning",
@@ -619,7 +619,7 @@ export class PluginManager {
 		// Check for orphaned runtime config entries
 		for (const name of Object.keys(config.plugins)) {
 			if (!(name in deps)) {
-				const fixed = options.fix ? await this.#removeOrphanedConfig(name) : false;
+				const fixed = options.fix === true ? await this.#removeOrphanedConfig(name) : false;
 				checks.push({
 					name: `orphan:${name}`,
 					status: "warning",

@@ -24,7 +24,7 @@ const resolvePythonPath = (): string | null => {
 
 const pythonPath = resolvePythonPath();
 const hasKernelDeps = (() => {
-	if (!pythonPath) return false;
+	if (pythonPath === null || pythonPath === undefined || pythonPath === "") return false;
 	const result = Bun.spawnSync(
 		[
 			pythonPath,

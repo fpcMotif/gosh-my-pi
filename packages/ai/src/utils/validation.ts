@@ -92,7 +92,7 @@ function tryParseNumberString(value: string, expectedTypes: string[]): { value: 
 
 function tryParseLeadingJsonContainer(value: string): unknown | undefined {
 	const firstChar = value[0];
-	const closingChar = firstChar === "{" ? "}" : firstChar === "[" ? "]" : undefined;
+	const closingChar = firstChar === "{" ? "}" : (firstChar === "[" ? "]" : undefined);
 	if (!closingChar) return undefined;
 
 	let depth = 0;
@@ -748,10 +748,13 @@ export function validateToolArguments(tool: Tool, toolCall: ToolCall): ToolCall[
 	const errors =
 		validate.errors
 			?.map((err: any) => {
-				const path = err.instancePath ? err.instancePath.substring(1) : err.params.missingProperty || "root";
+				const path =
+					err.instancePath !== null && err.instancePath !== undefined && err.instancePath !== ""
+						? err.instancePath.substring(1)
+						: (err.params.missingProperty ?? "root");
 				return `  - ${path}: ${err.message}`;
 			})
-			.join("\n") || "Unknown validation error";
+			.join("\n") ?? "Unknown validation error";
 
 	const receivedArgs = changed
 		? {

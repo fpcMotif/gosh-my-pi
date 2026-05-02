@@ -166,7 +166,10 @@ export function validateTypeConsistency(
 			if (!hasBuild) errors.push("Build commit should include build-related files");
 			break;
 		case "refactor": {
-			const hasNewFiles = options.diffText ? /\nnew file mode\s/m.test(options.diffText) : false;
+			const hasNewFiles =
+				options.diffText !== null && options.diffText !== undefined && options.diffText !== ""
+					? /\nnew file mode\s/m.test(options.diffText)
+					: false;
 			if (hasNewFiles) warnings.push("Refactor commit adds new files; consider feat if new functionality");
 			break;
 		}

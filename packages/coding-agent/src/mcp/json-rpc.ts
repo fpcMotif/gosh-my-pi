@@ -14,7 +14,7 @@ export function parseSSE(text: string): unknown {
 			const data = line.slice(6).trim();
 			if (data === "[DONE]") continue;
 			const result = JSON.parse(data) as unknown;
-			if (result) return result;
+			if (result !== null && result !== undefined) return result;
 		}
 	}
 	// Fallback: try parsing entire response as JSON

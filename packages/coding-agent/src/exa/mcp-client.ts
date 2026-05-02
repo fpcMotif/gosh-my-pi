@@ -74,7 +74,7 @@ function normalizeMcpToolPayload(payload: unknown): unknown {
 /** Fetch available tools from Exa MCP */
 export async function fetchExaTools(apiKey: string | null, toolNames: string[]): Promise<MCPTool[]> {
 	const params = new URLSearchParams();
-	if (apiKey) params.set("exaApiKey", apiKey);
+	if (apiKey !== null && apiKey !== undefined && apiKey !== "") params.set("exaApiKey", apiKey);
 	params.set("toolNames", toolNames.join(","));
 	const url = `https://mcp.exa.ai/mcp?${params.toString()}`;
 	const response = (await callMCP(url, "tools/list")) as MCPToolsResponse;
@@ -107,7 +107,7 @@ export async function callExaTool(
 	apiKey: string | null,
 ): Promise<unknown> {
 	const params = new URLSearchParams();
-	if (apiKey) params.set("exaApiKey", apiKey);
+	if (apiKey !== null && apiKey !== undefined && apiKey !== "") params.set("exaApiKey", apiKey);
 	params.set("tools", toolName);
 	const url = `https://mcp.exa.ai/mcp?${params.toString()}`;
 	const response = (await callMCP(url, "tools/call", {
@@ -152,11 +152,12 @@ export function formatSearchResults(data: ExaSearchResponse): string {
 	for (let i = 0; i < results.length; i++) {
 		const r = results[i];
 		output += `\n## ${r.title ?? "Untitled"}`;
-		if (r.url) output += `\n**URL:** ${r.url}`;
-		if (r.author) output += `\n**Author:** ${r.author}`;
-		if (r.publishedDate) output += `\n**Published Date:** ${r.publishedDate}`;
-		if (r.text) output += `\n**Text:** ${r.text}`;
-		if (r.highlights?.length) {
+		if (r.url !== null && r.url !== undefined && r.url !== "") output += `\n**URL:** ${r.url}`;
+		if (r.author !== null && r.author !== undefined && r.author !== "") output += `\n**Author:** ${r.author}`;
+		if (r.publishedDate !== null && r.publishedDate !== undefined && r.publishedDate !== "")
+			output += `\n**Published Date:** ${r.publishedDate}`;
+		if (r.text !== null && r.text !== undefined && r.text !== "") output += `\n**Text:** ${r.text}`;
+		if (r.highlights?.length !== null && r.highlights?.length !== undefined && r.highlights?.length !== 0) {
 			output += `\n**Highlights:**`;
 			for (const h of r.highlights) {
 				output += `\n- ${h}`;
@@ -168,7 +169,7 @@ export function formatSearchResults(data: ExaSearchResponse): string {
 	if (data.costDollars) {
 		output += `\n**Cost:** $${data.costDollars.total.toFixed(4)}`;
 	}
-	if (data.searchTime) {
+	if (data.searchTime !== null && data.searchTime !== undefined && data.searchTime !== 0) {
 		output += `\n**Search Time:** ${data.searchTime.toFixed(2)}s`;
 	}
 
@@ -223,8 +224,8 @@ export class MCPWrappedTool implements CustomTool<TSchema, ExaRenderDetails> {
 
 	constructor(
 		private readonly config: MCPToolWrapperConfig,
-		public readonly parameters: TSchema,
-		public readonly description: string,
+		readonly parameters: TSchema,
+		readonly description: string,
 	) {
 		this.name = config.name;
 		this.label = config.label;
@@ -240,16 +241,17 @@ export class MCPWrappedTool implements CustomTool<TSchema, ExaRenderDetails> {
 		try {
 			const apiKey = findApiKey();
 			// Websets tools require an API key; basic Exa MCP tools work without one
-			if (!apiKey && this.config.isWebsetsTool) {
+			if ((apiKey === null || apiKey === undefined || apiKey === "") && this.config.isWebsetsTool === true) {
 				return {
 					content: [{ type: "text" as const, text: "Error: EXA_API_KEY required for Websets tools" }],
 					details: { error: "EXA_API_KEY required for Websets tools", toolName: this.config.name },
 				};
 			}
 
-			const response = this.config.isWebsetsTool
-				? await callWebsetsTool(apiKey!, this.config.mcpToolName, params as Record<string, unknown>)
-				: await callExaTool(this.config.mcpToolName, params as Record<string, unknown>, apiKey);
+			const response =
+				this.config.isWebsetsTool === true
+					? await callWebsetsTool(apiKey!, this.config.mcpToolName, params as Record<string, unknown>)
+					: await callExaTool(this.config.mcpToolName, params as Record<string, unknown>, apiKey);
 
 			if (isSearchResponse(response)) {
 				const formatted = formatSearchResults(response);

@@ -88,11 +88,12 @@ export const handleBrew: SpecialHandler = async (
 		if (isFormula) {
 			const formula: BrewFormula = JSON.parse(result.content);
 
-			md = `# ${formula.full_name || formula.name}\n\n`;
-			if (formula.desc) md += `${formula.desc}\n\n`;
+			md = `# ${formula.full_name ?? formula.name}\n\n`;
+			if (formula.desc !== null && formula.desc !== undefined && formula.desc !== "") md += `${formula.desc}\n\n`;
 
-			md += `**Version:** ${formula.versions?.stable || "unknown"}`;
-			if (formula.license) md += ` · **License:** ${formula.license}`;
+			md += `**Version:** ${formula.versions?.stable ?? "unknown"}`;
+			if (formula.license !== null && formula.license !== undefined && formula.license !== "")
+				md += ` · **License:** ${formula.license}`;
 			md += "\n";
 
 			const installs = getInstallCount(formula.analytics);
@@ -103,40 +104,53 @@ export const handleBrew: SpecialHandler = async (
 
 			md += `\`\`\`bash\nbrew install ${formula.name}\n\`\`\`\n\n`;
 
-			if (formula.homepage) md += `**Homepage:** ${formula.homepage}\n`;
+			if (formula.homepage !== null && formula.homepage !== undefined && formula.homepage !== "")
+				md += `**Homepage:** ${formula.homepage}\n`;
 
-			if (formula.dependencies?.length) {
+			if (
+				formula.dependencies?.length !== null &&
+				formula.dependencies?.length !== undefined &&
+				formula.dependencies?.length !== 0
+			) {
 				md += `\n## Dependencies\n\n`;
 				for (const dep of formula.dependencies) {
 					md += `- ${dep}\n`;
 				}
 			}
 
-			if (formula.build_dependencies?.length) {
+			if (
+				formula.build_dependencies?.length !== null &&
+				formula.build_dependencies?.length !== undefined &&
+				formula.build_dependencies?.length !== 0
+			) {
 				md += `\n## Build Dependencies\n\n`;
 				for (const dep of formula.build_dependencies) {
 					md += `- ${dep}\n`;
 				}
 			}
 
-			if (formula.conflicts_with?.length) {
+			if (
+				formula.conflicts_with?.length !== null &&
+				formula.conflicts_with?.length !== undefined &&
+				formula.conflicts_with?.length !== 0
+			) {
 				md += `\n## Conflicts With\n\n`;
 				for (const conflict of formula.conflicts_with) {
 					md += `- ${conflict}\n`;
 				}
 			}
 
-			if (formula.caveats) {
+			if (formula.caveats !== null && formula.caveats !== undefined && formula.caveats !== "") {
 				md += `\n## Caveats\n\n${formula.caveats}\n`;
 			}
 		} else {
 			const cask: BrewCask = JSON.parse(result.content);
 
-			const displayName = cask.name?.[0] || cask.token;
+			const displayName = cask.name?.[0] ?? cask.token;
 			md = `# ${displayName}\n\n`;
-			if (cask.desc) md += `${cask.desc}\n\n`;
+			if (cask.desc !== null && cask.desc !== undefined && cask.desc !== "") md += `${cask.desc}\n\n`;
 
-			md += `**Version:** ${cask.version || "unknown"}\n`;
+			md += `**Version:** ${cask.version ?? "unknown"}\n`;
 
 			const installs = getInstallCount(cask.analytics);
 			if (installs !== null) {
@@ -146,16 +160,21 @@ export const handleBrew: SpecialHandler = async (
 
 			md += `\`\`\`bash\nbrew install --cask ${cask.token}\n\`\`\`\n\n`;
 
-			if (cask.homepage) md += `**Homepage:** ${cask.homepage}\n`;
+			if (cask.homepage !== null && cask.homepage !== undefined && cask.homepage !== "")
+				md += `**Homepage:** ${cask.homepage}\n`;
 
-			if (cask.conflicts_with?.cask?.length) {
+			if (
+				cask.conflicts_with?.cask?.length !== null &&
+				cask.conflicts_with?.cask?.length !== undefined &&
+				cask.conflicts_with?.cask?.length !== 0
+			) {
 				md += `\n## Conflicts With\n\n`;
 				for (const conflict of cask.conflicts_with.cask) {
 					md += `- ${conflict}\n`;
 				}
 			}
 
-			if (cask.caveats) {
+			if (cask.caveats !== null && cask.caveats !== undefined && cask.caveats !== "") {
 				md += `\n## Caveats\n\n${cask.caveats}\n`;
 			}
 		}

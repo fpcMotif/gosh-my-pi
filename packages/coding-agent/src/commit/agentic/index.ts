@@ -142,7 +142,13 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		process.stderr.write(`Agent error: ${errorMessage}\n`);
-		if (error instanceof Error && error.stack && $env.DEBUG) {
+		if (
+			error instanceof Error &&
+			error.stack !== null &&
+			error.stack !== undefined &&
+			error.stack !== "" &&
+			$env.DEBUG
+		) {
 			process.stderr.write(`${error.stack}\n`);
 		}
 		process.stdout.write("● Using fallback commit generation...\n");
@@ -332,9 +338,9 @@ async function loadExistingChangelogEntries(paths: string[]): Promise<ExistingCh
 			let content: string;
 			try {
 				content = await Bun.file(path).text();
-			} catch (err) {
-				if (isEnoent(err)) return null;
-				throw err;
+			} catch (error) {
+				if (isEnoent(error)) return null;
+				throw error;
 			}
 			try {
 				const unreleased = parseUnreleasedSection(content);

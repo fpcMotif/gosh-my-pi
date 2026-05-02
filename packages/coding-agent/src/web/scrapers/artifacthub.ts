@@ -83,39 +83,45 @@ export const handleArtifactHub: SpecialHandler = async (
 		const pkg = tryParseJson<ArtifactHubPackage>(result.content);
 		if (!pkg) return null;
 
-		const displayName = pkg.display_name || pkg.name;
+		const displayName = pkg.display_name ?? pkg.name;
 		const kindLabel = formatKindLabel(kind);
 
 		let md = `# ${displayName}\n\n`;
-		if (pkg.description) md += `${pkg.description}\n\n`;
+		if (pkg.description !== null && pkg.description !== undefined && pkg.description !== "")
+			md += `${pkg.description}\n\n`;
 
 		// Basic info line
 		md += `**Type:** ${kindLabel}`;
 		md += ` · **Version:** ${pkg.version}`;
-		if (pkg.app_version) md += ` · **App Version:** ${pkg.app_version}`;
-		if (pkg.license) md += ` · **License:** ${pkg.license}`;
+		if (pkg.app_version !== null && pkg.app_version !== undefined && pkg.app_version !== "")
+			md += ` · **App Version:** ${pkg.app_version}`;
+		if (pkg.license !== null && pkg.license !== undefined && pkg.license !== "")
+			md += ` · **License:** ${pkg.license}`;
 		md += "\n";
 
 		// Stats and badges
 		const badges: string[] = [];
-		if (pkg.official) badges.push("Official");
-		if (pkg.signed) badges.push("Signed");
-		if (pkg.stars) badges.push(`${formatNumber(pkg.stars)} stars`);
+		if (pkg.official === true) badges.push("Official");
+		if (pkg.signed === true) badges.push("Signed");
+		if (pkg.stars !== null && pkg.stars !== undefined && pkg.stars !== 0)
+			badges.push(`${formatNumber(pkg.stars)} stars`);
 		if (badges.length > 0) md += `**${badges.join(" · ")}**\n`;
 		md += "\n";
 
 		// Repository info
 		const repoDisplay =
-			pkg.repository.organization_display_name || pkg.repository.display_name || pkg.repository.name;
+			pkg.repository.organization_display_name ?? pkg.repository.display_name ?? pkg.repository.name;
 		md += `**Repository:** ${repoDisplay}`;
 		if (pkg.repository.url) md += ` ([${pkg.repository.url}](${pkg.repository.url}))`;
 		md += "\n";
 
-		if (pkg.home_url) md += `**Homepage:** ${pkg.home_url}\n`;
-		if (pkg.keywords?.length) md += `**Keywords:** ${pkg.keywords.join(", ")}\n`;
+		if (pkg.home_url !== null && pkg.home_url !== undefined && pkg.home_url !== "")
+			md += `**Homepage:** ${pkg.home_url}\n`;
+		if (pkg.keywords?.length !== null && pkg.keywords?.length !== undefined && pkg.keywords?.length !== 0)
+			md += `**Keywords:** ${pkg.keywords.join(", ")}\n`;
 
 		// Maintainers
-		if (pkg.maintainers?.length) {
+		if (pkg.maintainers?.length !== null && pkg.maintainers?.length !== undefined && pkg.maintainers?.length !== 0) {
 			const maintainerNames = pkg.maintainers.map(m => m.name).join(", ");
 			md += `**Maintainers:** ${maintainerNames}\n`;
 		}
@@ -124,17 +130,18 @@ export const handleArtifactHub: SpecialHandler = async (
 		if (pkg.security_report_summary) {
 			const sec = pkg.security_report_summary;
 			const parts: string[] = [];
-			if (sec.critical) parts.push(`${sec.critical} critical`);
-			if (sec.high) parts.push(`${sec.high} high`);
-			if (sec.medium) parts.push(`${sec.medium} medium`);
-			if (sec.low) parts.push(`${sec.low} low`);
+			if (sec.critical !== null && sec.critical !== undefined && sec.critical !== 0)
+				parts.push(`${sec.critical} critical`);
+			if (sec.high !== null && sec.high !== undefined && sec.high !== 0) parts.push(`${sec.high} high`);
+			if (sec.medium !== null && sec.medium !== undefined && sec.medium !== 0) parts.push(`${sec.medium} medium`);
+			if (sec.low !== null && sec.low !== undefined && sec.low !== 0) parts.push(`${sec.low} low`);
 			if (parts.length > 0) {
 				md += `**Security:** ${parts.join(", ")}\n`;
 			}
 		}
 
 		// Links
-		if (pkg.links?.length) {
+		if (pkg.links?.length !== null && pkg.links?.length !== undefined && pkg.links?.length !== 0) {
 			md += `\n## Links\n\n`;
 			for (const link of pkg.links) {
 				md += `- [${link.name}](${link.url})\n`;
@@ -142,12 +149,16 @@ export const handleArtifactHub: SpecialHandler = async (
 		}
 
 		// Install instructions
-		if (pkg.install) {
+		if (pkg.install !== null && pkg.install !== undefined && pkg.install !== "") {
 			md += `\n## Installation\n\n\`\`\`bash\n${pkg.install.trim()}\n\`\`\`\n`;
 		}
 
 		// Recent versions
-		if (pkg.available_versions?.length) {
+		if (
+			pkg.available_versions?.length !== null &&
+			pkg.available_versions?.length !== undefined &&
+			pkg.available_versions?.length !== 0
+		) {
 			md += `\n## Recent Versions\n\n`;
 			for (const ver of pkg.available_versions.slice(0, 5)) {
 				const date = formatIsoDate(ver.ts * 1000);
@@ -156,7 +167,7 @@ export const handleArtifactHub: SpecialHandler = async (
 		}
 
 		// README
-		if (pkg.readme) {
+		if (pkg.readme !== null && pkg.readme !== undefined && pkg.readme !== "") {
 			md += `\n---\n\n## README\n\n${pkg.readme}\n`;
 		}
 

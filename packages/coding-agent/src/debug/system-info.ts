@@ -54,7 +54,7 @@ export async function collectSystemInfo(): Promise<SystemInfo> {
 	let osStr = `${os.type()} ${os.release()} (${os.platform()})`;
 	if (os.platform() === "darwin") {
 		const name = macosMarketingName(os.release());
-		if (name) osStr = `${osStr} ${name}`;
+		if (name !== null && name !== undefined && name !== "") osStr = `${osStr} ${name}`;
 	}
 
 	return {
@@ -91,7 +91,7 @@ export function formatSystemInfo(info: SystemInfo): string {
 		`CWD:     ${info.cwd}`,
 		`Shell:   ${info.shell}`,
 	];
-	if (info.terminal) {
+	if (info.terminal !== null && info.terminal !== undefined && info.terminal !== "") {
 		lines.push(`Terminal: ${info.terminal}`);
 	}
 	return lines.join("\n");

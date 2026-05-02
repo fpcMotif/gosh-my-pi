@@ -102,7 +102,12 @@ const OVERFLOW_PATTERNS = [
  */
 export function isContextOverflow(message: AssistantMessage, contextWindow?: number): boolean {
 	// Case 1: Check error message patterns
-	if (message.stopReason === "error" && message.errorMessage) {
+	if (
+		message.stopReason === "error" &&
+		message.errorMessage !== null &&
+		message.errorMessage !== undefined &&
+		message.errorMessage !== ""
+	) {
 		// Check known patterns
 		if (OVERFLOW_PATTERNS.some(p => p.test(message.errorMessage!))) {
 			return true;
@@ -116,7 +121,7 @@ export function isContextOverflow(message: AssistantMessage, contextWindow?: num
 	}
 
 	// Case 2: Usage-based overflow (silent or provider-specific)
-	if (contextWindow) {
+	if (contextWindow !== null && contextWindow !== undefined && contextWindow !== 0) {
 		const inputTokens = message.usage.input + message.usage.cacheRead + message.usage.cacheWrite;
 		if (inputTokens > contextWindow) {
 			return true;

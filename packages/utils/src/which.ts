@@ -95,7 +95,7 @@ function isXcodeBin(command: string): boolean {
 function getDeveloperDirs(): string | null {
 	// 1. Explicit env override
 	const envDir = process.env.DEVELOPER_DIR;
-	if (envDir && fs.existsSync(envDir)) {
+	if (envDir !== null && envDir !== undefined && envDir !== "" && fs.existsSync(envDir)) {
 		return envDir;
 	}
 
@@ -124,7 +124,7 @@ function getMacosToolPaths(): Map<string, string> {
 		"/Library/Developer/CommandLineTools/usr/bin",
 	];
 	const devDir = getDeveloperDirs();
-	if (devDir) {
+	if (devDir !== null && devDir !== undefined && devDir !== "") {
 		paths.push(path.join(devDir, "usr/bin"), path.join(devDir, "Toolchains/XcodeDefault.xctoolchain/usr/bin"));
 	}
 
@@ -133,18 +133,19 @@ function getMacosToolPaths(): Map<string, string> {
 	for (const dir of Array.from(new Set(paths))) {
 		try {
 			for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-				if (entry.isFile() || entry.isSymbolicLink()) {
-					if (macosToolPaths.has(entry.name)) {
-						continue;
-					}
-					macosToolPaths.set(entry.name, path.join(dir, entry.name));
-				}
+				addMacosToolEntry(macosToolPaths, dir, entry);
 			}
 		} catch {
 			// dir doesn't exist or isn't readable
 		}
 	}
 	return macosToolPaths;
+}
+
+function addMacosToolEntry(toolPaths: Map<string, string>, dir: string, entry: fs.Dirent): void {
+	if (!entry.isFile() && !entry.isSymbolicLink()) return;
+	if (toolPaths.has(entry.name)) return;
+	toolPaths.set(entry.name, path.join(dir, entry.name));
 }
 
 // Map: cache key -> resolved binary path or null (not found)
@@ -185,7 +186,7 @@ export interface WhichOptions extends Bun.WhichOptions {
 // Uses cached directory listings instead of per-command existsSync or xcrun subprocesses.
 function darwinWhich(command: string, _options?: Bun.WhichOptions): string | null {
 	const regular = Bun.which(command);
-	if (regular) return regular;
+	if (regular !== null && regular !== undefined && regular !== "") return regular;
 	if (isXcodeBin(command)) {
 		return getMacosToolPaths().get(command) ?? null;
 	}
@@ -196,12 +197,18 @@ function darwinWhich(command: string, _options?: Bun.WhichOptions): string | nul
 export const whichFresh = os.platform() === "darwin" ? darwinWhich : Bun.which;
 
 // Derive stable cache key from command and lookup options
+function isNonEmpty(s: string | null | undefined): s is string {
+	return s !== null && s !== undefined && s !== "";
+}
+
 function cacheKey(command: string, options?: Bun.WhichOptions): CacheKey {
 	if (!options) return command;
-	if (!options.cwd && !options.PATH) return command;
+	const hasCwd = isNonEmpty(options.cwd);
+	const hasPath = isNonEmpty(options.PATH);
+	if (!hasCwd && !hasPath) return command;
 	let h = Bun.hash(command);
-	if (options.cwd) h = Bun.hash(options.cwd, h);
-	if (options.PATH) h = Bun.hash(options.PATH, h);
+	if (hasCwd) h = Bun.hash(options.cwd as string, h);
+	if (hasPath) h = Bun.hash(options.PATH as string, h);
 	return h;
 }
 
@@ -225,7 +232,7 @@ export function $which(command: string, options?: WhichOptions): string | null {
 	}
 
 	const result = whichFresh(command, options);
-	if (key != null && cachePolicy !== WhichCachePolicy.ReadOnly) {
+	if (key !== undefined && cachePolicy !== WhichCachePolicy.ReadOnly) {
 		toolCache.set(key, result);
 	}
 	return result;

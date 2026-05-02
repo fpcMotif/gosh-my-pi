@@ -56,12 +56,12 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 		let buffer: Uint8Array;
 		try {
 			buffer = await Bun.file(absolutePath).bytes();
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				console.error(chalk.red(`Error: File not found: ${absolutePath}`));
 				process.exit(1);
 			}
-			throw err;
+			throw error;
 		}
 		if (buffer.length === 0) {
 			continue;
@@ -101,7 +101,7 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 			images.push(attachment);
 
 			// Add text reference to image with optional dimension note
-			if (dimensionNote) {
+			if (dimensionNote !== null && dimensionNote !== undefined && dimensionNote !== "") {
 				text += `<file name="${absolutePath}">${dimensionNote}</file>\n`;
 			} else {
 				text += `<file name="${absolutePath}"></file>\n`;

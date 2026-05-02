@@ -68,7 +68,11 @@ function extractFileOperations(
 	// Collect from previous compaction's details (if pi-generated)
 	if (prevCompactionIndex >= 0) {
 		const prevCompaction = entries[prevCompactionIndex] as CompactionEntry;
-		if (!prevCompaction.fromExtension && prevCompaction.details) {
+		if (
+			prevCompaction.fromExtension !== true &&
+			prevCompaction.details !== null &&
+			prevCompaction.details !== undefined
+		) {
 			const details = prevCompaction.details as CompactionDetails;
 			if (Array.isArray(details.readFiles)) {
 				for (const f of details.readFiles) fileOps.read.add(f);
@@ -262,7 +266,7 @@ export function estimateTokens(message: AgentMessage): number {
 				fragments.push(content);
 			} else if (Array.isArray(content)) {
 				for (const block of content) {
-					if (block.type === "text" && block.text) {
+					if (block.type === "text" && block.text !== null && block.text !== undefined && block.text !== "") {
 						fragments.push(block.text);
 					}
 				}
@@ -542,7 +546,8 @@ function resolveOpenAiCompactEndpoint(model: Model): string {
 }
 
 function resolveOpenAiCodexCompactEndpoint(baseUrl: string | undefined): string {
-	const rawBase = baseUrl && baseUrl.length > 0 ? baseUrl : CODEX_BASE_URL;
+	const rawBase =
+		baseUrl !== null && baseUrl !== undefined && baseUrl !== "" && baseUrl.length > 0 ? baseUrl : CODEX_BASE_URL;
 	const normalizedBase = rawBase.endsWith("/") ? rawBase.slice(0, -1) : rawBase;
 	if (/\/codex(?:\/v\d+)?$/.test(normalizedBase)) return `${normalizedBase}/responses/compact`;
 	return `${normalizedBase}/codex/responses/compact`;
@@ -557,11 +562,11 @@ function getPreservedOpenAiRemoteCompactionData(
 	preserveData: Record<string, unknown> | undefined,
 ): OpenAiRemoteCompactionPreserveData | undefined {
 	const candidate = preserveData?.[OPENAI_REMOTE_COMPACTION_PRESERVE_KEY];
-	if (!candidate || typeof candidate !== "object") return undefined;
+	if (candidate === null || candidate === undefined || typeof candidate !== "object") return undefined;
 	const maybeData = candidate as { provider?: unknown; replacementHistory?: unknown; compactionItem?: unknown };
 	if (!Array.isArray(maybeData.replacementHistory)) return undefined;
 	const maybeItem = maybeData.compactionItem;
-	if (!maybeItem || typeof maybeItem !== "object") return undefined;
+	if (maybeItem === null || maybeItem === undefined || typeof maybeItem !== "object") return undefined;
 	const compactionItem = maybeItem as { type?: unknown; encrypted_content?: unknown; summary?: unknown };
 	const isClassicCompaction =
 		compactionItem.type === "compaction" && typeof compactionItem.encrypted_content === "string";
@@ -582,7 +587,7 @@ function withOpenAiRemoteCompactionPreserveData(
 ): Record<string, unknown> | undefined {
 	if (remoteCompaction) {
 		return {
-			...(preserveData ?? {}),
+			...preserveData,
 			[OPENAI_REMOTE_COMPACTION_PRESERVE_KEY]: remoteCompaction,
 		};
 	}
@@ -621,7 +626,7 @@ function shouldKeepOpenAiCompactOutputUserMessage(item: Record<string, unknown>)
 		[/^<subagent-notification>[\s\S]*<\/subagent-notification>$/i, /<subagent-notification>/i],
 	] as const;
 	return content.every(part => {
-		if (!part || typeof part !== "object") return false;
+		if (part === null || part === undefined || typeof part !== "object") return false;
 		const candidate = part as { type?: unknown; text?: unknown };
 		if (candidate.type === "input_image") return true;
 		if (candidate.type !== "input_text" || typeof candidate.text !== "string") return false;
@@ -652,7 +657,7 @@ function trimOpenAiCompactInput(
 		if (last?.type === "function_call_output") {
 			const callId = typeof last.call_id === "string" ? last.call_id : undefined;
 			trimmed.pop();
-			if (callId) {
+			if (callId !== null && callId !== undefined && callId !== "") {
 				const matchingCallIndex = trimmed.findLastIndex(
 					item => item.type === "function_call" && item.call_id === callId,
 				);
@@ -739,7 +744,7 @@ function buildOpenAiNativeHistory(
 				assistant.provider,
 			);
 			if (providerPayload) {
-				if (providerPayload.dt) {
+				if (providerPayload.dt === true) {
 					input.push(...providerPayload.items);
 				} else {
 					input.splice(0, input.length, ...providerPayload.items);
@@ -752,7 +757,13 @@ function buildOpenAiNativeHistory(
 				assistant.model !== model.id && assistant.provider === model.provider && assistant.api === model.api;
 
 			for (const block of assistant.content) {
-				if (block.type === "thinking" && assistant.stopReason !== "error" && block.thinkingSignature) {
+				if (
+					block.type === "thinking" &&
+					assistant.stopReason !== "error" &&
+					block.thinkingSignature !== null &&
+					block.thinkingSignature !== undefined &&
+					block.thinkingSignature !== ""
+				) {
 					try {
 						const reasoningItem = JSON.parse(block.thinkingSignature) as Record<string, unknown>;
 						if (reasoningItem && typeof reasoningItem === "object") {
@@ -771,7 +782,7 @@ function buildOpenAiNativeHistory(
 					if (!block.text || block.text.trim().length === 0) continue;
 					const parsedSignature = parseTextSignature(block.textSignature);
 					let msgId = parsedSignature?.id;
-					if (!msgId) {
+					if (msgId === null || msgId === undefined || msgId === "") {
 						msgId = `msg_${msgIndex}`;
 					} else if (msgId.length > 64) {
 						msgId = `msg_${Bun.hash(msgId).toString(36)}`;
@@ -863,13 +874,13 @@ async function requestOpenAiRemoteCompaction(
 	const headers: Record<string, string> = {
 		"content-type": "application/json",
 		Authorization: `Bearer ${apiKey}`,
-		...(model.headers ?? {}),
+		...model.headers,
 	};
 
 	// Codex endpoints require additional auth headers
 	if (model.provider === "openai-codex") {
 		const accountId = getCodexAccountId(apiKey);
-		if (accountId) {
+		if (accountId !== null && accountId !== undefined && accountId !== "") {
 			headers[OPENAI_HEADERS.ACCOUNT_ID] = accountId;
 		}
 		headers[OPENAI_HEADERS.BETA] = OPENAI_HEADER_VALUES.BETA_RESPONSES;
@@ -897,7 +908,9 @@ async function requestOpenAiRemoteCompaction(
 	const rawOutput = data?.output ?? [];
 	const replacementHistory = rawOutput.filter(
 		(item): item is Record<string, unknown> =>
-			!!item && typeof item === "object" && shouldKeepOpenAiCompactOutputItem(item as Record<string, unknown>),
+			!(item === null || item === undefined) &&
+			typeof item === "object" &&
+			shouldKeepOpenAiCompactOutputItem(item as Record<string, unknown>),
 	);
 	const compactionItem = [...replacementHistory].reverse().find((item): item is OpenAiRemoteCompactionItem => {
 		if (item.type === "compaction" && typeof item.encrypted_content === "string") return true;
@@ -980,11 +993,14 @@ export async function generateSummary(
 	const maxTokens = Math.floor(0.8 * reserveTokens);
 
 	// Use update prompt if we have a previous summary, otherwise initial prompt
-	let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
-	if (options?.promptOverride) {
+	let basePrompt =
+		previousSummary !== null && previousSummary !== undefined && previousSummary !== ""
+			? UPDATE_SUMMARIZATION_PROMPT
+			: SUMMARIZATION_PROMPT;
+	if (options?.promptOverride !== null && options?.promptOverride !== undefined && options?.promptOverride !== "") {
 		basePrompt = options.promptOverride;
 	}
-	if (customInstructions) {
+	if (customInstructions !== null && customInstructions !== undefined && customInstructions !== "") {
 		basePrompt = `${basePrompt}\n\nAdditional focus: ${customInstructions}`;
 	}
 
@@ -995,7 +1011,7 @@ export async function generateSummary(
 
 	// Build the prompt with conversation wrapped in tags
 	let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
-	if (previousSummary) {
+	if (previousSummary !== null && previousSummary !== undefined && previousSummary !== "") {
 		promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
 	}
 	promptText += formatAdditionalContext(options?.extraContext);
@@ -1009,7 +1025,7 @@ export async function generateSummary(
 		},
 	];
 
-	if (options?.remoteEndpoint) {
+	if (options?.remoteEndpoint !== null && options?.remoteEndpoint !== undefined && options?.remoteEndpoint !== "") {
 		const remote = await requestRemoteCompaction(options.remoteEndpoint, {
 			systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
 			prompt: promptText,
@@ -1024,7 +1040,7 @@ export async function generateSummary(
 	);
 
 	if (response.stopReason === "error") {
-		throw new Error(`Summarization failed: ${response.errorMessage || "Unknown error"}`);
+		throw new Error(`Summarization failed: ${response.errorMessage ?? "Unknown error"}`);
 	}
 
 	const textContent = response.content
@@ -1049,13 +1065,13 @@ async function generateShortSummary(
 	const conversationText = serializeConversation(llmMessages);
 
 	let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
-	if (historySummary) {
+	if (historySummary !== null && historySummary !== undefined && historySummary !== "") {
 		promptText += `<previous-summary>\n${historySummary}\n</previous-summary>\n\n`;
 	}
 	promptText += formatAdditionalContext(options?.extraContext);
 	promptText += SHORT_SUMMARY_PROMPT;
 
-	if (options?.remoteEndpoint) {
+	if (options?.remoteEndpoint !== null && options?.remoteEndpoint !== undefined && options?.remoteEndpoint !== "") {
 		const remote = await requestRemoteCompaction(options.remoteEndpoint, {
 			systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
 			prompt: promptText,
@@ -1073,7 +1089,7 @@ async function generateShortSummary(
 	);
 
 	if (response.stopReason === "error") {
-		throw new Error(`Short summary failed: ${response.errorMessage || "Unknown error"}`);
+		throw new Error(`Short summary failed: ${response.errorMessage ?? "Unknown error"}`);
 	}
 
 	return response.content
@@ -1269,9 +1285,9 @@ export async function compact(
 					summaryOptions.remoteInstructions ?? SUMMARIZATION_SYSTEM_PROMPT,
 				);
 				preserveData = withOpenAiRemoteCompactionPreserveData(previousPreserveData, remote);
-			} catch (err) {
+			} catch (error) {
 				logger.warn("OpenAI remote compaction failed, falling back to local summarization", {
-					error: err instanceof Error ? err.message : String(err),
+					error: error instanceof Error ? error.message : String(error),
 					model: model.id,
 					provider: model.provider,
 				});
@@ -1320,7 +1336,7 @@ export async function compact(
 			previousSummary,
 			summaryOptions,
 		);
-	} else if (previousSummary) {
+	} else if (previousSummary !== null && previousSummary !== undefined && previousSummary !== "") {
 		// No new messages to summarize, preserve previous summary
 		summary = previousSummary;
 	} else {
@@ -1391,7 +1407,7 @@ async function generateTurnPrefixSummary(
 	);
 
 	if (response.stopReason === "error") {
-		throw new Error(`Turn prefix summarization failed: ${response.errorMessage || "Unknown error"}`);
+		throw new Error(`Turn prefix summarization failed: ${response.errorMessage ?? "Unknown error"}`);
 	}
 
 	return response.content

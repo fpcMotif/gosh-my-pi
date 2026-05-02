@@ -262,7 +262,7 @@ describe("SQLite tool support", () => {
 	});
 
 	it("errors on composite primary key row lookups", async () => {
-		await expect(readTool.execute("sqlite-row-composite", { path: `${sqlitePath}:composite:1` })).rejects.toThrow(
+		expect(readTool.execute("sqlite-row-composite", { path: `${sqlitePath}:composite:1` })).rejects.toThrow(
 			/composite primary key/i,
 		);
 	});
@@ -310,7 +310,7 @@ describe("SQLite tool support", () => {
 	});
 
 	it("rejects SQLite where clauses that try to override pagination control syntax", async () => {
-		await expect(
+		expect(
 			readTool.execute("sqlite-where-pagination-bypass", {
 				path: sqlitePath,
 				sel: "users?where=1=1 LIMIT 1000000 --&limit=2&offset=0",
@@ -319,7 +319,7 @@ describe("SQLite tool support", () => {
 	});
 
 	it("rejects mutating raw queries on the readonly connection", async () => {
-		await expect(
+		expect(
 			readTool.execute("sqlite-raw-write", {
 				path: `${sqlitePath}?q=INSERT+INTO+users+(name,email,status,created)+VALUES+('X','x@example.com','active',7)`,
 			}),
@@ -327,7 +327,7 @@ describe("SQLite tool support", () => {
 	});
 
 	it("rejects table names that do not exist instead of interpolating them", async () => {
-		await expect(
+		expect(
 			readTool.execute("sqlite-injection-table", { path: `${sqlitePath}:users;DROP TABLE users;` }),
 		).rejects.toThrow(/not found/i);
 	});
@@ -386,7 +386,7 @@ describe("SQLite tool support", () => {
 		});
 		const planWriteTool = new WriteTool(planSession);
 
-		await expect(
+		expect(
 			planWriteTool.execute("sqlite-plan-mode", {
 				path: `${sqlitePath}:users:1`,
 				content: "{ email: 'blocked@example.com' }",
@@ -395,7 +395,7 @@ describe("SQLite tool support", () => {
 	});
 
 	it("rejects writes to non-existent tables", async () => {
-		await expect(
+		expect(
 			writeTool.execute("sqlite-write-missing-table", {
 				path: `${sqlitePath}:missing`,
 				content: "{ value: 1 }",
@@ -404,7 +404,7 @@ describe("SQLite tool support", () => {
 	});
 
 	it("rejects writes to non-existent databases", async () => {
-		await expect(
+		expect(
 			writeTool.execute("sqlite-write-missing-db", {
 				path: path.join(tmpDir, "missing.sqlite:users"),
 				content: "{ name: 'Nope' }",
@@ -413,7 +413,7 @@ describe("SQLite tool support", () => {
 	});
 
 	it("rejects unknown columns in write content", async () => {
-		await expect(
+		expect(
 			writeTool.execute("sqlite-write-bad-column", {
 				path: `${sqlitePath}:users`,
 				content: "{ bogus: 1 }",

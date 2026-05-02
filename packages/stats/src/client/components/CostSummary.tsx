@@ -62,9 +62,9 @@ export function CostSummary({ costSeries }: CostSummaryProps) {
 		},
 		{
 			label: "vs prev 30d",
-			value: trend !== null ? `${trend >= 0 ? "+" : ""}${Math.round(trend)}%` : "—",
+			value: trend === null ? "—" : `${trend >= 0 ? "+" : ""}${Math.round(trend)}%`,
 			sub: undefined as string | undefined,
-			positive: trend !== null ? trend <= 0 : null,
+			positive: trend === null ? null : trend <= 0,
 		},
 	];
 
@@ -77,9 +77,9 @@ export function CostSummary({ costSeries }: CostSummaryProps) {
 						className={`text-lg font-semibold ${
 							card.positive === true
 								? "text-[var(--accent-green,#4ade80)]"
-								: card.positive === false
+								: (card.positive === false
 									? "text-[var(--accent-pink)]"
-									: "text-[var(--text-primary)]"
+									: "text-[var(--text-primary)]")
 						}`}
 					>
 						{card.value}

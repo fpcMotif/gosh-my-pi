@@ -210,7 +210,7 @@ function makeAssistantMessage(
 	items: Record<string, unknown>[],
 	incremental = false,
 	provider: "openai" | "openai-codex" | "github-copilot" = "openai",
-	model = provider === "openai-codex" ? "gpt-5.2-codex" : provider === "github-copilot" ? "gpt-5.4" : "gpt-5-mini",
+	model = provider === "openai-codex" ? "gpt-5.2-codex" : (provider === "github-copilot" ? "gpt-5.4" : "gpt-5-mini"),
 ) {
 	return {
 		role: "assistant" as const,
@@ -244,12 +244,12 @@ const incrementalContext: Context = {
 
 function containsAssistantOutputText(input: unknown[] | undefined, text: string): boolean {
 	return (input ?? []).some(item => {
-		if (!item || typeof item !== "object") return false;
+		if (item === null || item === undefined || typeof item !== "object") return false;
 		const candidate = item as { type?: unknown; role?: unknown; content?: unknown };
 		if (candidate.type !== "message" || candidate.role !== "assistant" || !Array.isArray(candidate.content))
 			return false;
 		return candidate.content.some(part => {
-			if (!part || typeof part !== "object") return false;
+			if (part === null || part === undefined || typeof part !== "object") return false;
 			const content = part as { type?: unknown; text?: unknown };
 			return content.type === "output_text" && content.text === text;
 		});
@@ -258,7 +258,7 @@ function containsAssistantOutputText(input: unknown[] | undefined, text: string)
 
 function containsEncryptedReasoning(input: unknown[] | undefined): boolean {
 	return (input ?? []).some(item => {
-		if (!item || typeof item !== "object") return false;
+		if (item === null || item === undefined || typeof item !== "object") return false;
 		const candidate = item as { encrypted_content?: unknown };
 		return typeof candidate.encrypted_content === "string";
 	});
@@ -266,18 +266,18 @@ function containsEncryptedReasoning(input: unknown[] | undefined): boolean {
 
 function findResponsesInputItem(input: unknown[] | undefined, type: string): Record<string, unknown> | undefined {
 	return input?.find(item => {
-		if (!item || typeof item !== "object") return false;
+		if (item === null || item === undefined || typeof item !== "object") return false;
 		return (item as { type?: unknown }).type === type;
 	}) as Record<string, unknown> | undefined;
 }
 
 function containsUserInputText(input: unknown[] | undefined, text: string): boolean {
 	return (input ?? []).some(item => {
-		if (!item || typeof item !== "object") return false;
+		if (item === null || item === undefined || typeof item !== "object") return false;
 		const candidate = item as { role?: unknown; content?: unknown };
 		if (candidate.role !== "user" || !Array.isArray(candidate.content)) return false;
 		return candidate.content.some(part => {
-			if (!part || typeof part !== "object") return false;
+			if (part === null || part === undefined || typeof part !== "object") return false;
 			const content = part as { type?: unknown; text?: unknown };
 			return content.type === "input_text" && content.text === text;
 		});
@@ -549,7 +549,11 @@ describe("OpenAI responses history payload", () => {
 		expect(itemReference).toBeUndefined();
 		expect(
 			(payload.input ?? []).some(
-				item => item && typeof item === "object" && "id" in (item as Record<string, unknown>),
+				item =>
+					item !== null &&
+					item !== undefined &&
+					typeof item === "object" &&
+					"id" in (item as Record<string, unknown>),
 			),
 		).toBe(false);
 		expect(reasoningItem?.encrypted_content).toBe("enc_opaque");

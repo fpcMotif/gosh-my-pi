@@ -15,9 +15,9 @@ const isWindows = process.platform === "win32";
  */
 export function detectRecordingTools(): string[] {
 	const tools: string[] = [];
-	if ($which("sox")) tools.push("sox");
-	if ($which("ffmpeg")) tools.push("ffmpeg");
-	if (!isWindows && $which("arecord")) tools.push("arecord");
+	if ($which("sox") !== undefined && $which("sox") !== "") tools.push("sox");
+	if ($which("ffmpeg") !== undefined && $which("ffmpeg") !== "") tools.push("ffmpeg");
+	if (!isWindows && $which("arecord") !== undefined && $which("arecord") !== "") tools.push("arecord");
 	if (isWindows) tools.push("powershell");
 	return tools;
 }
@@ -121,8 +121,8 @@ async function startFFmpegRecording(outputPath: string): Promise<RecordingHandle
 	return {
 		async stop() {
 			try {
-				proc.stdin.write("q");
-				proc.stdin.end();
+				void proc.stdin.write("q");
+				void proc.stdin.end();
 			} catch {
 				// stdin may already be closed
 			}
@@ -223,7 +223,7 @@ async function startPowerShellRecording(outputPath: string): Promise<RecordingHa
 		stderr: "ignore",
 	});
 
-	proc.exited.then(() => {
+	void proc.exited.then(() => {
 		fs.unlink(scriptPath).catch(() => {});
 	});
 
@@ -260,8 +260,8 @@ async function startPowerShellRecording(outputPath: string): Promise<RecordingHa
 	return {
 		async stop() {
 			try {
-				proc.stdin.write("stop\n");
-				proc.stdin.end();
+				void proc.stdin.write("stop\n");
+				void proc.stdin.end();
 			} catch {
 				// stdin may already be closed
 			}
@@ -317,8 +317,8 @@ export async function startRecording(outputPath: string): Promise<RecordingHandl
 				case "powershell":
 					return await startPowerShellRecording(outputPath);
 			}
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
+		} catch (error) {
+			const msg = error instanceof Error ? error.message : String(error);
 			logger.debug(`Recording tool ${tool} failed, trying next`, { error: msg });
 			errors.push(`${tool}: ${msg}`);
 		}
@@ -341,8 +341,8 @@ export async function verifyRecordingFile(filePath: string): Promise<number> {
 			);
 		}
 		return stat.size;
-	} catch (err) {
-		if (err instanceof Error && err.message.includes("too small")) throw err;
+	} catch (error) {
+		if (error instanceof Error && error.message.includes("too small")) throw error;
 		throw new Error(
 			"Recording file was not created. The recording process may have failed silently. " +
 				"Check that a microphone is connected.",

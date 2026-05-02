@@ -97,7 +97,7 @@ export function createLogExperimentTool(
 		defaultInactive: true,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const workDirError = validateWorkDir(ctx.cwd);
-			if (workDirError) {
+			if (workDirError !== null && workDirError !== undefined && workDirError !== "") {
 				return {
 					content: [{ type: "text", text: `Error: ${workDirError}` }],
 				};
@@ -116,7 +116,12 @@ export function createLogExperimentTool(
 				};
 			}
 			const benchmarkForSync = contractResult.contract.benchmark;
-			if (benchmarkForSync.command && !isAutoresearchShCommand(benchmarkForSync.command)) {
+			if (
+				benchmarkForSync.command !== null &&
+				benchmarkForSync.command !== undefined &&
+				benchmarkForSync.command !== "" &&
+				!isAutoresearchShCommand(benchmarkForSync.command)
+			) {
 				return {
 					content: [
 						{
@@ -188,7 +193,7 @@ export function createLogExperimentTool(
 			}
 
 			const observedStatusError = validateObservedStatus(params.status, pendingRun);
-			if (observedStatusError) {
+			if (observedStatusError !== null && observedStatusError !== undefined && observedStatusError !== "") {
 				return {
 					content: [{ type: "text", text: `Error: ${observedStatusError}` }],
 				};
@@ -200,7 +205,7 @@ export function createLogExperimentTool(
 			const mergedAsi = mergeAsi(runtime.lastRunAsi, sanitizeAsi(params.asi));
 			if (!forceLoose) {
 				const asiValidationError = validateAsiRequirements(mergedAsi, params.status);
-				if (asiValidationError) {
+				if (asiValidationError !== null && asiValidationError !== undefined && asiValidationError !== "") {
 					return {
 						content: [{ type: "text", text: `Error: ${asiValidationError}` }],
 					};
@@ -251,7 +256,7 @@ export function createLogExperimentTool(
 			};
 
 			const activeBranch = await getCurrentAutoresearchBranch(options.pi, workDir);
-			if (!activeBranch) {
+			if (activeBranch === null || activeBranch === undefined || activeBranch === "") {
 				return {
 					content: [
 						{
@@ -267,15 +272,15 @@ export function createLogExperimentTool(
 			let gitNote: string | null = null;
 			if (params.status === "keep") {
 				const commitResult = await commitKeptExperiment(options, workDir, state, experiment, keepScopeValidation);
-				if (commitResult.error) {
+				if (commitResult.error !== null && commitResult.error !== undefined && commitResult.error !== "") {
 					return {
 						content: [{ type: "text", text: `Error: ${commitResult.error}` }],
 					};
 				}
 				gitNote = commitResult.note ?? null;
-			} else if (!params.skip_restore) {
+			} else if (params.skip_restore !== true) {
 				const revertResult = await revertFailedExperiment(options, workDir, preRunDirtyPaths);
-				if (revertResult.error) {
+				if (revertResult.error !== null && revertResult.error !== undefined && revertResult.error !== "") {
 					return {
 						content: [{ type: "text", text: `Error: ${revertResult.error}` }],
 					};
@@ -337,7 +342,9 @@ export function createLogExperimentTool(
 				runtime.autoresearchMode = false;
 				options.pi.appendEntry(
 					"autoresearch-control",
-					runtime.goal ? { mode: "off", goal: runtime.goal } : { mode: "off" },
+					runtime.goal !== null && runtime.goal !== undefined && runtime.goal !== ""
+						? { mode: "off", goal: runtime.goal }
+						: { mode: "off" },
 				);
 				await options.pi.setActiveTools(
 					options.pi.getActiveTools().filter(name => !EXPERIMENT_TOOL_NAMES.includes(name)),
@@ -360,7 +367,7 @@ export function createLogExperimentTool(
 			};
 		},
 		renderCall(args, _options, theme): Text {
-			const color = args.status === "keep" ? "success" : args.status === "discard" ? "warning" : "error";
+			const color = args.status === "keep" ? "success" : (args.status === "discard" ? "warning" : "error");
 			const description = truncateToWidth(replaceTabs(args.description), 100);
 			return new Text(
 				`${theme.fg("toolTitle", theme.bold("log_experiment"))} ${theme.fg(color, args.status)} ${theme.fg("muted", description)}`,
@@ -501,9 +508,9 @@ async function commitKeptExperiment(
 
 	try {
 		await git.stage.files(workDir, scopeValidation.committablePaths);
-	} catch (err) {
+	} catch (error) {
 		return {
-			error: `git add failed: ${err instanceof Error ? err.message : String(err)}`,
+			error: `git add failed: ${error instanceof Error ? error.message : String(error)}`,
 		};
 	}
 
@@ -525,9 +532,9 @@ async function commitKeptExperiment(
 			files: scopeValidation.committablePaths,
 		});
 		commitResultText = mergeStdoutStderr(commitResult);
-	} catch (err) {
+	} catch (error) {
 		return {
-			error: `git commit failed: ${err instanceof Error ? err.message : String(err)}`,
+			error: `git commit failed: ${error instanceof Error ? error.message : String(error)}`,
 		};
 	}
 
@@ -552,9 +559,9 @@ async function revertFailedExperiment(
 			untrackedFiles: "all",
 			z: true,
 		});
-	} catch (err) {
+	} catch (error) {
 		return {
-			error: `git status failed: ${err instanceof Error ? err.message : String(err)}`,
+			error: `git status failed: ${error instanceof Error ? error.message : String(error)}`,
 		};
 	}
 
@@ -568,9 +575,9 @@ async function revertFailedExperiment(
 	if (tracked.length > 0) {
 		try {
 			await git.restore(workDir, { files: tracked, source: "HEAD", staged: true, worktree: true });
-		} catch (err) {
+		} catch (error) {
 			return {
-				error: `git restore failed: ${err instanceof Error ? err.message : String(err)}`,
+				error: `git restore failed: ${error instanceof Error ? error.message : String(error)}`,
 			};
 		}
 	}
@@ -608,8 +615,8 @@ async function validateKeepPaths(
 			untrackedFiles: "all",
 			z: true,
 		});
-	} catch (err) {
-		return `git status failed: ${err instanceof Error ? err.message : String(err)}`;
+	} catch (error) {
+		return `git status failed: ${error instanceof Error ? error.message : String(error)}`;
 	}
 
 	const workDirPrefix = await readGitWorkDirPrefix(options, workDir);
@@ -650,7 +657,7 @@ async function updateRunMetadata(
 		wallClockSeconds: number | null;
 	},
 ): Promise<void> {
-	if (!runDirectory) return;
+	if (runDirectory === null || runDirectory === undefined || runDirectory === "") return;
 	const runJsonPath = path.join(runDirectory, "run.json");
 	let existing: Record<string, unknown> = {};
 	try {
@@ -724,10 +731,10 @@ function buildLogText(
 		lines.push(`ASI: ${asiSummary}`);
 	}
 	if (state.confidence !== null) {
-		const status = state.confidence >= 2 ? "likely real" : state.confidence >= 1 ? "marginal" : "within noise";
+		const status = state.confidence >= 2 ? "likely real" : (state.confidence >= 1 ? "marginal" : "within noise");
 		lines.push(`Confidence: ${state.confidence.toFixed(1)}x noise floor (${status})`);
 	}
-	if (gitNote) {
+	if (gitNote !== null && gitNote !== undefined && gitNote !== "") {
 		lines.push(`Git: ${gitNote}`);
 	}
 	if (state.maxExperiments !== null) {
@@ -755,7 +762,7 @@ function truncateAsiValue(value: ASIData[string]): string {
 
 function renderSummary(details: LogDetails, theme: Theme): string {
 	const { experiment, state } = details;
-	const color = experiment.status === "keep" ? "success" : experiment.status === "discard" ? "warning" : "error";
+	const color = experiment.status === "keep" ? "success" : (experiment.status === "discard" ? "warning" : "error");
 	let summary = `${theme.fg(color, experiment.status.toUpperCase())} ${theme.fg("muted", truncateToWidth(replaceTabs(experiment.description), 100))}`;
 	summary += ` ${theme.fg("accent", `${state.metricName}=${formatNum(experiment.metric, state.metricUnit)}`)}`;
 	if (state.bestMetric !== null) {

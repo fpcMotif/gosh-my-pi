@@ -142,7 +142,7 @@ class SessionList implements Component {
 			const cursor = isSelected ? theme.fg("accent", cursorSymbol) : padding(cursorWidth);
 			const maxWidth = width - cursorWidth; // Account for cursor width
 
-			if (session.title) {
+			if (session.title !== null && session.title !== undefined && session.title !== "") {
 				// Has title: show title on first line, dimmed first message on second line
 				const truncatedTitle = truncateToWidth(session.title, maxWidth);
 				const titleLine = cursor + (isSelected ? theme.bold(truncatedTitle) : truncatedTitle);
@@ -307,8 +307,8 @@ export class SessionSelectorComponent extends Container {
 						if (deleted) {
 							this.#sessionList.removeSession(session.path);
 						}
-					} catch (err) {
-						this.#showError(err instanceof Error ? err.message : String(err));
+					} catch (error) {
+						this.#showError(error instanceof Error ? error.message : String(error));
 					}
 				}
 				// Close confirmation dialog

@@ -300,7 +300,7 @@ export class SettingsSelectorComponent extends Container {
 					id: def.path,
 					label: def.label,
 					description: def.description,
-					currentValue: currentValue ? "true" : "false",
+					currentValue: currentValue !== null && currentValue !== undefined ? "true" : "false",
 					values: ["true", "false"],
 				};
 
@@ -381,7 +381,7 @@ export class SettingsSelectorComponent extends Container {
 				return this.callbacks.onThemePreview?.(value);
 			};
 			onPreviewCancel = () => {
-				this.callbacks.onThemePreview?.(activeThemeBeforePreview);
+				void this.callbacks.onThemePreview?.(activeThemeBeforePreview);
 			};
 		} else if (def.path === "statusLine.preset") {
 			onPreview = value => {

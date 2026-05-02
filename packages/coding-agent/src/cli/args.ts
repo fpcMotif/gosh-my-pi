@@ -1,11 +1,11 @@
 /**
  * CLI argument parsing and help display
  */
-import { type Effort, THINKING_EFFORTS } from "@oh-my-pi/pi-ai";
+import { type Effort, THINKING_EFFORTS } from "@oh-my-pi/pi-ai/model-thinking";
 import { APP_NAME, CONFIG_DIR_NAME, logger } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { parseEffort } from "../thinking";
-import { BUILTIN_TOOLS } from "../tools";
+import { BUILTIN_TOOL_NAMES, BUILTIN_TOOL_NAME_SET } from "../tools/builtin-tool-names";
 
 export type Mode = "text" | "json" | "rpc" | "acp";
 
@@ -52,96 +52,100 @@ export interface Args {
 	unknownFlags: Map<string, boolean | string>;
 }
 
-export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "boolean" | "string" }>): Args {
+export function expandInlineFlagValues(args: readonly string[]): string[] {
+	const expanded: string[] = [];
+	for (const arg of args) {
+		if (arg.startsWith("--") && arg.includes("=")) {
+			const eqIdx = arg.indexOf("=");
+			expanded.push(arg.slice(0, eqIdx), arg.slice(eqIdx + 1));
+			continue;
+		}
+		expanded.push(arg);
+	}
+	return expanded;
+}
+
+export function parseArgs(args: readonly string[], extensionFlags?: Map<string, { type: "boolean" | "string" }>): Args {
+	const expandedArgs = expandInlineFlagValues(args);
 	const result: Args = {
 		messages: [],
 		fileArgs: [],
 		unknownFlags: new Map(),
 	};
 
-	for (let i = 0; i < args.length; i++) {
-		let arg = args[i];
-
-		// Support --flag=value syntax (e.g. --tools=ask,read)
-		if (arg.startsWith("--") && arg.includes("=")) {
-			const eqIdx = arg.indexOf("=");
-			const value = arg.slice(eqIdx + 1);
-			arg = arg.slice(0, eqIdx);
-			// Insert the value so the existing "args[++i]" logic picks it up
-			args.splice(i + 1, 0, value);
-		}
-
+	for (let i = 0; i < expandedArgs.length; i++) {
+		const arg = expandedArgs[i];
 		if (arg === "--help" || arg === "-h") {
 			result.help = true;
 		} else if (arg === "--version" || arg === "-v") {
 			result.version = true;
 		} else if (arg === "--allow-home") {
 			result.allowHome = true;
-		} else if (arg === "--mode" && i + 1 < args.length) {
-			const mode = args[++i];
+		} else if (arg === "--mode" && i + 1 < expandedArgs.length) {
+			const mode = expandedArgs[++i];
 			if (mode === "text" || mode === "json" || mode === "rpc" || mode === "acp") {
 				result.mode = mode;
 			}
 		} else if (arg === "--continue" || arg === "-c") {
 			result.continue = true;
 		} else if (arg === "--resume" || arg === "-r" || arg === "--session") {
-			const next = args[i + 1];
+			const next = expandedArgs[i + 1];
 			if (next && !next.startsWith("-")) {
-				result.resume = args[++i];
+				result.resume = expandedArgs[++i];
 			} else {
 				result.resume = true;
 			}
-		} else if (arg === "--fork" && i + 1 < args.length) {
-			result.fork = args[++i];
-		} else if (arg === "--provider" && i + 1 < args.length) {
-			result.provider = args[++i];
-		} else if (arg === "--model" && i + 1 < args.length) {
-			result.model = args[++i];
-		} else if (arg === "--smol" && i + 1 < args.length) {
-			result.smol = args[++i];
-		} else if (arg === "--slow" && i + 1 < args.length) {
-			result.slow = args[++i];
-		} else if (arg === "--plan" && i + 1 < args.length) {
-			result.plan = args[++i];
-		} else if (arg === "--api-key" && i + 1 < args.length) {
-			result.apiKey = args[++i];
-		} else if (arg === "--system-prompt" && i + 1 < args.length) {
-			result.systemPrompt = args[++i];
-		} else if (arg === "--append-system-prompt" && i + 1 < args.length) {
-			result.appendSystemPrompt = args[++i];
-		} else if (arg === "--provider-session-id" && i + 1 < args.length) {
-			result.providerSessionId = args[++i];
+		} else if (arg === "--fork" && i + 1 < expandedArgs.length) {
+			result.fork = expandedArgs[++i];
+		} else if (arg === "--provider" && i + 1 < expandedArgs.length) {
+			result.provider = expandedArgs[++i];
+		} else if (arg === "--model" && i + 1 < expandedArgs.length) {
+			result.model = expandedArgs[++i];
+		} else if (arg === "--smol" && i + 1 < expandedArgs.length) {
+			result.smol = expandedArgs[++i];
+		} else if (arg === "--slow" && i + 1 < expandedArgs.length) {
+			result.slow = expandedArgs[++i];
+		} else if (arg === "--plan" && i + 1 < expandedArgs.length) {
+			result.plan = expandedArgs[++i];
+		} else if (arg === "--api-key" && i + 1 < expandedArgs.length) {
+			result.apiKey = expandedArgs[++i];
+		} else if (arg === "--system-prompt" && i + 1 < expandedArgs.length) {
+			result.systemPrompt = expandedArgs[++i];
+		} else if (arg === "--append-system-prompt" && i + 1 < expandedArgs.length) {
+			result.appendSystemPrompt = expandedArgs[++i];
+		} else if (arg === "--provider-session-id" && i + 1 < expandedArgs.length) {
+			result.providerSessionId = expandedArgs[++i];
 		} else if (arg === "--no-session") {
 			result.noSession = true;
-		} else if (arg === "--session-dir" && i + 1 < args.length) {
-			result.sessionDir = args[++i];
-		} else if (arg === "--models" && i + 1 < args.length) {
-			result.models = args[++i].split(",").map(s => s.trim());
+		} else if (arg === "--session-dir" && i + 1 < expandedArgs.length) {
+			result.sessionDir = expandedArgs[++i];
+		} else if (arg === "--models" && i + 1 < expandedArgs.length) {
+			result.models = expandedArgs[++i].split(",").map(s => s.trim());
 		} else if (arg === "--no-tools") {
 			result.noTools = true;
 		} else if (arg === "--no-lsp") {
 			result.noLsp = true;
 		} else if (arg === "--no-pty") {
 			result.noPty = true;
-		} else if (arg === "--tools" && i + 1 < args.length) {
-			const toolNames = args[++i]
+		} else if (arg === "--tools" && i + 1 < expandedArgs.length) {
+			const toolNames = expandedArgs[++i]
 				.split(",")
 				.map(s => s.trim().toLowerCase())
 				.filter(Boolean);
 			const validTools: string[] = [];
 			for (const name of toolNames) {
-				if (name in BUILTIN_TOOLS) {
+				if (BUILTIN_TOOL_NAME_SET.has(name)) {
 					validTools.push(name);
 				} else {
 					logger.warn("Unknown tool passed to --tools", {
 						tool: name,
-						validTools: Object.keys(BUILTIN_TOOLS),
+						validTools: BUILTIN_TOOL_NAMES,
 					});
 				}
 			}
 			result.tools = validTools;
-		} else if (arg === "--thinking" && i + 1 < args.length) {
-			const rawThinking = args[++i];
+		} else if (arg === "--thinking" && i + 1 < expandedArgs.length) {
+			const rawThinking = expandedArgs[++i];
 			const thinking = parseEffort(rawThinking);
 			if (thinking !== undefined) {
 				result.thinking = thinking;
@@ -153,17 +157,17 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			}
 		} else if (arg === "--print" || arg === "-p") {
 			result.print = true;
-		} else if (arg === "--export" && i + 1 < args.length) {
-			result.export = args[++i];
-		} else if (arg === "--hook" && i + 1 < args.length) {
+		} else if (arg === "--export" && i + 1 < expandedArgs.length) {
+			result.export = expandedArgs[++i];
+		} else if (arg === "--hook" && i + 1 < expandedArgs.length) {
 			result.hooks = result.hooks ?? [];
-			result.hooks.push(args[++i]);
-		} else if ((arg === "--extension" || arg === "-e") && i + 1 < args.length) {
+			result.hooks.push(expandedArgs[++i]);
+		} else if ((arg === "--extension" || arg === "-e") && i + 1 < expandedArgs.length) {
 			result.extensions = result.extensions ?? [];
-			result.extensions.push(args[++i]);
-		} else if (arg === "--plugin-dir" && i + 1 < args.length) {
+			result.extensions.push(expandedArgs[++i]);
+		} else if (arg === "--plugin-dir" && i + 1 < expandedArgs.length) {
 			result.pluginDirs = result.pluginDirs ?? [];
-			result.pluginDirs.push(args[++i]);
+			result.pluginDirs.push(expandedArgs[++i]);
 		} else if (arg === "--no-extensions") {
 			result.noExtensions = true;
 		} else if (arg === "--no-skills") {
@@ -172,13 +176,17 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.noRules = true;
 		} else if (arg === "--no-title") {
 			result.noTitle = true;
-		} else if (arg === "--skills" && i + 1 < args.length) {
+		} else if (arg === "--skills" && i + 1 < expandedArgs.length) {
 			// Comma-separated glob patterns for skill filtering
-			result.skills = args[++i].split(",").map(s => s.trim());
+			result.skills = expandedArgs[++i].split(",").map(s => s.trim());
 		} else if (arg === "--list-models") {
 			// Check if next arg is a search pattern (not a flag or file arg)
-			if (i + 1 < args.length && !args[i + 1].startsWith("-") && !args[i + 1].startsWith("@")) {
-				result.listModels = args[++i];
+			if (
+				i + 1 < expandedArgs.length &&
+				!expandedArgs[i + 1].startsWith("-") &&
+				!expandedArgs[i + 1].startsWith("@")
+			) {
+				result.listModels = expandedArgs[++i];
 			} else {
 				result.listModels = true;
 			}
@@ -191,8 +199,8 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			if (extFlag) {
 				if (extFlag.type === "boolean") {
 					result.unknownFlags.set(flagName, true);
-				} else if (extFlag.type === "string" && i + 1 < args.length) {
-					result.unknownFlags.set(flagName, args[++i]);
+				} else if (extFlag.type === "string" && i + 1 < expandedArgs.length) {
+					result.unknownFlags.set(flagName, expandedArgs[++i]);
 				}
 			}
 			// Unknown flags without extensionFlags are silently ignored (first pass)

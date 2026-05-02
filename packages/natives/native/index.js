@@ -112,7 +112,7 @@ const dedupedCandidates = resolveLoaderCandidates({
 function runCommand(command, args) {
 	// removed logger.time
 	try {
-		const { spawnSync } = require("child_process");
+		const { spawnSync } = require("node:child_process");
 		const result = spawnSync(command, args, { encoding: "utf-8" });
 		if (result.error) return null;
 		if (result.status !== 0) return null;
@@ -146,8 +146,8 @@ function maybeExtractEmbeddedAddon(errors) {
 
 	try {
 		fs.mkdirSync(versionedDir, { recursive: true });
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		errors.push(`embedded addon dir: ${message}`);
 		return null;
 	}
@@ -160,8 +160,8 @@ function maybeExtractEmbeddedAddon(errors) {
 		const buffer = fs.readFileSync(selectedEmbeddedFile.filePath);
 		fs.writeFileSync(targetPath, buffer);
 		return targetPath;
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		errors.push(`embedded addon write (${selectedEmbeddedFile.filename}): ${message}`);
 		return null;
 	}
@@ -175,8 +175,8 @@ function loadNative() {
 		try {
 			const bindings = require_(candidate);
 			return bindings;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
 			errors.push(`${candidate}: ${message}`);
 		}
 	}

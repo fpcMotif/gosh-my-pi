@@ -44,7 +44,7 @@ export function extractScopeCandidates(numstat: NumstatEntry[]): ScopeCandidates
 		if (isExcludedFile(normalizedPath)) continue;
 		paths.push(normalizedPath);
 		const root = extractTopLevelRoot(normalizedPath);
-		if (root) {
+		if (root !== null && root !== undefined && root !== "") {
 			distinctRoots.add(root);
 		}
 		totalLines += linesChanged;
@@ -65,7 +65,7 @@ export function extractScopeCandidates(numstat: NumstatEntry[]): ScopeCandidates
 	const isWide = isWideChange(candidates, 0.6, distinctRoots.size);
 	if (isWide) {
 		const pattern = analyzeWideChange(paths);
-		if (pattern) {
+		if (pattern !== null && pattern !== undefined && pattern !== "") {
 			return { scopeCandidates: `(cross-cutting: ${pattern})`, isWide: true };
 		}
 		return { scopeCandidates: "(none - multi-component change)", isWide: true };
@@ -75,9 +75,9 @@ export function extractScopeCandidates(numstat: NumstatEntry[]): ScopeCandidates
 	for (const candidate of candidates.slice(0, 5)) {
 		if (candidate.percentage < 10) continue;
 		const confidenceLabel = candidate.path.includes("/")
-			? candidate.percentage > 60
+			? (candidate.percentage > 60
 				? "high confidence"
-				: "moderate confidence"
+				: "moderate confidence")
 			: "high confidence";
 		suggestionParts.push(`${candidate.path} (${candidate.percentage.toFixed(0)}%, ${confidenceLabel})`);
 	}

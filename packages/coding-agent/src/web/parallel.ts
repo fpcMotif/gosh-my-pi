@@ -123,14 +123,24 @@ function extractParallelErrorMessage(payload: unknown): string | null {
 	if (!isObject(payload)) return null;
 
 	const directMessage = getString(payload, "message") ?? getString(payload, "detail") ?? getString(payload, "error");
-	if (directMessage && directMessage.trim().length > 0) {
+	if (
+		directMessage !== null &&
+		directMessage !== undefined &&
+		directMessage !== "" &&
+		directMessage.trim().length > 0
+	) {
 		return directMessage.trim();
 	}
 
 	const errorObject = getOwnValue(payload, "error");
 	if (isObject(errorObject)) {
 		const nestedMessage = getString(errorObject, "message") ?? getString(errorObject, "detail");
-		if (nestedMessage && nestedMessage.trim().length > 0) {
+		if (
+			nestedMessage !== null &&
+			nestedMessage !== undefined &&
+			nestedMessage !== "" &&
+			nestedMessage.trim().length > 0
+		) {
 			return nestedMessage.trim();
 		}
 	}
@@ -140,7 +150,9 @@ function extractParallelErrorMessage(payload: unknown): string | null {
 
 function createParallelApiError(statusCode: number, detail?: string): ParallelApiError {
 	return new ParallelApiError(
-		detail ? `Parallel API error (${statusCode}): ${detail}` : `Parallel API error (${statusCode})`,
+		detail !== null && detail !== undefined && detail !== ""
+			? `Parallel API error (${statusCode}): ${detail}`
+			: `Parallel API error (${statusCode})`,
 		statusCode,
 	);
 }
@@ -202,7 +214,7 @@ function parseWarnings(payload: unknown): string[] {
 		}
 		if (!isObject(item)) continue;
 		const message = getString(item, "message") ?? getString(item, "warning");
-		if (message) {
+		if (message !== null && message !== undefined && message !== "") {
 			warnings.push(message);
 		}
 	}
@@ -220,7 +232,7 @@ function parseSearchPayload(payload: unknown): ParallelSearchResult {
 
 	for (const item of rawResults) {
 		const url = getString(item, "url");
-		if (!url) continue;
+		if (url === null || url === undefined || url === "") continue;
 
 		const excerpts = getStringArray(item, "excerpts");
 		const snippet = excerpts.length > 0 ? excerpts.join("\n\n") : undefined;
@@ -250,7 +262,7 @@ function parseExtractPayload(payload: unknown): ParallelExtractResult {
 	const resultItems: ParallelExtractDocument[] = [];
 	for (const item of getObjectArray(payload, "results")) {
 		const url = getString(item, "url");
-		if (!url) continue;
+		if (url === null || url === undefined || url === "") continue;
 		resultItems.push({
 			url,
 			title: getString(item, "title"),
@@ -263,7 +275,7 @@ function parseExtractPayload(payload: unknown): ParallelExtractResult {
 	const errors: ParallelExtractErrorEntry[] = [];
 	for (const item of getObjectArray(payload, "errors")) {
 		const url = getString(item, "url");
-		if (!url) continue;
+		if (url === null || url === undefined || url === "") continue;
 		errors.push({
 			url,
 			errorType: getString(item, "error_type"),
@@ -287,7 +299,7 @@ export async function searchWithParallel(
 	options: ParallelSearchOptions = {},
 ): Promise<ParallelSearchResult> {
 	const apiKey = await findParallelApiKey();
-	if (!apiKey) {
+	if (apiKey === null || apiKey === undefined || apiKey === "") {
 		throw new ParallelApiError(
 			"Parallel credentials not found. Set PARALLEL_API_KEY or login with 'omp /login parallel'.",
 		);
@@ -319,7 +331,7 @@ export async function extractWithParallel(
 	options: ParallelExtractOptions = {},
 ): Promise<ParallelExtractResult> {
 	const apiKey = await findParallelApiKey();
-	if (!apiKey) {
+	if (apiKey === null || apiKey === undefined || apiKey === "") {
 		throw new ParallelApiError(
 			"Parallel credentials not found. Set PARALLEL_API_KEY or login with 'omp /login parallel'.",
 		);

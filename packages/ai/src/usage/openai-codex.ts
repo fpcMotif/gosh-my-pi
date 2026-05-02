@@ -85,19 +85,19 @@ function parseJwt(token: string): JwtPayload | null {
 }
 
 function normalizeEmail(email: string | undefined): string | undefined {
-	if (!email) return undefined;
+	if (email === null || email === undefined || email === "") return undefined;
 	const normalized = email.trim().toLowerCase();
-	return normalized || undefined;
+	return normalized.length > 0 ? normalized : undefined;
 }
 
 function extractAccountId(token: string | undefined): string | undefined {
-	if (!token) return undefined;
+	if (token === null || token === undefined || token === "") return undefined;
 	const payload = parseJwt(token);
 	return payload?.[JWT_AUTH_CLAIM]?.chatgpt_account_id ?? undefined;
 }
 
 function extractEmail(token: string | undefined): string | undefined {
-	if (!token) return undefined;
+	if (token === null || token === undefined || token === "") return undefined;
 	const payload = parseJwt(token);
 	return normalizeEmail(payload?.[JWT_PROFILE_CLAIM]?.email);
 }
@@ -128,7 +128,7 @@ function parseUsagePayload(payload: unknown): ParsedUsage | null {
 	if (!isRecord(payload)) return null;
 	const planType = typeof payload.plan_type === "string" ? payload.plan_type : undefined;
 	const rateLimit = isRecord(payload.rate_limit) ? payload.rate_limit : undefined;
-	if (!rateLimit) return null;
+	if (rateLimit === undefined || rateLimit === null) return null;
 	const parsed: ParsedUsage = {
 		planType,
 		allowed: toBoolean(rateLimit.allowed),
@@ -137,7 +137,12 @@ function parseUsagePayload(payload: unknown): ParsedUsage | null {
 		secondary: parseUsageWindow(rateLimit.secondary_window),
 		raw: payload as CodexUsagePayload,
 	};
-	if (!parsed.primary && !parsed.secondary && parsed.allowed === undefined && parsed.limitReached === undefined) {
+	if (
+		parsed.primary === undefined &&
+		parsed.secondary === undefined &&
+		parsed.allowed === undefined &&
+		parsed.limitReached === undefined
+	) {
 		return null;
 	}
 	return parsed;
@@ -145,12 +150,12 @@ function parseUsagePayload(payload: unknown): ParsedUsage | null {
 
 function normalizeCodexBaseUrl(baseUrl?: string): string {
 	const fallback = CODEX_BASE_URL;
-	const trimmed = baseUrl?.trim() ? baseUrl.trim() : fallback;
+	const trimmed = baseUrl !== undefined && baseUrl !== null && baseUrl.trim() !== "" ? baseUrl.trim() : fallback;
 	const base = trimmed.replace(/\/+$/, "");
 	const lower = base.toLowerCase();
 	if (
 		(lower.startsWith("https://chatgpt.com") || lower.startsWith("https://chat.openai.com")) &&
-		!lower.includes("/backend-api")
+		lower.includes("/backend-api") === false
 	) {
 		return `${base}/backend-api`;
 	}
@@ -219,7 +224,7 @@ function buildUsageAmount(window: ParsedUsageWindow): UsageAmount {
 }
 
 function buildUsageStatus(usedFraction?: number, limitReached?: boolean): UsageLimit["status"] {
-	if (limitReached) return "exhausted";
+	if (limitReached === true) return "exhausted";
 	if (usedFraction === undefined) return "unknown";
 	if (usedFraction >= 1) return "exhausted";
 	if (usedFraction >= 0.9) return "warning";
@@ -263,7 +268,7 @@ export const openaiCodexUsageProvider: UsageProvider = {
 		if (credential.type !== "oauth") return null;
 
 		const accessToken = credential.accessToken;
-		if (!accessToken) return null;
+		if (accessToken === null || accessToken === undefined || accessToken === "") return null;
 
 		const nowMs = Date.now();
 		if (credential.expiresAt !== undefined && credential.expiresAt <= nowMs) {
@@ -272,14 +277,18 @@ export const openaiCodexUsageProvider: UsageProvider = {
 		}
 
 		const baseUrl = normalizeCodexBaseUrl(params.baseUrl);
-		const accountId = credential.accountId ?? extractAccountId(accessToken);
+		const accountIdFromCred = credential.accountId;
+		const accountId =
+			accountIdFromCred !== undefined && accountIdFromCred !== null && accountIdFromCred !== ""
+				? accountIdFromCred
+				: extractAccountId(accessToken);
 		const email = normalizeEmail(credential.email ?? extractEmail(accessToken));
 
 		const headers: Record<string, string> = {
 			Authorization: `Bearer ${accessToken}`,
 			"User-Agent": "OpenCode-Status-Plugin/1.0",
 		};
-		if (accountId) {
+		if (accountId !== undefined && accountId !== null && accountId !== "") {
 			headers["ChatGPT-Account-Id"] = accountId;
 		}
 
@@ -287,7 +296,7 @@ export const openaiCodexUsageProvider: UsageProvider = {
 		let payload: unknown;
 		try {
 			const response = await ctx.fetch(url, { headers, signal: params.signal });
-			if (!response.ok) {
+			if (response.ok === false) {
 				ctx.logger?.warn("Codex usage request failed", { status: response.status, provider: params.provider });
 				return null;
 			}
@@ -352,9 +361,9 @@ export const codexRankingStrategy: CredentialRankingStrategy = {
 	findWindowLimits(report) {
 		const findLimit = (key: "primary" | "secondary"): UsageLimit | undefined => {
 			const direct = report.limits.find(l => l.id === `openai-codex:${key}`);
-			if (direct) return direct;
+			if (direct !== undefined && direct !== null) return direct;
 			const byId = report.limits.find(l => l.id.toLowerCase().includes(key));
-			if (byId) return byId;
+			if (byId !== undefined && byId !== null) return byId;
 			const windowId = key === "secondary" ? "7d" : "1h";
 			return report.limits.find(l => l.scope.windowId?.toLowerCase() === windowId);
 		};
@@ -362,7 +371,7 @@ export const codexRankingStrategy: CredentialRankingStrategy = {
 	},
 	windowDefaults: { primaryMs: 60 * 60 * 1000, secondaryMs: 7 * 24 * 60 * 60 * 1000 },
 	hasPriorityBoost(primary) {
-		if (!primary) return false;
+		if (primary === undefined || primary === null) return false;
 		const windowId = primary.scope.windowId?.toLowerCase();
 		const durationMs = primary.window?.durationMs;
 		const isFiveHourWindow =
@@ -370,7 +379,7 @@ export const codexRankingStrategy: CredentialRankingStrategy = {
 			(typeof durationMs === "number" &&
 				Number.isFinite(durationMs) &&
 				Math.abs(durationMs - FIVE_HOUR_MS) <= 60_000);
-		if (!isFiveHourWindow) return false;
+		if (isFiveHourWindow === false) return false;
 		const usedFraction = primary.amount.usedFraction;
 		return typeof usedFraction === "number" && Number.isFinite(usedFraction) && usedFraction === 0;
 	},

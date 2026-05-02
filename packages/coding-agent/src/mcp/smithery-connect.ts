@@ -1,4 +1,4 @@
-const SMITHERY_API_BASE_URL = (process.env.SMITHERY_API_URL || "https://api.smithery.ai").replace(/\/+$/, "");
+const SMITHERY_API_BASE_URL = (process.env.SMITHERY_API_URL ?? "https://api.smithery.ai").replace(/\/+$/, "");
 
 export class SmitheryConnectError extends Error {
 	status: number;

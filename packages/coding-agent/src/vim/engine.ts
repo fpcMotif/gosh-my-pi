@@ -104,7 +104,7 @@ function literalTextToReplayTokens(text: string): string[] {
 // and \( etc. become regex groups.
 function vimPatternToJsRegex(pattern: string): string {
 	return pattern.replace(/\\([(){}|+])|([(){}|+])/g, (_match, escaped, bare) => {
-		if (escaped) return escaped; // \( -> ( (regex group)
+		if (escaped !== null && escaped !== undefined) return escaped; // \( -> ( (regex group)
 		return `\\${bare}`; // ( -> \( (literal paren)
 	});
 }
@@ -809,9 +809,9 @@ export class VimEngine {
 					const transformed =
 						next.value === "u"
 							? original.toLowerCase()
-							: next.value === "U"
+							: (next.value === "U"
 								? original.toUpperCase()
-								: toggleCase(original);
+								: toggleCase(original));
 					this.buffer.replaceOffsets(visual.start, visual.end, transformed, visual.start);
 				});
 				this.#clearSelection();
@@ -849,9 +849,9 @@ export class VimEngine {
 				const operatorValue =
 					opToken.value === "x" || opToken.value === "X" || opToken.value === "D"
 						? "d"
-						: opToken.value === "s" || opToken.value === "S" || opToken.value === "C"
+						: (opToken.value === "s" || opToken.value === "S" || opToken.value === "C"
 							? "c"
-							: opToken.value;
+							: opToken.value);
 				const visualTokens = consumeExtraIndent ? [opToken.value, opToken.value] : [opToken.value];
 				await this.#applyVisualOperator(operatorValue, visual, count, visualTokens);
 				return nextIndex + visualTokens.length;
@@ -1544,7 +1544,6 @@ export class VimEngine {
 			await this.#startInsertChange(tokens, () => {
 				this.#yankAndDeleteRange(range);
 			});
-			return;
 		}
 	}
 
@@ -1587,7 +1586,7 @@ export class VimEngine {
 			};
 		}
 
-		if (motion.linewise) {
+		if (motion.linewise === true) {
 			const startLine = Math.min(this.buffer.cursor.line, motion.target.line);
 			const endLine = Math.max(this.buffer.cursor.line, motion.target.line);
 			const start = this.buffer.positionToOffset({ line: startLine, col: 0 });
@@ -2146,7 +2145,6 @@ export class VimEngine {
 			case "update":
 				if (!this.buffer.modified) {
 					this.statusMessage = `${this.buffer.displayPath} unchanged`;
-					return;
 				}
 				await this.#executeEx(command.force ? "w!" : "w");
 				return;
@@ -2174,9 +2172,10 @@ export class VimEngine {
 				this.#pendingChange = null;
 				this.#undoStack = [];
 				this.#redoStack = [];
-				this.statusMessage = command.path
-					? `Opened ${this.buffer.displayPath}`
-					: `Reloaded ${this.buffer.displayPath}`;
+				this.statusMessage =
+					command.path !== null && command.path !== undefined && command.path !== ""
+						? `Opened ${this.buffer.displayPath}`
+						: `Reloaded ${this.buffer.displayPath}`;
 				return;
 			}
 			case "substitute": {
@@ -2279,7 +2278,7 @@ export class VimEngine {
 					slice.sort((a, b) => {
 						const left = ignoreCase ? a.toLowerCase() : a;
 						const right = ignoreCase ? b.toLowerCase() : b;
-						return left < right ? -1 : left > right ? 1 : 0;
+						return left < right ? -1 : (left > right ? 1 : 0);
 					});
 					if (reverse) slice.reverse();
 					for (let i = 0; i < slice.length; i++) {
@@ -2364,7 +2363,6 @@ export class VimEngine {
 					}
 				});
 				this.statusMessage = `Global: processed ${command.pattern}`;
-				return;
 			}
 		}
 	}

@@ -9,7 +9,7 @@ export async function detectChangelogBoundaries(cwd: string, stagedFiles: string
 	for (const file of stagedFiles) {
 		if (file.toLowerCase().endsWith("changelog.md")) continue;
 		const changelogPath = await findNearestChangelog(cwd, file);
-		if (!changelogPath) continue;
+		if (changelogPath === null || changelogPath === undefined || changelogPath === "") continue;
 		const list = boundaries.get(changelogPath) ?? [];
 		list.push(file);
 		boundaries.set(changelogPath, list);

@@ -81,7 +81,16 @@ export const handlePackagist: SpecialHandler = async (
 			// Look for latest stable version first
 			for (const [key, ver] of Object.entries(pkg.versions)) {
 				if (key === "dev-master" || key === "dev-main" || key.includes("-dev")) continue;
-				if (!latestVersion || (ver.time && latestVersion.time && ver.time > latestVersion.time)) {
+				if (
+					!latestVersion ||
+					(ver.time !== null &&
+						ver.time !== undefined &&
+						ver.time !== "" &&
+						latestVersion.time !== null &&
+						latestVersion.time !== undefined &&
+						latestVersion.time !== "" &&
+						ver.time > latestVersion.time)
+				) {
 					latestVersion = ver;
 					latestVersionKey = key;
 				}
@@ -94,46 +103,68 @@ export const handlePackagist: SpecialHandler = async (
 		}
 
 		let md = `# ${pkg.name}\n\n`;
-		if (pkg.description) md += `${pkg.description}\n\n`;
+		if (pkg.description !== null && pkg.description !== undefined && pkg.description !== "")
+			md += `${pkg.description}\n\n`;
 
 		md += `**Latest:** ${latestVersionKey || "unknown"}`;
-		if (latestVersion?.license?.length) md += ` · **License:** ${latestVersion.license.join(", ")}`;
-		if (pkg.type) md += ` · **Type:** ${pkg.type}`;
+		if (
+			latestVersion?.license?.length !== null &&
+			latestVersion?.license?.length !== undefined &&
+			latestVersion?.license?.length !== 0
+		)
+			md += ` · **License:** ${latestVersion.license.join(", ")}`;
+		if (pkg.type !== null && pkg.type !== undefined && pkg.type !== "") md += ` · **Type:** ${pkg.type}`;
 		md += "\n";
 
 		if (pkg.downloads) {
 			md += `**Downloads:** ${formatNumber(pkg.downloads.total)} total · ${formatNumber(pkg.downloads.monthly)}/month\n`;
 		}
-		if (pkg.favers) md += `**Stars:** ${formatNumber(pkg.favers)}\n`;
+		if (pkg.favers !== null && pkg.favers !== undefined && pkg.favers !== 0)
+			md += `**Stars:** ${formatNumber(pkg.favers)}\n`;
 		md += "\n";
 
 		// Authors
-		if (latestVersion?.authors?.length) {
+		if (
+			latestVersion?.authors?.length !== null &&
+			latestVersion?.authors?.length !== undefined &&
+			latestVersion?.authors?.length !== 0
+		) {
 			const authorList = latestVersion.authors
-				.map((a: { name: string; email?: string }) => (a.email ? `${a.name} <${a.email}>` : a.name))
+				.map((a: { name: string; email?: string }) =>
+					a.email !== null && a.email !== undefined && a.email !== "" ? `${a.name} <${a.email}>` : a.name,
+				)
 				.join(", ");
 			md += `**Authors:** ${authorList}\n`;
 		}
 
 		// Maintainers
-		if (pkg.maintainers?.length) {
+		if (pkg.maintainers?.length !== null && pkg.maintainers?.length !== undefined && pkg.maintainers?.length !== 0) {
 			md += `**Maintainers:** ${pkg.maintainers.map(m => m.name).join(", ")}\n`;
 		}
 
 		// Links
-		if (latestVersion?.homepage) md += `**Homepage:** ${latestVersion.homepage}\n`;
-		if (pkg.repository) md += `**Repository:** ${pkg.repository}\n`;
-		else if (latestVersion?.source?.url) {
+		if (latestVersion?.homepage !== null && latestVersion?.homepage !== undefined && latestVersion?.homepage !== "")
+			md += `**Homepage:** ${latestVersion.homepage}\n`;
+		if (pkg.repository !== null && pkg.repository !== undefined && pkg.repository !== "")
+			md += `**Repository:** ${pkg.repository}\n`;
+		else if (
+			latestVersion?.source?.url !== null &&
+			latestVersion?.source?.url !== undefined &&
+			latestVersion?.source?.url !== ""
+		) {
 			const repoUrl = latestVersion.source.url.replace(/\.git$/, "");
 			md += `**Repository:** ${repoUrl}\n`;
 		}
 
 		// GitHub stats
-		if (pkg.github_stars || pkg.github_forks) {
+		if (pkg.github_stars ?? (pkg.github_forks !== null && pkg.github_forks !== undefined && pkg.github_forks !== 0)) {
 			const stats: string[] = [];
-			if (pkg.github_stars) stats.push(`${formatNumber(pkg.github_stars)} stars`);
-			if (pkg.github_forks) stats.push(`${formatNumber(pkg.github_forks)} forks`);
-			if (pkg.github_open_issues) stats.push(`${pkg.github_open_issues} open issues`);
+			if (pkg.github_stars !== null && pkg.github_stars !== undefined && pkg.github_stars !== 0)
+				stats.push(`${formatNumber(pkg.github_stars)} stars`);
+			if (pkg.github_forks !== null && pkg.github_forks !== undefined && pkg.github_forks !== 0)
+				stats.push(`${formatNumber(pkg.github_forks)} forks`);
+			if (pkg.github_open_issues !== null && pkg.github_open_issues !== undefined && pkg.github_open_issues !== 0)
+				stats.push(`${pkg.github_open_issues} open issues`);
 			md += `**GitHub:** ${stats.join(" · ")}\n`;
 		}
 

@@ -230,7 +230,7 @@ export class DapSessionManager {
 			}
 			return buildSummary(session);
 		} catch (error) {
-			await this.#disposeSession(session);
+			this.#disposeSession(session);
 			throw error;
 		}
 	}
@@ -255,7 +255,9 @@ export class DapSessionManager {
 				cwd: options.cwd,
 				...(options.pid !== undefined ? { pid: options.pid, processId: options.pid } : {}),
 				...(options.port !== undefined ? { port: options.port } : {}),
-				...(options.host ? { host: options.host } : {}),
+				...(options.host !== null && options.host !== undefined && options.host !== ""
+					? { host: options.host }
+					: {}),
 			};
 			const initialStopPromise = this.#prepareStopOutcome(
 				session,
@@ -278,7 +280,7 @@ export class DapSessionManager {
 			}
 			return buildSummary(session);
 		} catch (error) {
-			await this.#disposeSession(session);
+			this.#disposeSession(session);
 			throw error;
 		}
 	}
@@ -303,7 +305,9 @@ export class DapSessionManager {
 				source: { path: sourcePath, name: path.basename(sourcePath) },
 				breakpoints: deduped.map<DapSourceBreakpoint>(entry => ({
 					line: entry.line,
-					...(entry.condition ? { condition: entry.condition } : {}),
+					...(entry.condition !== null && entry.condition !== undefined && entry.condition !== ""
+						? { condition: entry.condition }
+						: {}),
 				})),
 			},
 			signal,
@@ -328,7 +332,9 @@ export class DapSessionManager {
 				source: { path: sourcePath, name: path.basename(sourcePath) },
 				breakpoints: current.map<DapSourceBreakpoint>(entry => ({
 					line: entry.line,
-					...(entry.condition ? { condition: entry.condition } : {}),
+					...(entry.condition !== null && entry.condition !== undefined && entry.condition !== ""
+						? { condition: entry.condition }
+						: {}),
 				})),
 			},
 			signal,
@@ -357,7 +363,9 @@ export class DapSessionManager {
 			{
 				breakpoints: current.map<DapFunctionBreakpoint>(entry => ({
 					name: entry.name,
-					...(entry.condition ? { condition: entry.condition } : {}),
+					...(entry.condition !== null && entry.condition !== undefined && entry.condition !== ""
+						? { condition: entry.condition }
+						: {}),
 				})),
 			},
 			signal,
@@ -376,7 +384,9 @@ export class DapSessionManager {
 			{
 				breakpoints: current.map<DapFunctionBreakpoint>(entry => ({
 					name: entry.name,
-					...(entry.condition ? { condition: entry.condition } : {}),
+					...(entry.condition !== null && entry.condition !== undefined && entry.condition !== ""
+						? { condition: entry.condition }
+						: {}),
 				})),
 			},
 			signal,
@@ -799,7 +809,13 @@ export class DapSessionManager {
 
 	getOutput(limitBytes?: number): DapOutputSnapshot {
 		const session = this.#touchActiveSession();
-		if (!limitBytes || limitBytes <= 0 || Buffer.byteLength(session.output, "utf-8") <= limitBytes) {
+		if (
+			limitBytes === null ||
+			limitBytes === undefined ||
+			limitBytes === 0 ||
+			limitBytes <= 0 ||
+			Buffer.byteLength(session.output, "utf-8") <= limitBytes
+		) {
 			return { snapshot: buildSummary(session), output: session.output };
 		}
 		let sliceStart = session.output.length;
@@ -816,7 +832,7 @@ export class DapSessionManager {
 		if (!session) return null;
 		session.lastUsedAt = Date.now();
 		if (session.status !== "terminated") {
-			if (session.capabilities?.supportsTerminateRequest) {
+			if (session.capabilities?.supportsTerminateRequest === true) {
 				await untilAborted(
 					signal,
 					session.client.sendRequest("terminate", undefined, signal, timeoutMs).catch(() => undefined),
@@ -831,7 +847,7 @@ export class DapSessionManager {
 		}
 		session.status = "terminated";
 		const summary = buildSummary(session);
-		await this.#disposeSession(session);
+		this.#disposeSession(session);
 		return summary;
 	}
 
@@ -868,7 +884,7 @@ export class DapSessionManager {
 		const active = this.#getActiveSessionOrNull();
 		if (!active) return;
 		if (active.status === "terminated" || !active.client.isAlive()) {
-			await this.#disposeSession(active);
+			this.#disposeSession(active);
 			return;
 		}
 		throw new Error(`Debug session ${active.id} is still active. Terminate it before launching another.`);
@@ -961,7 +977,7 @@ export class DapSessionManager {
 			}
 		}, HEARTBEAT_INTERVAL_MS);
 		heartbeat.unref?.();
-		client.proc.exited.finally(() => clearInterval(heartbeat));
+		void client.proc.exited.finally(() => clearInterval(heartbeat));
 		return session;
 	}
 
@@ -1103,10 +1119,10 @@ export class DapSessionManager {
 				await this.#fetchTopFrame(session, signal, Math.min(timeoutMs, 5_000));
 			}
 			const state =
-				session.status === "stopped" ? "stopped" : session.status === "terminated" ? "terminated" : "running";
+				session.status === "stopped" ? "stopped" : (session.status === "terminated" ? "terminated" : "running");
 			return { snapshot: buildSummary(session), state, timedOut: false };
 		} catch (error) {
-			if (signal?.aborted) {
+			if (signal !== undefined && signal.aborted) {
 				throw error;
 			}
 			return { snapshot: buildSummary(session), state: "running", timedOut: session.status === "running" };
@@ -1223,7 +1239,7 @@ export class DapSessionManager {
 	}
 
 	#getActiveSessionOrNull(): DapSession | null {
-		if (!this.#activeSessionId) {
+		if (this.#activeSessionId === null || this.#activeSessionId === undefined || this.#activeSessionId === "") {
 			return null;
 		}
 		const session = this.#sessions.get(this.#activeSessionId) ?? null;

@@ -81,7 +81,7 @@ export async function loadPage(url: string, options: LoadPageOptions = {}): Prom
 	const { timeout = 20, headers = {}, maxBytes = MAX_BYTES, signal, method = "GET", body } = options;
 
 	for (let attempt = 0; attempt < USER_AGENTS.length; attempt++) {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			throw new ToolAbortError();
 		}
 
@@ -127,7 +127,7 @@ export async function loadPage(url: string, options: LoadPageOptions = {}): Prom
 				totalSize += value.length;
 
 				if (totalSize > maxBytes) {
-					reader.cancel();
+					void reader.cancel();
 					break;
 				}
 			}
@@ -143,7 +143,7 @@ export async function loadPage(url: string, options: LoadPageOptions = {}): Prom
 
 			return { content, contentType, finalUrl, ok: true, status: response.status };
 		} catch {
-			if (signal?.aborted) {
+			if (signal !== undefined && signal.aborted) {
 				throw new ToolAbortError();
 			}
 			if (attempt === USER_AGENTS.length - 1) {
@@ -193,9 +193,9 @@ turndown.addRule("listItem", {
 		if (parent?.nodeName === "OL") {
 			const start = parent.getAttribute("start");
 			const index = Array.prototype.indexOf.call(parent.children, node);
-			prefix = `${(start ? Number(start) : 1) + index}. `;
+			prefix = `${(start !== null && start !== undefined && start !== "" ? Number(start) : 1) + index}. `;
 		}
-		return prefix + content + (node.nextSibling ? "\n" : "");
+		return prefix + content + (node.nextSibling !== null && node.nextSibling !== undefined ? "\n" : "");
 	},
 });
 
@@ -232,7 +232,7 @@ export function buildResult(
  * Format a date value as YYYY-MM-DD. Returns empty string on invalid input.
  */
 export function formatIsoDate(value?: string | number | Date): string {
-	if (value == null) return "";
+	if (value === null) return "";
 	if (typeof value === "string") {
 		const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/);
 		if (datePrefix) return datePrefix[0];
@@ -276,7 +276,7 @@ export function formatMediaDuration(totalSeconds: number): string {
 export type LocalizedText = string | Record<string, string | null> | null | undefined;
 
 export function getLocalizedText(value: LocalizedText, defaultLocale?: string): string | undefined {
-	if (value == null) return undefined;
+	if (value === null) return undefined;
 	if (typeof value === "string") return value;
 	if (defaultLocale && value[defaultLocale]) return value[defaultLocale];
 	return (

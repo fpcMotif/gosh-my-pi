@@ -22,7 +22,7 @@ export class VirtualTerminal implements Terminal {
 		// Create xterm instance with specified dimensions
 		this.xterm = new XtermTerminal({
 			cols: columns,
-			rows: rows,
+			rows,
 			// Disable all interactive features for testing
 			disableStdin: true,
 			allowProposedApi: true,

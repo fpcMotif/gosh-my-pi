@@ -83,7 +83,7 @@ export function validateServerName(name: string): string | undefined {
 export async function addMCPServer(filePath: string, name: string, config: MCPServerConfig): Promise<void> {
 	// Validate server name
 	const nameError = validateServerName(name);
-	if (nameError) {
+	if (nameError !== null && nameError !== undefined && nameError !== "") {
 		throw new Error(nameError);
 	}
 
@@ -123,7 +123,7 @@ export async function addMCPServer(filePath: string, name: string, config: MCPSe
 export async function updateMCPServer(filePath: string, name: string, config: MCPServerConfig): Promise<void> {
 	// Validate server name
 	const nameError = validateServerName(name);
-	if (nameError) {
+	if (nameError !== null && nameError !== undefined && nameError !== "") {
 		throw new Error(nameError);
 	}
 

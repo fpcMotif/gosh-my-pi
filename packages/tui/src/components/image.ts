@@ -52,11 +52,11 @@ export class Image implements Component {
 		}
 
 		const cap = this.#options.maxWidthCells;
-		const maxWidth = cap != null && cap > 0 ? Math.min(width - 2, cap) : width - 2;
+		const maxWidth = cap !== undefined && cap > 0 ? Math.min(width - 2, cap) : width - 2;
 
 		let lines: string[];
 
-		if (TERMINAL.imageProtocol) {
+		if (TERMINAL.imageProtocol !== null) {
 			const result = renderImage(this.#base64Data, this.#dimensions, {
 				maxWidthCells: maxWidth,
 				maxHeightCells: this.#options.maxHeightCells,

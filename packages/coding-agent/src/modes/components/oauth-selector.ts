@@ -168,7 +168,7 @@ export class OAuthSelectorComponent extends Container {
 				this.#mode === "login" ? "No OAuth providers available" : "No OAuth providers logged in. Use /login first.";
 			this.#listContainer.addChild(new TruncatedText(theme.fg("muted", `  ${message}`), 0, 0));
 		}
-		if (this.#statusMessage) {
+		if (this.#statusMessage !== null && this.#statusMessage !== undefined && this.#statusMessage !== "") {
 			this.#listContainer.addChild(new Spacer(1));
 			this.#listContainer.addChild(new TruncatedText(theme.fg("warning", `  ${this.#statusMessage}`), 0, 0));
 		}

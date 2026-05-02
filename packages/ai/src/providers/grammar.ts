@@ -38,7 +38,7 @@ function stripLarkLineComment(line: string): string {
 			continue;
 		}
 
-		if (inString) {
+		if (inString !== null && inString !== undefined && inString !== "") {
 			if (char === inString) {
 				inString = undefined;
 			}

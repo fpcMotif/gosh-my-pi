@@ -14,11 +14,13 @@ async function runStringTransform(transform: TransformStream<string, string>, ch
 
 	const reader = readable.pipeThrough(transform).getReader();
 	const output: string[] = [];
-	while (true) {
+	async function readAll(): Promise<void> {
 		const { value, done } = await reader.read();
-		if (done) break;
+		if (done) return;
 		output.push(value);
+		await readAll();
 	}
+	await readAll();
 	return output;
 }
 

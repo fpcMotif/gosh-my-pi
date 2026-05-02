@@ -12,7 +12,7 @@ import { sleep } from "bun";
 
 // Initialize dark theme with full color support
 Bun.env.COLORTERM = "truecolor";
-initTheme();
+void initTheme();
 
 async function main() {
 	// Load the real fixture that caused the bug

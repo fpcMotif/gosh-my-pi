@@ -13,7 +13,7 @@ export function substitutePluginRoot<T>(value: T, rootPath: string): T {
 	if (Array.isArray(value)) {
 		return value.map(v => substitutePluginRoot(v, rootPath)) as T;
 	}
-	if (value && typeof value === "object") {
+	if (value !== null && value !== undefined && typeof value === "object") {
 		const result: Record<string, unknown> = Object.create(null);
 		for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
 			Object.defineProperty(result, k, {

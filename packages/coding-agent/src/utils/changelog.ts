@@ -64,7 +64,7 @@ export async function parseChangelog(changelogPath: string): Promise<ChangelogEn
 		if (isEnoent(error)) {
 			return [];
 		}
-		logger.error(`Warning: Could not parse changelog: ${error}`);
+		logger.error(`Warning: Could not parse changelog: ${String(error)}`);
 		return [];
 	}
 }

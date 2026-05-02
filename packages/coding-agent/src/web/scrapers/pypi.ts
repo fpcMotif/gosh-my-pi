@@ -62,10 +62,11 @@ export const handlePyPI: SpecialHandler = async (
 
 		const info = pkg.info;
 		let md = `# ${info.name}\n\n`;
-		if (info.summary) md += `${info.summary}\n\n`;
+		if (info.summary !== null && info.summary !== undefined && info.summary !== "") md += `${info.summary}\n\n`;
 
 		md += `**Latest:** ${info.version}`;
-		if (info.license) md += ` · **License:** ${info.license}`;
+		if (info.license !== null && info.license !== undefined && info.license !== "")
+			md += ` · **License:** ${info.license}`;
 		md += "\n";
 
 		if (weeklyDownloads !== null) {
@@ -74,14 +75,17 @@ export const handlePyPI: SpecialHandler = async (
 
 		md += "\n";
 
-		if (info.author) {
+		if (info.author !== null && info.author !== undefined && info.author !== "") {
 			md += `**Author:** ${info.author}`;
-			if (info.author_email) md += ` <${info.author_email}>`;
+			if (info.author_email !== null && info.author_email !== undefined && info.author_email !== "")
+				md += ` <${info.author_email}>`;
 			md += "\n";
 		}
 
-		if (info.requires_python) md += `**Python:** ${info.requires_python}\n`;
-		if (info.home_page) md += `**Homepage:** ${info.home_page}\n`;
+		if (info.requires_python !== null && info.requires_python !== undefined && info.requires_python !== "")
+			md += `**Python:** ${info.requires_python}\n`;
+		if (info.home_page !== null && info.home_page !== undefined && info.home_page !== "")
+			md += `**Homepage:** ${info.home_page}\n`;
 
 		if (info.project_urls && Object.keys(info.project_urls).length > 0) {
 			md += "\n**Project URLs:**\n";
@@ -90,7 +94,8 @@ export const handlePyPI: SpecialHandler = async (
 			}
 		}
 
-		if (info.keywords) md += `\n**Keywords:** ${info.keywords}\n`;
+		if (info.keywords !== null && info.keywords !== undefined && info.keywords !== "")
+			md += `\n**Keywords:** ${info.keywords}\n`;
 
 		// Dependencies
 		if (pkg.requires_dist && pkg.requires_dist.length > 0) {
@@ -101,7 +106,7 @@ export const handlePyPI: SpecialHandler = async (
 		}
 
 		// README/Description
-		if (info.description) {
+		if (info.description !== null && info.description !== undefined && info.description !== "") {
 			md += `\n---\n\n## Description\n\n${info.description}\n`;
 		}
 

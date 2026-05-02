@@ -37,7 +37,13 @@ export interface LoadMCPConfigsResult {
  */
 function convertToLegacyConfig(server: MCPServer): MCPServerConfig {
 	// Determine transport type
-	const transport = server.transport ?? (server.command ? "stdio" : server.url ? "http" : "stdio");
+	const transport =
+		server.transport ??
+		(server.command !== null && server.command !== undefined && server.command !== ""
+			? "stdio"
+			: (server.url !== null && server.url !== undefined && server.url !== ""
+				? "http"
+				: "stdio"));
 	const shared = {
 		enabled: server.enabled,
 		timeout: server.timeout,
@@ -53,7 +59,7 @@ function convertToLegacyConfig(server: MCPServer): MCPServerConfig {
 		};
 		if (server.args) config.args = server.args;
 		if (server.env) config.env = server.env;
-		if (server.cwd) config.cwd = server.cwd;
+		if (server.cwd !== null && server.cwd !== undefined && server.cwd !== "") config.cwd = server.cwd;
 		return config;
 	}
 
@@ -153,7 +159,12 @@ export function isExaMCPServer(name: string, config: MCPServerConfig): boolean {
 	// Check by URL for HTTP/SSE servers
 	if (config.type === "http" || config.type === "sse") {
 		const httpConfig = config as { url?: string };
-		if (httpConfig.url && EXA_MCP_URL_PATTERN.test(httpConfig.url)) {
+		if (
+			httpConfig.url !== null &&
+			httpConfig.url !== undefined &&
+			httpConfig.url !== "" &&
+			EXA_MCP_URL_PATTERN.test(httpConfig.url)
+		) {
 			return true;
 		}
 	}
@@ -176,7 +187,7 @@ export function extractExaApiKey(config: MCPServerConfig): string | undefined {
 	// Check URL for HTTP/SSE servers
 	if (config.type === "http" || config.type === "sse") {
 		const httpConfig = config as { url?: string };
-		if (httpConfig.url) {
+		if (httpConfig.url !== null && httpConfig.url !== undefined && httpConfig.url !== "") {
 			const match = EXA_API_KEY_PATTERN.exec(httpConfig.url);
 			if (match) return match[1];
 		}
@@ -230,7 +241,7 @@ export function filterExaMCPServers(
 		if (isExaMCPServer(name, config)) {
 			// Extract API key before filtering
 			const apiKey = extractExaApiKey(config);
-			if (apiKey) {
+			if (apiKey !== null && apiKey !== undefined && apiKey !== "") {
 				exaApiKeys.push(apiKey);
 			}
 		} else {
@@ -263,16 +274,16 @@ export function validateServerConfig(name: string, config: MCPServerConfig): str
 
 	if (serverType === "stdio") {
 		const stdioConfig = config as { command?: string };
-		if (!stdioConfig.command) {
+		if (stdioConfig.command === null || stdioConfig.command === undefined || stdioConfig.command === "") {
 			errors.push(`Server "${name}": stdio server requires "command" field`);
 		}
 	} else if (serverType === "http" || serverType === "sse") {
 		const httpConfig = config as { url?: string };
-		if (!httpConfig.url) {
+		if (httpConfig.url === null || httpConfig.url === undefined || httpConfig.url === "") {
 			errors.push(`Server "${name}": ${serverType} server requires "url" field`);
 		}
 	} else {
-		errors.push(`Server "${name}": unknown server type "${serverType}"`);
+		errors.push(`Server "${name}": unknown server type "${String(serverType)}"`);
 	}
 
 	return errors;
@@ -314,7 +325,12 @@ export function isBrowserMCPServer(name: string, config: MCPServerConfig): boole
 	// Check by URL for HTTP/SSE servers
 	if (config.type === "http" || config.type === "sse") {
 		const httpConfig = config as { url?: string };
-		if (httpConfig.url && BROWSER_MCP_URL_PATTERN.test(httpConfig.url)) {
+		if (
+			httpConfig.url !== null &&
+			httpConfig.url !== undefined &&
+			httpConfig.url !== "" &&
+			BROWSER_MCP_URL_PATTERN.test(httpConfig.url)
+		) {
 			return true;
 		}
 	}
@@ -322,7 +338,12 @@ export function isBrowserMCPServer(name: string, config: MCPServerConfig): boole
 	// Check by command/args for stdio servers
 	if (!config.type || config.type === "stdio") {
 		const stdioConfig = config as { command?: string; args?: string[] };
-		if (stdioConfig.command && BROWSER_MCP_PKG_PATTERN.test(stdioConfig.command)) {
+		if (
+			stdioConfig.command !== null &&
+			stdioConfig.command !== undefined &&
+			stdioConfig.command !== "" &&
+			BROWSER_MCP_PKG_PATTERN.test(stdioConfig.command)
+		) {
 			return true;
 		}
 		if (stdioConfig.args?.some(arg => BROWSER_MCP_PKG_PATTERN.test(arg))) {

@@ -107,8 +107,14 @@ export function getRoleInfo(role: string, settings: Settings): RoleInfo {
 	if (configured) {
 		return {
 			tag: builtIn?.tag,
-			name: configured.name || builtIn?.name || role,
-			color: configured.color && isValidThemeColor(configured.color) ? configured.color : builtIn?.color,
+			name: (configured.name || builtIn?.name) ?? role,
+			color:
+				configured.color !== null &&
+				configured.color !== undefined &&
+				configured.color !== "" &&
+				isValidThemeColor(configured.color)
+					? configured.color
+					: builtIn?.color,
 		};
 	}
 
@@ -331,20 +337,28 @@ function validateProviderConfiguration(
 	if (models.length === 0) {
 		if (mode === "models-config") {
 			const hasModelOverrides = config.modelOverrides && Object.keys(config.modelOverrides).length > 0;
-			if (!config.baseUrl && !config.headers && !config.compat && !hasModelOverrides && !config.discovery) {
+			if (
+				(config.baseUrl === null || config.baseUrl === undefined || config.baseUrl === "") &&
+				!config.headers &&
+				!config.compat &&
+				hasModelOverrides !== true &&
+				!config.discovery
+			) {
 				throw new Error(
 					`Provider ${providerName}: must specify "baseUrl", "headers", "compat", "modelOverrides", "discovery", or "models"`,
 				);
 			}
 		}
 	} else {
-		if (!config.baseUrl) {
+		if (config.baseUrl === null || config.baseUrl === undefined || config.baseUrl === "") {
 			throw new Error(`Provider ${providerName}: "baseUrl" is required when defining custom models.`);
 		}
 		const requiresAuth =
 			mode === "runtime-register"
-				? !config.apiKey && !config.oauthConfigured
-				: !config.apiKey && (config.auth ?? "apiKey") !== "none";
+				? (config.apiKey === null || config.apiKey === undefined || config.apiKey === "") &&
+					config.oauthConfigured !== true
+				: (config.apiKey === null || config.apiKey === undefined || config.apiKey === "") &&
+					(config.auth ?? "apiKey") !== "none";
 		if (requiresAuth) {
 			throw new Error(
 				mode === "runtime-register"
@@ -468,7 +482,7 @@ type LlamaCppDiscoveredServerMetadata = {
  */
 function resolveApiKeyConfig(keyConfig: string): string | undefined {
 	const envValue = Bun.env[keyConfig];
-	if (envValue) return envValue;
+	if (envValue !== null && envValue !== undefined && envValue !== "") return envValue;
 	return keyConfig;
 }
 
@@ -655,9 +669,9 @@ function mergeCustomModelHeaders(
 	apiKeyConfig: string | undefined,
 ): Record<string, string> | undefined {
 	let headers = providerHeaders || modelHeaders ? { ...providerHeaders, ...modelHeaders } : undefined;
-	if (authHeader && apiKeyConfig) {
+	if (authHeader === true && apiKeyConfig !== null && apiKeyConfig !== undefined && apiKeyConfig !== "") {
 		const resolvedKey = resolveApiKeyConfig(apiKeyConfig);
-		if (resolvedKey) {
+		if (resolvedKey !== null && resolvedKey !== undefined && resolvedKey !== "") {
 			headers = { ...headers, Authorization: `Bearer ${resolvedKey}` };
 		}
 	}
@@ -806,11 +820,14 @@ export class ModelRegistry {
 		modelsPath?: string,
 	) {
 		this.#modelsConfigFile = ModelsConfigFile.relocate(modelsPath);
-		this.#cacheDbPath = modelsPath ? path.join(path.dirname(modelsPath), "models.db") : undefined;
+		this.#cacheDbPath =
+			modelsPath !== null && modelsPath !== undefined && modelsPath !== ""
+				? path.join(path.dirname(modelsPath), "models.db")
+				: undefined;
 		// Set up fallback resolver for custom provider API keys
 		this.authStorage.setFallbackResolver(provider => {
 			const keyConfig = this.#customProviderApiKeys.get(provider);
-			if (keyConfig) {
+			if (keyConfig !== null && keyConfig !== undefined && keyConfig !== "") {
 				return resolveApiKeyConfig(keyConfig);
 			}
 			return undefined;
@@ -1034,7 +1051,7 @@ export class ModelRegistry {
 			this.#discoverableProviders.push({
 				provider: "ollama",
 				api: "openai-responses",
-				baseUrl: Bun.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+				baseUrl: Bun.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434",
 				discovery: { type: "ollama" },
 				optional: true,
 			});
@@ -1044,7 +1061,7 @@ export class ModelRegistry {
 			this.#discoverableProviders.push({
 				provider: "llama.cpp",
 				api: "openai-responses",
-				baseUrl: Bun.env.LLAMA_CPP_BASE_URL || "http://127.0.0.1:8080",
+				baseUrl: Bun.env.LLAMA_CPP_BASE_URL ?? "http://127.0.0.1:8080",
 				discovery: { type: "llama.cpp" },
 				optional: true,
 			});
@@ -1057,7 +1074,7 @@ export class ModelRegistry {
 			this.#discoverableProviders.push({
 				provider: "lm-studio",
 				api: "openai-completions",
-				baseUrl: Bun.env.LM_STUDIO_BASE_URL || "http://127.0.0.1:1234/v1",
+				baseUrl: Bun.env.LM_STUDIO_BASE_URL ?? "http://127.0.0.1:1234/v1",
 				discovery: { type: "lm-studio" },
 				optional: true,
 			});
@@ -1127,7 +1144,7 @@ export class ModelRegistry {
 			}
 
 			// Always store API key for fallback resolver
-			if (providerConfig.apiKey) {
+			if (providerConfig.apiKey !== null && providerConfig.apiKey !== undefined && providerConfig.apiKey !== "") {
 				this.#customProviderApiKeys.set(providerName, providerConfig.apiKey);
 			}
 
@@ -1248,25 +1265,29 @@ export class ModelRegistry {
 			fetchDynamicModels,
 		});
 		const result = await manager.refresh(strategy);
-		const status = discoveryError
-			? result.models.length > 0
-				? "cached"
-				: "unavailable"
-			: result.models.length > 0 && strategy !== "offline"
-				? "ok"
-				: cached
+		const status =
+			discoveryError !== null && discoveryError !== undefined && discoveryError !== ""
+				? (result.models.length > 0
 					? "cached"
-					: "idle";
+					: "unavailable")
+				: result.models.length > 0 && strategy !== "offline"
+					? "ok"
+					: cached
+						? "cached"
+						: "idle";
 		this.#providerDiscoveryStates.set(providerId, {
 			provider: providerId,
 			status,
 			optional: providerConfig.optional ?? false,
 			stale: result.stale || status === "cached",
-			fetchedAt: discoveryError ? cached?.updatedAt : Date.now(),
+			fetchedAt:
+				discoveryError !== null && discoveryError !== undefined && discoveryError !== ""
+					? cached?.updatedAt
+					: Date.now(),
 			models: result.models.map(model => model.id),
 			error: discoveryError,
 		});
-		if (discoveryError) {
+		if (discoveryError !== null && discoveryError !== undefined && discoveryError !== "") {
 			this.#warnProviderDiscoveryFailure(providerConfig, discoveryError);
 		}
 		return this.#applyProviderModelOverrides(
@@ -1371,7 +1392,7 @@ export class ModelRegistry {
 		for (let i = 0; i < PROVIDER_DESCRIPTORS.length; i++) {
 			const descriptor = PROVIDER_DESCRIPTORS[i];
 			const apiKey = standardProviderKeys[i];
-			if (isAuthenticated(apiKey) || descriptor.allowUnauthenticated) {
+			if (isAuthenticated(apiKey) || descriptor.allowUnauthenticated === true) {
 				options.push(
 					descriptor.createModelManagerOptions({
 						apiKey: isAuthenticated(apiKey) ? apiKey : undefined,
@@ -1420,7 +1441,7 @@ export class ModelRegistry {
 		try {
 			const response = await fetch(showUrl, {
 				method: "POST",
-				headers: { ...(headers ?? {}), "Content-Type": "application/json" },
+				headers: { ...headers, "Content-Type": "application/json" },
 				body: JSON.stringify({ model: modelId }),
 				signal: AbortSignal.timeout(150),
 			});
@@ -1465,7 +1486,7 @@ export class ModelRegistry {
 	async #discoverOllamaModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
 		const endpoint = this.#normalizeOllamaBaseUrl(providerConfig.baseUrl);
 		const tagsUrl = `${endpoint}/api/tags`;
-		const headers = { ...(providerConfig.headers ?? {}) };
+		const headers = { ...providerConfig.headers };
 		const response = await fetch(tagsUrl, {
 			headers,
 			signal: AbortSignal.timeout(250),
@@ -1475,8 +1496,8 @@ export class ModelRegistry {
 		}
 		const payload = (await response.json()) as { models?: Array<{ name?: string; model?: string }> };
 		const entries = (payload.models ?? []).flatMap(item => {
-			const id = item.model || item.name;
-			return id ? [{ id, name: item.name || id }] : [];
+			const id = item.model ?? item.name;
+			return id !== null && id !== undefined && id !== "" ? [{ id, name: item.name ?? id }] : [];
 		});
 		const metadataById = new Map(
 			await Promise.all(
@@ -1534,9 +1555,15 @@ export class ModelRegistry {
 		const baseUrl = this.#normalizeLlamaCppBaseUrl(providerConfig.baseUrl);
 		const modelsUrl = `${baseUrl}/models`;
 
-		const headers: Record<string, string> = { ...(providerConfig.headers ?? {}) };
+		const headers: Record<string, string> = { ...providerConfig.headers };
 		const apiKey = await this.authStorage.getApiKey(providerConfig.provider);
-		if (apiKey && apiKey !== DEFAULT_LOCAL_TOKEN && apiKey !== kNoAuth) {
+		if (
+			apiKey !== null &&
+			apiKey !== undefined &&
+			apiKey !== "" &&
+			apiKey !== DEFAULT_LOCAL_TOKEN &&
+			apiKey !== kNoAuth
+		) {
 			headers.Authorization = `Bearer ${apiKey}`;
 		}
 
@@ -1584,9 +1611,15 @@ export class ModelRegistry {
 		const baseUrl = this.#normalizeLmStudioBaseUrl(providerConfig.baseUrl);
 		const modelsUrl = `${baseUrl}/models`;
 
-		const headers: Record<string, string> = { ...(providerConfig.headers ?? {}) };
+		const headers: Record<string, string> = { ...providerConfig.headers };
 		const apiKey = await this.authStorage.getApiKey(providerConfig.provider);
-		if (apiKey && apiKey !== DEFAULT_LOCAL_TOKEN && apiKey !== kNoAuth) {
+		if (
+			apiKey !== null &&
+			apiKey !== undefined &&
+			apiKey !== "" &&
+			apiKey !== DEFAULT_LOCAL_TOKEN &&
+			apiKey !== kNoAuth
+		) {
 			headers.Authorization = `Bearer ${apiKey}`;
 		}
 
@@ -1629,7 +1662,7 @@ export class ModelRegistry {
 
 	#normalizeLlamaCppBaseUrl(baseUrl?: string): string {
 		const defaultBaseUrl = "http://127.0.0.1:8080";
-		const raw = baseUrl || defaultBaseUrl;
+		const raw = baseUrl ?? defaultBaseUrl;
 		try {
 			const parsed = new URL(raw);
 			const trimmedPath = parsed.pathname.replace(/\/+$/g, "");
@@ -1653,7 +1686,7 @@ export class ModelRegistry {
 
 	#normalizeLmStudioBaseUrl(baseUrl?: string): string {
 		const defaultBaseUrl = "http://127.0.0.1:1234/v1";
-		const raw = baseUrl || defaultBaseUrl;
+		const raw = baseUrl ?? defaultBaseUrl;
 		try {
 			const parsed = new URL(raw);
 			const trimmedPath = parsed.pathname.replace(/\/+$/g, "");
@@ -1664,7 +1697,7 @@ export class ModelRegistry {
 		}
 	}
 	#normalizeOllamaBaseUrl(baseUrl?: string): string {
-		const raw = baseUrl || "http://127.0.0.1:11434";
+		const raw = baseUrl ?? "http://127.0.0.1:11434";
 		try {
 			const parsed = new URL(raw);
 			return `${parsed.protocol}//${parsed.host}`;
@@ -1687,7 +1720,7 @@ export class ModelRegistry {
 		return {
 			baseUrl: override.baseUrl ?? baseOverride?.baseUrl,
 			apiKey: override.apiKey ?? baseOverride?.apiKey,
-			headers: override.headers ? { ...(baseOverride?.headers ?? {}), ...override.headers } : baseOverride?.headers,
+			headers: override.headers ? { ...baseOverride?.headers, ...override.headers } : baseOverride?.headers,
 			compat: override.compat ? mergeCompat(baseOverride?.compat, override.compat) : baseOverride?.compat,
 		};
 	}
@@ -1745,7 +1778,7 @@ export class ModelRegistry {
 		for (const [providerName, providerConfig] of Object.entries(config.providers ?? {})) {
 			const modelDefs = providerConfig.models ?? [];
 			if (modelDefs.length === 0) continue; // Override-only, no custom models
-			if (providerConfig.apiKey) {
+			if (providerConfig.apiKey !== null && providerConfig.apiKey !== undefined && providerConfig.apiKey !== "") {
 				this.#customProviderApiKeys.set(providerName, providerConfig.apiKey);
 			}
 			for (const modelDef of modelDefs) {
@@ -1794,7 +1827,7 @@ export class ModelRegistry {
 			if (candidateKeys && !candidateKeys.has(variant.selector)) {
 				return false;
 			}
-			if (options?.availableOnly && !this.#isModelAvailable(variant.model)) {
+			if (options?.availableOnly === true && !this.#isModelAvailable(variant.model)) {
 				return false;
 			}
 			return true;
@@ -1894,7 +1927,7 @@ export class ModelRegistry {
 		if (variants.length === 0) {
 			return undefined;
 		}
-		const candidates = options?.candidates ?? (options?.availableOnly ? this.getAvailable() : this.getAll());
+		const candidates = options?.candidates ?? (options?.availableOnly === true ? this.getAvailable() : this.getAll());
 		return this.#resolveCanonicalVariant(variants, candidates)?.model;
 	}
 
@@ -2053,10 +2086,15 @@ export class ModelRegistry {
 		}
 
 		let sourceHandoff = false;
-		if (sourceId) {
+		if (sourceId !== null && sourceId !== undefined && sourceId !== "") {
 			this.#registeredProviderSources.add(sourceId);
 			const previousSourceId = this.#runtimeProviderSourceByName.get(providerName);
-			if (previousSourceId && previousSourceId !== sourceId) {
+			if (
+				previousSourceId !== null &&
+				previousSourceId !== undefined &&
+				previousSourceId !== "" &&
+				previousSourceId !== sourceId
+			) {
 				const previousProviders = this.#runtimeProvidersBySource.get(previousSourceId);
 				previousProviders?.delete(providerName);
 				if (previousProviders && previousProviders.size === 0) {
@@ -2074,7 +2112,7 @@ export class ModelRegistry {
 			this.#reloadStaticModels();
 		}
 
-		if (config.apiKey) {
+		if (config.apiKey !== null && config.apiKey !== undefined && config.apiKey !== "") {
 			this.#customProviderApiKeys.set(providerName, config.apiKey);
 			// Persist runtime API keys so they survive #reloadStaticModels() cycles
 			this.#runtimeProviderApiKeys.set(providerName, config.apiKey);
@@ -2131,7 +2169,7 @@ export class ModelRegistry {
 			return;
 		}
 
-		if (config.baseUrl || config.headers) {
+		if (config.baseUrl ?? config.headers) {
 			const transportOverride = { baseUrl: config.baseUrl, headers: config.headers };
 			const nextRuntimeOverride = this.#mergeProviderOverride(
 				this.#runtimeProviderOverrides.get(providerName),
@@ -2159,7 +2197,7 @@ export class ModelRegistry {
 	isSelectorSuppressed(selector: string): boolean {
 		const normalizedSelector = normalizeSuppressedSelector(selector);
 		const suppressedUntil = this.#suppressedSelectors.get(normalizedSelector);
-		if (!suppressedUntil) return false;
+		if (suppressedUntil === null || suppressedUntil === undefined || suppressedUntil === 0) return false;
 		if (suppressedUntil <= Date.now()) {
 			this.#suppressedSelectors.delete(normalizedSelector);
 			return false;

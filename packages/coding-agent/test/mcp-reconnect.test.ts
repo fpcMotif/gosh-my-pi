@@ -290,7 +290,7 @@ describe("reconnect abort propagation", () => {
 		const pending = tool.execute("call-1", {}, noop, noCtx, controller.signal);
 		controller.abort();
 
-		await expect(pending).rejects.toBeInstanceOf(ToolAbortError);
+		expect(pending).rejects.toBeInstanceOf(ToolAbortError);
 	});
 
 	it("throws ToolAbortError when DeferredMCPTool reconnect is aborted", async () => {
@@ -305,6 +305,6 @@ describe("reconnect abort propagation", () => {
 		const pending = tool.execute("call-1", {}, noop, noDeferredCtx, controller.signal);
 		controller.abort();
 
-		await expect(pending).rejects.toBeInstanceOf(ToolAbortError);
+		expect(pending).rejects.toBeInstanceOf(ToolAbortError);
 	});
 });

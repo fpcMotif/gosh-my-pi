@@ -497,7 +497,7 @@ function looksLikeGitHubUrl(value: string | undefined): boolean {
 
 function normalizeOptionalString(value: string | null | undefined): string | undefined {
 	const normalized = value?.trim();
-	return normalized ? normalized : undefined;
+	return normalized !== null && normalized !== undefined && normalized !== "" ? normalized : undefined;
 }
 
 function normalizePrIdentifierList(value: string | string[] | undefined): string[] {
@@ -513,7 +513,7 @@ function normalizePrIdentifierList(value: string | string[] | undefined): string
 
 function requireNonEmpty(value: string | null | undefined, label: string): string {
 	const normalized = normalizeOptionalString(value);
-	if (!normalized) {
+	if (normalized === null || normalized === undefined || normalized === "") {
 		throw new ToolError(`${label} must not be empty`);
 	}
 	return normalized;
@@ -544,7 +544,7 @@ function resolveTailLimit(value: number | undefined): number {
 }
 
 function appendRepoFlag(args: string[], repo: string | undefined, identifier?: string): void {
-	if (!repo || looksLikeGitHubUrl(identifier)) {
+	if (repo === null || repo === undefined || repo === "" || looksLikeGitHubUrl(identifier)) {
 		return;
 	}
 
@@ -591,7 +591,7 @@ function toLocalBranchRef(value: string): string {
 
 async function requireGitRepoRoot(cwd: string, signal?: AbortSignal): Promise<string> {
 	const repoRoot = await git.repo.root(cwd, signal);
-	if (!repoRoot) {
+	if (repoRoot === null || repoRoot === undefined || repoRoot === "") {
 		throw new ToolError("Current git repository is unavailable.");
 	}
 
@@ -600,7 +600,7 @@ async function requireGitRepoRoot(cwd: string, signal?: AbortSignal): Promise<st
 
 async function requirePrimaryGitRepoRoot(cwd: string, signal?: AbortSignal): Promise<string> {
 	const primaryRepoRoot = await git.repo.primaryRoot(cwd, signal);
-	if (!primaryRepoRoot) {
+	if (primaryRepoRoot === null || primaryRepoRoot === undefined || primaryRepoRoot === "") {
 		throw new ToolError("Current git repository is unavailable.");
 	}
 
@@ -609,7 +609,7 @@ async function requirePrimaryGitRepoRoot(cwd: string, signal?: AbortSignal): Pro
 
 async function requireCurrentGitBranch(cwd: string, signal?: AbortSignal): Promise<string> {
 	const branch = await git.branch.current(cwd, signal);
-	if (!branch) {
+	if (branch === null || branch === undefined || branch === "") {
 		throw new ToolError("Current git branch is unavailable. Pass `branch` or `run` explicitly.");
 	}
 
@@ -618,7 +618,7 @@ async function requireCurrentGitBranch(cwd: string, signal?: AbortSignal): Promi
 
 async function requireCurrentGitHead(cwd: string, signal?: AbortSignal): Promise<string> {
 	const headSha = await git.head.sha(cwd, signal);
-	if (!headSha) {
+	if (headSha === null || headSha === undefined || headSha === "") {
 		throw new ToolError("Current git HEAD is unavailable. Pass `run` explicitly.");
 	}
 
@@ -647,7 +647,7 @@ async function ensureGitWorktreePathAvailable(
 }
 
 function selectPrCloneUrl(originUrl: string | undefined, repo: Pick<GhRepoViewData, "url" | "sshUrl">): string {
-	if (originUrl?.startsWith("http://") || originUrl?.startsWith("https://")) {
+	if (originUrl?.startsWith("http://") ?? originUrl?.startsWith("https://") === true) {
 		return normalizeOptionalString(repo.url) ?? normalizeOptionalString(repo.sshUrl) ?? "";
 	}
 
@@ -659,7 +659,7 @@ async function getRemoteUrls(repoRoot: string, signal?: AbortSignal): Promise<Ma
 	const urls = new Map<string, string>();
 	for (const remoteName of remotes) {
 		const remoteUrl = await git.remote.url(repoRoot, remoteName, signal);
-		if (remoteUrl) {
+		if (remoteUrl !== null && remoteUrl !== undefined && remoteUrl !== "") {
 			urls.set(remoteName, remoteUrl);
 		}
 	}
@@ -671,9 +671,9 @@ async function ensurePrRemote(
 	data: GhPrViewData,
 	signal?: AbortSignal,
 ): Promise<{ name: string; url: string }> {
-	if (!data.isCrossRepository) {
+	if (data.isCrossRepository !== true) {
 		const originUrl = await git.remote.url(repoRoot, "origin", signal);
-		if (!originUrl) {
+		if (originUrl === null || originUrl === undefined || originUrl === "") {
 			throw new ToolError("origin remote is unavailable for this repository.");
 		}
 
@@ -734,7 +734,7 @@ async function resolvePrBranchPushTarget(
 	isCrossRepository: boolean;
 }> {
 	const headRef = await git.config.getBranch(repoRoot, localBranch, "ompPrHeadRef", signal);
-	if (!headRef) {
+	if (headRef === null || headRef === undefined || headRef === "") {
 		throw new ToolError(`branch ${localBranch} has no PR push metadata; check it out via op: pr_checkout first`);
 	}
 
@@ -750,7 +750,7 @@ async function resolvePrBranchPushTarget(
 	const isCrossRepositoryValue = await git.config.getBranch(repoRoot, localBranch, "ompPrIsCrossRepository", signal);
 
 	const remoteName = pushRemote ?? remote;
-	if (!remoteName) {
+	if (remoteName === null || remoteName === undefined || remoteName === "") {
 		throw new ToolError(`branch ${localBranch} has no configured push remote`);
 	}
 
@@ -769,8 +769,8 @@ async function resolvePrBranchPushTarget(
 
 function formatAuthor(author: GhUser | null | undefined): string | undefined {
 	if (!author) return undefined;
-	if (author.login) return `@${author.login}`;
-	if (author.name) return author.name;
+	if (author.login !== null && author.login !== undefined && author.login !== "") return `@${author.login}`;
+	if (author.name !== null && author.name !== undefined && author.name !== "") return author.name;
 	return undefined;
 }
 
@@ -781,13 +781,13 @@ function formatLabels(labels: GhLabel[] | undefined): string | undefined {
 }
 
 function pushLine(lines: string[], label: string, value: string | number | boolean | undefined): void {
-	if (value === undefined || value === "") return;
+	if (value === null || value === undefined || value === "") return;
 	lines.push(`${label}: ${value}`);
 }
 
 function parseRunReference(value: string | undefined): GhRunReference {
 	const run = normalizeOptionalString(value);
-	if (!run) {
+	if (run === null || run === undefined || run === "") {
 		return {};
 	}
 
@@ -808,7 +808,7 @@ function parseRunReference(value: string | undefined): GhRunReference {
 
 function parsePullRequestUrl(value: string | undefined): { repo?: string; prNumber?: number } {
 	const normalized = normalizeOptionalString(value);
-	if (!normalized) {
+	if (normalized === null || normalized === undefined || normalized === "") {
 		return {};
 	}
 
@@ -879,7 +879,7 @@ function normalizeRunSnapshot(run: GhActionsRunApi, jobs: GhRunJobSnapshot[]): G
 }
 
 function getRunOutcome(value: string | undefined): "success" | "failure" | "pending" {
-	if (!value) {
+	if (value === null || value === undefined || value === "") {
 		return "pending";
 	}
 
@@ -941,7 +941,7 @@ function formatJobState(job: GhRunJobSnapshot): string {
 }
 
 function parseTimestampMs(value: string | undefined): number | undefined {
-	if (!value) {
+	if (value === null || value === undefined || value === "") {
 		return undefined;
 	}
 
@@ -1003,13 +1003,13 @@ function renderJobsSection(jobs: GhRunJobSnapshot[]): string[] {
 	const lines: string[] = [`## Jobs (${jobs.length})`, ""];
 	for (const job of jobs) {
 		lines.push(`- [${formatJobState(job)}] ${job.name}`);
-		if (job.startedAt) {
+		if (job.startedAt !== null && job.startedAt !== undefined && job.startedAt !== "") {
 			pushLine(lines, "  Started", job.startedAt);
 		}
-		if (job.completedAt) {
+		if (job.completedAt !== null && job.completedAt !== undefined && job.completedAt !== "") {
 			pushLine(lines, "  Completed", job.completedAt);
 		}
-		if (job.url) {
+		if (job.url !== null && job.url !== undefined && job.url !== "") {
 			pushLine(lines, "  URL", job.url);
 		}
 	}
@@ -1030,18 +1030,18 @@ function renderFailedJobLogs(
 		lines.push(`### ${entry.job.name} [${entry.job.conclusion ?? "failed"}]`);
 		pushLine(lines, "Run", `#${entry.run.id}`);
 		pushLine(lines, "Workflow", entry.run.workflowName ?? undefined);
-		if (entry.job.startedAt) {
+		if (entry.job.startedAt !== null && entry.job.startedAt !== undefined && entry.job.startedAt !== "") {
 			pushLine(lines, "Started", entry.job.startedAt);
 		}
-		if (entry.job.completedAt) {
+		if (entry.job.completedAt !== null && entry.job.completedAt !== undefined && entry.job.completedAt !== "") {
 			pushLine(lines, "Completed", entry.job.completedAt);
 		}
-		if (entry.job.url) {
+		if (entry.job.url !== null && entry.job.url !== undefined && entry.job.url !== "") {
 			pushLine(lines, "URL", entry.job.url);
 		}
 		lines.push("");
 		const logText = options.mode === "full" ? entry.full : entry.tail;
-		if (entry.available && logText) {
+		if (entry.available && logText !== null && logText !== undefined && logText !== "") {
 			lines.push(options.mode === "full" ? "Full log:" : `Last ${options.tail} log lines:`);
 			lines.push("```text");
 			lines.push(logText);
@@ -1056,7 +1056,10 @@ function renderFailedJobLogs(
 }
 
 function renderRunSection(run: GhRunSnapshot): string[] {
-	const label = run.workflowName ? `### Run #${run.id} - ${run.workflowName}` : `### Run #${run.id}`;
+	const label =
+		run.workflowName !== null && run.workflowName !== undefined && run.workflowName !== ""
+			? `### Run #${run.id} - ${run.workflowName}`
+			: `### Run #${run.id}`;
 	const lines: string[] = [label, ""];
 	pushLine(lines, "Title", run.displayTitle ?? undefined);
 	pushLine(lines, "Branch", run.branch ?? undefined);
@@ -1092,7 +1095,7 @@ function formatRunWatchSnapshot(
 	pushLine(lines, "Poll", pollCount);
 	pushLine(lines, "Failed jobs", failedJobs.length || undefined);
 
-	if (note) {
+	if (note !== null && note !== undefined && note !== "") {
 		lines.push("");
 		lines.push(`Note: ${note}`);
 	}
@@ -1165,7 +1168,7 @@ function formatCommitRunWatchSnapshot(
 	pushLine(lines, "Completed runs", `${completedRuns}/${runs.length}`);
 	pushLine(lines, "Failed jobs", failedJobs.length || undefined);
 
-	if (note) {
+	if (note !== null && note !== undefined && note !== "") {
 		lines.push("");
 		lines.push(`Note: ${note}`);
 	}
@@ -1317,15 +1320,23 @@ async function resolveGitHubRepo(
 	runRepo: string | undefined,
 	signal?: AbortSignal,
 ): Promise<string> {
-	if (repo && runRepo && repo !== runRepo) {
+	if (
+		repo !== null &&
+		repo !== undefined &&
+		repo !== "" &&
+		runRepo !== null &&
+		runRepo !== undefined &&
+		runRepo !== "" &&
+		repo !== runRepo
+	) {
 		throw new ToolError("run URL repository does not match the provided repo");
 	}
 
-	if (repo) {
+	if (repo !== null && repo !== undefined && repo !== "") {
 		return repo;
 	}
 
-	if (runRepo) {
+	if (runRepo !== null && runRepo !== undefined && runRepo !== "") {
 		return runRepo;
 	}
 
@@ -1370,7 +1381,7 @@ async function fetchRunsForCommit(
 			`head_sha=${headSha}`,
 			"-F",
 			`per_page=${RUN_JOBS_PAGE_SIZE}`,
-			...(branch ? ["-F", `branch=${branch}`] : []),
+			...(branch !== null && branch !== undefined && branch !== "" ? ["-F", `branch=${branch}`] : []),
 		],
 		signal,
 		{ repoProvided: true },
@@ -1513,7 +1524,8 @@ async function fetchFailedJobLogs(
 		failedJobs.map(async entry => {
 			const result = await git.github.run(cwd, ["api", `/repos/${repo}/actions/jobs/${entry.job.id}/logs`], signal);
 			const fullLog = result.exitCode === 0 ? normalizeBlock(result.stdout) : undefined;
-			const logTail = fullLog ? tailLogLines(fullLog, tail) : undefined;
+			const logTail =
+				fullLog !== null && fullLog !== undefined && fullLog !== "" ? tailLogLines(fullLog, tail) : undefined;
 			return {
 				run: entry.run,
 				job: entry.job,
@@ -1530,7 +1542,7 @@ function formatCommentsSection(comments: GhComment[] | undefined): string[] {
 		return [];
 	}
 
-	const visible = comments.filter(comment => !comment.isMinimized);
+	const visible = comments.filter(comment => comment.isMinimized !== true);
 	const hiddenCount = comments.length - visible.length;
 	const lines: string[] = ["## Comments", ""];
 
@@ -1543,11 +1555,14 @@ function formatCommentsSection(comments: GhComment[] | undefined): string[] {
 
 	for (const comment of visible) {
 		const author = formatAuthor(comment.author) ?? "unknown";
-		const createdAt = comment.createdAt ? ` · ${comment.createdAt}` : "";
+		const createdAt =
+			comment.createdAt !== null && comment.createdAt !== undefined && comment.createdAt !== ""
+				? ` · ${comment.createdAt}`
+				: "";
 		lines.push(`### ${author}${createdAt}`);
 		lines.push("");
 		lines.push(normalizeText(comment.body) || "No comment body.");
-		if (comment.url) {
+		if (comment.url !== null && comment.url !== undefined && comment.url !== "") {
 			lines.push("");
 			lines.push(`URL: ${comment.url}`);
 		}
@@ -1569,10 +1584,14 @@ function formatReviewsSection(reviews: GhPrReview[] | undefined): string[] {
 	const lines: string[] = [`## Reviews (${reviews.length})`, ""];
 	for (const review of reviews) {
 		const author = formatAuthor(review.author) ?? "unknown";
-		const submittedAt = review.submittedAt ? ` - ${review.submittedAt}` : "";
-		const state = review.state ? ` [${review.state}]` : "";
+		const submittedAt =
+			review.submittedAt !== null && review.submittedAt !== undefined && review.submittedAt !== ""
+				? ` - ${review.submittedAt}`
+				: "";
+		const state =
+			review.state !== null && review.state !== undefined && review.state !== "" ? ` [${review.state}]` : "";
 		lines.push(`### ${author}${submittedAt}${state}`);
-		if (review.commit?.oid) {
+		if (review.commit?.oid !== null && review.commit?.oid !== undefined && review.commit?.oid !== "") {
 			lines.push("");
 			lines.push(`Commit: ${formatShortSha(review.commit.oid)}`);
 		}
@@ -1585,7 +1604,7 @@ function formatReviewsSection(reviews: GhPrReview[] | undefined): string[] {
 }
 
 function formatReviewCommentLocation(comment: GhPrReviewComment): string | undefined {
-	if (!comment.path) {
+	if (comment.path === null || comment.path === undefined || comment.path === "") {
 		return undefined;
 	}
 
@@ -1601,7 +1620,10 @@ function formatReviewCommentsSection(comments: GhPrReviewComment[] | undefined):
 	const lines: string[] = [`## Review Comments (${comments.length})`, ""];
 	for (const comment of comments) {
 		const author = formatAuthor(comment.author) ?? "unknown";
-		const createdAt = comment.createdAt ? ` · ${comment.createdAt}` : "";
+		const createdAt =
+			comment.createdAt !== null && comment.createdAt !== undefined && comment.createdAt !== ""
+				? ` · ${comment.createdAt}`
+				: "";
 		lines.push(`### ${author}${createdAt}`);
 		lines.push("");
 		pushLine(lines, "Location", formatReviewCommentLocation(comment));
@@ -1639,7 +1661,7 @@ function formatRepoView(data: GhRepoViewData, input: { repo?: string; branch?: s
 		?.map(topic => topic.name ?? topic.topic?.name)
 		.filter((value): value is string => Boolean(value))
 		.join(", ");
-	pushLine(lines, "Topics", topics || undefined);
+	pushLine(lines, "Topics", topics ?? undefined);
 	return lines.join("\n").trim();
 }
 
@@ -1828,7 +1850,14 @@ function formatSearchResults(
 
 async function saveArtifactText(session: ToolSession, toolType: string, text: string): Promise<string | undefined> {
 	const { path: artifactPath, id: artifactId } = (await session.allocateOutputArtifact?.(toolType)) ?? {};
-	if (!artifactPath || !artifactId) {
+	if (
+		artifactPath === null ||
+		artifactPath === undefined ||
+		artifactPath === "" ||
+		artifactId === null ||
+		artifactId === undefined ||
+		artifactId === ""
+	) {
 		return undefined;
 	}
 
@@ -1837,7 +1866,7 @@ async function saveArtifactText(session: ToolSession, toolType: string, text: st
 }
 
 function appendArtifactReference(text: string, artifactId: string | undefined, label: string): string {
-	if (!artifactId) {
+	if (artifactId === null || artifactId === undefined || artifactId === "") {
 		return text;
 	}
 
@@ -1853,7 +1882,7 @@ function buildTextResult(
 	const builder = toolResult<GhToolDetails>(details).text(
 		appendArtifactReference(text, options?.artifactId, options?.artifactLabel ?? "Saved artifact"),
 	);
-	if (sourceUrl) {
+	if (sourceUrl !== null && sourceUrl !== undefined && sourceUrl !== "") {
 		builder.sourceUrl(sourceUrl);
 	}
 	return builder.done();
@@ -1913,10 +1942,10 @@ async function executeRepoView(
 	const repo = normalizeOptionalString(params.repo);
 	const branch = normalizeOptionalString(params.branch);
 	const args = ["repo", "view"];
-	if (repo) {
+	if (repo !== null && repo !== undefined && repo !== "") {
 		args.push(repo);
 	}
-	if (branch) {
+	if (branch !== null && branch !== undefined && branch !== "") {
 		args.push("--branch", branch);
 	}
 	args.push("--json", GH_REPO_FIELDS.join(","));
@@ -1958,7 +1987,7 @@ async function executePrView(
 	const views = await Promise.all(
 		prRefs.map(async prRef => {
 			const args = ["pr", "view"];
-			if (prRef) args.push(prRef);
+			if (prRef !== null && prRef !== undefined && prRef !== "") args.push(prRef);
 			appendRepoFlag(args, repo, prRef);
 			args.push("--json", (includeComments ? GH_PR_FIELDS : GH_PR_FIELDS_NO_COMMENTS).join(","));
 
@@ -1966,7 +1995,13 @@ async function executePrView(
 				repoProvided: Boolean(repo),
 			});
 			const resolvedRepo = repo ?? parsePullRequestUrl(data.url).repo;
-			if (includeComments && resolvedRepo && typeof data.number === "number") {
+			if (
+				includeComments &&
+				resolvedRepo !== null &&
+				resolvedRepo !== undefined &&
+				resolvedRepo !== "" &&
+				typeof data.number === "number"
+			) {
 				data.reviewComments = await fetchPrReviewComments(session.cwd, resolvedRepo, data.number, signal);
 			}
 			return { prRef, data };
@@ -1998,10 +2033,10 @@ async function executePrDiff(
 	const diffs = await Promise.all(
 		prRefs.map(async prRef => {
 			const args = ["pr", "diff"];
-			if (prRef) args.push(prRef);
+			if (prRef !== null && prRef !== undefined && prRef !== "") args.push(prRef);
 			appendRepoFlag(args, repo, prRef);
 			args.push("--color", "never");
-			if (params.nameOnly) args.push("--name-only");
+			if (params.nameOnly === true) args.push("--name-only");
 			for (const pattern of params.exclude ?? []) {
 				args.push("--exclude", requireNonEmpty(pattern, "exclude pattern"));
 			}
@@ -2013,8 +2048,8 @@ async function executePrDiff(
 		}),
 	);
 
-	const singleTitle = params.nameOnly ? "# Pull Request Files" : "# Pull Request Diff";
-	const emptyBody = params.nameOnly ? "No changed files." : "No diff output.";
+	const singleTitle = params.nameOnly === true ? "# Pull Request Files" : "# Pull Request Diff";
+	const emptyBody = params.nameOnly === true ? "No changed files." : "No diff output.";
 
 	if (diffs.length === 1) {
 		const [diff] = diffs;
@@ -2022,11 +2057,13 @@ async function executePrDiff(
 		return buildTextResult(`${singleTitle}\n\n${body}`);
 	}
 
-	const header = params.nameOnly
-		? `# ${diffs.length} Pull Request File Lists`
-		: `# ${diffs.length} Pull Request Diffs`;
+	const header =
+		params.nameOnly === true ? `# ${diffs.length} Pull Request File Lists` : `# ${diffs.length} Pull Request Diffs`;
 	const sections = diffs.map(diff => {
-		const label = diff.prRef ? `PR ${diff.prRef}` : "PR (current branch)";
+		const label =
+			diff.prRef !== null && diff.prRef !== undefined && diff.prRef !== ""
+				? `PR ${diff.prRef}`
+				: "PR (current branch)";
 		const body = diff.output.length > 0 ? diff.output : emptyBody;
 		return `## ${label}\n\n${body}`;
 	});
@@ -2103,7 +2140,7 @@ async function checkoutPullRequest(
 ): Promise<PrCheckoutOutcome> {
 	const { prRef, repo, force } = options;
 	const args = ["pr", "view"];
-	if (prRef) args.push(prRef);
+	if (prRef !== null && prRef !== undefined && prRef !== "") args.push(prRef);
 	appendRepoFlag(args, repo, prRef);
 	args.push("--json", GH_PR_CHECKOUT_FIELDS.join(","));
 
@@ -2381,9 +2418,10 @@ async function executeRunWatch(
 	}
 
 	const branch = branchInput ?? (await requireCurrentGitBranch(session.cwd, signal));
-	const headSha = branchInput
-		? await resolveGitHubBranchHead(session.cwd, repo, branch, signal)
-		: await requireCurrentGitHead(session.cwd, signal);
+	const headSha =
+		branchInput !== null && branchInput !== undefined && branchInput !== ""
+			? await resolveGitHubBranchHead(session.cwd, repo, branch, signal)
+			: await requireCurrentGitHead(session.cwd, signal);
 	let pollCount = 0;
 	let settledSuccessSignature: string | undefined;
 

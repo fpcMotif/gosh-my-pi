@@ -104,7 +104,7 @@ export async function runSearchCommand(cmd: SearchCommandArgs): Promise<void> {
 	const width = Math.max(60, process.stdout.columns ?? 100);
 	process.stdout.write(`${component.render(width).join("\n")}\n`);
 
-	if (result.details?.error) {
+	if (result.details?.error !== null && result.details?.error !== undefined && result.details?.error !== "") {
 		process.exitCode = 1;
 	}
 }

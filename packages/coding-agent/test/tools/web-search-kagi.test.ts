@@ -39,7 +39,7 @@ describe("Kagi web search error handling", () => {
 	it("falls back to plain text for non-JSON error bodies", async () => {
 		using _hook = hookFetch(() => new Response("upstream unavailable", { status: 503 }));
 
-		await expect(searchWithKagi("plain text error")).rejects.toThrow("Kagi API error (503): upstream unavailable");
+		expect(searchWithKagi("plain text error")).rejects.toThrow("Kagi API error (503): upstream unavailable");
 	});
 
 	it("preserves successful search parsing", async () => {
@@ -63,7 +63,7 @@ describe("Kagi web search error handling", () => {
 				),
 		);
 
-		await expect(searchWithKagi("success case")).resolves.toEqual({
+		expect(searchWithKagi("success case")).resolves.toEqual({
 			requestId: "req-kagi-success",
 			sources: [
 				{

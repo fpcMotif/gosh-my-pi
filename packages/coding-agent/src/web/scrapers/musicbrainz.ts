@@ -103,24 +103,27 @@ function formatLifeSpan(life: MusicBrainzLifeSpan | undefined): string | null {
 	const begin = life.begin?.trim();
 	const end = life.end?.trim();
 
-	if (begin && end) return `${begin} - ${end}`;
-	if (begin && !end) return `${begin} - ${life.ended ? "ended" : "present"}`;
-	if (!begin && end) return `? - ${end}`;
+	if (begin !== null && begin !== undefined && begin !== "" && end !== null && end !== undefined && end !== "")
+		return `${begin} - ${end}`;
+	if (begin !== null && begin !== undefined && begin !== "" && (end === null || end === undefined || end === ""))
+		return `${begin} - ${life.ended === true ? "ended" : "present"}`;
+	if ((begin === null || begin === undefined || begin === "") && end !== null && end !== undefined && end !== "")
+		return `? - ${end}`;
 	if (life.ended !== undefined) return life.ended ? "ended" : "present";
 
 	return null;
 }
 
 function formatDurationMs(lengthMs: number | undefined): string | null {
-	if (!lengthMs || lengthMs <= 0) return null;
+	if (lengthMs === null || lengthMs === undefined || lengthMs === 0 || lengthMs <= 0) return null;
 	return formatMediaDuration(Math.round(lengthMs / 1000));
 }
 
 function formatArtistCredits(credits: MusicBrainzArtistCredit[] | undefined): string | null {
-	if (!credits?.length) return null;
+	if (credits?.length === null || credits?.length === undefined || credits?.length === 0) return null;
 
 	const names = credits
-		.map(credit => credit.name || credit.artist?.name)
+		.map(credit => credit.name ?? credit.artist?.name)
 		.filter((name): name is string => Boolean(name));
 
 	if (!names.length) return null;
@@ -128,20 +131,23 @@ function formatArtistCredits(credits: MusicBrainzArtistCredit[] | undefined): st
 }
 
 function formatTrack(track: MusicBrainzTrack): string {
-	const title = track.title || track.recording?.title || "Untitled";
+	const title = track.title ?? track.recording?.title ?? "Untitled";
 	const duration = formatDurationMs(track.length ?? track.recording?.length);
-	const number = track.number || (track.position ? String(track.position) : null);
+	const number =
+		track.number ??
+		(track.position !== null && track.position !== undefined && track.position !== 0 ? String(track.position) : null);
 
-	const prefix = number ? `${number}. ` : "- ";
+	const prefix = number !== null && number !== undefined && number !== "" ? `${number}. ` : "- ";
 	let line = `${prefix}${title}`;
-	if (duration) line += ` (${duration})`;
+	if (duration !== null && duration !== undefined && duration !== "") line += ` (${duration})`;
 	return line;
 }
 
 function buildMediumLabel(medium: MusicBrainzMedium, includePosition: boolean): string | null {
 	const parts: string[] = [];
-	if (includePosition && medium.position) parts.push(`Disc ${medium.position}`);
-	if (medium.format) parts.push(medium.format);
+	if (includePosition && medium.position !== null && medium.position !== undefined && medium.position !== 0)
+		parts.push(`Disc ${medium.position}`);
+	if (medium.format !== null && medium.format !== undefined && medium.format !== "") parts.push(medium.format);
 	return parts.length ? parts.join(" - ") : null;
 }
 
@@ -149,11 +155,12 @@ function buildArtistMarkdown(artist: MusicBrainzArtist): string {
 	let md = `# ${artist.name}\n\n`;
 	const meta: string[] = [];
 
-	if (artist.type) meta.push(`**Type**: ${artist.type}`);
-	if (artist.country) meta.push(`**Country**: ${artist.country}`);
+	if (artist.type !== null && artist.type !== undefined && artist.type !== "") meta.push(`**Type**: ${artist.type}`);
+	if (artist.country !== null && artist.country !== undefined && artist.country !== "")
+		meta.push(`**Country**: ${artist.country}`);
 
 	const lifeSpan = formatLifeSpan(artist["life-span"]);
-	if (lifeSpan) meta.push(`**Life Span**: ${lifeSpan}`);
+	if (lifeSpan !== null && lifeSpan !== undefined && lifeSpan !== "") meta.push(`**Life Span**: ${lifeSpan}`);
 
 	if (meta.length) md += `${meta.join("\n")}\n`;
 
@@ -178,7 +185,7 @@ function buildReleaseMarkdown(release: MusicBrainzRelease): string {
 
 		for (const medium of media) {
 			const label = buildMediumLabel(medium, includePosition);
-			if (label) md += `### ${label}\n\n`;
+			if (label !== null && label !== undefined && label !== "") md += `### ${label}\n\n`;
 
 			const tracks = medium.tracks ?? [];
 			if (tracks.length) {
@@ -188,7 +195,11 @@ function buildReleaseMarkdown(release: MusicBrainzRelease): string {
 				if (tracks.length > MAX_TRACKS) {
 					md += `_Showing first ${MAX_TRACKS} of ${tracks.length} tracks._\n\n`;
 				}
-			} else if (medium["track-count"]) {
+			} else if (
+				medium["track-count"] !== null &&
+				medium["track-count"] !== undefined &&
+				medium["track-count"] !== 0
+			) {
 				md += `- ${medium["track-count"]} tracks (details unavailable)\n\n`;
 			}
 		}
@@ -202,10 +213,10 @@ function buildRecordingMarkdown(recording: MusicBrainzRecording): string {
 	const meta: string[] = [];
 
 	const artists = formatArtistCredits(recording["artist-credit"]);
-	if (artists) meta.push(`**Artists**: ${artists}`);
+	if (artists !== null && artists !== undefined && artists !== "") meta.push(`**Artists**: ${artists}`);
 
 	const length = formatDurationMs(recording.length);
-	if (length) meta.push(`**Length**: ${length}`);
+	if (length !== null && length !== undefined && length !== "") meta.push(`**Length**: ${length}`);
 
 	if (meta.length) md += `${meta.join("\n")}\n`;
 

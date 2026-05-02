@@ -56,11 +56,11 @@ async function getConfigDirs(ctx: LoadContext): Promise<Array<{ dir: string; lev
 	const result: Array<{ dir: string; level: "user" | "project" }> = [];
 
 	const projectDir = await ifNonEmptyDir(ctx.cwd, PATHS.projectDir);
-	if (projectDir) {
+	if (projectDir !== null && projectDir !== undefined && projectDir !== "") {
 		result.push({ dir: projectDir, level: "project" });
 	}
 	const userDir = await ifNonEmptyDir(ctx.home, PATHS.userAgent);
-	if (userDir) {
+	if (userDir !== null && userDir !== undefined && userDir !== "") {
 		result.push({ dir: userDir, level: "user" });
 	}
 
@@ -73,7 +73,7 @@ function getAncestorDirs(cwd: string, stopAt?: string | null): Array<{ dir: stri
 	let depth = 0;
 	while (true) {
 		ancestors.push({ dir: current, depth });
-		if (stopAt && current === stopAt) break;
+		if (stopAt !== null && stopAt !== undefined && stopAt !== "" && current === stopAt) break;
 		const parent = path.dirname(current);
 		if (parent === current) break;
 		current = parent;
@@ -88,7 +88,8 @@ async function findNearestProjectConfigDir(
 ): Promise<{ dir: string; depth: number } | null> {
 	for (const ancestor of getAncestorDirs(cwd, repoRoot)) {
 		const configDir = await ifNonEmptyDir(ancestor.dir, PATHS.projectDir);
-		if (configDir) return { dir: configDir, depth: ancestor.depth };
+		if (configDir !== null && configDir !== undefined && configDir !== "")
+			return { dir: configDir, depth: ancestor.depth };
 	}
 	return null;
 }
@@ -195,7 +196,7 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 	const contents = await Promise.allSettled(
 		paths.map(async p => {
 			const content = await readFile(p.path);
-			if (content) {
+			if (content !== null && content !== undefined && content !== "") {
 				return { path: p.path, content, level: p.level };
 			}
 			return null;
@@ -226,7 +227,7 @@ async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemProm
 
 	const userPath = path.join(ctx.home, PATHS.userAgent, "SYSTEM.md");
 	const userContent = await readFile(userPath);
-	if (userContent) {
+	if (userContent !== null && userContent !== undefined && userContent !== "") {
 		items.push({
 			path: userPath,
 			content: userContent,
@@ -239,7 +240,7 @@ async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemProm
 	if (nearestProjectConfigDir) {
 		const projectPath = path.join(nearestProjectConfigDir.dir, "SYSTEM.md");
 		const projectContent = await readFile(projectPath);
-		if (projectContent) {
+		if (projectContent !== null && projectContent !== undefined && projectContent !== "") {
 			items.push({
 				path: projectPath,
 				content: projectContent,
@@ -430,7 +431,7 @@ async function loadExtensionModules(ctx: LoadContext): Promise<LoadResult<Extens
 	for (let i = 0; i < configDirs.length; i++) {
 		const { dir, level } = configDirs[i];
 		const settingsContent = settingsResults[i];
-		if (!settingsContent) continue;
+		if (settingsContent === null || settingsContent === undefined || settingsContent === "") continue;
 
 		const settingsPath = path.join(dir, "settings.json");
 		const settingsData = tryParseJson<{ extensions?: unknown }>(settingsContent);
@@ -534,7 +535,7 @@ async function loadExtensions(ctx: LoadContext): Promise<LoadResult<Extension>> 
 
 	for (let i = 0; i < manifestCandidates.length; i++) {
 		const content = manifestContents[i];
-		if (!content) continue;
+		if (content === null || content === undefined || content === "") continue;
 
 		const { extDir, manifestPath, entryName, level } = manifestCandidates[i];
 		const manifest = tryParseJson<ExtensionManifest>(content);
@@ -544,7 +545,7 @@ async function loadExtensions(ctx: LoadContext): Promise<LoadResult<Extension>> 
 		}
 
 		items.push({
-			name: manifest.name || entryName,
+			name: manifest.name ?? entryName,
 			path: extDir,
 			manifest,
 			level,
@@ -685,7 +686,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 				transform: (name, content, path, source) => {
 					if (name.endsWith(".json")) {
 						const data = tryParseJson<{ name?: string; description?: string }>(content);
-						const toolName = data?.name || name.replace(/\.json$/, "");
+						const toolName = data?.name ?? name.replace(/\.json$/, "");
 						const description =
 							typeof data?.description === "string" && data.description.trim()
 								? data.description
@@ -781,7 +782,7 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	for (const { dir, level } of await getConfigDirs(ctx)) {
 		const settingsPath = path.join(dir, "settings.json");
 		const content = await readFile(settingsPath);
-		if (!content) continue;
+		if (content === null || content === undefined || content === "") continue;
 
 		const data = tryParseJson<Record<string, unknown>>(content);
 		if (!data) {
@@ -815,7 +816,7 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 
 	const userPath = path.join(ctx.home, PATHS.userAgent, "AGENTS.md");
 	const userContent = await readFile(userPath);
-	if (userContent) {
+	if (userContent !== null && userContent !== undefined && userContent !== "") {
 		items.push({
 			path: userPath,
 			content: userContent,
@@ -828,7 +829,7 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	if (nearestProjectConfigDir) {
 		const projectPath = path.join(nearestProjectConfigDir.dir, "AGENTS.md");
 		const projectContent = await readFile(projectPath);
-		if (projectContent) {
+		if (projectContent !== null && projectContent !== undefined && projectContent !== "") {
 			items.push({
 				path: projectPath,
 				content: projectContent,

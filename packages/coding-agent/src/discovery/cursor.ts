@@ -80,23 +80,42 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 	const userPath = getUserPath(ctx, "cursor", "mcp.json");
 
 	const [userContent, projectPath] = await Promise.all([
-		userPath ? readFile(userPath) : Promise.resolve(null),
+		userPath !== null && userPath !== undefined && userPath !== "" ? readFile(userPath) : Promise.resolve(null),
 		getProjectPath(ctx, "cursor", "mcp.json"),
 	]);
 
-	const projectContentPromise = projectPath ? readFile(projectPath) : Promise.resolve(null);
+	const projectContentPromise =
+		projectPath !== null && projectPath !== undefined && projectPath !== ""
+			? readFile(projectPath)
+			: Promise.resolve(null);
 
-	if (userContent && userPath) {
+	if (
+		userContent !== null &&
+		userContent !== undefined &&
+		userContent !== "" &&
+		userPath !== null &&
+		userPath !== undefined &&
+		userPath !== ""
+	) {
 		const result = parseMCPServers(userContent, userPath, "user");
 		items.push(...result.items);
-		if (result.warning) warnings.push(result.warning);
+		if (result.warning !== null && result.warning !== undefined && result.warning !== "")
+			warnings.push(result.warning);
 	}
 
 	const projectContent = await projectContentPromise;
-	if (projectContent && projectPath) {
+	if (
+		projectContent !== null &&
+		projectContent !== undefined &&
+		projectContent !== "" &&
+		projectPath !== null &&
+		projectPath !== undefined &&
+		projectPath !== ""
+	) {
 		const result = parseMCPServers(projectContent, projectPath, "project");
 		items.push(...result.items);
-		if (result.warning) warnings.push(result.warning);
+		if (result.warning !== null && result.warning !== undefined && result.warning !== "")
+			warnings.push(result.warning);
 	}
 
 	return { items, warnings };
@@ -115,13 +134,13 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 	const projectRulesPath = getProjectPath(ctx, "cursor", "rules");
 
 	const [userResult, projectResult] = await Promise.all([
-		userRulesPath
+		userRulesPath !== null && userRulesPath !== undefined && userRulesPath !== ""
 			? loadFilesFromDir<Rule>(ctx, userRulesPath, PROVIDER_ID, "user", {
 					extensions: ["mdc", "md"],
 					transform: transformMDCRule,
 				})
 			: Promise.resolve({ items: [] as Rule[], warnings: undefined }),
-		projectRulesPath
+		projectRulesPath !== null && projectRulesPath !== undefined && projectRulesPath !== ""
 			? loadFilesFromDir<Rule>(ctx, projectRulesPath, PROVIDER_ID, "project", {
 					extensions: ["mdc", "md"],
 					transform: transformMDCRule,
@@ -153,13 +172,23 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	const userPath = getUserPath(ctx, "cursor", "settings.json");
 
 	const [userContent, projectPath] = await Promise.all([
-		userPath ? readFile(userPath) : Promise.resolve(null),
+		userPath !== null && userPath !== undefined && userPath !== "" ? readFile(userPath) : Promise.resolve(null),
 		getProjectPath(ctx, "cursor", "settings.json"),
 	]);
 
-	const projectContentPromise = projectPath ? readFile(projectPath) : Promise.resolve(null);
+	const projectContentPromise =
+		projectPath !== null && projectPath !== undefined && projectPath !== ""
+			? readFile(projectPath)
+			: Promise.resolve(null);
 
-	if (userContent && userPath) {
+	if (
+		userContent !== null &&
+		userContent !== undefined &&
+		userContent !== "" &&
+		userPath !== null &&
+		userPath !== undefined &&
+		userPath !== ""
+	) {
 		const parsed = tryParseJson<Record<string, unknown>>(userContent);
 		if (parsed) {
 			items.push({
@@ -174,7 +203,14 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	}
 
 	const projectContent = await projectContentPromise;
-	if (projectContent && projectPath) {
+	if (
+		projectContent !== null &&
+		projectContent !== undefined &&
+		projectContent !== "" &&
+		projectPath !== null &&
+		projectPath !== undefined &&
+		projectPath !== ""
+	) {
 		const parsed = tryParseJson<Record<string, unknown>>(projectContent);
 		if (parsed) {
 			items.push({

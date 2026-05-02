@@ -523,7 +523,7 @@ describe("atom parser — edge cases", () => {
 	});
 
 	it("locator-only patches report the cursor diagnostic", async () => {
-		await expect(
+		expect(
 			executeAtomSingle({
 				session: { cwd: process.cwd() } as ToolSession,
 				input: "---a.ts\n@123ab",
@@ -973,12 +973,12 @@ describe("atom executor — whole-file operations", () => {
 		await withTempDir(async tempDir => {
 			await Bun.write(path.join(tempDir, "file.ts"), "export const x = 1;\n");
 
-			await expect(
+			expect(
 				executeAtomSingle(atomExecuteOptions(tempDir, "---file.ts\n!rm\n+export const y = 2;\n")),
 			).rejects.toThrow(/mixes !rm with line edits/);
-			await expect(
-				executeAtomSingle(atomExecuteOptions(tempDir, "---file.ts\n!mv file2.ts\n-1ab\n")),
-			).rejects.toThrow(/mixes !mv with line edits/);
+			expect(executeAtomSingle(atomExecuteOptions(tempDir, "---file.ts\n!mv file2.ts\n-1ab\n"))).rejects.toThrow(
+				/mixes !mv with line edits/,
+			);
 		});
 	});
 
@@ -986,7 +986,7 @@ describe("atom executor — whole-file operations", () => {
 		await withTempDir(async tempDir => {
 			await Bun.write(path.join(tempDir, "file.ts"), "export const x = 1;\n");
 
-			await expect(executeAtomSingle(atomExecuteOptions(tempDir, "---file.ts\n!mv\n"))).rejects.toThrow(
+			expect(executeAtomSingle(atomExecuteOptions(tempDir, "---file.ts\n!mv\n"))).rejects.toThrow(
 				/!mv requires exactly one non-empty destination path/,
 			);
 		});
@@ -994,7 +994,7 @@ describe("atom executor — whole-file operations", () => {
 
 	it("rejects `^Lid` anchored inserts on missing files", async () => {
 		await withTempDir(async tempDir => {
-			await expect(executeAtomSingle(atomExecuteOptions(tempDir, "---missing.ts\n^1aa\n+top\n"))).rejects.toThrow(
+			expect(executeAtomSingle(atomExecuteOptions(tempDir, "---missing.ts\n^1aa\n+top\n"))).rejects.toThrow(
 				/File not found: missing\.ts/,
 			);
 		});
@@ -1023,9 +1023,7 @@ describe("atom executor — whole-file operations", () => {
 			await Bun.write(bPath, "bbb\n");
 
 			const input = [`---a.ts`, `${tag(1, "aaa")}=AAA`, `---b.ts`, `${mistag(1, "bbb")}=BBB`].join("\n");
-			await expect(executeAtomSingle(atomExecuteOptions(tempDir, input))).rejects.toThrow(
-				/changed since the last read/,
-			);
+			expect(executeAtomSingle(atomExecuteOptions(tempDir, input))).rejects.toThrow(/changed since the last read/);
 			expect(await Bun.file(aPath).text()).toBe("aaa\n");
 			expect(await Bun.file(bPath).text()).toBe("bbb\n");
 		});

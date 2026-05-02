@@ -115,7 +115,7 @@ export class OutputMetaBuilder {
 
 	/** Add truncation info from TruncationResult. No-op if not truncated. */
 	truncation(result: TruncationResult, options: TruncationOptions): this {
-		if (!result.truncated) return this;
+		if (result.truncated !== true) return this;
 
 		const { direction, startLine = 1, totalFileLines, artifactId } = options;
 		const outputLines = result.outputLines ?? result.totalLines;
@@ -157,9 +157,9 @@ export class OutputMetaBuilder {
 		const truncatedBy: "lines" | "bytes" =
 			summary.outputBytes < summary.totalBytes
 				? "bytes"
-				: summary.outputLines < summary.totalLines
+				: (summary.outputLines < summary.totalLines
 					? "lines"
-					: "bytes";
+					: "bytes");
 
 		let shownStart: number;
 		let shownEnd: number;
@@ -198,7 +198,10 @@ export class OutputMetaBuilder {
 		if (!truncated) return this;
 
 		const truncatedBy: "lines" | "bytes" =
-			options.maxBytes && outputBytes >= options.maxBytes
+			options.maxBytes !== null &&
+			options.maxBytes !== undefined &&
+			options.maxBytes !== 0 &&
+			outputBytes >= options.maxBytes
 				? "bytes"
 				: totalBytes > outputBytes
 					? "bytes"
@@ -336,12 +339,12 @@ export function formatTruncationMetaNotice(truncation: TruncationMeta): string {
 		notice += ` (${formatBytes(maxBytes)} limit)`;
 	}
 
-	if (truncation.nextOffset != null) {
+	if (truncation.nextOffset !== null) {
 		notice += `. Use sel=${truncation.nextOffset} to continue`;
 	}
 
-	if (truncation.artifactId != null) {
-		notice += `. ${formatFullOutputReference(truncation.artifactId)}`;
+	if (truncation.artifactId !== null) {
+		notice += `. ${formatFullOutputReference(truncation.artifactId!)}`;
 	}
 
 	return notice;
@@ -468,8 +471,13 @@ async function spillLargeResultToArtifact(
 	const { threshold, tailBytes, tailLines } = getSpillConfig(context?.settings);
 
 	// Skip if tool already saved an artifact
-	const existingMeta: OutputMeta | undefined = result.details?.meta;
-	if (existingMeta?.truncation?.artifactId) return result;
+	const existingMeta: OutputMeta | undefined = (result.details as any)?.meta;
+	if (
+		existingMeta?.truncation?.artifactId !== null &&
+		existingMeta?.truncation?.artifactId !== undefined &&
+		existingMeta?.truncation?.artifactId !== ""
+	)
+		return result;
 
 	// Measure total text content
 	const textParts: string[] = [];
@@ -486,7 +494,7 @@ async function spillLargeResultToArtifact(
 
 	// Save full output as artifact
 	const artifactId = await sessionManager.saveArtifact(fullText, toolName);
-	if (!artifactId) return result;
+	if (artifactId === null || artifactId === undefined || artifactId === "") return result;
 
 	// Truncate to tail
 	const truncated = truncateTail(fullText, {
@@ -519,8 +527,8 @@ async function spillLargeResultToArtifact(
 		artifactId,
 	};
 
-	const newMeta: OutputMeta = { ...(existingMeta ?? {}), truncation: truncationMeta };
-	const newDetails = { ...(result.details ?? {}), meta: newMeta };
+	const newMeta: OutputMeta = { ...existingMeta, truncation: truncationMeta };
+	const newDetails = { ...(result.details as any), meta: newMeta };
 
 	return { ...result, content: newContent, details: newDetails };
 }
@@ -546,7 +554,7 @@ async function wrappedExecute(
 		result = await spillLargeResultToArtifact(result, this.name, context);
 
 		// Append notices from meta
-		const meta: OutputMeta | undefined = result.details?.meta;
+		const meta: OutputMeta | undefined = (result.details as any)?.meta;
 		if (meta) {
 			return {
 				...result,
@@ -554,9 +562,9 @@ async function wrappedExecute(
 			};
 		}
 		return result;
-	} catch (e) {
+	} catch (error) {
 		// Re-throw with formatted message so agent-loop sets isError flag
-		throw new Error(renderError(e));
+		throw new Error(renderError(error));
 	}
 }
 

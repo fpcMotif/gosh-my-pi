@@ -124,7 +124,11 @@ export class SettingsList implements Component {
 
 		// Add description for selected item
 		const selectedItem = this.#items[this.#selectedIndex];
-		if (selectedItem?.description) {
+		if (
+			selectedItem?.description !== null &&
+			selectedItem?.description !== undefined &&
+			selectedItem?.description !== ""
+		) {
 			lines.push("");
 			const wrappedDesc = wrapTextWithAnsi(selectedItem.description, width - 4);
 			for (const line of wrappedDesc) {

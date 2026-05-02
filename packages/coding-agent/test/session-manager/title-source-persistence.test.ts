@@ -32,7 +32,7 @@ describe("session title source persistence", () => {
 	});
 
 	afterEach(() => {
-		if (originalAgentDir) {
+		if (originalAgentDir !== null && originalAgentDir !== undefined && originalAgentDir !== "") {
 			setAgentDir(originalAgentDir);
 		} else {
 			setAgentDir(fallbackAgentDir);

@@ -74,50 +74,58 @@ export const handleBiorxiv: SpecialHandler = async (
 		if (!paper) return null;
 
 		const serverName = isBiorxiv ? "bioRxiv" : "medRxiv";
-		const paperDoi = paper.biorxiv_doi || paper.medrxiv_doi || doi;
+		const paperDoi = paper.biorxiv_doi ?? paper.medrxiv_doi ?? doi;
 
 		// Build markdown output
-		let md = `# ${paper.title || "Untitled Preprint"}\n\n`;
+		let md = `# ${paper.title ?? "Untitled Preprint"}\n\n`;
 
 		// Metadata section
-		if (paper.authors) {
+		if (paper.authors !== null && paper.authors !== undefined && paper.authors !== "") {
 			md += `**Authors:** ${paper.authors}\n`;
 		}
-		if (paper.author_corresponding) {
+		if (
+			paper.author_corresponding !== null &&
+			paper.author_corresponding !== undefined &&
+			paper.author_corresponding !== ""
+		) {
 			let correspondingLine = `**Corresponding Author:** ${paper.author_corresponding}`;
-			if (paper.author_corresponding_institution) {
+			if (
+				paper.author_corresponding_institution !== null &&
+				paper.author_corresponding_institution !== undefined &&
+				paper.author_corresponding_institution !== ""
+			) {
 				correspondingLine += ` (${paper.author_corresponding_institution})`;
 			}
 			md += `${correspondingLine}\n`;
 		}
-		if (paper.date) {
+		if (paper.date !== null && paper.date !== undefined && paper.date !== "") {
 			md += `**Posted:** ${paper.date}\n`;
 		}
-		if (paper.category) {
+		if (paper.category !== null && paper.category !== undefined && paper.category !== "") {
 			md += `**Category:** ${paper.category}\n`;
 		}
-		if (paper.version) {
+		if (paper.version !== null && paper.version !== undefined && paper.version !== "") {
 			md += `**Version:** ${paper.version}\n`;
 		}
-		if (paper.license) {
+		if (paper.license !== null && paper.license !== undefined && paper.license !== "") {
 			md += `**License:** ${paper.license}\n`;
 		}
 		md += `**DOI:** [${paperDoi}](https://doi.org/${paperDoi})\n`;
 		md += `**Server:** ${serverName}\n`;
 
 		// Published status
-		if (paper.published) {
+		if (paper.published !== null && paper.published !== undefined && paper.published !== "") {
 			md += `\n> **Published in journal:** [${paper.published}](https://doi.org/${paper.published})\n`;
 		}
 
 		// Abstract
-		md += `\n---\n\n## Abstract\n\n${paper.abstract || "No abstract available."}\n`;
+		md += `\n---\n\n## Abstract\n\n${paper.abstract ?? "No abstract available."}\n`;
 
 		// Links section
 		md += `\n---\n\n## Links\n\n`;
 		md += `- [View on ${serverName}](https://www.${server}.org/content/${paperDoi})\n`;
 		md += `- [PDF](https://www.${server}.org/content/${paperDoi}.full.pdf)\n`;
-		if (paper.jatsxml) {
+		if (paper.jatsxml !== null && paper.jatsxml !== undefined && paper.jatsxml !== "") {
 			md += `- [JATS XML](${paper.jatsxml})\n`;
 		}
 

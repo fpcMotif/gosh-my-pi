@@ -166,7 +166,7 @@ describe("cachePlugin, isCached, removeCachedPlugin", () => {
 
 	it("removeCachedPlugin is a no-op when entry does not exist", async () => {
 		// Should not throw
-		await expect(removeCachedPlugin(cacheDir, "my-market", "my-plugin", "1.0.0")).resolves.toBeUndefined();
+		expect(removeCachedPlugin(cacheDir, "my-market", "my-plugin", "1.0.0")).resolves.toBeUndefined();
 	});
 });
 

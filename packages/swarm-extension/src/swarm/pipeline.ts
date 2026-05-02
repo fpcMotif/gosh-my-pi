@@ -71,7 +71,7 @@ export class PipelineController {
 
 		try {
 			for (let iteration = 0; iteration < targetCount; iteration++) {
-				if (signal?.aborted) {
+				if (signal !== undefined && signal.aborted) {
 					await this.#stateTracker.updatePipeline({ status: "aborted" });
 					return { status: "aborted", iterations: iteration, agentResults: allResults, errors };
 				}
@@ -99,11 +99,11 @@ export class PipelineController {
 				});
 
 				for (const [agentName, result] of iterationResults) {
-					allResults.get(agentName)!.push(result);
+					allResults.get(agentName)?.push(result);
 					if (result.exitCode !== 0) {
-						errors.push(
-							`${agentName} (iteration ${iteration + 1}): ${result.error || `exit code ${result.exitCode}`}`,
-						);
+						const errMsg =
+							result.error !== undefined && result.error !== "" ? result.error : `exit code ${result.exitCode}`;
+						errors.push(`${agentName} (iteration ${iteration + 1}): ${errMsg}`);
 					}
 				}
 			}
@@ -112,11 +112,11 @@ export class PipelineController {
 			await this.#stateTracker.updatePipeline({ status, completedAt: Date.now() });
 			await this.#stateTracker.appendOrchestratorLog(`Pipeline ${status} (${errors.length} errors)`);
 			return { status, iterations: targetCount, agentResults: allResults, errors };
-		} catch (err) {
-			const error = err instanceof Error ? err.message : String(err);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
 			await this.#stateTracker.updatePipeline({ status: "failed", completedAt: Date.now() });
-			await this.#stateTracker.appendOrchestratorLog(`Pipeline fatal error: ${error}`);
-			errors.push(error);
+			await this.#stateTracker.appendOrchestratorLog(`Pipeline fatal error: ${message}`);
+			errors.push(message);
 			return { status: "failed", iterations: 0, agentResults: allResults, errors };
 		}
 	}
@@ -138,7 +138,7 @@ export class PipelineController {
 		for (let waveIdx = 0; waveIdx < this.#waves.length; waveIdx++) {
 			const wave = this.#waves[waveIdx];
 
-			if (options.signal?.aborted) break;
+			if (options.signal !== undefined && options.signal.aborted) break;
 
 			await this.#stateTracker.appendOrchestratorLog(
 				`Wave ${waveIdx + 1}/${this.#waves.length}: [${wave.join(", ")}]`,
@@ -157,7 +157,10 @@ export class PipelineController {
 			// Execute all agents in wave in parallel, catching per-agent errors
 			const waveResults = await Promise.all(
 				wave.map(async agentName => {
-					const agent = this.#def.agents.get(agentName)!;
+					const agent = this.#def.agents.get(agentName);
+					if (!agent) {
+						throw new Error(`Agent '${agentName}' not found in definition`);
+					}
 					const currentIndex = agentIndex++;
 					try {
 						const result = await executeSwarmAgent(agent, currentIndex, {
@@ -175,8 +178,8 @@ export class PipelineController {
 							stateTracker: this.#stateTracker,
 						});
 						return { agentName, result };
-					} catch (err) {
-						const error = err instanceof Error ? err.message : String(err);
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
 						const failResult: SingleResult = {
 							index: currentIndex,
 							id: `swarm-${this.#def.name}-${agentName}-${iteration}`,
@@ -185,11 +188,11 @@ export class PipelineController {
 							task: agent.task,
 							exitCode: 1,
 							output: "",
-							stderr: error,
+							stderr: message,
 							truncated: false,
 							durationMs: 0,
 							tokens: 0,
-							error,
+							error: message,
 						};
 						return { agentName, result: failResult };
 					}

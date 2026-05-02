@@ -1,5 +1,6 @@
+import { Ellipsis } from "@oh-my-pi/pi-natives";
 import type { Component } from "../tui";
-import { applyBackgroundToLine, padding, replaceTabs, visibleWidth, wrapTextWithAnsi } from "../utils";
+import { applyBackgroundToLine, padding, replaceTabs, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "../utils";
 
 /**
  * Text component - displays multi-line text with word wrapping
@@ -83,15 +84,22 @@ export class Text implements Component {
 			if (this.#customBgFn) {
 				contentLines.push(applyBackgroundToLine(lineWithMargins, width, this.#customBgFn));
 			} else {
-				// No background - just pad to width with spaces
+				// Clamp to width: if margins+content exceed the budget (which
+				// happens when `width < paddingX*2 + 1` because contentWidth
+				// has a min of 1), truncateToWidth shaves the overflow. Pad
+				// short lines so each output line has exactly `width` cells.
 				const visibleLen = visibleWidth(lineWithMargins);
-				const paddingNeeded = Math.max(0, width - visibleLen);
-				contentLines.push(lineWithMargins + padding(paddingNeeded));
+				if (visibleLen > width) {
+					contentLines.push(truncateToWidth(lineWithMargins, width, Ellipsis.Omit, true));
+				} else {
+					const paddingNeeded = width - visibleLen;
+					contentLines.push(lineWithMargins + padding(paddingNeeded));
+				}
 			}
 		}
 
-		// Add top/bottom padding (empty lines)
-		const emptyLine = padding(width);
+		// Add top/bottom padding (empty lines) — exactly `width` spaces each
+		const emptyLine = padding(Math.max(0, width));
 		const emptyLines: string[] = [];
 		for (let i = 0; i < this.#paddingY; i++) {
 			const line = this.#customBgFn ? applyBackgroundToLine(emptyLine, width, this.#customBgFn) : emptyLine;

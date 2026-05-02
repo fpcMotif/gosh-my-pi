@@ -60,7 +60,7 @@ export class MCPToolCache {
 	async get(serverName: string, config: MCPServerConfig): Promise<MCPToolDefinition[] | null> {
 		const key = cacheKey(serverName);
 		const raw = this.storage.getCache(key);
-		if (!raw) return null;
+		if (raw === null || raw === undefined || raw === "") return null;
 
 		let parsed: unknown;
 		try {

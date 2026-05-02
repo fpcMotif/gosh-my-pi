@@ -55,13 +55,20 @@ async function resolveRelativeSource(
 		throw new Error(`Relative plugin source paths must start with "./" — got: "${source}"`);
 	}
 
-	if (!context.marketplaceClonePath) {
+	if (
+		context.marketplaceClonePath === null ||
+		context.marketplaceClonePath === undefined ||
+		context.marketplaceClonePath === ""
+	) {
 		throw new Error(`Cannot resolve relative source "${source}": marketplaceClonePath is required`);
 	}
 
 	// If pluginRoot is set, prepend it to the path segment after "./"
 	const pluginRoot = context.catalogMetadata?.pluginRoot;
-	const relativePath = pluginRoot ? `./${path.join(pluginRoot, source.slice(2))}` : source;
+	const relativePath =
+		pluginRoot !== null && pluginRoot !== undefined && pluginRoot !== ""
+			? `./${path.join(pluginRoot, source.slice(2))}`
+			: source;
 
 	// Resolve against marketplace root (not the .claude-plugin/ catalog subdirectory)
 	const resolved = path.resolve(context.marketplaceClonePath, relativePath);
@@ -115,9 +122,9 @@ async function resolveObjectSource(
 			}
 			try {
 				await verifyDirExists(subdirPath, `git-subdir path "${source.path}" does not exist in cloned repository`);
-			} catch (err) {
+			} catch (error) {
 				await fs.rm(cloneDir, { recursive: true, force: true });
-				throw err;
+				throw error;
 			}
 			return { dir: subdirPath, tempCloneRoot: cloneDir };
 		}
@@ -138,10 +145,10 @@ async function verifyDirExists(dirPath: string, errorMessage: string): Promise<v
 		if (!stat.isDirectory()) {
 			throw new Error(errorMessage);
 		}
-	} catch (err) {
-		if (isEnoent(err)) {
+	} catch (error) {
+		if (isEnoent(error)) {
 			throw new Error(errorMessage);
 		}
-		throw err;
+		throw error;
 	}
 }

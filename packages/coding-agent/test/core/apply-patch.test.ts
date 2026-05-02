@@ -411,7 +411,7 @@ describe("applyPatch", () => {
 	});
 
 	test("missing file for update fails", async () => {
-		await expect(
+		expect(
 			applyPatch({ path: "nonexistent.txt", op: "update", diff: "@@\n-foo\n+bar" }, { cwd: tempDir }),
 		).rejects.toThrow(ApplyPatchError);
 	});
@@ -420,7 +420,7 @@ describe("applyPatch", () => {
 		const filePath = path.join(tempDir, "nodiff.txt");
 		await Bun.write(filePath, "content\n");
 
-		await expect(applyPatch({ path: "nodiff.txt", op: "update" }, { cwd: tempDir })).rejects.toThrow("requires diff");
+		expect(applyPatch({ path: "nodiff.txt", op: "update" }, { cwd: tempDir })).rejects.toThrow("requires diff");
 	});
 
 	test("creates parent directories for create", async () => {
@@ -557,7 +557,7 @@ describe("simple replace mode", () => {
 		const filePath = path.join(tempDir, "dupe.txt");
 		await Bun.write(filePath, "foo\nbar\nfoo\n");
 
-		await expect(
+		expect(
 			applyPatch(
 				{
 					path: "dupe.txt",
@@ -641,7 +641,7 @@ describe("applyCodexPatch (production)", () => {
 	});
 
 	test("zero-hunk patch throws 'No files were modified.'", async () => {
-		await expect(applyCodexPatch("*** Begin Patch\n*** End Patch", { cwd: tempDir })).rejects.toThrow(
+		expect(applyCodexPatch("*** Begin Patch\n*** End Patch", { cwd: tempDir })).rejects.toThrow(
 			"No files were modified.",
 		);
 	});
@@ -711,7 +711,7 @@ describe("applyCodexPatch (production)", () => {
 			"*** End Patch",
 		].join("\n");
 
-		await expect(applyCodexPatch(patch, { cwd: tempDir })).rejects.toThrow();
+		expect(applyCodexPatch(patch, { cwd: tempDir })).rejects.toThrow();
 
 		// First op should have landed before the failure.
 		expect(await Bun.file(path.join(tempDir, "first.txt")).text()).toBe("A\n");

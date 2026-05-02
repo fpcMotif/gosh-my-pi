@@ -99,9 +99,9 @@ export interface SearchResponse {
 /** Provider-specific error with optional HTTP status */
 export class SearchProviderError extends Error {
 	constructor(
-		public readonly provider: SearchProviderId,
+		readonly provider: SearchProviderId,
 		message: string,
-		public readonly status?: number,
+		readonly status?: number,
 	) {
 		super(message);
 		this.name = "SearchProviderError";

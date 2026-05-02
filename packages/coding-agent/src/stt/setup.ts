@@ -19,7 +19,7 @@ export async function checkDependencies(): Promise<STTDependencyStatus> {
 	const pythonHint = "Install Python 3.8+ from https://python.org";
 
 	let whisperAvailable = false;
-	if (pythonCmd) {
+	if (pythonCmd !== null && pythonCmd !== undefined && pythonCmd !== "") {
 		const check = Bun.spawnSync([pythonCmd, "-c", "import whisper"], {
 			stdout: "pipe",
 			stderr: "pipe",

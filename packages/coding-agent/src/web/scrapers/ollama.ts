@@ -51,7 +51,7 @@ function extractMetaDescription(html: string): string | null {
 
 	for (const pattern of patterns) {
 		const match = html.match(pattern);
-		if (match?.[1]) {
+		if (match?.[1] !== undefined && match?.[1] !== "") {
 			return decodeHtmlEntities(match[1].trim());
 		}
 	}
@@ -148,7 +148,7 @@ function collectParameterSizes(models: OllamaTagModel[], htmlSizes: string[]): s
 	const sizes = new Set<string>();
 	for (const model of models) {
 		const param = model.details?.parameter_size?.trim();
-		if (param) sizes.add(param.toUpperCase());
+		if (param !== null && param !== undefined && param !== "") sizes.add(param.toUpperCase());
 	}
 	for (const size of htmlSizes) {
 		sizes.add(size);
@@ -189,7 +189,10 @@ export const handleOllama: SpecialHandler = async (
 		});
 
 		const tagRef = modelRef.includes(":") ? modelRef : null;
-		const selectedTag = tagRef ? matchingModels.find(model => (model.model ?? model.name ?? "") === tagRef) : null;
+		const selectedTag =
+			tagRef !== null && tagRef !== undefined && tagRef !== ""
+				? matchingModels.find(model => (model.model ?? model.name ?? "") === tagRef)
+				: null;
 
 		const availableTagsRaw = matchingModels
 			.map(model => model.model ?? model.name ?? "")
@@ -204,7 +207,7 @@ export const handleOllama: SpecialHandler = async (
 		const sizes = matchingModels.map(model => model.size).filter((size): size is number => typeof size === "number");
 		let sizeLine: string | null = null;
 
-		if (selectedTag?.size) {
+		if (selectedTag?.size !== null && selectedTag?.size !== undefined && selectedTag?.size !== 0) {
 			sizeLine = formatBytes(selectedTag.size);
 		} else if (sizes.length > 0) {
 			const minSize = Math.min(...sizes);
@@ -213,12 +216,12 @@ export const handleOllama: SpecialHandler = async (
 		}
 
 		let md = `# ${baseRef}\n\n`;
-		if (description) md += `${description}\n\n`;
+		if (description !== null && description !== undefined && description !== "") md += `${description}\n\n`;
 
 		md += `**Model:** ${baseRef}\n`;
-		if (tagRef) md += `**Tag:** ${tagRef}\n`;
+		if (tagRef !== null && tagRef !== undefined && tagRef !== "") md += `**Tag:** ${tagRef}\n`;
 		if (parameterSizes.length > 0) md += `**Parameters:** ${parameterSizes.join(", ")}\n`;
-		if (sizeLine) {
+		if (sizeLine !== null && sizeLine !== undefined && sizeLine !== "") {
 			const label = sizeLine.includes(" - ") ? "Size Range" : "Size";
 			md += `**${label}:** ${sizeLine}\n`;
 		}

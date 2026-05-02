@@ -1,29 +1,4 @@
 import type { TSchema } from "@sinclair/typebox";
-import type { BedrockOptions } from "./providers/amazon-bedrock";
-import type { AnthropicOptions } from "./providers/anthropic";
-import type { AzureOpenAIResponsesOptions } from "./providers/azure-openai-responses";
-import type { CursorOptions } from "./providers/cursor";
-import type {
-	DeleteArgs,
-	DeleteResult,
-	DiagnosticsArgs,
-	DiagnosticsResult,
-	GrepArgs,
-	GrepResult,
-	LsArgs,
-	LsResult,
-	McpResult,
-	ReadArgs,
-	ReadResult,
-	ShellArgs,
-	ShellResult,
-	WriteArgs,
-	WriteResult,
-} from "./providers/cursor/gen/agent_pb";
-import type { GoogleOptions } from "./providers/google";
-import type { GoogleGeminiCliOptions } from "./providers/google-gemini-cli";
-import type { GoogleVertexOptions } from "./providers/google-vertex";
-import type { OllamaChatOptions } from "./providers/ollama";
 import type { OpenAICodexResponsesOptions } from "./providers/openai-codex-responses";
 import type { OpenAICompletionsOptions } from "./providers/openai-completions";
 import type { OpenAIResponsesOptions } from "./providers/openai-responses";
@@ -31,31 +6,12 @@ import type { AssistantMessageEventStream } from "./utils/event-stream";
 
 export type { AssistantMessageEventStream } from "./utils/event-stream";
 
-export type KnownApi =
-	| "openai-completions"
-	| "openai-responses"
-	| "openai-codex-responses"
-	| "azure-openai-responses"
-	| "anthropic-messages"
-	| "bedrock-converse-stream"
-	| "google-generative-ai"
-	| "google-gemini-cli"
-	| "google-vertex"
-	| "ollama-chat"
-	| "cursor-agent";
+export type KnownApi = "openai-completions" | "openai-responses" | "openai-codex-responses";
 export type Api = KnownApi | (string & {});
 export interface ApiOptionsMap {
-	"anthropic-messages": AnthropicOptions;
-	"bedrock-converse-stream": BedrockOptions;
 	"openai-completions": OpenAICompletionsOptions;
 	"openai-responses": OpenAIResponsesOptions;
 	"openai-codex-responses": OpenAICodexResponsesOptions;
-	"azure-openai-responses": AzureOpenAIResponsesOptions;
-	"google-generative-ai": GoogleOptions;
-	"google-gemini-cli": GoogleGeminiCliOptions;
-	"google-vertex": GoogleVertexOptions;
-	"ollama-chat": OllamaChatOptions;
-	"cursor-agent": CursorOptions;
 }
 // Compile-time exhaustiveness check - this will fail if ApiOptionsMap doesn't have all KnownApi keys
 type _CheckExhaustive =
@@ -70,12 +26,7 @@ export type OptionsForApi<TApi extends Api> =
 	| (TApi extends keyof ApiOptionsMap ? ApiOptionsMap[TApi] : never);
 
 /** Canonical thinking transport used by a model. */
-export type ThinkingControlMode =
-	| "effort"
-	| "budget"
-	| "google-level"
-	| "anthropic-adaptive"
-	| "anthropic-budget-effort";
+export type ThinkingControlMode = "effort" | "budget" | "zai" | "qwen";
 
 /** Per-model thinking capabilities used to clamp and map user-facing effort levels. */
 export interface ThinkingConfig {
@@ -90,52 +41,15 @@ export interface ThinkingConfig {
 }
 
 export type KnownProvider =
-	| "alibaba-coding-plan"
-	| "amazon-bedrock"
-	| "anthropic"
-	| "google"
-	| "google-gemini-cli"
-	| "google-antigravity"
-	| "google-vertex"
 	| "openai"
 	| "openai-codex"
 	| "kimi-code"
 	| "minimax-code"
 	| "minimax-code-cn"
-	| "github-copilot"
-	| "fireworks"
-	| "gitlab-duo"
-	| "cursor"
-	| "deepseek"
-	| "xai"
-	| "groq"
-	| "cerebras"
-	| "openrouter"
-	| "kilo"
-	| "vercel-ai-gateway"
 	| "zai"
-	| "mistral"
 	| "minimax"
-	| "opencode-go"
-	| "opencode-zen"
-	| "synthetic"
-	| "cloudflare-ai-gateway"
-	| "huggingface"
-	| "litellm"
-	| "moonshot"
-	| "nvidia"
-	| "nanogpt"
-	| "ollama"
-	| "ollama-cloud"
-	| "qianfan"
-	| "qwen-portal"
-	| "together"
-	| "venice"
-	| "vllm"
-	| "xiaomi"
-	| "zenmux"
-	| "lm-studio";
-export type Provider = KnownProvider | string;
+	| "moonshot";
+export type Provider = KnownProvider | (string & {});
 
 import type { Effort } from "./model-thinking";
 
@@ -229,7 +143,7 @@ export interface StreamOptions {
 	 * Optional callback for inspecting or replacing provider payloads before sending.
 	 * Return undefined to keep the payload unchanged.
 	 */
-	onPayload?: (payload: unknown, model?: Model<Api>) => unknown | undefined | Promise<unknown | undefined>;
+	onPayload?: (payload: unknown, model?: Model<Api>) => any;
 	/**
 	 * Optional callback for provider response metadata after headers are received.
 	 */
@@ -239,8 +153,6 @@ export interface StreamOptions {
 	 * Set to 0 to disable the first-event watchdog for this request.
 	 */
 	streamFirstEventTimeoutMs?: number;
-	/** Cursor exec/MCP tool handlers (cursor-agent only). */
-	execHandlers?: CursorExecHandlers;
 }
 
 // Unified options with reasoning passed to streamSimple() and completeSimple()
@@ -248,10 +160,6 @@ export interface SimpleStreamOptions extends StreamOptions {
 	reasoning?: Effort;
 	/** Custom token budgets for thinking levels (token-based providers only) */
 	thinkingBudgets?: ThinkingBudgets;
-	/** Cursor exec handlers for local tool execution */
-	cursorExecHandlers?: CursorExecHandlers;
-	/** Hook to handle tool results from Cursor exec */
-	cursorOnToolResult?: CursorToolResultHandler;
 	/** Optional tool choice override for compatible providers */
 	toolChoice?: ToolChoice;
 	/** OpenAI service tier for processing priority/cost control. Ignored by non-OpenAI providers. */
@@ -431,42 +339,6 @@ export interface ToolResultMessage<TDetails = any> {
 
 export type Message = UserMessage | DeveloperMessage | AssistantMessage | ToolResultMessage;
 
-export type CursorExecHandlerResult<T> = { result: T; toolResult?: ToolResultMessage } | T | ToolResultMessage;
-
-export type CursorToolResultHandler = (
-	result: ToolResultMessage,
-) => ToolResultMessage | undefined | Promise<ToolResultMessage | undefined>;
-
-export interface CursorMcpCall {
-	name: string;
-	providerIdentifier: string;
-	toolName: string;
-	toolCallId: string;
-	args: Record<string, unknown>;
-	rawArgs: Record<string, Uint8Array>;
-}
-
-export interface CursorShellStreamCallbacks {
-	onStdout(data: string): void;
-	onStderr(data: string): void;
-}
-
-export interface CursorExecHandlers {
-	read?: (args: ReadArgs) => Promise<CursorExecHandlerResult<ReadResult>>;
-	ls?: (args: LsArgs) => Promise<CursorExecHandlerResult<LsResult>>;
-	grep?: (args: GrepArgs) => Promise<CursorExecHandlerResult<GrepResult>>;
-	write?: (args: WriteArgs) => Promise<CursorExecHandlerResult<WriteResult>>;
-	delete?: (args: DeleteArgs) => Promise<CursorExecHandlerResult<DeleteResult>>;
-	shell?: (args: ShellArgs) => Promise<CursorExecHandlerResult<ShellResult>>;
-	shellStream?: (
-		args: ShellArgs,
-		callbacks: CursorShellStreamCallbacks,
-	) => Promise<CursorExecHandlerResult<ShellResult>>;
-	diagnostics?: (args: DiagnosticsArgs) => Promise<CursorExecHandlerResult<DiagnosticsResult>>;
-	mcp?: (call: CursorMcpCall) => Promise<CursorExecHandlerResult<McpResult>>;
-	onToolResult?: CursorToolResultHandler;
-}
-
 export interface Tool<TParameters extends TSchema = TSchema> {
 	name: string;
 	description: string;
@@ -578,27 +450,6 @@ export interface OpenAICompat {
 }
 
 /**
- * Compatibility settings for anthropic-messages API.
- * Use this to disable features that strict-by-default Anthropic accepts but
- * that proxy gateways (Vertex AI, AWS Bedrock-style fronts, etc.) reject.
- */
-export interface AnthropicCompat {
-	/**
-	 * Drop the top-level `strict: true` field on tool definitions. Vertex AI's
-	 * Anthropic-compatible endpoint rejects unknown tool fields with
-	 * `tools.<n>.custom.strict: Extra inputs are not permitted`.
-	 */
-	disableStrictTools?: boolean;
-	/**
-	 * Map adaptive thinking (`thinking: { type: "adaptive" }`) to
-	 * `{ type: "enabled", budget_tokens }`. Vertex AI rejects the `adaptive`
-	 * tag with `Input tag 'adaptive' ... does not match any of the expected
-	 * tags: 'disabled', 'enabled'`.
-	 */
-	disableAdaptiveThinking?: boolean;
-}
-
-/**
  * OpenRouter provider routing preferences.
  * Controls which upstream providers OpenRouter routes requests to.
  * @see https://openrouter.ai/docs/provider-routing
@@ -651,11 +502,7 @@ export interface Model<TApi extends Api = any> {
 	/** Canonical thinking capability metadata for this model. */
 	thinking?: ThinkingConfig;
 	/** Compatibility overrides per API. If not set, auto-detected from baseUrl. */
-	compat?: TApi extends "openai-completions"
-		? OpenAICompat
-		: TApi extends "anthropic-messages"
-			? AnthropicCompat
-			: never;
+	compat?: TApi extends "openai-completions" ? OpenAICompat : never;
 	/**
 	 * Which shape to use when exposing the Codex `apply_patch` tool to this model.
 	 * Generated catalog policy sets `"freeform"` for first-party GPT-5 Responses

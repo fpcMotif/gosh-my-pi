@@ -45,7 +45,7 @@ function buildMinimizerOptions(group: ShellMinimizerSettings): MinimizerOptions 
 	if (!group.enabled) return undefined;
 	return {
 		enabled: true,
-		settingsPath: group.settingsPath || undefined,
+		settingsPath: group.settingsPath ?? undefined,
 		only: group.only.length > 0 ? group.only : undefined,
 		except: group.except.length > 0 ? group.except : undefined,
 		maxCaptureBytes: group.maxCaptureBytes,
@@ -58,10 +58,10 @@ export async function runShellCommand(cmd: ShellCommandArgs): Promise<void> {
 		process.exit(1);
 	}
 
-	const cwd = cmd.cwd ? path.resolve(cmd.cwd) : getProjectDir();
+	const cwd = cmd.cwd !== null && cmd.cwd !== undefined && cmd.cwd !== "" ? path.resolve(cmd.cwd) : getProjectDir();
 	const settings = await Settings.init({ cwd });
 	const { shell, env: shellEnv } = settings.getShellConfig();
-	const snapshotPath = cmd.noSnapshot || !shell.includes("bash") ? null : await getOrCreateSnapshot(shell, shellEnv);
+	const snapshotPath = (cmd.noSnapshot ?? !shell.includes("bash")) ? null : await getOrCreateSnapshot(shell, shellEnv);
 	const minimizer = buildMinimizerOptions(settings.getGroup("shellMinimizer"));
 	const shellSession = new Shell({ sessionEnv: shellEnv, snapshotPath: snapshotPath ?? undefined, minimizer });
 
@@ -153,8 +153,8 @@ export async function runShellCommand(cmd: ShellCommandArgs): Promise<void> {
 				} else if (result.exitCode !== 0 && result.exitCode !== undefined) {
 					process.stderr.write(chalk.yellow(`Exit code: ${result.exitCode}\n`));
 				}
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
 				process.stderr.write(chalk.red(`Error: ${message}\n`));
 			} finally {
 				active = false;

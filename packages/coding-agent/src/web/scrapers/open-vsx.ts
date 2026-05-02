@@ -43,7 +43,10 @@ export const handleOpenVsx: SpecialHandler = async (
 
 		const fetchedAt = new Date().toISOString();
 		const baseUrl = `https://open-vsx.org/api/${encodeURIComponent(namespace)}/${encodeURIComponent(extension)}`;
-		const apiUrl = version ? `${baseUrl}/${encodeURIComponent(version)}` : baseUrl;
+		const apiUrl =
+			version !== null && version !== undefined && version !== ""
+				? `${baseUrl}/${encodeURIComponent(version)}`
+				: baseUrl;
 
 		const result = await loadPage(apiUrl, { timeout, signal });
 		if (!result.ok) return null;
@@ -53,28 +56,30 @@ export const handleOpenVsx: SpecialHandler = async (
 
 		let readme: string | null = null;
 		const readmeUrl = data.files?.readme;
-		if (readmeUrl) {
+		if (readmeUrl !== null && readmeUrl !== undefined && readmeUrl !== "") {
 			try {
 				const readmeResult = await loadPage(readmeUrl, { timeout: Math.min(timeout, 10), signal });
 				if (readmeResult.ok) readme = readmeResult.content;
 			} catch {}
 		}
 
-		const displayName = data.displayName || data.name || `${namespace}/${extension}`;
+		const displayName = (data.displayName ?? data.name) || `${namespace}/${extension}`;
 		const displayNamespace = data.namespace || namespace;
 		const displayVersion = data.version || version || "unknown";
 		const downloads = typeof data.downloadCount === "number" ? data.downloadCount : null;
 		const rating = typeof data.averageRating === "number" ? data.averageRating : null;
 		const reviews = typeof data.reviewCount === "number" ? data.reviewCount : null;
-		const repository = typeof data.repository === "string" ? data.repository : data.repository?.url || null;
+		const repository = typeof data.repository === "string" ? data.repository : (data.repository?.url ?? null);
 
 		let md = `# ${displayName}\n\n`;
-		if (data.description) md += `${data.description}\n\n`;
+		if (data.description !== null && data.description !== undefined && data.description !== "")
+			md += `${data.description}\n\n`;
 
 		md += `**Namespace:** ${displayNamespace}\n`;
 		md += `**Extension:** ${data.name || extension}\n`;
 		md += `**Version:** ${displayVersion}`;
-		if (data.license) md += ` | **License:** ${data.license}`;
+		if (data.license !== null && data.license !== undefined && data.license !== "")
+			md += ` | **License:** ${data.license}`;
 		md += "\n";
 
 		if (downloads !== null) {
@@ -86,15 +91,17 @@ export const handleOpenVsx: SpecialHandler = async (
 			md += `**Rating:** ${rating}${reviewSuffix}\n`;
 		}
 
-		if (repository) {
+		if (repository !== null && repository !== undefined && repository !== "") {
 			const cleanedRepo = repository.replace(/^git\+/, "").replace(/\.git$/, "");
 			md += `**Repository:** ${cleanedRepo}\n`;
 		}
 
-		if (data.homepage) md += `**Homepage:** ${data.homepage}\n`;
-		if (data.categories?.length) md += `**Categories:** ${data.categories.join(", ")}\n`;
+		if (data.homepage !== null && data.homepage !== undefined && data.homepage !== "")
+			md += `**Homepage:** ${data.homepage}\n`;
+		if (data.categories?.length !== null && data.categories?.length !== undefined && data.categories?.length !== 0)
+			md += `**Categories:** ${data.categories.join(", ")}\n`;
 
-		if (readme) {
+		if (readme !== null && readme !== undefined && readme !== "") {
 			md += "\n---\n\n## README\n\n";
 			md += `${readme}\n`;
 		}

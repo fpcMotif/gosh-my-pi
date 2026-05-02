@@ -265,7 +265,7 @@ function adjustLinesIndentation(patternLines: string[], actualLines: string[], n
 				break;
 			}
 			const nextRatio = actualIndent / patternIndent;
-			if (!ratio) {
+			if (ratio === null || ratio === undefined || ratio === 0) {
 				ratio = nextRatio;
 			} else if (ratio !== nextRatio) {
 				consistent = false;
@@ -273,7 +273,13 @@ function adjustLinesIndentation(patternLines: string[], actualLines: string[], n
 			}
 		}
 
-		if (consistent && ratio && canConvertTabsToSpaces(patternLines, actualLines, ratio)) {
+		if (
+			consistent &&
+			ratio !== null &&
+			ratio !== undefined &&
+			ratio !== 0 &&
+			canConvertTabsToSpaces(patternLines, actualLines, ratio)
+		) {
 			return convertLeadingTabsToSpaces(newLines.join("\n"), ratio).split("\n");
 		}
 	}
@@ -414,7 +420,7 @@ function adjustLinesIndentation(patternLines: string[], actualLines: string[], n
 		}
 
 		// This is a new/added line - apply consistent delta if safe
-		if (delta && delta !== 0) {
+		if (delta !== null && delta !== undefined && delta !== 0 && delta !== 0) {
 			const newIndent = countLeadingWhitespace(newLine);
 			if (newIndent === patternMin) {
 				return applyIndentDelta([newLine], delta, indentChar)[0];
@@ -619,7 +625,9 @@ function formatSequenceMatchPreviews(
 	if (!matchIndices || matchIndices.length === 0) return undefined;
 	const previews = matchIndices.map(index => formatSequenceMatchPreview(lines, index));
 	const moreMsg =
-		matchCount && matchCount > matchIndices.length ? ` (showing first ${matchIndices.length} of ${matchCount})` : "";
+		matchCount !== null && matchCount !== undefined && matchCount !== 0 && matchCount > matchIndices.length
+			? ` (showing first ${matchIndices.length} of ${matchCount})`
+			: "";
 	return `${previews.join("\n\n")}${moreMsg}`;
 }
 
@@ -731,7 +739,10 @@ function findHierarchicalContext(
 		if (outerResult.index !== undefined) {
 			const innerResult = findContextLine(lines, inner, outerResult.index + 1, { allowFuzzy });
 			if (innerResult.index !== undefined) {
-				return innerResult.matchCount && innerResult.matchCount > 1
+				return innerResult.matchCount !== null &&
+					innerResult.matchCount !== undefined &&
+					innerResult.matchCount !== 0 &&
+					innerResult.matchCount > 1
 					? { ...innerResult, matchCount: 1, matchIndices: [innerResult.index] }
 					: innerResult;
 			}
@@ -798,7 +809,10 @@ function findHierarchicalContext(
 
 		const innerResult = findContextLine(lines, inner, outerResult.index + 1, { allowFuzzy });
 		if (innerResult.index !== undefined) {
-			return innerResult.matchCount && innerResult.matchCount > 1
+			return innerResult.matchCount !== null &&
+				innerResult.matchCount !== undefined &&
+				innerResult.matchCount !== 0 &&
+				innerResult.matchCount > 1
 				? { ...innerResult, matchCount: 1, matchIndices: [innerResult.index] }
 				: innerResult;
 		}
@@ -826,7 +840,9 @@ function findSequenceWithHint(
 	// Prefer content-based search starting from currentIndex
 	const primaryResult = seekSequence(lines, pattern, currentIndex, eof, { allowFuzzy });
 	if (
-		primaryResult.matchCount &&
+		primaryResult.matchCount !== null &&
+		primaryResult.matchCount !== undefined &&
+		primaryResult.matchCount !== 0 &&
 		primaryResult.matchCount > 1 &&
 		hintIndex !== undefined &&
 		hintIndex !== currentIndex
@@ -835,18 +851,35 @@ function findSequenceWithHint(
 		if (hintedResult.index !== undefined && (hintedResult.matchCount ?? 1) <= 1) {
 			return hintedResult;
 		}
-		if (hintedResult.matchCount && hintedResult.matchCount > 1) {
+		if (
+			hintedResult.matchCount !== null &&
+			hintedResult.matchCount !== undefined &&
+			hintedResult.matchCount !== 0 &&
+			hintedResult.matchCount > 1
+		) {
 			return hintedResult;
 		}
 	}
-	if (primaryResult.index !== undefined || (primaryResult.matchCount && primaryResult.matchCount > 1)) {
+	if (
+		primaryResult.index !== undefined ||
+		(primaryResult.matchCount !== null &&
+			primaryResult.matchCount !== undefined &&
+			primaryResult.matchCount !== 0 &&
+			primaryResult.matchCount > 1)
+	) {
 		return primaryResult;
 	}
 
 	// Use line hint as a secondary bias only if needed
 	if (hintIndex !== undefined && hintIndex !== currentIndex) {
 		const hintedResult = seekSequence(lines, pattern, hintIndex, eof, { allowFuzzy });
-		if (hintedResult.index !== undefined || (hintedResult.matchCount && hintedResult.matchCount > 1)) {
+		if (
+			hintedResult.index !== undefined ||
+			(hintedResult.matchCount !== null &&
+				hintedResult.matchCount !== undefined &&
+				hintedResult.matchCount !== 0 &&
+				hintedResult.matchCount > 1)
+		) {
 			return hintedResult;
 		}
 	}
@@ -854,7 +887,13 @@ function findSequenceWithHint(
 	// Last resort: search from beginning (handles out-of-order hunks)
 	if (currentIndex !== 0) {
 		const fromStartResult = seekSequence(lines, pattern, 0, eof, { allowFuzzy });
-		if (fromStartResult.index !== undefined || (fromStartResult.matchCount && fromStartResult.matchCount > 1)) {
+		if (
+			fromStartResult.index !== undefined ||
+			(fromStartResult.matchCount !== null &&
+				fromStartResult.matchCount !== undefined &&
+				fromStartResult.matchCount !== 0 &&
+				fromStartResult.matchCount > 1)
+		) {
 			return fromStartResult;
 		}
 	}
@@ -943,7 +982,12 @@ function applyCharacterMatch(
 	}
 
 	// Check for multiple exact occurrences
-	if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
+	if (
+		matchOutcome.occurrences !== null &&
+		matchOutcome.occurrences !== undefined &&
+		matchOutcome.occurrences !== 0 &&
+		matchOutcome.occurrences > 1
+	) {
 		const previews = matchOutcome.occurrencePreviews?.join("\n\n") ?? "";
 		const moreMsg = matchOutcome.occurrences > 5 ? ` (showing first 5 of ${matchOutcome.occurrences})` : "";
 		throw new ApplyPatchError(
@@ -952,7 +996,12 @@ function applyCharacterMatch(
 		);
 	}
 
-	if (matchOutcome.fuzzyMatches && matchOutcome.fuzzyMatches > 1) {
+	if (
+		matchOutcome.fuzzyMatches !== null &&
+		matchOutcome.fuzzyMatches !== undefined &&
+		matchOutcome.fuzzyMatches !== 0 &&
+		matchOutcome.fuzzyMatches > 1
+	) {
 		throw new ApplyPatchError(
 			`Found ${matchOutcome.fuzzyMatches} high-confidence matches in ${path}. ` +
 				`The text must be unique. Please provide more context to make it unique.`,
@@ -975,7 +1024,7 @@ function applyCharacterMatch(
 	const adjustedNewText = adjustIndentation(normalizedOldText, matchOutcome.match.actualText, newText);
 
 	const warnings: string[] = [];
-	if (matchOutcome.dominantFuzzy && matchOutcome.match) {
+	if (matchOutcome.dominantFuzzy === true && matchOutcome.match) {
 		const similarity = Math.round(matchOutcome.match.confidence * 100);
 		warnings.push(
 			`Dominant fuzzy match selected in ${path} near line ${matchOutcome.match.startLine} (${similarity}% similar).`,
@@ -1062,7 +1111,8 @@ function computeReplacements(
 						: hunk.changeContext;
 					const previews = formatSequenceMatchPreviews(originalLines, result.matchIndices, result.matchCount);
 					const strategyHint = result.strategy ? ` Matching strategy: ${result.strategy}.` : "";
-					const previewText = previews ? `\n\n${previews}` : "";
+					const previewText =
+						previews !== null && previews !== undefined && previews !== "" ? `\n\n${previews}` : "";
 					throw new ApplyPatchError(
 						`Found ${result.matchCount} matches for context '${displayContext}' in ${path}.${strategyHint}` +
 							`${previewText}\n\nAdd more surrounding context or additional @@ anchors to make it unique.`,
@@ -1211,7 +1261,8 @@ function computeReplacements(
 		}
 
 		if ((searchResult.matchCount ?? 0) > 1) {
-			const hintIndex = matchHint ?? (lineHint ? lineHint - 1 : undefined);
+			const hintIndex =
+				matchHint ?? (lineHint !== null && lineHint !== undefined && lineHint !== 0 ? lineHint - 1 : undefined);
 			const hinted = chooseHintedMatch(searchResult.matchIndices, hintIndex, AMBIGUITY_HINT_WINDOW);
 			if (hinted !== undefined) {
 				searchResult = { ...searchResult, index: hinted, matchCount: 1 };
@@ -1226,7 +1277,7 @@ function computeReplacements(
 					searchResult.matchCount,
 				);
 				const strategyHint = searchResult.strategy ? ` Matching strategy: ${searchResult.strategy}.` : "";
-				const previewText = previews ? `\n\n${previews}` : "";
+				const previewText = previews !== null && previews !== undefined && previews !== "" ? `\n\n${previews}` : "";
 				throw new ApplyPatchError(
 					`Found ${searchResult.matchCount} matches for the text in ${path}.${strategyHint}` +
 						`${previewText}\n\nAdd more surrounding context or additional @@ anchors to make it unique.`,
@@ -1262,7 +1313,7 @@ function computeReplacements(
 				searchResult.matchCount,
 			);
 			const strategyHint = searchResult.strategy ? ` Matching strategy: ${searchResult.strategy}.` : "";
-			const previewText = previews ? `\n\n${previews}` : "";
+			const previewText = previews !== null && previews !== undefined && previews !== "" ? `\n\n${previews}` : "";
 			throw new ApplyPatchError(
 				`Found ${searchResult.matchCount} matches for the text in ${path}.${strategyHint}` +
 					`${previewText}\n\nAdd more surrounding context or additional @@ anchors to make it unique.`,
@@ -1430,7 +1481,7 @@ async function applyNormalizedPatch(input: PatchInput, options: ApplyPatchOption
 	const absolutePath = resolvePath(input.path);
 	const op = input.op ?? "update";
 
-	if (input.rename) {
+	if (input.rename !== null && input.rename !== undefined && input.rename !== "") {
 		const destPath = resolvePath(input.rename);
 		if (destPath === absolutePath) {
 			throw new ApplyPatchError("rename path is the same as source path");
@@ -1439,7 +1490,7 @@ async function applyNormalizedPatch(input: PatchInput, options: ApplyPatchOption
 
 	// Handle CREATE operation
 	if (op === "create") {
-		if (!input.diff) {
+		if (input.diff === null || input.diff === undefined || input.diff === "") {
 			throw new ApplyPatchError("Create operation requires diff (file content)");
 		}
 		// Strip + prefixes if present (handles diffs formatted as additions)
@@ -1480,7 +1531,7 @@ async function applyNormalizedPatch(input: PatchInput, options: ApplyPatchOption
 	}
 
 	// Handle UPDATE operation
-	if (!input.diff) {
+	if (input.diff === null || input.diff === undefined || input.diff === "") {
 		throw new ApplyPatchError("Update operation requires diff (hunks)");
 	}
 
@@ -1509,7 +1560,10 @@ async function applyNormalizedPatch(input: PatchInput, options: ApplyPatchOption
 		allowFuzzy,
 	);
 	const finalContent = bom + restoreLineEndings(newContent, lineEnding);
-	const destPath = input.rename ? resolvePath(input.rename) : absolutePath;
+	const destPath =
+		input.rename !== null && input.rename !== undefined && input.rename !== ""
+			? resolvePath(input.rename)
+			: absolutePath;
 	const isMove = Boolean(input.rename) && destPath !== absolutePath;
 
 	if (!dryRun) {
@@ -1571,8 +1625,8 @@ export async function computePatchDiff(
 			return { diff: "", firstChangedLine: undefined };
 		}
 		return generateUnifiedDiffString(normalizedOld, normalizedNew);
-	} catch (err) {
-		return { error: err instanceof Error ? err.message : String(err) };
+	} catch (error) {
+		return { error: error instanceof Error ? error.message : String(error) };
 	}
 }
 
@@ -1715,12 +1769,13 @@ export async function executePatchSingle(
 
 	enforcePlanModeWrite(session, path, { op, move: rename });
 	const resolvedPath = resolvePlanPath(session, path);
-	const resolvedRename = rename ? resolvePlanPath(session, rename) : undefined;
+	const resolvedRename =
+		rename !== null && rename !== undefined && rename !== "" ? resolvePlanPath(session, rename) : undefined;
 
 	if (path.endsWith(".ipynb")) {
 		throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 	}
-	if (rename?.endsWith(".ipynb")) {
+	if (rename?.endsWith(".ipynb") === true) {
 		throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 	}
 
@@ -1735,20 +1790,31 @@ export async function executePatchSingle(
 		allowFuzzy,
 	});
 
-	if (resolvedRename) {
+	if (resolvedRename !== null && resolvedRename !== undefined && resolvedRename !== "") {
 		invalidateFsScanAfterRename(resolvedPath, resolvedRename);
 	} else if (result.change.type === "delete") {
 		invalidateFsScanAfterDelete(resolvedPath);
 	} else {
 		invalidateFsScanAfterWrite(resolvedPath);
 	}
-	const effectiveRename = result.change.newPath ? rename : undefined;
+	const effectiveRename =
+		result.change.newPath !== null && result.change.newPath !== undefined && result.change.newPath !== ""
+			? rename
+			: undefined;
 
 	let diffResult: { diff: string; firstChangedLine: number | undefined } = {
 		diff: "",
 		firstChangedLine: undefined,
 	};
-	if (result.change.type === "update" && result.change.oldContent && result.change.newContent) {
+	if (
+		result.change.type === "update" &&
+		result.change.oldContent !== null &&
+		result.change.oldContent !== undefined &&
+		result.change.oldContent !== "" &&
+		result.change.newContent !== null &&
+		result.change.newContent !== undefined &&
+		result.change.newContent !== ""
+	) {
 		const normalizedOld = normalizeToLF(stripBom(result.change.oldContent).text);
 		const normalizedNew = normalizeToLF(stripBom(result.change.newContent).text);
 		diffResult = generateUnifiedDiffString(normalizedOld, normalizedNew);
@@ -1763,12 +1829,15 @@ export async function executePatchSingle(
 			resultText = `Deleted ${path}`;
 			break;
 		case "update":
-			resultText = effectiveRename ? `Updated and moved ${path} to ${effectiveRename}` : `Updated ${path}`;
+			resultText =
+				effectiveRename !== null && effectiveRename !== undefined && effectiveRename !== ""
+					? `Updated and moved ${path} to ${effectiveRename}`
+					: `Updated ${path}`;
 			break;
 	}
 
 	let diagnostics = patchFileSystem.getDiagnostics();
-	if (op === "delete" && batchRequest?.flush) {
+	if (op === "delete" && batchRequest?.flush === true) {
 		const flushedDiagnostics = await flushLspWritethroughBatch(batchRequest.id, session.cwd, signal);
 		diagnostics ??= flushedDiagnostics;
 	}

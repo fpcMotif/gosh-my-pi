@@ -132,30 +132,45 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 
 				let md = `# ${model.modelId}\n\n`;
 
-				if (model.pipeline_tag) md += `**Task:** ${model.pipeline_tag}\n`;
-				if (model.library_name) md += `**Library:** ${model.library_name}\n`;
+				if (model.pipeline_tag !== null && model.pipeline_tag !== undefined && model.pipeline_tag !== "")
+					md += `**Task:** ${model.pipeline_tag}\n`;
+				if (model.library_name !== null && model.library_name !== undefined && model.library_name !== "")
+					md += `**Library:** ${model.library_name}\n`;
 				if (model.downloads !== undefined) md += `**Downloads:** ${formatNumber(model.downloads)}\n`;
 				if (model.likes !== undefined) md += `**Likes:** ${formatNumber(model.likes)}\n`;
-				if (model.private) md += `**Visibility:** Private\n`;
+				if (model.private === true) md += `**Visibility:** Private\n`;
 				if (model.gated) md += `**Access:** Gated\n`;
 
 				if (model.cardData) {
-					if (model.cardData.license) md += `**License:** ${model.cardData.license}\n`;
+					if (
+						model.cardData.license !== null &&
+						model.cardData.license !== undefined &&
+						model.cardData.license !== ""
+					)
+						md += `**License:** ${model.cardData.license}\n`;
 					if (model.cardData.language) {
 						const langs = Array.isArray(model.cardData.language)
 							? model.cardData.language.join(", ")
 							: model.cardData.language;
 						md += `**Language:** ${langs}\n`;
 					}
-					if (model.cardData.datasets?.length) {
+					if (
+						model.cardData.datasets?.length !== null &&
+						model.cardData.datasets?.length !== undefined &&
+						model.cardData.datasets?.length !== 0
+					) {
 						md += `**Datasets:** ${model.cardData.datasets.join(", ")}\n`;
 					}
-					if (model.cardData.metrics?.length) {
+					if (
+						model.cardData.metrics?.length !== null &&
+						model.cardData.metrics?.length !== undefined &&
+						model.cardData.metrics?.length !== 0
+					) {
 						md += `**Metrics:** ${model.cardData.metrics.join(", ")}\n`;
 					}
 				}
 
-				if (model.tags?.length) {
+				if (model.tags?.length !== null && model.tags?.length !== undefined && model.tags?.length !== 0) {
 					md += `**Tags:** ${model.tags.join(", ")}\n`;
 				}
 
@@ -183,30 +198,44 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 				if (!dataset) return null;
 
 				let md = `# ${dataset.id}\n\n`;
-				if (dataset.description) md += `${dataset.description}\n\n`;
+				if (dataset.description !== null && dataset.description !== undefined && dataset.description !== "")
+					md += `${dataset.description}\n\n`;
 
 				if (dataset.downloads !== undefined) md += `**Downloads:** ${formatNumber(dataset.downloads)}\n`;
 				if (dataset.likes !== undefined) md += `**Likes:** ${formatNumber(dataset.likes)}\n`;
-				if (dataset.private) md += `**Visibility:** Private\n`;
+				if (dataset.private === true) md += `**Visibility:** Private\n`;
 				if (dataset.gated) md += `**Access:** Gated\n`;
 
 				if (dataset.cardData) {
-					if (dataset.cardData.license) md += `**License:** ${dataset.cardData.license}\n`;
+					if (
+						dataset.cardData.license !== null &&
+						dataset.cardData.license !== undefined &&
+						dataset.cardData.license !== ""
+					)
+						md += `**License:** ${dataset.cardData.license}\n`;
 					if (dataset.cardData.language) {
 						const langs = Array.isArray(dataset.cardData.language)
 							? dataset.cardData.language.join(", ")
 							: dataset.cardData.language;
 						md += `**Language:** ${langs}\n`;
 					}
-					if (dataset.cardData.task_categories?.length) {
+					if (
+						dataset.cardData.task_categories?.length !== null &&
+						dataset.cardData.task_categories?.length !== undefined &&
+						dataset.cardData.task_categories?.length !== 0
+					) {
 						md += `**Tasks:** ${dataset.cardData.task_categories.join(", ")}\n`;
 					}
-					if (dataset.cardData.size_categories?.length) {
+					if (
+						dataset.cardData.size_categories?.length !== null &&
+						dataset.cardData.size_categories?.length !== undefined &&
+						dataset.cardData.size_categories?.length !== 0
+					) {
 						md += `**Size:** ${dataset.cardData.size_categories.join(", ")}\n`;
 					}
 				}
 
-				if (dataset.tags?.length) {
+				if (dataset.tags?.length !== null && dataset.tags?.length !== undefined && dataset.tags?.length !== 0) {
 					md += `**Tags:** ${dataset.tags.join(", ")}\n`;
 				}
 
@@ -234,19 +263,30 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 				if (!space) return null;
 
 				let md = `# ${space.id}\n\n`;
-				if (space.title) md += `${space.title}\n\n`;
+				if (space.title !== null && space.title !== undefined && space.title !== "") md += `${space.title}\n\n`;
 
-				if (space.author) md += `**Author:** ${space.author}\n`;
-				if (space.sdk) md += `**SDK:** ${space.sdk}\n`;
+				if (space.author !== null && space.author !== undefined && space.author !== "")
+					md += `**Author:** ${space.author}\n`;
+				if (space.sdk !== null && space.sdk !== undefined && space.sdk !== "") md += `**SDK:** ${space.sdk}\n`;
 				if (space.likes !== undefined) md += `**Likes:** ${formatNumber(space.likes)}\n`;
-				if (space.private) md += `**Visibility:** Private\n`;
+				if (space.private === true) md += `**Visibility:** Private\n`;
 
 				if (space.cardData) {
-					if (space.cardData.license) md += `**License:** ${space.cardData.license}\n`;
-					if (space.cardData.app_file) md += `**App File:** ${space.cardData.app_file}\n`;
+					if (
+						space.cardData.license !== null &&
+						space.cardData.license !== undefined &&
+						space.cardData.license !== ""
+					)
+						md += `**License:** ${space.cardData.license}\n`;
+					if (
+						space.cardData.app_file !== null &&
+						space.cardData.app_file !== undefined &&
+						space.cardData.app_file !== ""
+					)
+						md += `**App File:** ${space.cardData.app_file}\n`;
 				}
 
-				if (space.tags?.length) {
+				if (space.tags?.length !== null && space.tags?.length !== undefined && space.tags?.length !== 0) {
 					md += `**Tags:** ${space.tags.join(", ")}\n`;
 				}
 
@@ -271,11 +311,14 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 						const readmeResult = await loadPage(readmeUrl, { timeout: Math.min(timeout, 5), signal });
 
 						let md = `# ${model.modelId}\n\n`;
-						if (model.pipeline_tag) md += `**Task:** ${model.pipeline_tag}\n`;
-						if (model.library_name) md += `**Library:** ${model.library_name}\n`;
+						if (model.pipeline_tag !== null && model.pipeline_tag !== undefined && model.pipeline_tag !== "")
+							md += `**Task:** ${model.pipeline_tag}\n`;
+						if (model.library_name !== null && model.library_name !== undefined && model.library_name !== "")
+							md += `**Library:** ${model.library_name}\n`;
 						if (model.downloads !== undefined) md += `**Downloads:** ${formatNumber(model.downloads)}\n`;
 						if (model.likes !== undefined) md += `**Likes:** ${formatNumber(model.likes)}\n`;
-						if (model.tags?.length) md += `**Tags:** ${model.tags.join(", ")}\n`;
+						if (model.tags?.length !== null && model.tags?.length !== undefined && model.tags?.length !== 0)
+							md += `**Tags:** ${model.tags.join(", ")}\n`;
 						md += "\n";
 						if (readmeResult.ok && readmeResult.content.trim()) {
 							md += `## Model Card\n\n${readmeResult.content}`;
@@ -299,13 +342,14 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 				const user = tryParseJson<HfUserData>(userResult.content);
 				if (!user) return null;
 
-				let md = `# ${user.user || parsed.id}\n\n`;
-				if (user.fullname) md += `**Name:** ${user.fullname}\n`;
+				let md = `# ${user.user ?? parsed.id}\n\n`;
+				if (user.fullname !== null && user.fullname !== undefined && user.fullname !== "")
+					md += `**Name:** ${user.fullname}\n`;
 				if (user.numModels !== undefined) md += `**Models:** ${formatNumber(user.numModels)}\n`;
 				if (user.numDatasets !== undefined) md += `**Datasets:** ${formatNumber(user.numDatasets)}\n`;
 				if (user.numSpaces !== undefined) md += `**Spaces:** ${formatNumber(user.numSpaces)}\n`;
 
-				if (user.orgs?.length) {
+				if (user.orgs?.length !== null && user.orgs?.length !== undefined && user.orgs?.length !== 0) {
 					md += `**Organizations:** ${user.orgs.map(o => o.name).join(", ")}\n`;
 				}
 

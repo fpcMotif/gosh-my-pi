@@ -7,16 +7,8 @@ function createRuntimeHarness(options?: {
 	handleSessionDeleteCommand?: InteractiveModeContext["handleSessionDeleteCommand"];
 }) {
 	const setText = vi.fn();
-	const handleSessionCommand =
-		options?.handleSessionCommand ??
-		vi.fn(async () => {
-			return;
-		});
-	const handleSessionDeleteCommand =
-		options?.handleSessionDeleteCommand ??
-		vi.fn(async () => {
-			return;
-		});
+	const handleSessionCommand = options?.handleSessionCommand ?? vi.fn(async () => {});
+	const handleSessionDeleteCommand = options?.handleSessionDeleteCommand ?? vi.fn(async () => {});
 
 	return {
 		setText,
@@ -66,7 +58,7 @@ describe("/session slash command", () => {
 		});
 		const harness = createRuntimeHarness({ handleSessionCommand });
 
-		await expect(executeBuiltinSlashCommand("/session info", harness.runtime)).rejects.toBe(infoError);
+		expect(executeBuiltinSlashCommand("/session info", harness.runtime)).rejects.toBe(infoError);
 		expect(handleSessionCommand).toHaveBeenCalledTimes(1);
 		expect(harness.handleSessionDeleteCommand).not.toHaveBeenCalled();
 		expect(harness.setText).not.toHaveBeenCalled();
@@ -102,7 +94,7 @@ describe("/session slash command", () => {
 		});
 		const harness = createRuntimeHarness({ handleSessionDeleteCommand });
 
-		await expect(executeBuiltinSlashCommand("/session delete", harness.runtime)).rejects.toBe(deleteError);
+		expect(executeBuiltinSlashCommand("/session delete", harness.runtime)).rejects.toBe(deleteError);
 		expect(handleSessionDeleteCommand).toHaveBeenCalledTimes(1);
 		expect(harness.setText).toHaveBeenCalledWith("");
 	});

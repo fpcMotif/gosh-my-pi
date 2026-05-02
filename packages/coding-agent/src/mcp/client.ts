@@ -82,7 +82,7 @@ async function createTransport(config: MCPServerConfig): Promise<MCPTransport> {
 		case "sse":
 			return createHttpTransport(config as MCPHttpServerConfig | MCPSseServerConfig);
 		default:
-			throw new Error(`Unknown server type: ${serverType}`);
+			throw new Error(`Unknown server type: ${String(serverType)}`);
 	}
 }
 
@@ -111,7 +111,7 @@ async function initializeConnection(
 		{ signal: options?.signal },
 	);
 
-	if (options?.signal?.aborted) {
+	if (options?.signal !== undefined && options?.signal.aborted) {
 		throw options.signal.reason instanceof Error ? options.signal.reason : new Error("Aborted");
 	}
 
@@ -218,14 +218,14 @@ export async function listTools(
 
 	do {
 		const params: Record<string, unknown> = {};
-		if (cursor) {
+		if (cursor !== null && cursor !== undefined && cursor !== "") {
 			params.cursor = cursor;
 		}
 
 		const result = await connection.transport.request<MCPToolsListResult>("tools/list", params, options);
 		allTools.push(...result.tools);
 		cursor = result.nextCursor;
-	} while (cursor);
+	} while (cursor !== null && cursor !== undefined && cursor !== "");
 
 	// Cache tools
 	connection.tools = allTools;
@@ -288,14 +288,14 @@ export async function listResources(
 
 	do {
 		const params: Record<string, unknown> = {};
-		if (cursor) {
+		if (cursor !== null && cursor !== undefined && cursor !== "") {
 			params.cursor = cursor;
 		}
 
 		const result = await connection.transport.request<MCPResourcesListResult>("resources/list", params, options);
 		allResources.push(...result.resources);
 		cursor = result.nextCursor;
-	} while (cursor);
+	} while (cursor !== null && cursor !== undefined && cursor !== "");
 
 	connection.resources = allResources;
 	return allResources;
@@ -321,7 +321,7 @@ export async function listResourceTemplates(
 
 	do {
 		const params: Record<string, unknown> = {};
-		if (cursor) {
+		if (cursor !== null && cursor !== undefined && cursor !== "") {
 			params.cursor = cursor;
 		}
 
@@ -332,7 +332,7 @@ export async function listResourceTemplates(
 		);
 		allTemplates.push(...result.resourceTemplates);
 		cursor = result.nextCursor;
-	} while (cursor);
+	} while (cursor !== null && cursor !== undefined && cursor !== "");
 
 	connection.resourceTemplates = allTemplates;
 	return allTemplates;
@@ -362,7 +362,7 @@ export async function subscribeToResources(
 	uris: string[],
 	options?: MCPRequestOptions,
 ): Promise<void> {
-	if (uris.length === 0 || !connection.capabilities.resources?.subscribe) return;
+	if (uris.length === 0 || connection.capabilities.resources?.subscribe !== true) return;
 	const results = await Promise.allSettled(
 		uris.map(uri => {
 			const params: MCPResourceSubscribeParams = { uri };
@@ -388,7 +388,7 @@ export async function unsubscribeFromResources(
 	uris: string[],
 	options?: MCPRequestOptions,
 ): Promise<void> {
-	if (uris.length === 0 || !connection.capabilities.resources?.subscribe) return;
+	if (uris.length === 0 || connection.capabilities.resources?.subscribe !== true) return;
 	const results = await Promise.allSettled(
 		uris.map(uri => {
 			const params: MCPResourceSubscribeParams = { uri };
@@ -440,14 +440,14 @@ export async function listPrompts(
 
 	do {
 		const params: Record<string, unknown> = {};
-		if (cursor) {
+		if (cursor !== null && cursor !== undefined && cursor !== "") {
 			params.cursor = cursor;
 		}
 
 		const result = await connection.transport.request<MCPPromptsListResult>("prompts/list", params, options);
 		allPrompts.push(...result.prompts);
 		cursor = result.nextCursor;
-	} while (cursor);
+	} while (cursor !== null && cursor !== undefined && cursor !== "");
 
 	connection.prompts = allPrompts;
 	return allPrompts;

@@ -10,6 +10,8 @@
 	"arrowParens": "avoid",
 	"bracketSameLine": false,
 	"bracketSpacing": true,
+	"endOfLine": "lf",
+	"insertFinalNewline": true,
 	"ignorePatterns": [
 		"packages/natives/native/index.d.ts",
 		"**/vendor/**/*",

@@ -79,7 +79,7 @@ function buildConfig(shell: string): ShellConfig {
 export function resolveBasicShell(): string | undefined {
 	for (const name of ["bash", "bash.exe", "sh", "sh.exe"]) {
 		const resolved = $which(name);
-		if (resolved) return resolved;
+		if (resolved !== null && resolved !== undefined && resolved !== "") return resolved;
 	}
 
 	if (process.platform !== "win32") {
@@ -105,72 +105,59 @@ export function resolveBasicShell(): string | undefined {
  * 3. On Unix: $SHELL if bash/zsh, then fallback paths
  * 4. Fallback: sh
  */
-export function getShellConfig(customShellPath?: string): ShellConfig {
-	if (cachedShellConfig) {
-		return cachedShellConfig;
+function isStringSet(s: string | null | undefined): s is string {
+	return s !== null && s !== undefined && s !== "";
+}
+
+function tryCustomShellPath(customShellPath: string | undefined): ShellConfig | undefined {
+	if (!isStringSet(customShellPath)) return undefined;
+	if (fs.existsSync(customShellPath)) return buildConfig(customShellPath);
+	throw new Error(
+		`Custom shell path not found: ${customShellPath}\nPlease update shellPath in ~/.omp/agent/settings.json`,
+	);
+}
+
+function resolveWindowsShell(): ShellConfig {
+	const paths: string[] = [];
+	if (isStringSet(Bun.env.ProgramFiles)) paths.push(`${Bun.env.ProgramFiles}\\Git\\bin\\bash.exe`);
+	if (isStringSet(Bun.env["ProgramFiles(x86)"])) paths.push(`${Bun.env["ProgramFiles(x86)"]}\\Git\\bin\\bash.exe`);
+
+	for (const path of paths) {
+		if (fs.existsSync(path)) return buildConfig(path);
 	}
 
-	// 1. Check user-specified shell path
-	if (customShellPath) {
-		if (fs.existsSync(customShellPath)) {
-			cachedShellConfig = buildConfig(customShellPath);
-			return cachedShellConfig;
-		}
-		throw new Error(
-			`Custom shell path not found: ${customShellPath}\nPlease update shellPath in ~/.omp/agent/settings.json`,
-		);
-	}
+	const bashOnPath = $which("bash.exe");
+	if (isStringSet(bashOnPath)) return buildConfig(bashOnPath);
 
-	if (process.platform === "win32") {
-		// 2. Try Git Bash in known locations
-		const paths: string[] = [];
-		const programFiles = Bun.env.ProgramFiles;
-		if (programFiles) {
-			paths.push(`${programFiles}\\Git\\bin\\bash.exe`);
-		}
-		const programFilesX86 = Bun.env["ProgramFiles(x86)"];
-		if (programFilesX86) {
-			paths.push(`${programFilesX86}\\Git\\bin\\bash.exe`);
-		}
+	throw new Error(
+		`No bash shell found. Options:\n` +
+			`  1. Install Git for Windows: https://git-scm.com/download/win\n` +
+			`  2. Add your bash to PATH (Cygwin, MSYS2, etc.)\n` +
+			`  3. Set shellPath in ~/.omp/agent/settings.json\n\n` +
+			`Searched Git Bash in:\n${paths.map(p => `  ${p}`).join("\n")}`,
+	);
+}
 
-		for (const path of paths) {
-			if (fs.existsSync(path)) {
-				cachedShellConfig = buildConfig(path);
-				return cachedShellConfig;
-			}
-		}
-
-		// 3. Fallback: search bash.exe on PATH (Cygwin, MSYS2, WSL, etc.)
-		const bashOnPath = $which("bash.exe");
-		if (bashOnPath) {
-			cachedShellConfig = buildConfig(bashOnPath);
-			return cachedShellConfig;
-		}
-
-		throw new Error(
-			`No bash shell found. Options:\n` +
-				`  1. Install Git for Windows: https://git-scm.com/download/win\n` +
-				`  2. Add your bash to PATH (Cygwin, MSYS2, etc.)\n` +
-				`  3. Set shellPath in ~/.omp/agent/settings.json\n\n` +
-				`Searched Git Bash in:\n${paths.map(p => `  ${p}`).join("\n")}`,
-		);
-	}
-
-	// Unix: prefer user's shell from $SHELL if it's bash/zsh and executable
+function resolveUnixShell(): ShellConfig {
 	const userShell = Bun.env.SHELL;
-	const isValidShell = userShell && (userShell.includes("bash") || userShell.includes("zsh"));
-	if (isValidShell && isExecutable(userShell)) {
-		cachedShellConfig = buildConfig(userShell);
+	if (isStringSet(userShell) && (userShell.includes("bash") || userShell.includes("zsh")) && isExecutable(userShell)) {
+		return buildConfig(userShell);
+	}
+	const basicShell = resolveBasicShell();
+	if (isStringSet(basicShell)) return buildConfig(basicShell);
+	return buildConfig("sh");
+}
+
+export function getShellConfig(customShellPath?: string): ShellConfig {
+	if (cachedShellConfig) return cachedShellConfig;
+
+	const custom = tryCustomShellPath(customShellPath);
+	if (custom !== undefined) {
+		cachedShellConfig = custom;
 		return cachedShellConfig;
 	}
 
-	// 4. Fallback: use basic shell
-	const basicShell = resolveBasicShell();
-	if (basicShell) {
-		cachedShellConfig = buildConfig(basicShell);
-		return cachedShellConfig;
-	}
-	cachedShellConfig = buildConfig("sh");
+	cachedShellConfig = process.platform === "win32" ? resolveWindowsShell() : resolveUnixShell();
 	return cachedShellConfig;
 }
 
@@ -271,53 +258,48 @@ export function onProcessExit(proc: Subprocess | number, abortSignal?: AbortSign
 /**
  * Terminate a process and all its descendants.
  */
+function sendTerminationSignal(target: TerminateOptions["target"], sig: NodeJS.Signals | number): void {
+	try {
+		if (typeof target === "number") {
+			process.kill(target, sig);
+		} else {
+			target.kill(sig);
+		}
+	} catch {}
+}
+
+function killProcessTree(target: TerminateOptions["target"], pid: number | undefined, group: boolean): void {
+	if (nativeKillTree && pid !== undefined) {
+		nativeKillTree(pid, 9);
+		return;
+	}
+	if (group && !IS_WINDOWS && pid !== undefined) {
+		try {
+			process.kill(-pid, "SIGKILL");
+		} catch {}
+	}
+	sendTerminationSignal(target, "SIGKILL");
+}
+
 export async function terminate(options: TerminateOptions): Promise<boolean> {
 	const { target, group = false, timeout = 5000, signal } = options;
 
 	const abortController = new AbortController();
 	try {
 		const abortSignal = joinSignals(signal, abortController.signal);
-
-		// Determine PID
-		let pid: number | undefined;
 		const exitPromise = onProcessExit(target, abortSignal);
-		if (typeof target === "number") {
-			pid = target;
-		} else {
-			pid = target.pid;
-			if (target.killed) return true;
-		}
+
+		const pid = typeof target === "number" ? target : target.pid;
+		if (typeof target !== "number" && target.killed) return true;
 
 		// Give it a moment to exit gracefully first.
-		try {
-			if (typeof target === "number") {
-				process.kill(target, TERM_SIGNAL);
-			} else {
-				target.kill(TERM_SIGNAL);
-			}
-
-			if (exitPromise) {
-				const exited = await Promise.race([Bun.sleep(1000).then(() => false), exitPromise]);
-				if (exited) return true;
-			}
-		} catch {}
-
-		if (nativeKillTree) {
-			nativeKillTree(pid, 9);
-		} else {
-			if (group && !IS_WINDOWS) {
-				try {
-					process.kill(-pid, "SIGKILL");
-				} catch {}
-			}
-			try {
-				if (typeof target === "number") {
-					process.kill(target, "SIGKILL");
-				} else {
-					target.kill("SIGKILL");
-				}
-			} catch {}
+		sendTerminationSignal(target, TERM_SIGNAL);
+		if (exitPromise !== undefined) {
+			const exited = await Promise.race([Bun.sleep(1000).then(() => false), exitPromise]);
+			if (exited) return true;
 		}
+
+		killProcessTree(target, pid, group);
 
 		return await Promise.race([Bun.sleep(timeout).then(() => false), exitPromise]);
 	} finally {

@@ -189,7 +189,7 @@ export interface ExecuteHashlineSingleOptions {
  * A single multiline `string` is still split on `\n` for the same normalization path.
  */
 export function hashlineParseText(edit: string[] | string | null | undefined): string[] {
-	if (edit == null) return [];
+	if (edit === null) return [];
 	if (typeof edit === "string") {
 		const normalizedEdit = edit.endsWith("\n") ? edit.slice(0, -1) : edit;
 		edit = normalizedEdit.replaceAll("\r", "").split("\n");
@@ -354,7 +354,7 @@ function createHashlineChunkEmitter(
 			(outLines.length >= options.maxChunkLines || outBytes + sepBytes + lineBytes > options.maxChunkBytes)
 		) {
 			const flushed = flush();
-			if (flushed) chunksToYield.push(flushed);
+			if (flushed !== null && flushed !== undefined && flushed !== "") chunksToYield.push(flushed);
 		}
 
 		outLines.push(formatted);
@@ -362,7 +362,7 @@ function createHashlineChunkEmitter(
 
 		if (outLines.length >= options.maxChunkLines || outBytes >= options.maxChunkBytes) {
 			const flushed = flush();
-			if (flushed) chunksToYield.push(flushed);
+			if (flushed !== null && flushed !== undefined && flushed !== "") chunksToYield.push(flushed);
 		}
 
 		return chunksToYield;
@@ -450,7 +450,7 @@ export async function* streamHashLinesFromUtf8(
 	}
 
 	const last = emitter.flush();
-	if (last) yield last;
+	if (last !== null && last !== undefined && last !== "") yield last;
 }
 
 /**
@@ -490,7 +490,7 @@ export async function* streamHashLinesFromLines(
 	}
 
 	const last = emitter.flush();
-	if (last) yield last;
+	if (last !== null && last !== undefined && last !== "") yield last;
 }
 
 /**
@@ -530,8 +530,8 @@ const MISMATCH_CONTEXT = 2;
 export class HashlineMismatchError extends Error {
 	readonly remaps: ReadonlyMap<string, string>;
 	constructor(
-		public readonly mismatches: HashMismatch[],
-		public readonly fileLines: string[],
+		readonly mismatches: HashMismatch[],
+		readonly fileLines: string[],
 	) {
 		super(HashlineMismatchError.formatMessage(mismatches, fileLines));
 		this.name = "HashlineMismatchError";
@@ -1324,8 +1324,8 @@ export async function computeHashlineDiff(
 		}
 
 		return generateDiffString(normalizedContent, result.lines);
-	} catch (err) {
-		return { error: err instanceof Error ? err.message : String(err) };
+	} catch (error) {
+		return { error: error instanceof Error ? error.message : String(error) };
 	}
 }
 
@@ -1346,7 +1346,7 @@ export async function executeHashlineSingle(
 ): Promise<AgentToolResult<EditToolDetails, typeof hashlineEditParamsSchema>> {
 	const { session, path, edits, signal, batchRequest, writethrough, beginDeferredDiagnosticsForPath } = options;
 
-	const contentEdits = edits.filter(e => e.loc != null);
+	const contentEdits = edits.filter(e => e.loc !== null);
 
 	enforcePlanModeWrite(session, path, { op: "update" });
 
@@ -1445,7 +1445,10 @@ export async function executeHashlineSingle(
 	const resultText = `Updated ${path}`;
 	const preview = buildCompactHashlineDiffPreview(diffResult.diff);
 	const summaryLine = `Changes: +${preview.addedLines} -${preview.removedLines}${preview.preview ? "" : " (no textual diff preview)"}`;
-	const warningsBlock = result.warnings?.length ? `\n\nWarnings:\n${result.warnings.join("\n")}` : "";
+	const warningsBlock =
+		result.warnings?.length !== null && result.warnings?.length !== undefined && result.warnings?.length !== 0
+			? `\n\nWarnings:\n${result.warnings.join("\n")}`
+			: "";
 	const previewBlock = preview.preview ? `\n\nDiff preview:\n${preview.preview}` : "";
 
 	return {

@@ -62,8 +62,8 @@ function extractCik(url: URL): string | null {
 	if (!hostname.includes("sec.gov")) return null;
 
 	// Pattern: ?CIK=xxx or ?cik=xxx
-	const cikParam = searchParams.get("CIK") || searchParams.get("cik");
-	if (cikParam) {
+	const cikParam = searchParams.get("CIK") ?? searchParams.get("cik");
+	if (cikParam !== null && cikParam !== undefined && cikParam !== "") {
 		return normalizeCik(cikParam);
 	}
 
@@ -80,7 +80,11 @@ function extractCik(url: URL): string | null {
 	}
 
 	// Pattern: /cgi-bin/browse-edgar with company search (no CIK yet)
-	if (pathname.includes("/cgi-bin/browse-edgar") && searchParams.get("company")) {
+	if (
+		pathname.includes("/cgi-bin/browse-edgar") &&
+		searchParams.get("company") !== undefined &&
+		searchParams.get("company") !== ""
+	) {
 		// Company name search - we'd need to search first, skip for now
 		return null;
 	}
@@ -107,13 +111,14 @@ function normalizeCik(cik: string): string {
  */
 function formatAddress(addr: SecCompany["addresses"]["business"]): string {
 	const parts: string[] = [];
-	if (addr.street1) parts.push(addr.street1);
-	if (addr.street2) parts.push(addr.street2);
+	if (addr.street1 !== null && addr.street1 !== undefined && addr.street1 !== "") parts.push(addr.street1);
+	if (addr.street2 !== null && addr.street2 !== undefined && addr.street2 !== "") parts.push(addr.street2);
 
 	const cityLine: string[] = [];
-	if (addr.city) cityLine.push(addr.city);
-	if (addr.stateOrCountry) cityLine.push(addr.stateOrCountry);
-	if (addr.zipCode) cityLine.push(addr.zipCode);
+	if (addr.city !== null && addr.city !== undefined && addr.city !== "") cityLine.push(addr.city);
+	if (addr.stateOrCountry !== null && addr.stateOrCountry !== undefined && addr.stateOrCountry !== "")
+		cityLine.push(addr.stateOrCountry);
+	if (addr.zipCode !== null && addr.zipCode !== undefined && addr.zipCode !== "") cityLine.push(addr.zipCode);
 	if (cityLine.length) parts.push(cityLine.join(", "));
 
 	return parts.join("\n");
@@ -167,7 +172,7 @@ export const handleSecEdgar: SpecialHandler = async (
 
 		// Extract CIK from URL
 		const cik = extractCik(parsed);
-		if (!cik) return null;
+		if (cik === null || cik === undefined || cik === "") return null;
 
 		const fetchedAt = new Date().toISOString();
 

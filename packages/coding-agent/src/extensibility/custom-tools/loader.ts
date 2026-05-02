@@ -59,8 +59,8 @@ async function loadTool(
 		}));
 
 		return { tools: loadedTools, error: null };
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		return { tools: null, error: { path: toolPath, error: `Failed to load tool: ${message}`, source } };
 	}
 }

@@ -47,17 +47,17 @@ export class AgentProtocolHandler implements ProtocolHandler {
 
 	async resolve(url: InternalUrl): Promise<InternalResource> {
 		const artifactsDir = this.options.getArtifactsDir();
-		if (!artifactsDir) {
+		if (artifactsDir === null || artifactsDir === undefined || artifactsDir === "") {
 			throw new Error("No session - agent outputs unavailable");
 		}
 
 		try {
 			await fs.stat(artifactsDir);
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				throw new Error("No artifacts directory found");
 			}
-			throw err;
+			throw error;
 		}
 
 		// Extract output ID from host
@@ -80,13 +80,13 @@ export class AgentProtocolHandler implements ProtocolHandler {
 		const outputPath = path.join(artifactsDir, `${outputId}.md`);
 		try {
 			await fs.stat(outputPath);
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				const available = await listAvailableOutputs(artifactsDir);
 				const availableStr = available.length > 0 ? available.join(", ") : "none";
 				throw new Error(`Not found: ${outputId}\nAvailable: ${availableStr}`);
 			}
-			throw err;
+			throw error;
 		}
 
 		const rawContent = await Bun.file(outputPath).text();
@@ -101,8 +101,8 @@ export class AgentProtocolHandler implements ProtocolHandler {
 			let jsonValue: unknown;
 			try {
 				jsonValue = JSON.parse(rawContent);
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
 				throw new Error(`Output ${outputId} is not valid JSON: ${message}`);
 			}
 

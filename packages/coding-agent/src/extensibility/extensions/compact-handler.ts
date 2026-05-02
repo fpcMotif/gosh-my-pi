@@ -34,7 +34,7 @@ interface SetModelCapableSession {
  */
 export async function runExtensionSetModel(session: SetModelCapableSession, model: Model): Promise<boolean> {
 	const key = await session.modelRegistry.getApiKey(model);
-	if (!key) return false;
+	if (key === null || key === undefined || key === "") return false;
 	await session.setModel(model);
 	return true;
 }

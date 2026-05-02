@@ -129,7 +129,7 @@ const ASCII_WHITESPACE = makeBoolArray("\x09\x0a\x0b\x0c\x0d\x20");
  * Check if a character is whitespace.
  */
 export function isWhitespaceChar(char: string): boolean {
-	const code = char.codePointAt(0) || 0;
+	const code = char.codePointAt(0) ?? 0;
 	return ASCII_WHITESPACE[code] ?? false;
 }
 
@@ -139,7 +139,7 @@ const ASCII_PUNCTUATION = makeBoolArray("(){}[]<>.,;:'\"!?+-=*/\\|&%^$#@~`");
  * Check if a character is punctuation.
  */
 export function isPunctuationChar(char: string): boolean {
-	const code = char.codePointAt(0) || 0;
+	const code = char.codePointAt(0) ?? 0;
 	return ASCII_PUNCTUATION[code] ?? false;
 }
 
@@ -261,15 +261,15 @@ export function moveWordRight(text: string, cursor: number): number {
 	let next = iterator.next();
 
 	// Skip leading whitespace.
-	while (!next.done && getWordNavKind(next.value.segment) === "whitespace") {
+	while (next.done !== true && getWordNavKind(next.value.segment) === "whitespace") {
 		i += next.value.segment.length;
 		next = iterator.next();
 	}
-	if (next.done) return i;
+	if (next.done === true) return i;
 
 	const firstKind = getWordNavKind(next.value.segment);
 	if (firstKind === "delimiter" || firstKind === "cjk") {
-		while (!next.done && getWordNavKind(next.value.segment) === firstKind) {
+		while (next.done !== true && getWordNavKind(next.value.segment) === firstKind) {
 			i += next.value.segment.length;
 			next = iterator.next();
 		}
@@ -278,7 +278,7 @@ export function moveWordRight(text: string, cursor: number): number {
 
 	if (firstKind === "word") {
 		let hasLeftWord = false;
-		while (!next.done) {
+		while (next.done !== true) {
 			const segment = next.value.segment;
 			const k = getWordNavKind(segment);
 			if (k === "word") {
@@ -289,7 +289,7 @@ export function moveWordRight(text: string, cursor: number): number {
 			}
 			if (hasLeftWord && k === "delimiter" && isWordNavJoiner(segment)) {
 				const lookahead = iterator.next();
-				if (!lookahead.done && getWordNavKind(lookahead.value.segment) === "word") {
+				if (lookahead.done !== true && getWordNavKind(lookahead.value.segment) === "word") {
 					i += segment.length;
 					next = lookahead;
 					continue;

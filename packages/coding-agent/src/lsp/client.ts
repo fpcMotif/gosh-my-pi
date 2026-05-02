@@ -33,7 +33,7 @@ const IDLE_CHECK_INTERVAL_MS = 60 * 1000;
 export function setIdleTimeout(ms: number | null | undefined): void {
 	idleTimeoutMs = ms ?? null;
 
-	if (idleTimeoutMs && idleTimeoutMs > 0) {
+	if (idleTimeoutMs !== null && idleTimeoutMs !== undefined && idleTimeoutMs !== 0 && idleTimeoutMs > 0) {
 		startIdleChecker();
 	} else {
 		stopIdleChecker();
@@ -43,7 +43,7 @@ export function setIdleTimeout(ms: number | null | undefined): void {
 function startIdleChecker(): void {
 	if (idleCheckInterval) return;
 	idleCheckInterval = setInterval(() => {
-		if (!idleTimeoutMs) return;
+		if (idleTimeoutMs === null || idleTimeoutMs === undefined || idleTimeoutMs === 0) return;
 		const now = Date.now();
 		for (const [key, client] of Array.from(clients.entries())) {
 			if (now - client.lastActivity > idleTimeoutMs) {
@@ -211,7 +211,7 @@ async function writeMessage(
 	message: LspJsonRpcRequest | LspJsonRpcNotification | LspJsonRpcResponse,
 ): Promise<void> {
 	const content = JSON.stringify(message);
-	sink.write(`Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n${content}`);
+	void sink.write(`Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n${content}`);
 	await sink.flush();
 }
 
@@ -271,14 +271,18 @@ async function startMessageReader(client: LspClient): Promise<void> {
 					}
 				} else if ("method" in message) {
 					// Server notification
-					if (message.method === "textDocument/publishDiagnostics" && message.params) {
+					if (
+						message.method === "textDocument/publishDiagnostics" &&
+						message.params !== null &&
+						message.params !== undefined
+					) {
 						const params = message.params as PublishDiagnosticsParams;
 						client.diagnostics.set(params.uri, {
 							diagnostics: params.diagnostics,
 							version: params.version ?? null,
 						});
 						client.diagnosticsVersion += 1;
-					} else if (message.method === "$/progress" && message.params) {
+					} else if (message.method === "$/progress" && message.params !== null && message.params !== undefined) {
 						const params = message.params as { token: string | number; value?: { kind?: string } };
 						if (params.value?.kind === "begin") {
 							client.activeProgressTokens.add(params.token);
@@ -297,10 +301,10 @@ async function startMessageReader(client: LspClient): Promise<void> {
 			// Atomically commit processed buffer
 			client.messageBuffer = workingBuffer;
 		}
-	} catch (err) {
+	} catch (error) {
 		// Connection closed or error - reject all pending requests
 		for (const pending of Array.from(client.pendingRequests.values())) {
-			pending.reject(new Error(`LSP connection closed: ${err}`));
+			pending.reject(new Error(`LSP connection closed: ${String(error)}`));
 		}
 		client.pendingRequests.clear();
 	} finally {
@@ -342,8 +346,8 @@ async function handleApplyEditRequest(client: LspClient, message: LspJsonRpcRequ
 	try {
 		await applyWorkspaceEdit(params.edit, client.cwd);
 		await sendResponse(client, message.id, { applied: true }, "workspace/applyEdit");
-	} catch (err) {
-		await sendResponse(client, message.id, { applied: false, failureReason: String(err) }, "workspace/applyEdit");
+	} catch (error) {
+		await sendResponse(client, message.id, { applied: false, failureReason: String(error) }, "workspace/applyEdit");
 	}
 }
 
@@ -391,8 +395,8 @@ async function sendResponse(
 
 	try {
 		await queueWriteMessage(client, response);
-	} catch (err) {
-		logger.error("LSP failed to respond.", { method, error: String(err) });
+	} catch (error) {
+		logger.error("LSP failed to respond.", { method, error: String(error) });
 	}
 }
 
@@ -477,7 +481,7 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
 		clients.set(key, client);
 
 		// Register crash recovery - remove client on process exit
-		proc.exited.then(() => {
+		void proc.exited.then(() => {
 			clients.delete(key);
 			clientLocks.delete(key);
 			client.resolveProjectLoaded();
@@ -504,7 +508,7 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
 		});
 
 		// Start background message reader
-		startMessageReader(client);
+		void startMessageReader(client);
 
 		try {
 			// Send initialize request
@@ -533,12 +537,12 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
 			await sendNotification(client, "initialized", {});
 
 			return client;
-		} catch (err) {
+		} catch (error) {
 			// Clean up on initialization failure
 			clients.delete(key);
 			clientLocks.delete(key);
 			proc.kill();
-			throw err;
+			throw error;
 		} finally {
 			clientLocks.delete(key);
 		}
@@ -581,9 +585,9 @@ export async function ensureFileOpen(client: LspClient, filePath: string, signal
 		try {
 			content = await Bun.file(filePath).text();
 			throwIfAborted(signal);
-		} catch (err) {
-			if (isEnoent(err)) return;
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) return;
+			throw error;
 		}
 		const languageId = detectLanguageId(filePath);
 		throwIfAborted(signal);
@@ -615,7 +619,7 @@ export async function ensureFileOpen(client: LspClient, filePath: string, signal
  * Returns immediately if loading already completed or timed out.
  */
 export async function waitForProjectLoaded(client: LspClient, signal?: AbortSignal): Promise<void> {
-	if (signal?.aborted) return;
+	if (signal !== undefined && signal.aborted) return;
 	await Promise.race([
 		client.projectLoaded,
 		...(signal
@@ -730,9 +734,9 @@ export async function refreshFile(client: LspClient, filePath: string, signal?: 
 		try {
 			content = await Bun.file(filePath).text();
 			throwIfAborted(signal);
-		} catch (err) {
-			if (isEnoent(err)) return;
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) return;
+			throw error;
 		}
 		const version = ++info.version;
 		throwIfAborted(signal);
@@ -802,7 +806,7 @@ export async function sendRequest(
 ): Promise<unknown> {
 	// Atomically increment and capture request ID
 	const id = ++client.requestId;
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		const reason = signal.reason instanceof Error ? signal.reason : new ToolAbortError();
 		return Promise.reject(reason);
 	}
@@ -867,11 +871,11 @@ export async function sendRequest(
 	});
 
 	// Write request
-	queueWriteMessage(client, request).catch(err => {
+	queueWriteMessage(client, request).catch(error => {
 		if (timeout) clearTimeout(timeout);
 		client.pendingRequests.delete(id);
 		cleanup();
-		reject(err);
+		reject(error);
 	});
 	return promise;
 }

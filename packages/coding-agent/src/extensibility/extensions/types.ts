@@ -1052,7 +1052,7 @@ export interface ExtensionAPI {
 	): void;
 
 	/** Set the display label for this extension, or set a label on a specific entry. */
-	setLabel(entryIdOrLabel: string, label?: string | undefined): void;
+	setLabel(entryIdOrLabel: string, label?: string): void;
 
 	/** Get the value of a registered CLI flag. */
 	getFlag(name: string): boolean | string | undefined;

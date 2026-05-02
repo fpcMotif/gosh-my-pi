@@ -69,7 +69,7 @@ export function createSplitCommitTool(
 			const diffText = await git.diff(cwd, { cached: true });
 
 			const commits: SplitCommitGroup[] = params.commits.map((commit, index) => {
-				const scope = commit.scope?.trim() || null;
+				const scope = commit.scope?.trim() ?? null;
 				const summary = normalizeSummary(commit.summary, commit.type, scope);
 				const detailInput = normalizeDetails(commit.details ?? []);
 				const detailResult = capDetails(detailInput);
@@ -113,7 +113,7 @@ export function createSplitCommitTool(
 					summary,
 					details: detailResult.details,
 					issueRefs,
-					rationale: commit.rationale?.trim() || undefined,
+					rationale: commit.rationale?.trim() ?? undefined,
 					dependencies,
 				};
 			});

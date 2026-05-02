@@ -16,9 +16,10 @@ const MODEL_USAGE_PATH = "/api/monitor/usage/model-usage";
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function normalizeZaiBaseUrl(baseUrl?: string): string {
-	if (!baseUrl?.trim()) return DEFAULT_ENDPOINT;
+	const trimmed = baseUrl?.trim();
+	if (trimmed === undefined || trimmed === "") return DEFAULT_ENDPOINT;
 	try {
-		return new URL(baseUrl.trim()).origin;
+		return new URL(trimmed).origin;
 	} catch {
 		return DEFAULT_ENDPOINT;
 	}
@@ -49,9 +50,10 @@ function parseMillis(value: unknown): number | undefined {
 }
 
 function parseLimitItem(value: unknown): ZaiUsageLimitItem | null {
-	if (!isRecord(value)) return null;
-	const type = typeof value.type === "string" ? value.type : undefined;
-	if (!type) return null;
+	if (isRecord(value) === false) return null;
+	const typeValue = (value as Record<string, unknown>).type;
+	const type = typeof typeValue === "string" ? typeValue : undefined;
+	if (type === undefined || type === null || type === "") return null;
 	return {
 		type,
 		usage: toNumber(value.usage),
@@ -72,9 +74,9 @@ function buildUsageAmount(args: {
 	const usedFraction =
 		args.percentage !== undefined
 			? Math.min(Math.max(args.percentage / 100, 0), 1)
-			: args.used !== undefined && args.limit !== undefined && args.limit > 0
+			: (args.used !== undefined && args.limit !== undefined && args.limit > 0
 				? Math.min(args.used / args.limit, 1)
-				: undefined;
+				: undefined);
 	const remainingFraction = usedFraction !== undefined ? Math.max(1 - usedFraction, 0) : undefined;
 	return {
 		used: args.used,
@@ -110,7 +112,13 @@ function buildModelUsageUrl(baseUrl: string, now: Date): string {
 async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): Promise<UsageReport | null> {
 	if (params.provider !== "zai") return null;
 	const credential = params.credential;
-	if (credential.type !== "api_key" || !credential.apiKey) return null;
+	if (
+		credential.type !== "api_key" ||
+		credential.apiKey === null ||
+		credential.apiKey === undefined ||
+		credential.apiKey === ""
+	)
+		return null;
 
 	const baseUrl = normalizeZaiBaseUrl(params.baseUrl);
 	const url = `${baseUrl}${QUOTA_PATH}`;
@@ -126,7 +134,7 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 			headers,
 			signal: params.signal,
 		});
-		if (!response.ok) {
+		if (response.ok === false) {
 			ctx.logger?.warn("ZAI usage fetch failed", { status: response.status, statusText: response.statusText });
 			return null;
 		}
@@ -136,7 +144,7 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 		return null;
 	}
 
-	if (!payload) return null;
+	if (payload === null || payload === undefined) return null;
 	if (payload.success !== true) {
 		ctx.logger?.warn("ZAI usage response invalid", { code: payload.code, message: payload.msg });
 		return null;
@@ -147,7 +155,7 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 
 	for (const rawLimit of limitsPayload) {
 		const parsed = parseLimitItem(rawLimit);
-		if (!parsed) continue;
+		if (parsed === null) continue;
 		if (parsed.type === "TOKENS_LIMIT") {
 			const amount = buildUsageAmount({
 				used: parsed.currentValue,
@@ -167,7 +175,7 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 				label: "ZAI Token Quota",
 				scope: {
 					provider: params.provider,
-					windowId: window?.id ?? "quota",
+					windowId: window.id,
 					shared: true,
 				},
 				window,
@@ -229,7 +237,7 @@ async function fetchZaiUsage(params: UsageFetchParams, ctx: UsageFetchContext): 
 			if (isRecord(modelUsagePayload)) {
 				report.metadata = {
 					...report.metadata,
-					modelUsage: modelUsagePayload,
+					modelUsage: modelUsagePayload as Record<string, unknown>,
 				};
 			}
 		}

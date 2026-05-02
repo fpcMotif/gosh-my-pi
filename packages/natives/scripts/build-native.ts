@@ -10,8 +10,8 @@ const nativeDir = path.join(import.meta.dir, "../native");
 const packageJsonPath = path.join(import.meta.dir, "../package.json");
 
 const crossTarget = Bun.env.CROSS_TARGET;
-const targetPlatform = Bun.env.TARGET_PLATFORM || process.platform;
-const targetArch = Bun.env.TARGET_ARCH || process.arch;
+const targetPlatform = Bun.env.TARGET_PLATFORM ?? process.platform;
+const targetArch = Bun.env.TARGET_ARCH ?? process.arch;
 const configuredVariantRaw = Bun.env.TARGET_VARIANT;
 const isCrossCompile = Boolean(crossTarget) || targetPlatform !== process.platform || targetArch !== process.arch;
 
@@ -25,7 +25,7 @@ interface SafeHostZigBuildConfig {
 }
 
 let configuredVariant: X64Variant | undefined;
-if (configuredVariantRaw) {
+if (configuredVariantRaw !== null && configuredVariantRaw !== undefined && configuredVariantRaw !== "") {
 	if (targetArch !== "x64") {
 		throw new Error(`TARGET_VARIANT is only supported for x64 builds, got ${targetPlatform}-${targetArch}.`);
 	}
@@ -48,7 +48,11 @@ const variantSuffix = effectiveVariant ? `-${effectiveVariant}` : "";
 
 function resolveLinuxHostZigTarget(): "x86_64-linux-gnu" | "x86_64-linux-musl" {
 	const report = process.report?.getReport?.() as { header?: { glibcVersionRuntime?: string } } | undefined;
-	return report?.header?.glibcVersionRuntime ? "x86_64-linux-gnu" : "x86_64-linux-musl";
+	return report?.header?.glibcVersionRuntime !== null &&
+		report?.header?.glibcVersionRuntime !== undefined &&
+		report?.header?.glibcVersionRuntime !== ""
+		? "x86_64-linux-gnu"
+		: "x86_64-linux-musl";
 }
 
 function resolveSafeHostZigBuildConfig(): SafeHostZigBuildConfig | null {
@@ -61,7 +65,7 @@ function resolveSafeHostZigBuildConfig(): SafeHostZigBuildConfig | null {
 	}
 
 	const realZigPath = Bun.env.ZIG ?? Bun.which("zig");
-	if (!realZigPath) {
+	if (realZigPath === null || realZigPath === undefined || realZigPath === "") {
 		return null;
 	}
 
@@ -76,7 +80,7 @@ function resolveSafeHostZigBuildConfig(): SafeHostZigBuildConfig | null {
 // Keep host-built Zig dependencies on the same ISA floor as the Rust addon.
 // zlob's build.rs defaults host builds to `native`, which can leak newer CPU
 // instructions into release artifacts even when Rust itself targets x86-64-v2/v3.
-if (!isCrossCompile && !Bun.env.RUSTFLAGS) {
+if (!isCrossCompile && (Bun.env.RUSTFLAGS === null || Bun.env.RUSTFLAGS === undefined || Bun.env.RUSTFLAGS === "")) {
 	if (effectiveVariant === "modern") {
 		Bun.env.RUSTFLAGS = "-C target-cpu=x86-64-v3";
 	} else if (effectiveVariant === "baseline") {
@@ -89,11 +93,10 @@ if (!isCrossCompile && !Bun.env.RUSTFLAGS) {
 async function cleanupStaleTemps(dir: string): Promise<void> {
 	try {
 		const entries = await fs.readdir(dir);
-		for (const entry of entries) {
-			if (entry.includes(".tmp.") || entry.includes(".old.") || entry.includes(".new.")) {
-				await fs.unlink(path.join(dir, entry)).catch(() => {});
-			}
-		}
+		const stale = entries.filter(
+			entry => entry.includes(".tmp.") || entry.includes(".old.") || entry.includes(".new."),
+		);
+		await Promise.all(stale.map(entry => fs.unlink(path.join(dir, entry)).catch(() => {})));
 	} catch {
 		// Directory might not exist yet
 	}
@@ -112,20 +115,20 @@ async function installBinary(src: string, dest: string): Promise<void> {
 		// Try delete-then-rename as fallback
 		try {
 			await fs.unlink(dest);
-		} catch (unlinkErr) {
-			if ((unlinkErr as NodeJS.ErrnoException).code !== "ENOENT") {
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
 				await fs.unlink(tempPath).catch(() => {});
 				const isWindows = process.platform === "win32";
 				throw new Error(
-					`Cannot replace ${path.basename(dest)}${isWindows ? " (file may be in use - close any running processes)" : ""}: ${(unlinkErr as Error).message}`,
+					`Cannot replace ${path.basename(dest)}${isWindows ? " (file may be in use - close any running processes)" : ""}: ${(error as Error).message}`,
 				);
 			}
 		}
 		try {
 			await fs.rename(tempPath, dest);
-		} catch (finalErr) {
+		} catch (error) {
 			await fs.unlink(tempPath).catch(() => {});
-			throw new Error(`Failed to install ${path.basename(dest)}: ${(finalErr as Error).message}`);
+			throw new Error(`Failed to install ${path.basename(dest)}: ${(error as Error).message}`);
 		}
 	}
 }
@@ -170,27 +173,26 @@ function resolveBuildOutputDirPrefix(profileLabel: string): string {
 }
 
 async function installGeneratedBindings(outputDir: string): Promise<void> {
-	for (const filename of ["index.js", "index.d.ts"]) {
-		const sourcePath = path.join(outputDir, filename);
-		const destPath = path.join(nativeDir, filename);
-		try {
-			await fs.copyFile(sourcePath, destPath);
-		} catch (err) {
-			const errno = err as NodeJS.ErrnoException;
-			if (errno.code === "ENOENT") {
-				const destExists = await Bun.file(destPath).exists();
-				if (destExists) {
-					continue;
+	await Promise.all(
+		["index.js", "index.d.ts"].map(async filename => {
+			const sourcePath = path.join(outputDir, filename);
+			const destPath = path.join(nativeDir, filename);
+			try {
+				await fs.copyFile(sourcePath, destPath);
+			} catch (error) {
+				const errno = error as NodeJS.ErrnoException;
+				if (errno.code === "ENOENT" && (await Bun.file(destPath).exists())) {
+					return;
 				}
+				const message = error instanceof Error ? error.message : String(error);
+				throw new Error(`Failed to install generated ${filename}: ${message}`);
 			}
-			const message = err instanceof Error ? err.message : String(err);
-			throw new Error(`Failed to install generated ${filename}: ${message}`);
-		}
-	}
+		}),
+	);
 }
 
 function resolveManagedCargoTargetDir(profileLabel: string): string | null {
-	if (Bun.env.CARGO_TARGET_DIR) {
+	if (Bun.env.CARGO_TARGET_DIR !== null && Bun.env.CARGO_TARGET_DIR !== undefined && Bun.env.CARGO_TARGET_DIR !== "") {
 		return null;
 	}
 
@@ -227,7 +229,7 @@ const napiArgs = [
 	profileLabel,
 ];
 
-if (crossTarget) napiArgs.push("--target", crossTarget);
+if (crossTarget !== null && crossTarget !== undefined && crossTarget !== "") napiArgs.push("--target", crossTarget);
 
 const canonicalAddonFilename = `pi_natives.${targetPlatform}-${targetArch}${variantSuffix}.node`;
 const canonicalAddonPath = path.join(nativeDir, canonicalAddonFilename);
@@ -245,12 +247,12 @@ napiArgs[10] = buildOutputDir;
 const napiBin = Bun.which("napi", {
 	PATH: `${path.join(import.meta.dir, "..", "node_modules", ".bin")}:${path.join(repoRoot, "node_modules", ".bin")}:${process.env.PATH ?? ""}`,
 });
-if (!napiBin) {
+if (napiBin === null || napiBin === undefined || napiBin === "") {
 	throw new Error("Could not locate @napi-rs/cli `napi` binary in node_modules/.bin");
 }
 
 const managedCargoTargetDir = resolveManagedCargoTargetDir(profileLabel);
-if (managedCargoTargetDir) {
+if (managedCargoTargetDir !== null && managedCargoTargetDir !== undefined && managedCargoTargetDir !== "") {
 	Bun.env.CARGO_TARGET_DIR = managedCargoTargetDir;
 	console.log(`Using isolated CARGO_TARGET_DIR: ${managedCargoTargetDir}`);
 }

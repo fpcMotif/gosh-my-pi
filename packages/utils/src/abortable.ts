@@ -57,8 +57,8 @@ export function untilAborted<T>(
 	void (async () => {
 		try {
 			resolve(await (typeof pr === "function" ? pr() : pr));
-		} catch (err) {
-			reject(err);
+		} catch (error) {
+			reject(error);
 		} finally {
 			signal.removeEventListener("abort", onAbort);
 		}

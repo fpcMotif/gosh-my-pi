@@ -92,14 +92,28 @@ export async function discoverAndLoadMCPTools(cwd: string, options?: MCPToolsLoa
 		const serverName = mcpTool.mcpServerName;
 
 		// Get provider info from manager's connection if available
-		const connection = serverName ? manager.getConnection(serverName) : undefined;
-		const source = serverName ? manager.getSource(serverName) : undefined;
+		const connection =
+			serverName !== null && serverName !== undefined && serverName !== ""
+				? manager.getConnection(serverName)
+				: undefined;
+		const source =
+			serverName !== null && serverName !== undefined && serverName !== ""
+				? manager.getSource(serverName)
+				: undefined;
 		const providerName =
 			connection?._source?.providerName ?? source?.providerName ?? connection?._source?.provider ?? source?.provider;
 
 		// Format path with provider info if available
 		// Format: "mcp:serverName via providerName" (e.g., "mcp:agentx via Claude Code")
-		const path = serverName && providerName ? `mcp:${serverName} via ${providerName}` : `mcp:${tool.name}`;
+		const path =
+			serverName !== null &&
+			serverName !== undefined &&
+			serverName !== "" &&
+			providerName !== null &&
+			providerName !== undefined &&
+			providerName !== ""
+				? `mcp:${serverName} via ${providerName}`
+				: `mcp:${tool.name}`;
 
 		return {
 			path,

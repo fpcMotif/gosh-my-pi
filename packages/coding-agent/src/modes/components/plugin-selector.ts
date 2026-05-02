@@ -36,7 +36,10 @@ export class PluginSelectorComponent extends Container {
 			// Format: "name@marketplace" or "name@marketplace#scope"
 			const id = scope ? `${plugin.name}@${marketplace}#${scope}` : `${plugin.name}@${marketplace}`;
 			const installed = installedIds.has(`${plugin.name}@${marketplace}`);
-			const version = plugin.version ? `@${plugin.version}` : "";
+			const version =
+				plugin.version !== null && plugin.version !== undefined && plugin.version !== ""
+					? `@${plugin.version}`
+					: "";
 			const status = installed ? " [installed]" : "";
 			const scopeTag = scope ? ` [${scope}]` : "";
 
@@ -66,7 +69,14 @@ export class PluginSelectorComponent extends Container {
 		this.#selectList.onSelect = item => {
 			if (item.value === "__empty__") return;
 			const [name, marketplace, scope] = splitPluginId(item.value);
-			if (name && marketplace) {
+			if (
+				name !== null &&
+				name !== undefined &&
+				name !== "" &&
+				marketplace !== null &&
+				marketplace !== undefined &&
+				marketplace !== ""
+			) {
 				callbacks.onSelect(name, marketplace, scope);
 			}
 		};

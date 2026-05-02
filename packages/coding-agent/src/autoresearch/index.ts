@@ -87,7 +87,10 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 		runtime.autoResumeArmed = false;
 		runtime.goal = goal;
 		runtime.lastAutoResumePendingRunNumber = null;
-		api.appendEntry("autoresearch-control", goal ? { mode, goal } : { mode });
+		api.appendEntry(
+			"autoresearch-control",
+			goal !== null && goal !== undefined && goal !== "" ? { mode, goal } : { mode },
+		);
 	};
 
 	api.registerTool(createInitExperimentTool({ dashboard, getRuntime, pi: api }));
@@ -117,7 +120,7 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 				};
 			}
 			const validationError = validateEditableAutoresearchPath(relativePath.relativePath, runtime);
-			if (validationError) {
+			if (validationError !== null && validationError !== undefined && validationError !== "") {
 				return {
 					block: true,
 					reason: `Autoresearch blocked edits to ${relativePath.relativePath}: ${validationError}`,
@@ -145,7 +148,7 @@ export const createAutoresearchExtension: ExtensionFactory = api => {
 			const trimmed = args.trim();
 			const runtime = getRuntime(ctx);
 			const workDirError = validateWorkDir(ctx.cwd);
-			if (workDirError) {
+			if (workDirError !== null && workDirError !== undefined && workDirError !== "") {
 				ctx.ui.notify(workDirError, "error");
 				return;
 			}

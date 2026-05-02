@@ -250,7 +250,10 @@ describe("custom_tool_call stream receive", () => {
 			): e is {
 				type: string;
 				toolCall: { name: string; arguments: Record<string, unknown>; customWireName?: string };
-			} => !!e && typeof e === "object" && (e as { type?: string }).type === "toolcall_end",
+			} =>
+				!(e === null || e === undefined) &&
+				typeof e === "object" &&
+				(e as { type?: string }).type === "toolcall_end",
 		);
 		expect(endEvent?.toolCall.name).toBe("apply_patch");
 		expect(endEvent?.toolCall.customWireName).toBe("apply_patch");
@@ -312,7 +315,9 @@ describe("custom_tool_call stream receive", () => {
 
 		const endEvent = emitted.find(
 			(e): e is { type: string; toolCall: { id: string } } =>
-				!!e && typeof e === "object" && (e as { type?: string }).type === "toolcall_end",
+				!(e === null || e === undefined) &&
+				typeof e === "object" &&
+				(e as { type?: string }).type === "toolcall_end",
 		);
 		expect(endEvent?.toolCall.id).toStartWith("call_missing_item|fc_");
 	});

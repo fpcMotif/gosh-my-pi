@@ -50,14 +50,14 @@ export function renderExaResult(
 	const { expanded } = options;
 	const details = result.details;
 
-	if (details?.error) {
+	if (details?.error !== null && details?.error !== undefined && details?.error !== "") {
 		logger.error("Exa render error", { error: details.error, toolName: details.toolName });
 		return renderErrorMessage(details.error, uiTheme);
 	}
 
 	const response = details?.response;
 	if (!response) {
-		if (details?.raw) {
+		if (details?.raw !== null && details?.raw !== undefined) {
 			const rawText = typeof details.raw === "string" ? details.raw : JSON.stringify(details.raw, null, 2);
 			const rawLines = rawText.split("\n").filter(l => l.trim());
 			const maxLines = expanded ? rawLines.length : Math.min(rawLines.length, COLLAPSED_PREVIEW_LINES);
@@ -161,33 +161,33 @@ export function renderExaResult(
 		const cont = isLast ? " " : uiTheme.tree.vertical;
 
 		const title = truncateToWidth(res.title ?? "Untitled", MAX_TITLE_LEN);
-		const domain = res.url ? getDomain(res.url) : "";
+		const domain = res.url !== null && res.url !== undefined && res.url !== "" ? getDomain(res.url) : "";
 		const domainPart = domain ? uiTheme.fg("dim", ` (${domain})`) : "";
 
 		text += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("accent", title)}${domainPart}`;
 
-		if (res.url) {
+		if (res.url !== null && res.url !== undefined && res.url !== "") {
 			text += `\n ${uiTheme.fg("dim", cont)} ${uiTheme.fg("dim", uiTheme.tree.hook)} ${uiTheme.fg(
 				"mdLinkUrl",
 				res.url,
 			)}`;
 		}
 
-		if (res.author) {
+		if (res.author !== null && res.author !== undefined && res.author !== "") {
 			text += `\n ${uiTheme.fg("dim", cont)} ${uiTheme.fg("dim", uiTheme.tree.hook)} ${uiTheme.fg(
 				"muted",
 				`Author: ${res.author}`,
 			)}`;
 		}
 
-		if (res.publishedDate) {
+		if (res.publishedDate !== null && res.publishedDate !== undefined && res.publishedDate !== "") {
 			text += `\n ${uiTheme.fg("dim", cont)} ${uiTheme.fg("dim", uiTheme.tree.hook)} ${uiTheme.fg(
 				"muted",
 				`Published: ${res.publishedDate}`,
 			)}`;
 		}
 
-		if (res.text) {
+		if (res.text !== null && res.text !== undefined && res.text !== "") {
 			const textLines = res.text.split("\n").filter(l => l.trim());
 			const displayLines = textLines.slice(0, EXPANDED_TEXT_LINES);
 			for (const line of displayLines) {
@@ -204,7 +204,7 @@ export function renderExaResult(
 			}
 		}
 
-		if (res.highlights?.length) {
+		if (res.highlights?.length !== null && res.highlights?.length !== undefined && res.highlights?.length !== 0) {
 			text += `\n ${uiTheme.fg("dim", cont)} ${uiTheme.fg("dim", uiTheme.tree.hook)} ${uiTheme.fg(
 				"accent",
 				"Highlights",

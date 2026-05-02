@@ -142,7 +142,7 @@ export async function detectLspmux(): Promise<LspmuxState> {
 	}
 
 	const binaryPath = $which("lspmux");
-	if (!binaryPath) {
+	if (binaryPath === null || binaryPath === undefined || binaryPath === "") {
 		cachedState = { available: false, running: false, binaryPath: null, config: null };
 		cacheTimestamp = now;
 		return cachedState;
@@ -192,7 +192,13 @@ export function wrapWithLspmux(
 	originalArgs: string[] | undefined,
 	state: LspmuxState,
 ): LspmuxWrappedCommand {
-	if (!state.available || !state.running || !state.binaryPath) {
+	if (
+		!state.available ||
+		!state.running ||
+		state.binaryPath === null ||
+		state.binaryPath === undefined ||
+		state.binaryPath === ""
+	) {
 		return { command: originalCommand, args: originalArgs ?? [] };
 	}
 
@@ -205,13 +211,13 @@ export function wrapWithLspmux(
 	const hasArgs = originalArgs && originalArgs.length > 0;
 
 	// rust-analyzer from $PATH with no args - lspmux's default, simplest case
-	if (isDefaultRustAnalyzer && !hasArgs) {
+	if (isDefaultRustAnalyzer && hasArgs !== true) {
 		return { command: state.binaryPath, args: [] };
 	}
 
 	// Use explicit `client` subcommand with LSPMUX_SERVER env var
 	// Use `--` to separate lspmux options from server args
-	const args = hasArgs ? ["client", "--", ...originalArgs] : ["client"];
+	const args = hasArgs === true ? ["client", "--", ...originalArgs] : ["client"];
 	return {
 		command: state.binaryPath,
 		args,

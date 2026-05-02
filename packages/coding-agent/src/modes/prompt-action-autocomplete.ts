@@ -103,7 +103,7 @@ export class PromptActionAutocompleteProvider implements AutocompleteProvider {
 		const currentLine = lines[cursorLine] || "";
 		const textBeforeCursor = currentLine.slice(0, cursorCol);
 		const promptActionPrefix = getPromptActionPrefix(textBeforeCursor);
-		if (promptActionPrefix) {
+		if (promptActionPrefix !== null && promptActionPrefix !== undefined && promptActionPrefix !== "") {
 			const query = promptActionPrefix.slice(1).toLowerCase();
 			const items = this.#actions
 				.map(action => {

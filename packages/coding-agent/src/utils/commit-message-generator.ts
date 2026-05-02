@@ -27,7 +27,7 @@ function filterDiffNoise(diff: string): string {
 	for (const line of lines) {
 		if (line.startsWith("diff --git ")) {
 			const bPath = line.split(" b/")[1];
-			skip = bPath != null && NOISE_SUFFIXES.some(s => bPath.endsWith(s));
+			skip = bPath !== null && NOISE_SUFFIXES.some(s => bPath.endsWith(s));
 		}
 		if (!skip) filtered.push(line);
 	}
@@ -96,7 +96,7 @@ export async function generateCommitMessage(
 
 	for (const candidate of candidates) {
 		const apiKey = await registry.getApiKey(candidate.model, sessionId);
-		if (!apiKey) continue;
+		if (apiKey === null || apiKey === undefined || apiKey === "") continue;
 
 		try {
 			const response = await completeSimple(
@@ -125,10 +125,10 @@ export async function generateCommitMessage(
 
 			logger.debug("commit-msg-generator: generated", { model: candidate.model.id, msg });
 			return msg;
-		} catch (err) {
+		} catch (error) {
 			logger.debug("commit-msg-generator: error", {
 				model: candidate.model.id,
-				error: err instanceof Error ? err.message : String(err),
+				error: error instanceof Error ? error.message : String(error),
 			});
 		}
 	}

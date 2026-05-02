@@ -59,7 +59,7 @@ describe("MemoryProtocolHandler", () => {
 			await fs.mkdir(memoryRoot, { recursive: true });
 
 			const router = createRouter(memoryRoot);
-			await expect(router.resolve("memory://other/memory_summary.md")).rejects.toThrow(
+			expect(router.resolve("memory://other/memory_summary.md")).rejects.toThrow(
 				"Unknown memory namespace: other. Supported: root",
 			);
 		});
@@ -71,10 +71,10 @@ describe("MemoryProtocolHandler", () => {
 			await fs.mkdir(memoryRoot, { recursive: true });
 
 			const router = createRouter(memoryRoot);
-			await expect(router.resolve("memory://root/../secret.md")).rejects.toThrow(
+			expect(router.resolve("memory://root/../secret.md")).rejects.toThrow(
 				"Path traversal (..) is not allowed in memory:// URLs",
 			);
-			await expect(router.resolve("memory://root/%2E%2E/secret.md")).rejects.toThrow(
+			expect(router.resolve("memory://root/%2E%2E/secret.md")).rejects.toThrow(
 				"Path traversal (..) is not allowed in memory:// URLs",
 			);
 		});
@@ -86,7 +86,7 @@ describe("MemoryProtocolHandler", () => {
 			await fs.mkdir(memoryRoot, { recursive: true });
 
 			const router = createRouter(memoryRoot);
-			await expect(router.resolve("memory://root/missing.md")).rejects.toThrow(
+			expect(router.resolve("memory://root/missing.md")).rejects.toThrow(
 				"Memory file not found: memory://root/missing.md",
 			);
 		});
@@ -104,9 +104,7 @@ describe("MemoryProtocolHandler", () => {
 			await fs.symlink(outsideDir, path.join(memoryRoot, "linked"));
 
 			const router = createRouter(memoryRoot);
-			await expect(router.resolve("memory://root/linked/secret.md")).rejects.toThrow(
-				"memory:// URL escapes memory root",
-			);
+			expect(router.resolve("memory://root/linked/secret.md")).rejects.toThrow("memory:// URL escapes memory root");
 		});
 	});
 });

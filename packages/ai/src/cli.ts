@@ -2,23 +2,14 @@
 import * as readline from "node:readline";
 import { AuthCredentialStore } from "./auth-storage";
 import { getOAuthProviders } from "./utils/oauth";
-import { loginAnthropic } from "./utils/oauth/anthropic";
-import { loginCursor } from "./utils/oauth/cursor";
-import { loginGitHubCopilot } from "./utils/oauth/github-copilot";
-import { loginAntigravity } from "./utils/oauth/google-antigravity";
-import { loginGeminiCli } from "./utils/oauth/google-gemini-cli";
 import { loginKagi } from "./utils/oauth/kagi";
-import { loginKilo } from "./utils/oauth/kilo";
 import { loginKimi } from "./utils/oauth/kimi";
 import { loginMiniMaxCode, loginMiniMaxCodeCn } from "./utils/oauth/minimax-code";
-import { loginNanoGPT } from "./utils/oauth/nanogpt";
-import { loginOllamaCloud } from "./utils/oauth/ollama-cloud";
 import { loginOpenAICodex } from "./utils/oauth/openai-codex";
 import { loginParallel } from "./utils/oauth/parallel";
 import { loginTavily } from "./utils/oauth/tavily";
 import type { OAuthCredentials, OAuthProvider } from "./utils/oauth/types";
 import { loginZai } from "./utils/oauth/zai";
-import { loginZenMux } from "./utils/oauth/zenmux";
 
 const PROVIDERS = getOAuthProviders();
 
@@ -53,7 +44,7 @@ function prompt(rl: readline.Interface, question: string): Promise<string> {
 	};
 
 	const onKeypress = (_str: string, key: readline.Key) => {
-		if (key.name === "escape" || (key.ctrl && key.name === "c")) {
+		if (key.name === "escape" || (key.ctrl === true && key.name === "c")) {
 			cancel();
 			rl.close();
 		}
@@ -82,62 +73,19 @@ async function login(provider: OAuthProvider): Promise<void> {
 		let credentials: OAuthCredentials;
 
 		switch (provider) {
-			case "anthropic":
-				credentials = await loginAnthropic({
-					onAuth(info) {
-						const { url } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}\n`);
-					},
-					onProgress(message) {
-						console.log(message);
-					},
-				});
-				break;
-
-			case "github-copilot":
-				credentials = await loginGitHubCopilot({
-					onAuth(url, instructions) {
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
-						console.log();
-					},
-					async onPrompt(p) {
-						return await promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
-					},
-				});
-				break;
-
-			case "google-gemini-cli":
-				credentials = await loginGeminiCli({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
-						console.log();
-					},
-				});
-				break;
-
-			case "google-antigravity":
-				credentials = await loginAntigravity({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
-						console.log();
-					},
-				});
-				break;
 			case "openai-codex":
 				credentials = await loginOpenAICodex({
 					onAuth(info) {
 						const { url, instructions } = info;
 						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
+						if (instructions !== null && instructions !== undefined && instructions !== "")
+							console.log(instructions);
 						console.log();
 					},
 					async onPrompt(p) {
-						return await promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
+						return await promptFn(
+							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
+						);
 					},
 				});
 				break;
@@ -147,63 +95,26 @@ async function login(provider: OAuthProvider): Promise<void> {
 					onAuth(info) {
 						const { url, instructions } = info;
 						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
+						if (instructions !== null && instructions !== undefined && instructions !== "")
+							console.log(instructions);
 						console.log();
 					},
 				});
 				break;
-			case "kilo":
-				credentials = await loginKilo({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
-						console.log();
-					},
-				});
-				break;
+
 			case "kagi": {
 				const apiKey = await loginKagi({
 					onAuth(info) {
 						const { url, instructions } = info;
 						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
+						if (instructions !== null && instructions !== undefined && instructions !== "")
+							console.log(instructions);
 						console.log();
 					},
 					onPrompt(p) {
-						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-			case "tavily": {
-				const apiKey = await loginTavily({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-			case "parallel": {
-				const apiKey = await loginParallel({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
+						return promptFn(
+							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
+						);
 					},
 				});
 				storage.saveApiKey(provider, apiKey);
@@ -211,77 +122,59 @@ async function login(provider: OAuthProvider): Promise<void> {
 				return;
 			}
 
-			case "cursor":
-				credentials = await loginCursor(
-					url => {
-						console.log(`\nOpen this URL in your browser:\n${url}\n`);
+			case "tavily": {
+				const apiKey = await loginTavily({
+					onAuth(info) {
+						const { url, instructions } = info;
+						console.log(`\nOpen this URL in your browser:\n${url}`);
+						if (instructions !== null && instructions !== undefined && instructions !== "")
+							console.log(instructions);
+						console.log();
 					},
-					() => {
-						console.log("Waiting for browser authentication...");
+					onPrompt(p) {
+						return promptFn(
+							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
+						);
 					},
-				);
-				break;
+				});
+				storage.saveApiKey(provider, apiKey);
+				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
+				return;
+			}
+
+			case "parallel": {
+				const apiKey = await loginParallel({
+					onAuth(info) {
+						const { url, instructions } = info;
+						console.log(`\nOpen this URL in your browser:\n${url}`);
+						if (instructions !== null && instructions !== undefined && instructions !== "")
+							console.log(instructions);
+						console.log();
+					},
+					onPrompt(p) {
+						return promptFn(
+							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
+						);
+					},
+				});
+				storage.saveApiKey(provider, apiKey);
+				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
+				return;
+			}
 
 			case "zai": {
 				const apiKey = await loginZai({
 					onAuth(info) {
 						const { url, instructions } = info;
 						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
+						if (instructions !== null && instructions !== undefined && instructions !== "")
+							console.log(instructions);
 						console.log();
 					},
 					onPrompt(p) {
-						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-
-			case "nanogpt": {
-				const apiKey = await loginNanoGPT({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-
-			case "zenmux": {
-				const apiKey = await loginZenMux({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-			case "ollama-cloud": {
-				const apiKey = await loginOllamaCloud({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
+						return promptFn(
+							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
+						);
 					},
 				});
 				storage.saveApiKey(provider, apiKey);
@@ -294,11 +187,14 @@ async function login(provider: OAuthProvider): Promise<void> {
 					onAuth(info) {
 						const { url, instructions } = info;
 						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
+						if (instructions !== null && instructions !== undefined && instructions !== "")
+							console.log(instructions);
 						console.log();
 					},
 					onPrompt(p) {
-						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
+						return promptFn(
+							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
+						);
 					},
 				});
 				storage.saveApiKey(provider, apiKey);
@@ -311,11 +207,14 @@ async function login(provider: OAuthProvider): Promise<void> {
 					onAuth(info) {
 						const { url, instructions } = info;
 						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions) console.log(instructions);
+						if (instructions !== null && instructions !== undefined && instructions !== "")
+							console.log(instructions);
 						console.log();
 					},
 					onPrompt(p) {
-						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
+						return promptFn(
+							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
+						);
 					},
 				});
 				storage.saveApiKey(provider, apiKey);
@@ -350,27 +249,19 @@ Commands:
   list              List available providers
 
 Providers:
-  anthropic         Anthropic (Claude Pro/Max)
-  github-copilot    GitHub Copilot
-  google-gemini-cli Google Gemini CLI
-  google-antigravity Antigravity (Gemini 3, Claude, GPT-OSS)
   openai-codex      OpenAI Codex (ChatGPT Plus/Pro)
   kimi-code         Kimi Code
-  kilo              Kilo Gateway
-  kagi              Kagi
-  tavily            Tavily
-  zai               Z.AI (GLM Coding Plan)
-  nanogpt           NanoGPT
   minimax-code      MiniMax Coding Plan (International)
   minimax-code-cn   MiniMax Coding Plan (China)
-  cursor            Cursor (Claude, GPT, etc.)
-  zenmux            ZenMux
-  ollama-cloud      Ollama Cloud
+  zai               Z.AI (GLM Coding Plan)
+  kagi              Kagi
+  tavily            Tavily
+  parallel          Parallel
 
 Examples:
   bunx @oh-my-pi/pi-ai login              # interactive provider selection
-  bunx @oh-my-pi/pi-ai login anthropic    # login to specific provider
-  bunx @oh-my-pi/pi-ai logout anthropic   # logout from specific provider
+  bunx @oh-my-pi/pi-ai login openai-codex # login to specific provider
+  bunx @oh-my-pi/pi-ai logout openai-codex
   bunx @oh-my-pi/pi-ai status             # show logged-in providers
   bunx @oh-my-pi/pi-ai list               # list providers
 `);
@@ -396,7 +287,7 @@ Examples:
 						continue;
 					}
 					const apiKey = storage.getApiKey(provider);
-					if (apiKey) {
+					if (apiKey !== null && apiKey !== undefined && apiKey !== "") {
 						console.log(`  ${provider.padEnd(20)} (api key)`);
 					}
 				}
@@ -451,7 +342,7 @@ Examples:
 
 			const oauth = storage.getOAuth(provider);
 			const apiKey = storage.getApiKey(provider);
-			if (!oauth && !apiKey) {
+			if (!oauth && (apiKey === null || apiKey === undefined || apiKey === "")) {
 				console.error(`Not logged in to ${provider}`);
 				process.exit(1);
 			}
@@ -506,7 +397,7 @@ Examples:
 	process.exit(1);
 }
 
-main().catch(err => {
-	console.error("Error:", err.message);
+main().catch(error => {
+	console.error("Error:", error.message);
 	process.exit(1);
 });

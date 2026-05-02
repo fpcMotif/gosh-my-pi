@@ -37,7 +37,7 @@ function createFifoOrSkip(fifoPath: string): boolean {
 	}
 
 	const mkfifoPath = $which("mkfifo");
-	if (!mkfifoPath) {
+	if (mkfifoPath === null || mkfifoPath === undefined || mkfifoPath === "") {
 		return false;
 	}
 
@@ -306,7 +306,7 @@ describe("Coding Agent Tools", () => {
 		it("should handle non-existent files", async () => {
 			const testFile = path.join(testDir, "nonexistent.txt");
 
-			await expect(readTool.execute("test-call-2", { path: testFile })).rejects.toThrow(/ENOENT|not found/i);
+			expect(readTool.execute("test-call-2", { path: testFile })).rejects.toThrow(/ENOENT|not found/i);
 		});
 
 		it("should read local files passed as file:// URLs", async () => {
@@ -683,7 +683,7 @@ describe("Coding Agent Tools", () => {
 			const originalContent = "Hello, world!";
 			fs.writeFileSync(testFile, originalContent);
 
-			await expect(
+			expect(
 				editTool.execute("test-call-6", {
 					path: testFile,
 					edits: [{ old_text: "nonexistent", new_text: "testing" }],
@@ -696,7 +696,7 @@ describe("Coding Agent Tools", () => {
 			const originalContent = "foo foo foo";
 			fs.writeFileSync(testFile, originalContent);
 
-			await expect(
+			expect(
 				editTool.execute("test-call-7", {
 					path: testFile,
 					edits: [{ old_text: "foo", new_text: "bar" }],
@@ -737,7 +737,7 @@ function b() {
 			);
 
 			// With multiple fuzzy matches, the tool rejects for safety to avoid ambiguous replacements
-			await expect(
+			expect(
 				editTool.execute("test-all-fuzzy", {
 					path: testFile,
 					edits: [
@@ -755,7 +755,7 @@ function b() {
 			const testFile = path.join(testDir, "edit-all-nomatch.txt");
 			fs.writeFileSync(testFile, "hello world");
 
-			await expect(
+			expect(
 				editTool.execute("test-all-nomatch", {
 					path: testFile,
 					edits: [{ old_text: "nonexistent", new_text: "bar", all: true }],
@@ -818,7 +818,7 @@ function b() {
 				new BashTool(createTestToolSession(testDir, Settings.isolated({ "bashInterceptor.enabled": true }))),
 			);
 
-			await expect(
+			expect(
 				interceptedBashTool.execute(
 					"test-call-8-intercept-default",
 					{ command: "cat test.txt" },
@@ -874,7 +874,7 @@ function b() {
 					),
 				),
 			);
-			await expect(
+			expect(
 				interceptedBashTool.execute(
 					"test-call-8-intercept-custom",
 					{ command: "customcmd foo" },
@@ -958,16 +958,14 @@ function b() {
 
 			const artifactId = result.details?.meta?.truncation?.artifactId;
 			expect(artifactId).toBeDefined();
-			if (artifactId) {
+			if (artifactId !== null && artifactId !== undefined && artifactId !== "") {
 				const artifactPath = path.join(testDir, "session", `${artifactId}.bash.log`);
 				expect(fs.existsSync(artifactPath)).toBe(true);
 			}
 		});
 
 		it("should handle command errors", async () => {
-			await expect(bashTool.execute("test-call-9", { command: "exit 1" })).rejects.toThrow(
-				/(Command failed|code 1)/,
-			);
+			expect(bashTool.execute("test-call-9", { command: "exit 1" })).rejects.toThrow(/(Command failed|code 1)/);
 		});
 
 		it("should keep short commands inline when auto-background is enabled", async () => {
@@ -1036,7 +1034,7 @@ function b() {
 			expect(getTextOutput(result)).toContain("start");
 
 			const jobId = result.details?.async?.jobId;
-			if (!jobId) {
+			if (jobId === null || jobId === undefined || jobId === "") {
 				throw new Error("expected an auto-backgrounded job id");
 			}
 			const runningJob = asyncJobManager.getJob(jobId);
@@ -1081,7 +1079,7 @@ function b() {
 			expect(result.details?.async?.state).toBe("running");
 			expect(getTextOutput(result)).toContain("Background job");
 			const jobId = result.details?.async?.jobId;
-			if (!jobId) {
+			if (jobId === null || jobId === undefined || jobId === "") {
 				throw new Error("expected an auto-backgrounded job id");
 			}
 			const runningJob = asyncJobManager.getJob(jobId);
@@ -1105,9 +1103,7 @@ function b() {
 		});
 
 		it("should respect timeout", async () => {
-			await expect(bashTool.execute("test-call-10", { command: "sleep 5", timeout: 1 })).rejects.toThrow(
-				/timed out/i,
-			);
+			expect(bashTool.execute("test-call-10", { command: "sleep 5", timeout: 1 })).rejects.toThrow(/timed out/i);
 		});
 
 		it("should abort and recover for subsequent commands", async () => {
@@ -1115,7 +1111,7 @@ function b() {
 			const promise = bashTool.execute("test-call-10-abort", { command: "sleep 5" }, controller.signal);
 			await Bun.sleep(200);
 			controller.abort("test abort");
-			await expect(promise).rejects.toThrow(/abort|cancel|timed out/i);
+			expect(promise).rejects.toThrow(/abort|cancel|timed out/i);
 
 			const result = await bashTool.execute("test-call-10-after-abort", { command: "echo ok" });
 			expect(getTextOutput(result)).toContain("ok");
@@ -1126,7 +1122,7 @@ function b() {
 
 			const bashToolWithBadCwd = new BashTool(createTestToolSession(nonexistentCwd));
 
-			await expect(bashToolWithBadCwd.execute("test-call-11", { command: "echo test" })).rejects.toThrow(
+			expect(bashToolWithBadCwd.execute("test-call-11", { command: "echo test" })).rejects.toThrow(
 				/Working directory does not exist/,
 			);
 		});
@@ -1611,7 +1607,7 @@ describe("edit tool CRLF handling", () => {
 
 		fs.writeFileSync(testFile, "hello\r\nworld\r\n---\r\nhello\nworld\n");
 
-		await expect(
+		expect(
 			editTool.execute("test-crlf-dup", {
 				path: testFile,
 				edits: [{ old_text: "hello\nworld\n", new_text: "replaced\n" }],

@@ -357,7 +357,11 @@ function createAutoresearchCommandHarness(
 	const mockStatus = Object.assign(
 		async (_cwd: string, options?: Parameters<typeof git.status>[1]) => {
 			const args = ["status", "--porcelain=v1", "--untracked-files=all", "-z"];
-			if (options?.pathspecs?.length) {
+			if (
+				options?.pathspecs?.length !== null &&
+				options?.pathspecs?.length !== undefined &&
+				options?.pathspecs?.length !== 0
+			) {
 				args.push("--", ...options.pathspecs);
 			}
 			const result = await runGitMock(args);
@@ -405,7 +409,7 @@ function createAutoresearchCommandHarness(
 			sentMessages.push(content);
 		},
 	} as unknown as ExtensionAPI;
-	createAutoresearchExtension(api);
+	void createAutoresearchExtension(api);
 	if (!command) throw new Error("Expected autoresearch command to register");
 
 	const ctx = {
@@ -496,7 +500,7 @@ function createAutoresearchLifecycleHarness(options: {
 		},
 		sendUserMessage(): void {},
 	} as unknown as ExtensionAPI;
-	createAutoresearchExtension(api);
+	void createAutoresearchExtension(api);
 
 	const ctx = {
 		abort(): void {},

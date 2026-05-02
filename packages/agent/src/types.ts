@@ -176,17 +176,194 @@ export interface CustomAgentMessages {
  * AgentMessage: Union of LLM messages + custom messages.
  * This abstraction allows apps to add custom message types while maintaining
  * type safety and compatibility with the base LLM messages.
+ *
+ * The conditional check ensures the union doesn't include `never` when no apps
+ * have extended `CustomAgentMessages` via declaration merging.
  */
-export type AgentMessage = Message | CustomAgentMessages[keyof CustomAgentMessages];
+export type AgentMessage<T extends keyof CustomAgentMessages = keyof CustomAgentMessages> =
+	| Message
+	| CustomAgentMessages[T];
 
 /**
  * Agent state containing all configuration and conversation data.
  */
+export class AgentBusyError extends Error {
+	constructor(
+		message = "Agent is already processing. Use steer() or followUp() to queue messages, or wait for completion.",
+	) {
+		super(message);
+		this.name = "AgentBusyError";
+	}
+}
+
+export interface AgentOptions {
+	initialState?: Partial<AgentState>;
+
+	/**
+	 * Converts AgentMessage[] to LLM-compatible Message[] before each LLM call.
+	 * Default filters to user/assistant/toolResult and converts attachments.
+	 */
+	convertToLlm?: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
+
+	/**
+	 * Optional transform applied to context before convertToLlm.
+	 * Use for context pruning, injecting external context, etc.
+	 */
+	transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
+
+	/**
+	 * Steering mode: "all" = send all steering messages at once, "one-at-a-time" = one per turn
+	 */
+	steeringMode?: "all" | "one-at-a-time";
+
+	/**
+	 * Follow-up mode: "all" = send all follow-up messages at once, "one-at-a-time" = one per turn
+	 */
+	followUpMode?: "all" | "one-at-a-time";
+
+	/**
+	 * When to interrupt tool execution for steering messages.
+	 * - "immediate": check after each tool call (default)
+	 * - "wait": defer steering until the current turn completes
+	 */
+	interruptMode?: "immediate" | "wait";
+
+	/**
+	 * API format for Kimi Code provider: "openai" or "anthropic" (default: "anthropic")
+	 */
+	kimiApiFormat?: "openai" | "anthropic";
+
+	/**
+	 * Hint that websocket transport should be preferred when supported by the provider implementation.
+	 */
+	preferWebsockets?: boolean;
+
+	/**
+	 * Use for late-bound UI or session state access.
+	 */
+	getToolContext?: (toolCall?: ToolCallContext) => AgentToolContext | undefined;
+
+	/**
+	 * Unique session identifier for prompt caching and persistence.
+	 */
+	sessionId?: string;
+
+	/**
+	 * Effort level for thinking models (effort-based providers only).
+	 */
+	thinkingLevel?: Effort;
+
+	/**
+	 * Token budgets for each thinking level (token-based providers only).
+	 */
+	thinkingBudgets?: ThinkingBudgets;
+
+	/**
+	 * OpenAI service tier for processing priority.
+	 */
+	serviceTier?: ServiceTier;
+
+	/**
+	 * Maximum retry delay in milliseconds for rate-limited requests.
+	 */
+	maxRetryDelayMs?: number;
+
+	/**
+	 * Enable/disable intent tracing in tool calls.
+	 */
+	intentTracing?: boolean;
+
+	/**
+	 * If true, tool results are buffered and emitted in correct order for Cursor-based streams.
+	 */
+	cursorSupport?: boolean;
+
+	/**
+	 * Callback for each AssistantMessageEvent received from the loop.
+	 */
+	onAssistantMessageEvent?: (event: AssistantMessageEvent) => void;
+
+	/**
+	 * Provider-scoped mutable state store for this agent session.
+	 * Providers can use this to persist transport/session state between turns.
+	 */
+	providerSessionState?: Map<string, ProviderSessionState>;
+
+	/**
+	 * Optional callback for inspecting or replacing provider payloads before sending.
+	 * Return undefined to keep the payload unchanged.
+	 */
+	onPayload?: AgentLoopConfig["onPayload"];
+
+	/**
+	 * Optional callback for provider response after headers are received.
+	 */
+	onResponse?: AgentLoopConfig["onResponse"];
+
+	/**
+	 * Optional hook for dynamic API key resolution (e.g. for expiring tokens).
+	 * If provided, this is called before each LLM call.
+	 */
+	getApiKey?: (provider: string) => string | undefined | Promise<string | undefined>;
+
+	/**
+	 * Optional hook for dynamic tool choice resolution.
+	 * If provided, this is called before each LLM call.
+	 */
+	getToolChoice?: () => ToolChoice | undefined;
+
+	/**
+	 * Optional hook for transforming tool call arguments before execution.
+	 */
+	transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
+
+	/**
+	 * Sampling temperature.
+	 */
+	temperature?: number;
+
+	/**
+	 * Nucleus sampling probability.
+	 */
+	topP?: number;
+
+	/**
+	 * Top-K sampling count.
+	 */
+	topK?: number;
+
+	/**
+	 * Minimum probability relative to top token.
+	 */
+	minP?: number;
+
+	/**
+	 * Presence penalty.
+	 */
+	presencePenalty?: number;
+
+	/**
+	 * Frequency/repetition penalty.
+	 */
+	repetitionPenalty?: number;
+
+	/**
+	 * Low-level loop stream function override.
+	 */
+	streamFn?: StreamFn;
+}
+
+export interface AgentPromptOptions {
+	toolChoice?: ToolChoice;
+}
+
+export type AgentListener = (event: AgentEvent) => void;
+
 export interface AgentState {
 	systemPrompt: string;
 	model: Model;
 	thinkingLevel?: Effort;
-	tools: AgentTool<any>[];
+	tools: AnyAgentTool[];
 	messages: AgentMessage[]; // Can include attachments + custom message types
 	isStreaming: boolean;
 	streamMessage: AgentMessage | null;
@@ -194,7 +371,7 @@ export interface AgentState {
 	error?: string;
 }
 
-export interface AgentToolResult<T = any, _TInput = unknown> {
+export interface AgentToolResult<T = unknown, _TInput = unknown> {
 	// Content blocks supporting text and images
 	content: (TextContent | ImageContent)[];
 	// Details to be displayed in a UI or logged
@@ -202,7 +379,9 @@ export interface AgentToolResult<T = any, _TInput = unknown> {
 }
 
 // Callback for streaming tool execution updates
-export type AgentToolUpdateCallback<T = any, TInput = unknown> = (partialResult: AgentToolResult<T, TInput>) => void;
+export type AgentToolUpdateCallback<T = unknown, TInput = unknown> = (
+	partialResult: AgentToolResult<T, TInput>,
+) => void;
 
 /** Options passed to renderResult */
 export interface RenderResultOptions {
@@ -222,7 +401,7 @@ export interface AgentToolContext {
 	// Empty by default - apps extend via declaration merging
 }
 
-export type AgentToolExecFn<TParameters extends TSchema = TSchema, TDetails = any, TTheme = unknown> = (
+export type AgentToolExecFn<TParameters extends TSchema = TSchema, TDetails = unknown, TTheme = unknown> = (
 	this: AgentTool<TParameters, TDetails, TTheme>,
 	toolCallId: string,
 	params: Static<TParameters>,
@@ -234,7 +413,7 @@ export type AgentToolExecFn<TParameters extends TSchema = TSchema, TDetails = an
 // AgentTool extends Tool but adds the execute function
 export interface AgentTool<
 	TParameters extends TSchema = TSchema,
-	TDetails = any,
+	TDetails = unknown,
 	TTheme = unknown,
 > extends Tool<TParameters> {
 	// A human-readable label for the tool to be displayed in UI
@@ -280,7 +459,27 @@ export interface AgentTool<
 export interface AgentContext {
 	systemPrompt: string;
 	messages: AgentMessage[];
-	tools?: AgentTool<any>[];
+	tools?: AnyAgentTool[];
+}
+
+/**
+ * Erased AgentTool type compatible with any concrete AgentTool specialization.
+ * Use for collections that need to mix tools with different parameter/details types.
+ *
+ * Function members are declared as method signatures (bivariant) so concrete
+ * `AgentTool<Schema, Details>` instances are assignable here.
+ */
+export interface AnyAgentTool extends Omit<AgentTool, "execute" | "renderCall" | "renderResult" | "intent"> {
+	execute(
+		toolCallId: string,
+		params: unknown,
+		signal?: AbortSignal,
+		onUpdate?: AgentToolUpdateCallback,
+		context?: AgentToolContext,
+	): Promise<AgentToolResult>;
+	renderCall?(args: unknown, options: RenderResultOptions, theme: unknown): unknown;
+	renderResult?(result: AgentToolResult, options: RenderResultOptions, theme: unknown): unknown;
+	intent?: "omit" | "optional" | "require" | ((args: never) => string | undefined);
 }
 
 /**
@@ -300,6 +499,24 @@ export type AgentEvent =
 	| { type: "message_update"; message: AgentMessage; assistantMessageEvent: AssistantMessageEvent }
 	| { type: "message_end"; message: AgentMessage }
 	// Tool execution lifecycle
-	| { type: "tool_execution_start"; toolCallId: string; toolName: string; args: any; intent?: string }
-	| { type: "tool_execution_update"; toolCallId: string; toolName: string; args: any; partialResult: any }
-	| { type: "tool_execution_end"; toolCallId: string; toolName: string; result: any; isError?: boolean };
+	| {
+			type: "tool_execution_start";
+			toolCallId: string;
+			toolName: string;
+			args: Record<string, unknown>;
+			intent?: string;
+	  }
+	| {
+			type: "tool_execution_update";
+			toolCallId: string;
+			toolName: string;
+			args: Record<string, unknown>;
+			partialResult: AgentToolResult<unknown, unknown>;
+	  }
+	| {
+			type: "tool_execution_end";
+			toolCallId: string;
+			toolName: string;
+			result: AgentToolResult<unknown, unknown>;
+			isError?: boolean;
+	  };

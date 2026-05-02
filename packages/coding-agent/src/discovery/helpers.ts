@@ -80,7 +80,7 @@ export type SourceId = keyof typeof SOURCE_PATHS;
  */
 export function getUserPath(ctx: LoadContext, source: SourceId, subpath: string): string | null {
 	const paths = SOURCE_PATHS[source];
-	if (!paths.userAgent) return null;
+	if (paths.userAgent === null || paths.userAgent === undefined || paths.userAgent === "") return null;
 	return path.join(ctx.home, paths.userAgent, subpath);
 }
 
@@ -89,7 +89,7 @@ export function getUserPath(ctx: LoadContext, source: SourceId, subpath: string)
  */
 export function getProjectPath(ctx: LoadContext, source: SourceId, subpath: string): string | null {
 	const paths = SOURCE_PATHS[source];
-	if (!paths.projectDir) return null;
+	if (paths.projectDir === null || paths.projectDir === undefined || paths.projectDir === "") return null;
 
 	return path.join(ctx.cwd, paths.projectDir, subpath);
 }
@@ -215,7 +215,14 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	const name = typeof frontmatter.name === "string" ? frontmatter.name : undefined;
 	const description = typeof frontmatter.description === "string" ? frontmatter.description : undefined;
 
-	if (!name || !description) {
+	if (
+		name === null ||
+		name === undefined ||
+		name === "" ||
+		description === null ||
+		description === undefined ||
+		description === ""
+	) {
 		return null;
 	}
 
@@ -242,7 +249,7 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	}
 
 	// Backward compat: infer spawns: "*" when tools includes "task"
-	if (spawns === undefined && tools?.includes("task")) {
+	if (spawns === undefined && tools?.includes("task") === true) {
 		spawns = "*";
 	}
 
@@ -250,9 +257,9 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	const rawThinkingLevel =
 		typeof frontmatter.thinkingLevel === "string"
 			? frontmatter.thinkingLevel
-			: typeof frontmatter.thinking === "string"
+			: (typeof frontmatter.thinking === "string"
 				? frontmatter.thinking
-				: undefined;
+				: undefined);
 
 	const thinkingLevel = parseThinkingLevel(rawThinkingLevel);
 	const model = parseModelList(frontmatter.model);
@@ -283,7 +290,7 @@ export interface ScanSkillsFromDirOptions {
 
 // Stable ordering used for skill lists in prompts: name (case-insensitive), then name, then path.
 export function compareSkillOrder(aName: string, aPath: string, bName: string, bPath: string): number {
-	const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+	const cmp = (a: string, b: string): number => (a < b ? -1 : (a > b ? 1 : 0));
 	const lowerCompare = cmp(aName.toLowerCase(), bName.toLowerCase());
 	if (lowerCompare !== 0) return lowerCompare;
 	const nameCompare = cmp(aName, bName);
@@ -311,12 +318,12 @@ export async function scanSkillsFromDir(
 	const loadSkill = async (skillPath: string) => {
 		try {
 			const content = await readFile(skillPath);
-			if (!content) return;
+			if (content === null || content === undefined || content === "") return;
 			const { frontmatter, body } = parseFrontmatter(content, { source: skillPath });
 			if (frontmatter.enabled === false) {
 				return;
 			}
-			if (requireDescription && !frontmatter.description) {
+			if (requireDescription && (frontmatter.description === null || frontmatter.description === undefined)) {
 				return;
 			}
 			const skillDirName = path.basename(path.dirname(skillPath));
@@ -455,8 +462,8 @@ export async function loadFilesFromDir<T>(
 			if (item !== null) {
 				items.push(item);
 			}
-		} catch (err) {
-			warnings.push(`Failed to parse ${filePath}: ${err}`);
+		} catch (error) {
+			warnings.push(`Failed to parse ${filePath}: ${String(error)}`);
 		}
 	}
 	return { items, warnings };
@@ -482,7 +489,7 @@ async function readExtensionModuleManifest(
 	packageJsonPath: string,
 ): Promise<ExtensionModuleManifest | null> {
 	const content = await readFile(packageJsonPath);
-	if (!content) return null;
+	if (content === null || content === undefined || content === "") return null;
 
 	const pkg = tryParseJson<{ omp?: ExtensionModuleManifest; pi?: ExtensionModuleManifest }>(content);
 	const manifest = pkg?.omp ?? pkg?.pi;
@@ -538,7 +545,10 @@ export async function discoverExtensionModulePaths(_ctx: LoadContext, dir: strin
 				const pluginFilePath = entries.find(
 					e => e.isFile() && (e.name === "index.ts" || e.name === "index.js"),
 				)?.name;
-				resolvedExtPath = pluginFilePath ? path.join(resolvedExtPath, pluginFilePath) : resolvedExtPath;
+				resolvedExtPath =
+					pluginFilePath !== null && pluginFilePath !== undefined && pluginFilePath !== ""
+						? path.join(resolvedExtPath, pluginFilePath)
+						: resolvedExtPath;
 			}
 			const content = await readFile(resolvedExtPath);
 			if (content !== null) {
@@ -552,7 +562,12 @@ export async function discoverExtensionModulePaths(_ctx: LoadContext, dir: strin
 		const subdir = path.dirname(match.path);
 		if (subdirsWithDeclaredExtensions.has(subdir)) continue;
 		const existing = preferredIndexBySubdir.get(subdir);
-		if (!existing || (existing.endsWith("index.js") && match.path.endsWith("index.ts"))) {
+		if (
+			existing === null ||
+			existing === undefined ||
+			existing === "" ||
+			(existing.endsWith("index.js") && match.path.endsWith("index.ts"))
+		) {
 			preferredIndexBySubdir.set(subdir, match.path);
 		}
 	}
@@ -728,7 +743,7 @@ export async function resolveActiveProjectRegistryPath(cwd: string): Promise<str
  */
 export async function resolveOrDefaultProjectRegistryPath(cwd: string): Promise<string | undefined> {
 	const resolved = await resolveActiveProjectRegistryPath(cwd);
-	if (resolved) return resolved;
+	if (resolved !== null && resolved !== undefined && resolved !== "") return resolved;
 	// Home directory must not be treated as a project root: the fallback path would alias
 	// getInstalledPluginsRegistryPath(), causing MarketplaceManager to load the same file
 	// as both user and project registry and producing duplicates / disambiguation errors.
@@ -749,7 +764,8 @@ export async function listClaudePluginRoots(
 	home: string,
 	cwd?: string,
 ): Promise<{ roots: ClaudePluginRoot[]; warnings: string[] }> {
-	const resolvedProjectPath = cwd ? await resolveActiveProjectRegistryPath(cwd) : null;
+	const resolvedProjectPath =
+		cwd !== null && cwd !== undefined && cwd !== "" ? await resolveActiveProjectRegistryPath(cwd) : null;
 	const cacheKey = `${home}:${resolvedProjectPath ?? ""}`;
 	const cached = pluginRootsCache.get(cacheKey);
 	if (cached) return cached;
@@ -762,7 +778,7 @@ export async function listClaudePluginRoots(
 	const registryPath = path.join(home, ".claude", "plugins", "installed_plugins.json");
 	const content = await readFile(registryPath);
 
-	if (content) {
+	if (content !== null && content !== undefined && content !== "") {
 		const registry = parseClaudePluginsRegistry(content);
 		if (!registry) {
 			warnings.push(`Failed to parse Claude Code plugin registry: ${registryPath}`);
@@ -807,7 +823,7 @@ export async function listClaudePluginRoots(
 	// Path derived from `home` (not os.homedir()) so test isolation works when home is overridden.
 	const ompRegistryPath = path.join(home, getConfigDirName(), "plugins", "installed_plugins.json");
 	const ompContent = await readFile(ompRegistryPath);
-	if (ompContent) {
+	if (ompContent !== null && ompContent !== undefined && ompContent !== "") {
 		const ompRegistry = parseClaudePluginsRegistry(ompContent);
 		if (ompRegistry) {
 			for (const [pluginId, entries] of Object.entries(ompRegistry.plugins)) {
@@ -853,9 +869,9 @@ export async function listClaudePluginRoots(
 	// ── Project-scoped OMP registry ────────────────────────────────────────
 	// Loaded from the nearest .omp/plugins/installed_plugins.json relative to cwd.
 	// Project entries take precedence over user entries for the same plugin ID.
-	if (resolvedProjectPath) {
+	if (resolvedProjectPath !== null && resolvedProjectPath !== undefined && resolvedProjectPath !== "") {
 		const projectContent = await readFile(resolvedProjectPath);
-		if (projectContent) {
+		if (projectContent !== null && projectContent !== undefined && projectContent !== "") {
 			const projectRegistry = parseClaudePluginsRegistry(projectContent);
 			if (projectRegistry) {
 				for (const [pluginId, entries] of Object.entries(projectRegistry.plugins)) {
@@ -917,7 +933,7 @@ export function clearClaudePluginRootsCache(): void {
 	pluginRootsCache.clear();
 	preloadedPluginRoots = [...injectedPluginDirRoots];
 	// Re-warm preloaded roots asynchronously so sync LSP config reads stay valid
-	if (lastPreloadHome) {
+	if (lastPreloadHome !== null && lastPreloadHome !== undefined && lastPreloadHome !== "") {
 		void preloadPluginRoots(lastPreloadHome, getProjectDir());
 	}
 }
@@ -979,7 +995,7 @@ export async function injectPluginDirRoots(home: string, dirs: string[], cwd?: s
 			const manifestPath = path.join(resolved, ".claude-plugin", "plugin.json");
 			const content = await Bun.file(manifestPath).text();
 			const manifest = JSON.parse(content);
-			if (typeof manifest.name === "string" && manifest.name) {
+			if (typeof manifest.name === "string" && manifest.name !== null && manifest.name !== undefined) {
 				pluginName = manifest.name;
 			}
 		} catch {

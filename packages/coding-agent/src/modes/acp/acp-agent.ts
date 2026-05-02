@@ -226,7 +226,7 @@ export class AcpAgent implements Agent {
 	}
 
 	async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
-		if (params.cwd) {
+		if (params.cwd !== null && params.cwd !== undefined && params.cwd !== "") {
 			this.#assertAbsoluteCwd(params.cwd);
 		}
 		for (const record of this.#sessions.values()) {
@@ -423,7 +423,7 @@ export class AcpAgent implements Agent {
 			}
 			case "omp/chats/byCwd": {
 				const cwd = typeof params.cwd === "string" ? (params.cwd as string) : undefined;
-				if (!cwd) throw new Error("cwd required");
+				if (cwd === null || cwd === undefined || cwd === "") throw new Error("cwd required");
 				const limit = typeof params.limit === "number" ? Math.max(1, Math.min(500, params.limit as number)) : 100;
 				const sessions = await SessionManager.list(cwd);
 				const sorted = sessions.sort((l, r) => r.modified.getTime() - l.modified.getTime()).slice(0, limit);
@@ -608,7 +608,7 @@ export class AcpAgent implements Agent {
 			}
 			await loaded.session.sessionManager.flush();
 			const sessionPath = loaded.session.sessionManager.getSessionFile();
-			if (!sessionPath) {
+			if (sessionPath === null || sessionPath === undefined || sessionPath === "") {
 				throw new Error(`ACP session cannot be forked before it is persisted: ${sessionId}`);
 			}
 			return sessionPath;
@@ -648,7 +648,7 @@ export class AcpAgent implements Agent {
 			return undefined;
 		}
 		const existing = record.liveMessageIds.get(message);
-		if (existing) {
+		if (existing !== null && existing !== undefined && existing !== "") {
 			return existing;
 		}
 		const nextMessageId = crypto.randomUUID();
@@ -782,7 +782,7 @@ export class AcpAgent implements Agent {
 	}
 
 	#toThinkingConfigValue(value: string | undefined): string {
-		return value && value !== "inherit" ? value : THINKING_OFF;
+		return value !== null && value !== undefined && value !== "" && value !== "inherit" ? value : THINKING_OFF;
 	}
 
 	async #setModelById(session: AgentSession, modelId: string): Promise<void> {
@@ -795,7 +795,7 @@ export class AcpAgent implements Agent {
 
 	#setThinkingLevelById(session: AgentSession, value: string): void {
 		const thinkingLevel = parseThinkingLevel(value);
-		if (!thinkingLevel) {
+		if (thinkingLevel === undefined) {
 			throw new Error(`Unknown ACP thinking level: ${value}`);
 		}
 		session.setThinkingLevel(thinkingLevel);
@@ -955,7 +955,10 @@ export class AcpAgent implements Agent {
 	}
 
 	async #listStoredSessions(cwd?: string): Promise<StoredSessionInfo[]> {
-		const sessions = cwd ? await SessionManager.list(cwd) : await SessionManager.listAll();
+		const sessions =
+			cwd !== null && cwd !== undefined && cwd !== ""
+				? await SessionManager.list(cwd)
+				: await SessionManager.listAll();
 		return sessions.sort((left, right) => right.modified.getTime() - left.modified.getTime());
 	}
 
@@ -970,7 +973,7 @@ export class AcpAgent implements Agent {
 	}
 
 	#parseCursor(cursor: string | undefined): number {
-		if (!cursor) {
+		if (cursor === null || cursor === undefined || cursor === "") {
 			return 0;
 		}
 		const parsed = Number.parseInt(cursor, 10);
@@ -1087,7 +1090,12 @@ export class AcpAgent implements Agent {
 				}
 			}
 		}
-		if (notifications.length === 0 && message.errorMessage) {
+		if (
+			notifications.length === 0 &&
+			message.errorMessage !== null &&
+			message.errorMessage !== undefined &&
+			message.errorMessage !== ""
+		) {
 			notifications.push({
 				sessionId,
 				update: {
@@ -1117,9 +1125,8 @@ export class AcpAgent implements Agent {
 			toolName: message.toolName,
 			isError: message.isError === true,
 			result: {
-				content: message.content,
+				content: message.content as any,
 				details: message.details,
-				errorMessage: message.errorMessage,
 			},
 		};
 		return [
@@ -1174,7 +1181,7 @@ export class AcpAgent implements Agent {
 				}
 			}
 		}
-		if (replay.length === 0 && errorMessage) {
+		if (replay.length === 0 && errorMessage !== null && errorMessage !== undefined && errorMessage !== "") {
 			replay.push({ type: "text", text: errorMessage });
 		}
 		return replay;
@@ -1215,7 +1222,7 @@ export class AcpAgent implements Agent {
 				getCommands: () => [],
 				setModel: async model => {
 					const apiKey = await record.session.modelRegistry.getApiKey(model);
-					if (!apiKey) {
+					if (apiKey === null || apiKey === undefined || apiKey === "") {
 						return false;
 					}
 					await record.session.setModel(model);

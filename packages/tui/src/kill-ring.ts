@@ -19,7 +19,7 @@ export class KillRing {
 	push(text: string, opts: { prepend: boolean; accumulate?: boolean }): void {
 		if (!text) return;
 
-		if (opts.accumulate && this.#ring.length > 0) {
+		if (opts.accumulate === true && this.#ring.length > 0) {
 			const last = this.#ring.pop()!;
 			this.#ring.push(opts.prepend ? text + last : last + text);
 		} else {

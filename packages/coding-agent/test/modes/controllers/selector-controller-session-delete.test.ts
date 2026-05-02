@@ -142,7 +142,7 @@ function renderText(selector: SessionSelectorComponent): string {
 }
 
 beforeAll(() => {
-	initTheme();
+	void initTheme();
 });
 
 describe("SelectorController session deletion", () => {

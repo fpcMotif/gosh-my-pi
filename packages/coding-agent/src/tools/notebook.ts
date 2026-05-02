@@ -86,8 +86,8 @@ export class NotebookTool implements AgentTool<typeof notebookSchema, NotebookTo
 			let notebook: Notebook;
 			try {
 				notebook = await Bun.file(absolutePath).json();
-			} catch (err) {
-				if (isEnoent(err)) throw new Error(`Notebook not found: ${notebook_path}`);
+			} catch (error) {
+				if (isEnoent(error)) throw new Error(`Notebook not found: ${notebook_path}`);
 				throw new Error(`Invalid JSON in notebook: ${notebook_path}`);
 			}
 
@@ -155,7 +155,7 @@ export class NotebookTool implements AgentTool<typeof notebookSchema, NotebookTo
 					break;
 				}
 				default: {
-					throw new Error(`Invalid action: ${action}`);
+					throw new Error(`Invalid action: ${String(action)}`);
 				}
 			}
 
@@ -205,9 +205,9 @@ export const notebookToolRenderer = {
 		const notebookPath = args.notebookPath ?? args.notebook_path;
 		const cellNumber = args.cellNumber ?? args.cell_index;
 		const cellType = args.cellType ?? args.cell_type;
-		meta.push(`in ${notebookPath || "?"}`);
+		meta.push(`in ${notebookPath ?? "?"}`);
 		if (cellNumber !== undefined) meta.push(`cell:${cellNumber}`);
-		if (cellType) meta.push(`type:${cellType}`);
+		if (cellType !== null && cellType !== undefined && cellType !== "") meta.push(`type:${cellType}`);
 
 		const text = renderStatusLine(
 			{ icon: "pending", title: "Notebook", description: args.action || "?", meta },
@@ -223,7 +223,7 @@ export const notebookToolRenderer = {
 		args?: NotebookRenderArgs,
 	): Component {
 		const content = result.content?.[0];
-		if (content?.type === "text" && content.text?.startsWith("Error:")) {
+		if (content?.type === "text" && content.text?.startsWith("Error:") === true) {
 			const notebookPath = args?.notebookPath ?? args?.notebook_path ?? "?";
 			const header = renderStatusLine({ icon: "error", title: "Notebook", description: notebookPath }, uiTheme);
 			return new Text([header, formatErrorMessage(content.text, uiTheme)].join("\n"), 0, 0);
@@ -237,8 +237,8 @@ export const notebookToolRenderer = {
 		const cellSource = details?.cellSource ?? [];
 		const lineCount = cellSource.length;
 
-		const actionLabel = action === "insert" ? "Inserted" : action === "delete" ? "Deleted" : "Edited";
-		const cellLabel = cellType || "cell";
+		const actionLabel = action === "insert" ? "Inserted" : (action === "delete" ? "Deleted" : "Edited");
+		const cellLabel = cellType ?? "cell";
 		const summaryParts = [`${actionLabel} ${cellLabel} ${cellIndex ?? "?"}`];
 		if (lineCount > 0) summaryParts.push(formatCount("line", lineCount));
 		if (totalCells !== undefined) summaryParts.push(`${totalCells} total`);
@@ -248,7 +248,10 @@ export const notebookToolRenderer = {
 		const language = cellType === "markdown" ? "markdown" : undefined;
 
 		const notebookPath = args?.notebookPath ?? args?.notebook_path;
-		const notebookLabel = notebookPath ? `${actionLabel} ${notebookPath}` : "Notebook";
+		const notebookLabel =
+			notebookPath !== null && notebookPath !== undefined && notebookPath !== ""
+				? `${actionLabel} ${notebookPath}`
+				: "Notebook";
 		let cached: RenderCache | undefined;
 
 		return {

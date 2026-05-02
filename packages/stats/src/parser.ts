@@ -87,9 +87,9 @@ export async function parseSessionFile(
 	let bytes: Uint8Array;
 	try {
 		bytes = await Bun.file(sessionPath).bytes();
-	} catch (err) {
-		if (isEnoent(err)) return { stats: [], newOffset: fromOffset };
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return { stats: [], newOffset: fromOffset };
+		throw error;
 	}
 
 	const folder = extractFolderFromPath(sessionPath);
@@ -154,9 +154,9 @@ export async function getSessionEntry(sessionPath: string, entryId: string): Pro
 	let bytes: Uint8Array;
 	try {
 		bytes = await Bun.file(sessionPath).bytes();
-	} catch (err) {
-		if (isEnoent(err)) return null;
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return null;
+		throw error;
 	}
 
 	const { entries } = parseSessionEntriesLenient(bytes);

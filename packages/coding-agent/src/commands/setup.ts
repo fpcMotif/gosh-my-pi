@@ -25,7 +25,7 @@ export default class Setup extends Command {
 
 	async run(): Promise<void> {
 		const { args, flags } = await this.parse(Setup);
-		if (!args.component) {
+		if (args.component === null || args.component === undefined || args.component === "") {
 			renderCommandHelp("omp", "setup", Setup);
 			return;
 		}

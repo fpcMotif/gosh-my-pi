@@ -274,16 +274,16 @@ export class Markdown implements Component {
 		}
 
 		// Apply text decorations using this.#theme
-		if (this.#defaultTextStyle.bold) {
+		if (this.#defaultTextStyle.bold === true) {
 			styled = this.#theme.bold(styled);
 		}
-		if (this.#defaultTextStyle.italic) {
+		if (this.#defaultTextStyle.italic === true) {
 			styled = this.#theme.italic(styled);
 		}
-		if (this.#defaultTextStyle.strikethrough) {
+		if (this.#defaultTextStyle.strikethrough === true) {
 			styled = this.#theme.strikethrough(styled);
 		}
-		if (this.#defaultTextStyle.underline) {
+		if (this.#defaultTextStyle.underline === true) {
 			styled = this.#theme.underline(styled);
 		}
 
@@ -306,16 +306,16 @@ export class Markdown implements Component {
 			styled = this.#defaultTextStyle.color(styled);
 		}
 
-		if (this.#defaultTextStyle.bold) {
+		if (this.#defaultTextStyle.bold === true) {
 			styled = this.#theme.bold(styled);
 		}
-		if (this.#defaultTextStyle.italic) {
+		if (this.#defaultTextStyle.italic === true) {
 			styled = this.#theme.italic(styled);
 		}
-		if (this.#defaultTextStyle.strikethrough) {
+		if (this.#defaultTextStyle.strikethrough === true) {
 			styled = this.#theme.strikethrough(styled);
 		}
-		if (this.#defaultTextStyle.underline) {
+		if (this.#defaultTextStyle.underline === true) {
 			styled = this.#theme.underline(styled);
 		}
 
@@ -355,7 +355,12 @@ export class Markdown implements Component {
 					styledHeading = this.#theme.heading(this.#theme.bold(headingPrefix + headingText));
 				}
 				lines.push(styledHeading);
-				if (nextTokenType && nextTokenType !== "space") {
+				if (
+					nextTokenType !== null &&
+					nextTokenType !== undefined &&
+					nextTokenType !== "" &&
+					nextTokenType !== "space"
+				) {
 					lines.push(""); // Add spacing after headings (unless space token follows)
 				}
 				break;
@@ -365,7 +370,13 @@ export class Markdown implements Component {
 				const paragraphText = this.#renderInlineTokens(token.tokens || [], styleContext);
 				lines.push(paragraphText);
 				// Don't add spacing if next token is space or list
-				if (nextTokenType && nextTokenType !== "list" && nextTokenType !== "space") {
+				if (
+					nextTokenType !== null &&
+					nextTokenType !== undefined &&
+					nextTokenType !== "" &&
+					nextTokenType !== "list" &&
+					nextTokenType !== "space"
+				) {
 					lines.push("");
 				}
 				break;
@@ -376,11 +387,16 @@ export class Markdown implements Component {
 				if (token.lang === "mermaid" && this.#theme.resolveMermaidAscii) {
 					const ascii = this.#theme.resolveMermaidAscii(token.text);
 
-					if (ascii) {
+					if (ascii !== null && ascii !== undefined && ascii !== "") {
 						for (const asciiLine of Bun.stripANSI(ascii).split("\n")) {
 							lines.push(asciiLine);
 						}
-						if (nextTokenType && nextTokenType !== "space") {
+						if (
+							nextTokenType !== null &&
+							nextTokenType !== undefined &&
+							nextTokenType !== "" &&
+							nextTokenType !== "space"
+						) {
 							lines.push("");
 						}
 						break;
@@ -388,7 +404,7 @@ export class Markdown implements Component {
 				}
 
 				const codeIndent = padding(this.#codeBlockIndent);
-				lines.push(this.#theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
+				lines.push(this.#theme.codeBlockBorder(`\`\`\`${token.lang ?? ""}`));
 				if (this.#theme.highlightCode) {
 					const highlightedLines = this.#theme.highlightCode(token.text, token.lang);
 					for (const hlLine of highlightedLines) {
@@ -402,7 +418,12 @@ export class Markdown implements Component {
 					}
 				}
 				lines.push(this.#theme.codeBlockBorder("```"));
-				if (nextTokenType && nextTokenType !== "space") {
+				if (
+					nextTokenType !== null &&
+					nextTokenType !== undefined &&
+					nextTokenType !== "" &&
+					nextTokenType !== "space"
+				) {
 					lines.push(""); // Add spacing after code blocks (unless space token follows)
 				}
 				break;
@@ -463,7 +484,12 @@ export class Markdown implements Component {
 						lines.push(this.#theme.quoteBorder(`${this.#theme.symbols.quoteBorder} `) + wrappedLine);
 					}
 				}
-				if (nextTokenType && nextTokenType !== "space") {
+				if (
+					nextTokenType !== null &&
+					nextTokenType !== undefined &&
+					nextTokenType !== "" &&
+					nextTokenType !== "space"
+				) {
 					lines.push(""); // Add spacing after blockquotes (unless space token follows)
 				}
 				break;
@@ -471,7 +497,12 @@ export class Markdown implements Component {
 
 			case "hr":
 				lines.push(this.#theme.hr(this.#theme.symbols.hrChar.repeat(Math.min(width, 80))));
-				if (nextTokenType && nextTokenType !== "space") {
+				if (
+					nextTokenType !== null &&
+					nextTokenType !== undefined &&
+					nextTokenType !== "" &&
+					nextTokenType !== "space"
+				) {
 					lines.push(""); // Add spacing after horizontal rules (unless space token follows)
 				}
 				break;
@@ -511,11 +542,10 @@ export class Markdown implements Component {
 			switch (token.type) {
 				case "text":
 					// Text tokens in list items can have nested tokens for inline formatting
-					if (token.tokens && token.tokens.length > 0) {
-						result += this.#renderInlineTokens(token.tokens, resolvedStyleContext);
-					} else {
-						result += applyTextWithNewlines(token.text);
-					}
+					result +=
+						token.tokens && token.tokens.length > 0
+							? this.#renderInlineTokens(token.tokens, resolvedStyleContext)
+							: applyTextWithNewlines(token.text);
 					break;
 
 				case "paragraph":
@@ -547,7 +577,8 @@ export class Markdown implements Component {
 					// Compare raw text (token.text) not styled text (linkText) since linkText has ANSI codes
 					// For mailto: links, strip the prefix before comparing (autolinked emails have
 					// text="foo@bar.com" but href="mailto:foo@bar.com")
-					const hrefForComparison = token.href.startsWith("mailto:") ? token.href.slice(7) : token.href;
+					const tokenHref = String(token.href);
+					const hrefForComparison = tokenHref.startsWith("mailto:") ? tokenHref.slice(7) : tokenHref;
 					if (token.text === token.href || token.text === hrefForComparison)
 						result += clickableLinkText + stylePrefix;
 					else {
@@ -654,7 +685,7 @@ export class Markdown implements Component {
 				const text =
 					token.tokens && token.tokens.length > 0
 						? this.#renderInlineTokens(token.tokens, styleContext)
-						: token.text || "";
+						: (token.text ?? "");
 				lines.push(text);
 			} else if (token.type === "paragraph") {
 				// Paragraph in list item
@@ -663,7 +694,7 @@ export class Markdown implements Component {
 			} else if (token.type === "code") {
 				// Code block in list item
 				const codeIndent = padding(this.#codeBlockIndent);
-				lines.push(this.#theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
+				lines.push(this.#theme.codeBlockBorder(`\`\`\`${token.lang ?? ""}`));
 				if (this.#theme.highlightCode) {
 					const highlightedLines = this.#theme.highlightCode(token.text, token.lang);
 					for (const hlLine of highlightedLines) {
@@ -713,6 +744,32 @@ export class Markdown implements Component {
 		return wrapTextWithAnsi(text, Math.max(1, maxWidth));
 	}
 
+	#buildHeaderRowParts(headerCellLines: string[][], columnWidths: number[], lineIdx: number): string[] {
+		return headerCellLines.map((cellLines, colIdx) => {
+			const text = cellLines[lineIdx] || "";
+			const padded = text + padding(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
+			return this.#theme.bold(padded);
+		});
+	}
+
+	#mapTableRowCells(
+		row: { tokens?: Token[] }[],
+		columnWidths: number[],
+		styleContext?: InlineStyleContext,
+	): string[][] {
+		return row.map((cell, i) => {
+			const text = this.#renderInlineTokens(cell.tokens || [], styleContext);
+			return this.#wrapCellText(text, columnWidths[i]);
+		});
+	}
+
+	#buildTableRowParts(rowCellLines: string[][], columnWidths: number[], lineIdx: number): string[] {
+		return rowCellLines.map((cellLines, colIdx) => {
+			const text = cellLines[lineIdx] || "";
+			return text + padding(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
+		});
+	}
+
 	/**
 	 * Render a table with width-aware cell wrapping.
 	 * Cells that don't fit are wrapped to multiple lines.
@@ -737,7 +794,12 @@ export class Markdown implements Component {
 		if (availableForCells < numCols) {
 			// Too narrow to render a stable table. Fall back to raw markdown.
 			const fallbackLines = token.raw ? wrapTextWithAnsi(token.raw, availableWidth) : [];
-			if (nextTokenType && nextTokenType !== "space") {
+			if (
+				nextTokenType !== null &&
+				nextTokenType !== undefined &&
+				nextTokenType !== "" &&
+				nextTokenType !== "space"
+			) {
 				fallbackLines.push("");
 			}
 			return fallbackLines;
@@ -768,7 +830,7 @@ export class Markdown implements Component {
 		let minCellsWidth = minColumnWidths.reduce((a, b) => a + b, 0);
 
 		if (minCellsWidth > availableForCells) {
-			minColumnWidths = new Array(numCols).fill(1);
+			minColumnWidths = Array.from({ length: numCols }, () => 1);
 			const remaining = availableForCells - numCols;
 
 			if (remaining > 0) {
@@ -850,11 +912,7 @@ export class Markdown implements Component {
 		const headerLineCount = Math.max(...headerCellLines.map(c => c.length));
 
 		for (let lineIdx = 0; lineIdx < headerLineCount; lineIdx++) {
-			const rowParts = headerCellLines.map((cellLines, colIdx) => {
-				const text = cellLines[lineIdx] || "";
-				const padded = text + padding(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
-				return this.#theme.bold(padded);
-			});
+			const rowParts = this.#buildHeaderRowParts(headerCellLines, columnWidths, lineIdx);
 			lines.push(`${v} ${rowParts.join(` ${v} `)} ${v}`);
 		}
 
@@ -866,17 +924,11 @@ export class Markdown implements Component {
 		// Render rows with wrapping
 		for (let rowIndex = 0; rowIndex < token.rows.length; rowIndex++) {
 			const row = token.rows[rowIndex];
-			const rowCellLines: string[][] = row.map((cell, i) => {
-				const text = this.#renderInlineTokens(cell.tokens || [], styleContext);
-				return this.#wrapCellText(text, columnWidths[i]);
-			});
+			const rowCellLines: string[][] = this.#mapTableRowCells(row, columnWidths, styleContext);
 			const rowLineCount = Math.max(...rowCellLines.map(c => c.length));
 
 			for (let lineIdx = 0; lineIdx < rowLineCount; lineIdx++) {
-				const rowParts = rowCellLines.map((cellLines, colIdx) => {
-					const text = cellLines[lineIdx] || "";
-					return text + padding(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
-				});
+				const rowParts = this.#buildTableRowParts(rowCellLines, columnWidths, lineIdx);
 				lines.push(`${v} ${rowParts.join(` ${v} `)} ${v}`);
 			}
 
@@ -889,7 +941,7 @@ export class Markdown implements Component {
 		const bottomBorderCells = columnWidths.map(w => h.repeat(w));
 		lines.push(`${t.bottomLeft}${h}${bottomBorderCells.join(`${h}${t.teeUp}${h}`)}${h}${t.bottomRight}`);
 
-		if (nextTokenType && nextTokenType !== "space") {
+		if (nextTokenType !== null && nextTokenType !== undefined && nextTokenType !== "" && nextTokenType !== "space") {
 			lines.push(""); // Add spacing after table
 		}
 		return lines;
@@ -910,8 +962,12 @@ export function renderInlineMarkdown(text: string, mdTheme: MarkdownTheme, baseC
 		} else if (token.type === "list") {
 			result += token.items
 				.map((item: Tokens.ListItem, index: number) => {
-					const prefix = token.ordered ? `${(token.start || 1) + index}. ` : "• ";
-					const content = item.tokens ? renderInlineTokens(item.tokens, mdTheme, applyText) : applyText(item.text);
+					const prefix =
+						token.ordered !== null && token.ordered !== undefined ? `${(token.start ?? 1) + index}. ` : "• ";
+					const content =
+						item.tokens !== undefined && item.tokens.length > 0
+							? renderInlineTokens(item.tokens, mdTheme, applyText)
+							: applyText(item.text);
 					return `${applyText(prefix)}${content}`;
 				})
 				.join(applyText(" "));
@@ -928,11 +984,10 @@ function renderInlineTokens(tokens: Token[], mdTheme: MarkdownTheme, applyText: 
 	for (const token of tokens) {
 		switch (token.type) {
 			case "text":
-				if (token.tokens && token.tokens.length > 0) {
-					result += renderInlineTokens(token.tokens, mdTheme, applyText);
-				} else {
-					result += applyText(token.text);
-				}
+				result +=
+					token.tokens && token.tokens.length > 0
+						? renderInlineTokens(token.tokens, mdTheme, applyText)
+						: applyText(token.text);
 				break;
 			case "strong":
 				result += mdTheme.bold(renderInlineTokens(token.tokens || [], mdTheme, applyText)) + styleReset;

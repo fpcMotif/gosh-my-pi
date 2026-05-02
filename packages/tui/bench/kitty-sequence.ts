@@ -30,12 +30,9 @@ function bench(name: string, fn: () => void): number {
 		fn();
 	}
 	const elapsed = (Bun.nanoseconds() - start) / 1e6;
-	const perOp = (elapsed / ITERATIONS).toFixed(6);
-	console.log(`${name}: ${elapsed.toFixed(2)}ms total (${perOp}ms/op)`);
+
 	return elapsed;
 }
-
-console.log(`Kitty sequence match benchmark (${ITERATIONS} iterations)\n`);
 
 bench("js/parse+match", () => {
 	for (const sample of samples) {

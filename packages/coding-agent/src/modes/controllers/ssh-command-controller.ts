@@ -180,12 +180,12 @@ export class SSHCommandController {
 			return;
 		}
 
-		if (!name) {
+		if (name === null || name === undefined || name === "") {
 			this.ctx.showError("Host name required. Usage: /ssh add <name> --host <host> ...");
 			return;
 		}
 
-		if (!host) {
+		if (host === null || host === undefined || host === "") {
 			this.ctx.showError("--host is required. Usage: /ssh add <name> --host <host> ...");
 			return;
 		}
@@ -195,10 +195,11 @@ export class SSHCommandController {
 			const filePath = getSSHConfigPath(scope, cwd);
 
 			const hostConfig: SSHHostConfig = { host };
-			if (username) hostConfig.username = username;
-			if (port) hostConfig.port = port;
-			if (keyPath) hostConfig.keyPath = keyPath;
-			if (description) hostConfig.description = description;
+			if (username !== null && username !== undefined && username !== "") hostConfig.username = username;
+			if (port !== null && port !== undefined && port !== 0) hostConfig.port = port;
+			if (keyPath !== null && keyPath !== undefined && keyPath !== "") hostConfig.keyPath = keyPath;
+			if (description !== null && description !== undefined && description !== "")
+				hostConfig.description = description;
 			if (compat) hostConfig.compat = true;
 
 			await addSSHHost(filePath, name, hostConfig);
@@ -210,10 +211,11 @@ export class SSHCommandController {
 				"",
 				`  Host: ${host}`,
 			];
-			if (username) lines.push(`  User: ${username}`);
-			if (port) lines.push(`  Port: ${port}`);
-			if (keyPath) lines.push(`  Key:  ${keyPath}`);
-			if (description) lines.push(`  Desc: ${description}`);
+			if (username !== null && username !== undefined && username !== "") lines.push(`  User: ${username}`);
+			if (port !== null && port !== undefined && port !== 0) lines.push(`  Port: ${port}`);
+			if (keyPath !== null && keyPath !== undefined && keyPath !== "") lines.push(`  Key:  ${keyPath}`);
+			if (description !== null && description !== undefined && description !== "")
+				lines.push(`  Desc: ${description}`);
 			if (compat) lines.push(`  Compat: true`);
 			lines.push("");
 			lines.push(theme.fg("muted", `Run ${theme.fg("accent", "/ssh list")} to see all configured hosts.`));
@@ -345,9 +347,11 @@ export class SSHCommandController {
 	 */
 	#formatHostDetails(config: { host?: string; username?: string; port?: number }): string {
 		const parts: string[] = [];
-		if (config.host) parts.push(config.host);
-		if (config.username) parts.push(`user=${config.username}`);
-		if (config.port && config.port !== 22) parts.push(`port=${config.port}`);
+		if (config.host !== null && config.host !== undefined && config.host !== "") parts.push(config.host);
+		if (config.username !== null && config.username !== undefined && config.username !== "")
+			parts.push(`user=${config.username}`);
+		if (config.port !== null && config.port !== undefined && config.port !== 0 && config.port !== 22)
+			parts.push(`port=${config.port}`);
 		return theme.fg("dim", parts.length > 0 ? `[${parts.join(", ")}]` : "");
 	}
 
@@ -384,7 +388,7 @@ export class SSHCommandController {
 			return;
 		}
 
-		if (!name) {
+		if (name === null || name === undefined || name === "") {
 			this.ctx.showError("Host name required. Usage: /ssh remove <name> [--scope project|user]");
 			return;
 		}

@@ -41,7 +41,7 @@ export function getSessionAccentHexForTitle(
 	name: string | undefined,
 	titleSource: "auto" | "user" | undefined,
 ): string | undefined {
-	if (!name || titleSource === "auto") return undefined;
+	if (name === null || name === undefined || name === "" || titleSource === "auto") return undefined;
 	return getSessionAccentHex(name);
 }
 
@@ -50,6 +50,6 @@ export function getSessionAccentHexForTitle(
  * Returns `undefined` if `hex` is nullish or Bun.color conversion fails.
  */
 export function getSessionAccentAnsi(hex: string | undefined): string | undefined {
-	if (!hex) return undefined;
+	if (hex === null || hex === undefined || hex === "") return undefined;
 	return Bun.color(hex, "ansi-16m") ?? undefined;
 }

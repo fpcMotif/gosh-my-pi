@@ -362,10 +362,8 @@ describe("SearchToolBm25Tool", () => {
 	it("rejects invalid input", async () => {
 		const tool = new SearchToolBm25Tool(createSession(discoverableTools));
 
-		await expect(tool.execute("call-empty", { query: "   " })).rejects.toThrow(
-			"Query is required and must not be empty.",
-		);
-		await expect(tool.execute("call-limit", { query: "github", limit: 0 as never })).rejects.toThrow(
+		expect(tool.execute("call-empty", { query: "   " })).rejects.toThrow("Query is required and must not be empty.");
+		expect(tool.execute("call-limit", { query: "github", limit: 0 as never })).rejects.toThrow(
 			"Limit must be a positive integer.",
 		);
 	});
@@ -378,8 +376,6 @@ describe("SearchToolBm25Tool", () => {
 			}),
 		);
 
-		await expect(tool.execute("call-disabled", { query: "github" })).rejects.toThrow(
-			"MCP tool discovery is disabled.",
-		);
+		expect(tool.execute("call-disabled", { query: "github" })).rejects.toThrow("MCP tool discovery is disabled.");
 	});
 });

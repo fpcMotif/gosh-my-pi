@@ -75,7 +75,7 @@ export const handleVimeo: SpecialHandler = async (url: string, timeout: number, 
 		if (!parsed.hostname.includes("vimeo.com")) return null;
 
 		const videoId = extractVideoId(url);
-		if (!videoId) return null;
+		if (videoId === null || videoId === undefined || videoId === "") return null;
 
 		const fetchedAt = new Date().toISOString();
 
@@ -99,7 +99,7 @@ export const handleVimeo: SpecialHandler = async (url: string, timeout: number, 
 
 		md += `**Video ID:** ${videoId}\n\n`;
 
-		if (oembed.description) {
+		if (oembed.description !== null && oembed.description !== undefined && oembed.description !== "") {
 			md += `---\n\n## Description\n\n${oembed.description}\n\n`;
 		}
 

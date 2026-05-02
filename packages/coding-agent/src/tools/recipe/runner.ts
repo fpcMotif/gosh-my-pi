@@ -150,11 +150,11 @@ export interface ResolvedTask {
 export function resolveCommand(op: string, runners: DetectedRunner[]): ResolvedTask {
 	const { runner, task, tail } = resolveRunnerAndTask(op, runners);
 	const command = buildCommand(task.commandPrefix ?? runner.commandPrefix, task.commandName ?? task.name, tail);
-	return task.cwd ? { command, cwd: task.cwd } : { command };
+	return task.cwd !== null && task.cwd !== undefined && task.cwd !== "" ? { command, cwd: task.cwd } : { command };
 }
 
 export function resolveTaskFromOp(op: string | undefined, runners: DetectedRunner[]): ResolvedTask | undefined {
-	if (!op) return undefined;
+	if (op === null || op === undefined || op === "") return undefined;
 	try {
 		return resolveCommand(op, runners);
 	} catch {
@@ -171,7 +171,7 @@ export function cwdFromOp(op: string | undefined, runners: DetectedRunner[]): st
 }
 
 export function titleFromOp(op: string | undefined, runners: DetectedRunner[]): string {
-	if (!op) return "Run";
+	if (op === null || op === undefined || op === "") return "Run";
 	const { head } = parseOp(op);
 	if (!head) return "Run";
 	const colonIndex = head.indexOf(":");
@@ -188,7 +188,8 @@ function findAmbiguityExample(runners: DetectedRunner[]): { runner: string; task
 	for (const runner of runners) {
 		for (const task of runner.tasks) {
 			const previousRunner = seen.get(task.name);
-			if (previousRunner) return { runner: previousRunner, task: task.name };
+			if (previousRunner !== null && previousRunner !== undefined && previousRunner !== "")
+				return { runner: previousRunner, task: task.name };
 			seen.set(task.name, runner.id);
 		}
 	}

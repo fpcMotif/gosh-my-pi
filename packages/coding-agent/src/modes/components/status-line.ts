@@ -127,7 +127,7 @@ export class StatusLineComponent implements Component {
 		}
 
 		const gitHeadPath = git.repo.resolveSync(getProjectDir())?.headPath ?? null;
-		if (!gitHeadPath) return;
+		if (gitHeadPath === null || gitHeadPath === undefined || gitHeadPath === "") return;
 
 		try {
 			this.#gitWatcher = fs.watch(gitHeadPath, () => {
@@ -178,9 +178,9 @@ export class StatusLineComponent implements Component {
 	#isDefaultBranch(branch: string): boolean {
 		if (this.#defaultBranch === undefined) {
 			this.#defaultBranch = "main";
-			(async () => {
+			void (async () => {
 				const resolved = await git.branch.default(getProjectDir());
-				if (resolved) {
+				if (resolved !== null && resolved !== undefined && resolved !== "") {
 					this.#defaultBranch = resolved;
 					if (this.#onBranchChange) {
 						this.#onBranchChange();
@@ -198,7 +198,7 @@ export class StatusLineComponent implements Component {
 
 		this.#gitStatusInFlight = true;
 
-		(async () => {
+		void (async () => {
 			try {
 				this.#cachedGitStatus = await git.status.summary(getProjectDir());
 			} catch {
@@ -214,7 +214,10 @@ export class StatusLineComponent implements Component {
 
 	#lookupPr(): { number: number; url: string } | null {
 		const branch = this.#getCurrentBranch();
-		const currentContext = branch ? createPrCacheContext(branch, this.#cachedBranchRepoId ?? null) : null;
+		const currentContext =
+			branch !== null && branch !== undefined && branch !== ""
+				? createPrCacheContext(branch, this.#cachedBranchRepoId ?? null)
+				: null;
 
 		if (canReuseCachedPr(this.#cachedPr, this.#cachedPrContext, currentContext)) {
 			return this.#cachedPr ?? null;
@@ -223,7 +226,14 @@ export class StatusLineComponent implements Component {
 		const stalePr = this.#cachedPr;
 
 		// Don't look up if no branch, detached HEAD, default branch, or already in flight
-		if (!branch || branch === "detached" || this.#isDefaultBranch(branch) || this.#prLookupInFlight) {
+		if (
+			branch === null ||
+			branch === undefined ||
+			branch === "" ||
+			branch === "detached" ||
+			this.#isDefaultBranch(branch) ||
+			this.#prLookupInFlight
+		) {
 			return stalePr ?? null;
 		}
 
@@ -231,13 +241,14 @@ export class StatusLineComponent implements Component {
 		const lookupContext = currentContext;
 
 		// Fire async lookup, keep stale value visible until resolved
-		(async () => {
+		void (async () => {
 			// Helper: only write cache if branch/repo context hasn't changed since launch
 			const setCachedPr = (value: { number: number; url: string } | null) => {
 				const latestBranch = this.#getCurrentBranch();
-				const latestContext = latestBranch
-					? createPrCacheContext(latestBranch, this.#cachedBranchRepoId ?? null)
-					: undefined;
+				const latestContext =
+					latestBranch !== null && latestBranch !== undefined && latestBranch !== ""
+						? createPrCacheContext(latestBranch, this.#cachedBranchRepoId ?? null)
+						: undefined;
 				if (lookupContext && isSamePrCacheContext(latestContext, lookupContext)) {
 					this.#cachedPr = value;
 					this.#cachedPrContext = lookupContext;
@@ -486,11 +497,12 @@ export class StatusLineComponent implements Component {
 			if (parts.length === 0) return "";
 			const sep = direction === "left" ? separatorDef.left : separatorDef.right;
 			const cap = separatorDef.endCaps
-				? direction === "left"
+				? (direction === "left"
 					? separatorDef.endCaps.right
-					: separatorDef.endCaps.left
+					: separatorDef.endCaps.left)
 				: "";
-			const capPrefix = separatorDef.endCaps?.useBgAsFg ? bgAnsi.replace("\x1b[48;", "\x1b[38;") : bgAnsi + sepAnsi;
+			const capPrefix =
+				separatorDef.endCaps?.useBgAsFg === true ? bgAnsi.replace("\x1b[48;", "\x1b[38;") : bgAnsi + sepAnsi;
 			const capText = cap ? `${capPrefix}${cap}\x1b[0m` : "";
 
 			let content = bgAnsi + fgAnsi;

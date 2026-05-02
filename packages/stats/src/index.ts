@@ -149,5 +149,5 @@ Examples:
 
 // Run if executed directly
 if (import.meta.main) {
-	main();
+	void main();
 }

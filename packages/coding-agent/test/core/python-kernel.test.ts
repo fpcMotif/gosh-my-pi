@@ -329,11 +329,11 @@ describe("PythonKernel (external gateway)", () => {
 		});
 
 		const kernel = await kernelPromise;
-		await expect(kernel.shutdown()).resolves.toEqual({ confirmed: false });
+		expect(kernel.shutdown()).resolves.toEqual({ confirmed: false });
 		expect(deleteAttempts).toBe(1);
-		await expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
+		expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
 		expect(deleteAttempts).toBe(2);
-		await expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
+		expect(kernel.shutdown()).resolves.toEqual({ confirmed: true });
 		expect(deleteAttempts).toBe(2);
 	});
 

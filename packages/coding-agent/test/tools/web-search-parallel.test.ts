@@ -105,7 +105,7 @@ describe("Parallel web search", () => {
 
 	it("surfaces plain-text Parallel API errors", async () => {
 		using _hook = hookFetch(() => new Response("upstream unavailable", { status: 503 }));
-		await expect(searchParallel({ query: "broken" })).rejects.toMatchObject({
+		expect(searchParallel({ query: "broken" })).rejects.toMatchObject({
 			provider: "parallel",
 			status: 503,
 			message: "Parallel API error (503): upstream unavailable",

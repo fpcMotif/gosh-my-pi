@@ -273,7 +273,7 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 		.map((m): Message | undefined => {
 			switch (m.role) {
 				case "bashExecution":
-					if (m.excludeFromContext) {
+					if (m.excludeFromContext === true) {
 						return undefined;
 					}
 					return {
@@ -283,7 +283,7 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 						timestamp: m.timestamp,
 					};
 				case "pythonExecution":
-					if (m.excludeFromContext) {
+					if (m.excludeFromContext === true) {
 						return undefined;
 					}
 					return {

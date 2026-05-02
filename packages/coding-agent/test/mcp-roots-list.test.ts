@@ -44,8 +44,8 @@ describe("message classification", () => {
 
 	function classify(message: Record<string, unknown>): "request" | "response" | "notification" | "unknown" {
 		// Mirrors the classification in StdioTransport.#handleMessage
-		if ("method" in message && "id" in message && message.id != null) return "request";
-		if ("id" in message && message.id != null) return "response";
+		if ("method" in message && "id" in message && message.id !== null) return "request";
+		if ("id" in message && message.id !== null) return "response";
 		if ("method" in message) return "notification";
 		return "unknown";
 	}

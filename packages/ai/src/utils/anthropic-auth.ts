@@ -37,15 +37,15 @@ const DEFAULT_BASE_URL = "https://api.anthropic.com";
 
 function normalizeBaseUrl(baseUrl: string | undefined): string | undefined {
 	const trimmed = baseUrl?.trim();
-	return trimmed ? trimmed.replace(/\/+$/, "") : undefined;
+	return trimmed !== null && trimmed !== undefined && trimmed !== "" ? trimmed.replace(/\/+$/, "") : undefined;
 }
 function resolveAnthropicBaseUrlFromEnv(): string | undefined {
 	if (isFoundryEnabled()) {
 		const foundryBaseUrl = normalizeBaseUrl($env.FOUNDRY_BASE_URL);
-		if (foundryBaseUrl) return foundryBaseUrl;
+		if (foundryBaseUrl !== null && foundryBaseUrl !== undefined && foundryBaseUrl !== "") return foundryBaseUrl;
 	}
 	const anthropicBaseUrl = normalizeBaseUrl($env.ANTHROPIC_BASE_URL);
-	return anthropicBaseUrl || undefined;
+	return anthropicBaseUrl ?? undefined;
 }
 
 /**
@@ -123,7 +123,7 @@ export async function findAnthropicAuth(store?: AuthCredentialStore): Promise<An
 
 	// 2. Foundry explicit env override
 	const foundryApiKey = isFoundryEnabled() ? $env.ANTHROPIC_FOUNDRY_API_KEY?.trim() : undefined;
-	if (foundryApiKey) {
+	if (foundryApiKey !== null && foundryApiKey !== undefined && foundryApiKey !== "") {
 		return {
 			apiKey: foundryApiKey,
 			baseUrl: resolveAnthropicBaseUrlFromEnv() ?? DEFAULT_BASE_URL,
@@ -152,7 +152,7 @@ export async function findAnthropicAuth(store?: AuthCredentialStore): Promise<An
 
 		// 4. API key credentials in agent.db
 		const storedApiKey = effectiveStore.getApiKey("anthropic");
-		if (storedApiKey) {
+		if (storedApiKey !== null && storedApiKey !== undefined && storedApiKey !== "") {
 			return {
 				apiKey: storedApiKey,
 				baseUrl: resolveAnthropicBaseUrlFromEnv() ?? DEFAULT_BASE_URL,
@@ -168,7 +168,7 @@ export async function findAnthropicAuth(store?: AuthCredentialStore): Promise<An
 	// 5. Generic ANTHROPIC_API_KEY fallback
 	const apiKey = getEnvApiKey("anthropic");
 	const baseUrl = resolveAnthropicBaseUrlFromEnv();
-	if (apiKey) {
+	if (apiKey !== null && apiKey !== undefined && apiKey !== "") {
 		return {
 			apiKey,
 			baseUrl: baseUrl ?? DEFAULT_BASE_URL,

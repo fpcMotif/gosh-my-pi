@@ -124,7 +124,7 @@ export async function fetchCodexModels(options: CodexModelDiscoveryOptions): Pro
 		}
 		sawSuccessfulResponse = true;
 		const etag = getResponseEtag(response.headers);
-		return etag ? { models, etag } : { models };
+		return etag !== null && etag !== undefined && etag !== "" ? { models, etag } : { models };
 	}
 	return sawSuccessfulResponse ? { models: [] } : null;
 }
@@ -150,7 +150,12 @@ function normalizePaths(paths: readonly string[] | undefined): string[] {
 
 function buildModelsUrl(baseUrl: string, path: string, clientVersion: string | undefined): string {
 	const url = new URL(`${baseUrl}${path}`);
-	if (clientVersion && clientVersion.trim().length > 0) {
+	if (
+		clientVersion !== null &&
+		clientVersion !== undefined &&
+		clientVersion !== "" &&
+		clientVersion.trim().length > 0
+	) {
 		url.searchParams.set("client_version", clientVersion.trim());
 	}
 	return url.toString();
@@ -159,7 +164,12 @@ function buildModelsUrl(baseUrl: string, path: string, clientVersion: string | u
 function buildCodexHeaders(options: CodexModelDiscoveryOptions): Headers {
 	const headers = new Headers(options.headers);
 	headers.set("Authorization", `Bearer ${options.accessToken}`);
-	if (options.accountId && options.accountId.trim().length > 0) {
+	if (
+		options.accountId !== null &&
+		options.accountId !== undefined &&
+		options.accountId !== "" &&
+		options.accountId.trim().length > 0
+	) {
 		headers.set(OPENAI_HEADERS.ACCOUNT_ID, options.accountId);
 	}
 	headers.set(OPENAI_HEADERS.BETA, OPENAI_HEADER_VALUES.BETA_RESPONSES);
@@ -174,7 +184,7 @@ async function resolveCodexClientVersion(
 	signal: AbortSignal | undefined,
 ): Promise<string> {
 	const normalizedClientVersion = normalizeClientVersion(clientVersion);
-	if (normalizedClientVersion) {
+	if (normalizedClientVersion !== null && normalizedClientVersion !== undefined && normalizedClientVersion !== "") {
 		return normalizedClientVersion;
 	}
 	try {
@@ -248,7 +258,7 @@ function normalizeCodexModelEntry(entry: unknown, baseUrl: string): NormalizedCo
 
 	const payload: CodexModelEntry = parsedEntry.data;
 	const slug = toNonEmptyString(payload.slug) ?? toNonEmptyString(payload.id);
-	if (!slug) {
+	if (slug === null || slug === undefined || slug === "") {
 		return null;
 	}
 
@@ -286,7 +296,7 @@ function normalizeCodexModelEntry(entry: unknown, baseUrl: string): NormalizedCo
 
 function supportsReasoning(defaultReasoningLevel: unknown, supportedReasoningLevels: unknown): boolean {
 	const defaultLevel = toNonEmptyString(defaultReasoningLevel)?.toLowerCase();
-	if (defaultLevel && defaultLevel !== "none") {
+	if (defaultLevel !== null && defaultLevel !== undefined && defaultLevel !== "" && defaultLevel !== "none") {
 		return true;
 	}
 
@@ -300,7 +310,7 @@ function supportsReasoning(defaultReasoningLevel: unknown, supportedReasoningLev
 			continue;
 		}
 		const effort = toNonEmptyString(parsedLevel.data.effort)?.toLowerCase();
-		if (effort && effort !== "none") {
+		if (effort !== null && effort !== undefined && effort !== "" && effort !== "none") {
 			return true;
 		}
 	}
@@ -331,7 +341,7 @@ function normalizeInputModalities(inputModalities: unknown): ("text" | "image")[
 
 function getResponseEtag(headers: Headers): string | undefined {
 	const etag = headers.get("etag");
-	if (!etag) {
+	if (etag === null || etag === undefined || etag === "") {
 		return undefined;
 	}
 	const trimmed = etag.trim();

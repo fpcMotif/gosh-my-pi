@@ -121,7 +121,7 @@ export type ShutdownHandler = () => void;
  * Returns true if the event was emitted, false if there were no handlers.
  */
 export async function emitSessionShutdownEvent(extensionRunner: ExtensionRunner | undefined): Promise<boolean> {
-	if (extensionRunner?.hasHandlers("session_shutdown")) {
+	if (extensionRunner?.hasHandlers("session_shutdown") === true) {
 		await extensionRunner.emit({
 			type: "session_shutdown",
 		});
@@ -353,7 +353,7 @@ export class ExtensionRunner {
 		const commands = new Map<string, RegisteredCommand>();
 		for (const ext of this.extensions) {
 			for (const command of ext.commands.values()) {
-				if (reserved?.has(command.name)) {
+				if (reserved?.has(command.name) === true) {
 					const message = `Extension command '${command.name}' from ${ext.path} conflicts with built-in commands. Skipping.`;
 					this.#commandDiagnostics.push({ type: "warning", message, path: ext.path });
 					if (!this.hasUI()) {
@@ -446,19 +446,19 @@ export class ExtensionRunner {
 				try {
 					const handlerResult = await handler(event, ctx);
 
-					if (this.#isSessionBeforeEvent(event) && handlerResult) {
+					if (this.#isSessionBeforeEvent(event) && handlerResult !== null && handlerResult !== undefined) {
 						result = handlerResult as SessionBeforeEventResult;
-						if (result.cancel) {
+						if (result.cancel === true) {
 							return result as RunnerEmitResult<TEvent>;
 						}
 					}
 
-					if (event.type === "session.compacting" && handlerResult) {
+					if (event.type === "session.compacting" && handlerResult !== null && handlerResult !== undefined) {
 						result = handlerResult as SessionCompactingResult;
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					const stack = error instanceof Error ? error.stack : undefined;
 					this.emitError({
 						extensionPath: ext.path,
 						event: event.type,
@@ -498,9 +498,9 @@ export class ExtensionRunner {
 						currentEvent.isError = handlerResult.isError;
 						modified = true;
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					const stack = error instanceof Error ? error.stack : undefined;
 					this.emitError({
 						extensionPath: ext.path,
 						event: "tool_result",
@@ -532,15 +532,15 @@ export class ExtensionRunner {
 				try {
 					const handlerResult = await handler(event, ctx);
 
-					if (handlerResult) {
+					if (handlerResult !== null && handlerResult !== undefined) {
 						result = handlerResult as ToolCallEventResult;
-						if (result.block) {
+						if (result.block === true) {
 							return result;
 						}
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					const stack = error instanceof Error ? error.stack : undefined;
 					this.emitError({
 						extensionPath: ext.path,
 						event: "tool_call",
@@ -576,12 +576,12 @@ export class ExtensionRunner {
 			for (const handler of handlers) {
 				try {
 					const handlerResult = await handler(event, ctx);
-					if (handlerResult) {
+					if (handlerResult !== null && handlerResult !== undefined) {
 						return handlerResult as R;
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					const stack = error instanceof Error ? error.stack : undefined;
 					this.emitError({
 						extensionPath: ext.path,
 						event: eventName,
@@ -618,18 +618,30 @@ export class ExtensionRunner {
 					const handlerResult = await handler(event, ctx);
 					const result = handlerResult as ResourcesDiscoverResult | undefined;
 
-					if (result?.skillPaths?.length) {
+					if (
+						result?.skillPaths?.length !== null &&
+						result?.skillPaths?.length !== undefined &&
+						result?.skillPaths?.length !== 0
+					) {
 						skillPaths.push(...result.skillPaths.map(path => ({ path, extensionPath: ext.path })));
 					}
-					if (result?.promptPaths?.length) {
+					if (
+						result?.promptPaths?.length !== null &&
+						result?.promptPaths?.length !== undefined &&
+						result?.promptPaths?.length !== 0
+					) {
 						promptPaths.push(...result.promptPaths.map(path => ({ path, extensionPath: ext.path })));
 					}
-					if (result?.themePaths?.length) {
+					if (
+						result?.themePaths?.length !== null &&
+						result?.themePaths?.length !== undefined &&
+						result?.themePaths?.length !== 0
+					) {
 						themePaths.push(...result.themePaths.map(path => ({ path, extensionPath: ext.path })));
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					const stack = error instanceof Error ? error.stack : undefined;
 					this.emitError({
 						extensionPath: ext.path,
 						event: "resources_discover",
@@ -658,17 +670,17 @@ export class ExtensionRunner {
 				try {
 					const event: InputEvent = { type: "input", text: currentText, images: currentImages, source };
 					const result = (await handler(event, ctx)) as InputEventResult | undefined;
-					if (result?.handled) return result;
+					if (result?.handled === true) return result;
 					if (result?.text !== undefined) {
 						currentText = result.text;
 						currentImages = result.images ?? currentImages;
 					}
-				} catch (err) {
+				} catch (error) {
 					this.emitError({
 						extensionPath: ext.path,
 						event: "input",
-						error: err instanceof Error ? err.message : String(err),
-						stack: err instanceof Error ? err.stack : undefined,
+						error: error instanceof Error ? error.message : String(error),
+						stack: error instanceof Error ? error.stack : undefined,
 					});
 				}
 			}
@@ -708,12 +720,16 @@ export class ExtensionRunner {
 					const event: ContextEvent = { type: "context", messages: currentMessages };
 					const handlerResult = await handler(event, ctx);
 
-					if (handlerResult && (handlerResult as ContextEventResult).messages) {
+					if (
+						handlerResult !== null &&
+						handlerResult !== undefined &&
+						(handlerResult as ContextEventResult).messages
+					) {
 						currentMessages = (handlerResult as ContextEventResult).messages!;
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					const stack = error instanceof Error ? error.stack : undefined;
 					this.emitError({
 						extensionPath: ext.path,
 						event: "context",
@@ -745,9 +761,9 @@ export class ExtensionRunner {
 					if (handlerResult !== undefined) {
 						currentPayload = handlerResult;
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					const stack = error instanceof Error ? error.stack : undefined;
 					this.emitError({
 						extensionPath: ext.path,
 						event: "before_provider_request",
@@ -778,9 +794,9 @@ export class ExtensionRunner {
 						metadata: response.metadata,
 					};
 					await handler(event, ctx);
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					const stack = error instanceof Error ? error.stack : undefined;
 					this.emitError({
 						extensionPath: ext.path,
 						event: "after_provider_response",
@@ -816,7 +832,7 @@ export class ExtensionRunner {
 					};
 					const handlerResult = await handler(event, ctx);
 
-					if (handlerResult) {
+					if (handlerResult !== null && handlerResult !== undefined) {
 						const result = handlerResult as BeforeAgentStartEventResult;
 						if (result.message) {
 							messages.push(result.message);
@@ -826,9 +842,9 @@ export class ExtensionRunner {
 							systemPromptModified = true;
 						}
 					}
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					const stack = err instanceof Error ? err.stack : undefined;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					const stack = error instanceof Error ? error.stack : undefined;
 					this.emitError({
 						extensionPath: ext.path,
 						event: "before_agent_start",

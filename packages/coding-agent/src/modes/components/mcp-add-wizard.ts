@@ -129,7 +129,7 @@ export class MCPAddWizard extends Container {
 		this.#onOAuthCallback = onOAuth ?? null;
 		this.#onTestConnectionCallback = onTestConnection ?? null;
 		this.#onRenderCallback = onRender ?? null;
-		if (initialName && initialName.trim().length > 0) {
+		if (initialName !== null && initialName !== undefined && initialName !== "" && initialName.trim().length > 0) {
 			this.#state.name = initialName.trim();
 			this.#currentStep = "transport";
 		}
@@ -233,7 +233,7 @@ export class MCPAddWizard extends Container {
 		this.#contentContainer.addChild(new Spacer(1));
 
 		// Show validation error if any
-		if (this.#validationError) {
+		if (this.#validationError !== null && this.#validationError !== undefined && this.#validationError !== "") {
 			this.#contentContainer.addChild(new Text(theme.fg("error", `✗ ${sanitize(this.#validationError)}`), 0, 0));
 			this.#contentContainer.addChild(new Spacer(1));
 		}
@@ -308,7 +308,7 @@ export class MCPAddWizard extends Container {
 		this.#contentContainer.addChild(new Spacer(1));
 
 		// Show validation error if any
-		if (this.#validationError) {
+		if (this.#validationError !== null && this.#validationError !== undefined && this.#validationError !== "") {
 			this.#contentContainer.addChild(new Text(theme.fg("error", `✗ ${sanitize(this.#validationError)}`), 0, 0));
 			this.#contentContainer.addChild(new Spacer(1));
 		}
@@ -489,7 +489,6 @@ export class MCPAddWizard extends Container {
 		}
 		if (matchesKey(keyData, "down")) {
 			this.#moveSelection(1);
-			return;
 		}
 	}
 
@@ -502,7 +501,7 @@ export class MCPAddWizard extends Container {
 			case "name": {
 				// Validate server name
 				const nameError = validateServerName(value);
-				if (nameError) {
+				if (nameError !== null && nameError !== undefined && nameError !== "") {
 					this.#validationError = nameError;
 					this.#renderStep();
 					return;
@@ -704,7 +703,7 @@ export class MCPAddWizard extends Container {
 			case "command":
 			case "url":
 				this.#currentStep = "transport";
-				this.#selectedIndex = this.#state.transport === "stdio" ? 0 : this.#state.transport === "http" ? 1 : 2;
+				this.#selectedIndex = this.#state.transport === "stdio" ? 0 : (this.#state.transport === "http" ? 1 : 2);
 				break;
 			case "args":
 				this.#currentStep = "command";
@@ -963,8 +962,8 @@ export class MCPAddWizard extends Container {
 				if (oauth) {
 					this.#state.oauthAuthUrl = oauth.authorizationUrl;
 					this.#state.oauthTokenUrl = oauth.tokenUrl;
-					this.#state.oauthClientId = oauth.clientId || "";
-					this.#state.oauthScopes = oauth.scopes || "";
+					this.#state.oauthClientId = oauth.clientId ?? "";
+					this.#state.oauthScopes = oauth.scopes ?? "";
 					this.#state.authMethod = "oauth";
 
 					this.#contentContainer.clear();
@@ -1039,7 +1038,7 @@ export class MCPAddWizard extends Container {
 
 			if (includeAuth && this.#state.authMethod === "manual" && this.#state.apiKey) {
 				config.env = {
-					...(config.env ?? {}),
+					...config.env,
 					[this.#state.envVarName || "API_KEY"]: this.#state.apiKey,
 				};
 			}
@@ -1068,13 +1067,13 @@ export class MCPAddWizard extends Container {
 			if (this.#state.authLocation === "env") {
 				// For HTTP with env location, store in headers using the env var name as-is
 				config.headers = {
-					...(config.headers ?? {}),
+					...config.headers,
 					[this.#state.headerName || "Authorization"]: this.#state.apiKey,
 				};
 			} else {
 				const headerName = this.#state.headerName || "Authorization";
 				config.headers = {
-					...(config.headers ?? {}),
+					...config.headers,
 					[headerName]: this.#state.apiKey,
 				};
 			}

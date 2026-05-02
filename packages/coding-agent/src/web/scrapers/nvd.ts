@@ -109,7 +109,7 @@ export const handleNvd: SpecialHandler = async (
 		let md = `# ${vuln.id}\n\n`;
 
 		// Status and dates
-		if (vuln.vulnStatus) {
+		if (vuln.vulnStatus !== null && vuln.vulnStatus !== undefined && vuln.vulnStatus !== "") {
 			md += `**Status:** ${vuln.vulnStatus}\n`;
 		}
 		md += `**Published:** ${formatIsoDate(vuln.published)}`;
@@ -117,7 +117,7 @@ export const handleNvd: SpecialHandler = async (
 
 		// Description
 		const desc = vuln.descriptions.find(d => d.lang === "en")?.value;
-		if (desc) {
+		if (desc !== null && desc !== undefined && desc !== "") {
 			md += `## Description\n\n${desc}\n\n`;
 		}
 
@@ -155,7 +155,8 @@ export const handleNvd: SpecialHandler = async (
 				const data = cvss2.cvssData as CvssV2;
 				md += `### CVSS 2.0\n\n`;
 				md += `- **Base Score:** ${data.baseScore}`;
-				if (data.severity) md += ` (${data.severity})`;
+				if (data.severity !== null && data.severity !== undefined && data.severity !== "")
+					md += ` (${data.severity})`;
 				md += `\n- **Vector:** \`${data.vectorString}\`\n\n`;
 			}
 		}
@@ -165,7 +166,7 @@ export const handleNvd: SpecialHandler = async (
 			?.flatMap(w => w.description)
 			.filter(d => d.lang === "en" && d.value !== "NVD-CWE-Other" && d.value !== "NVD-CWE-noinfo");
 
-		if (cwes?.length) {
+		if (cwes?.length !== null && cwes?.length !== undefined && cwes?.length !== 0) {
 			md += `## Weaknesses\n\n`;
 			for (const cwe of cwes) {
 				md += `- ${cwe.value}\n`;
@@ -188,10 +189,13 @@ export const handleNvd: SpecialHandler = async (
 		}
 
 		// References
-		if (vuln.references?.length) {
+		if (vuln.references?.length !== null && vuln.references?.length !== undefined && vuln.references?.length !== 0) {
 			md += `## References\n\n`;
 			for (const ref of vuln.references.slice(0, 15)) {
-				const tags = ref.tags?.length ? ` (${ref.tags.join(", ")})` : "";
+				const tags =
+					ref.tags?.length !== null && ref.tags?.length !== undefined && ref.tags?.length !== 0
+						? ` (${ref.tags.join(", ")})`
+						: "";
 				md += `- ${ref.url}${tags}\n`;
 			}
 			if (vuln.references.length > 15) {

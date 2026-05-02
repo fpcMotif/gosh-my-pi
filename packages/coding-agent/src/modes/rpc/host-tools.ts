@@ -20,19 +20,19 @@ type PendingHostToolCall = {
 };
 
 function isAgentToolResult(value: unknown): value is AgentToolResult<unknown> {
-	if (!value || typeof value !== "object") return false;
+	if (value === null || value === undefined || typeof value !== "object") return false;
 	const content = (value as { content?: unknown }).content;
 	return Array.isArray(content);
 }
 
 export function isRpcHostToolResult(value: unknown): value is RpcHostToolResult {
-	if (!value || typeof value !== "object") return false;
+	if (value === null || value === undefined || typeof value !== "object") return false;
 	const frame = value as { type?: unknown; id?: unknown; result?: unknown };
 	return frame.type === "host_tool_result" && typeof frame.id === "string" && isAgentToolResult(frame.result);
 }
 
 export function isRpcHostToolUpdate(value: unknown): value is RpcHostToolUpdate {
-	if (!value || typeof value !== "object") return false;
+	if (value === null || value === undefined || typeof value !== "object") return false;
 	const frame = value as { type?: unknown; id?: unknown; partialResult?: unknown };
 	return frame.type === "host_tool_update" && typeof frame.id === "string" && isAgentToolResult(frame.partialResult);
 }
@@ -95,7 +95,7 @@ export class RpcHostToolBridge {
 		const pending = this.#pendingCalls.get(frame.id);
 		if (!pending) return false;
 		this.#pendingCalls.delete(frame.id);
-		if (frame.isError) {
+		if (frame.isError === true) {
 			const text = frame.result.content
 				.filter(
 					(item): item is { type: "text"; text: string } => item.type === "text" && typeof item.text === "string",
@@ -124,7 +124,7 @@ export class RpcHostToolBridge {
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback<unknown>,
 	): Promise<AgentToolResult<unknown>> {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			return Promise.reject(new Error(`Host tool "${definition.name}" was aborted`));
 		}
 

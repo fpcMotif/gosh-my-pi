@@ -45,7 +45,7 @@ async function readPluginManifest(root: ClaudePluginRoot): Promise<ClaudePluginM
 
 	try {
 		const parsed = JSON.parse(raw);
-		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+		if (parsed === null || parsed === undefined || typeof parsed !== "object" || Array.isArray(parsed)) return null;
 		return parsed as ClaudePluginManifest;
 	} catch {
 		return null;
@@ -104,7 +104,7 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 	);
 
 	for (const { root, result, warning } of results) {
-		if (warning) warnings.push(warning);
+		if (warning !== null && warning !== undefined && warning !== "") warnings.push(warning);
 		for (const skill of result.items) {
 			if (root.plugin) skill.name = `${root.plugin}:${skill.name}`;
 			items.push(skill);
@@ -147,7 +147,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 	);
 
 	for (const { result, warning } of results) {
-		if (warning) warnings.push(warning);
+		if (warning !== null && warning !== undefined && warning !== "") warnings.push(warning);
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
 	}
@@ -264,7 +264,7 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 			continue;
 		}
 
-		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+		if (parsed === null || parsed === undefined || typeof parsed !== "object" || Array.isArray(parsed)) continue;
 		const obj = parsed as Record<string, unknown>;
 
 		// Two shapes are supported:
@@ -287,7 +287,8 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 		}
 
 		for (const [serverName, serverCfg] of Object.entries(servers)) {
-			if (!serverCfg || typeof serverCfg !== "object" || Array.isArray(serverCfg)) continue;
+			if (serverCfg === null || serverCfg === undefined || typeof serverCfg !== "object" || Array.isArray(serverCfg))
+				continue;
 			const raw = serverCfg as {
 				enabled?: boolean;
 				timeout?: number;

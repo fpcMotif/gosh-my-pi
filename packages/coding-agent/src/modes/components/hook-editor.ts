@@ -53,7 +53,7 @@ export class HookEditorComponent extends Container {
 			this.#editor.setPromptGutter("> ");
 			this.#editor.disableSubmit = true;
 		}
-		if (prefill) {
+		if (prefill !== null && prefill !== undefined && prefill !== "") {
 			this.#editor.setText(prefill);
 		}
 		this.addChild(this.#editor);
@@ -134,7 +134,7 @@ export class HookEditorComponent extends Container {
 
 	async #openExternalEditor(): Promise<void> {
 		const editorCmd = getEditorCommand();
-		if (!editorCmd) return;
+		if (editorCmd === null || editorCmd === undefined || editorCmd === "") return;
 
 		const currentText = this.#editor.getExpandedText();
 		try {

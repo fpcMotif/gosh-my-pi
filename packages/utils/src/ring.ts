@@ -14,8 +14,8 @@ export class RingBuffer<T> {
 	 *
 	 * @param capacity - The maximum number of elements the buffer can hold. Must be positive.
 	 */
-	constructor(public readonly capacity: number) {
-		this.#buf = new Array(capacity);
+	constructor(readonly capacity: number) {
+		this.#buf = Array.from({ length: capacity });
 	}
 
 	/**

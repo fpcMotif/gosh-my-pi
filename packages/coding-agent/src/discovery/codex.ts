@@ -57,7 +57,7 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	// User level only: ~/.codex/AGENTS.md
 	const agentsMd = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "AGENTS.md");
 	const agentsContent = await readFile(agentsMd);
-	if (agentsContent) {
+	if (agentsContent !== null && agentsContent !== undefined && agentsContent !== "") {
 		items.push({
 			path: agentsMd,
 			content: agentsContent,
@@ -112,7 +112,7 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 
 async function loadTomlConfig(_ctx: LoadContext, path: string): Promise<Record<string, unknown> | null> {
 	const content = await readFile(path);
-	if (!content) return null;
+	if (content === null || content === undefined || content === "") return null;
 
 	try {
 		return Bun.TOML.parse(content) as Record<string, unknown>;
@@ -141,7 +141,7 @@ interface CodexMCPConfig {
 
 function extractMCPServersFromToml(toml: Record<string, unknown>): Record<string, Partial<MCPServer>> {
 	// Check for [mcp_servers.*] sections (Codex format)
-	if (!toml.mcp_servers || typeof toml.mcp_servers !== "object") {
+	if (toml.mcp_servers === null || toml.mcp_servers === undefined || typeof toml.mcp_servers !== "object") {
 		return {};
 	}
 
@@ -179,9 +179,13 @@ function extractMCPServersFromToml(toml: Record<string, unknown>): Record<string
 				}
 			}
 		}
-		if (config.bearer_token_env_var) {
+		if (
+			config.bearer_token_env_var !== null &&
+			config.bearer_token_env_var !== undefined &&
+			config.bearer_token_env_var !== ""
+		) {
 			const token = Bun.env[config.bearer_token_env_var];
-			if (token) {
+			if (token !== null && token !== undefined && token !== "") {
 				headers.Authorization = `Bearer ${token}`;
 			}
 		}
@@ -190,9 +194,9 @@ function extractMCPServersFromToml(toml: Record<string, unknown>): Record<string
 		}
 
 		// Determine transport type (infer from config if not explicit)
-		if (config.url) {
+		if (config.url !== null && config.url !== undefined && config.url !== "") {
 			server.transport = "http";
-		} else if (config.command) {
+		} else if (config.command !== null && config.command !== undefined && config.command !== "") {
 			server.transport = "stdio";
 		}
 		// Note: validation of transport vs endpoint is handled by mcpCapability.validate()
@@ -268,7 +272,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 	const transformCommand =
 		(level: "user" | "project") => (name: string, content: string, path: string, source: SourceMeta) => {
 			const { frontmatter, body } = parseFrontmatter(content, { source: path });
-			const commandName = frontmatter.name || name.replace(/\.md$/, "");
+			const commandName = frontmatter.name ?? name.replace(/\.md$/, "");
 			return {
 				name: String(commandName),
 				path,
@@ -306,12 +310,15 @@ async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
 
 	const transformPrompt = (name: string, content: string, path: string, source: SourceMeta) => {
 		const { frontmatter, body } = parseFrontmatter(content, { source: path });
-		const promptName = frontmatter.name || name.replace(/\.md$/, "");
+		const promptName = frontmatter.name ?? name.replace(/\.md$/, "");
 		return {
 			name: String(promptName),
 			path,
 			content: body,
-			description: frontmatter.description ? String(frontmatter.description) : undefined,
+			description:
+				frontmatter.description !== null && frontmatter.description !== undefined
+					? String(frontmatter.description)
+					: undefined,
 			_source: source,
 		};
 	};
@@ -347,7 +354,7 @@ async function loadHooks(ctx: LoadContext): Promise<LoadResult<Hook>> {
 			const baseName = name.replace(/\.(ts|js)$/, "");
 			const match = baseName.match(/^(pre|post)-(.+)$/);
 			const hookType = (match?.[1] as "pre" | "post") || "pre";
-			const toolName = match?.[2] || baseName;
+			const toolName = match?.[2] ?? baseName;
 			return {
 				name,
 				path,

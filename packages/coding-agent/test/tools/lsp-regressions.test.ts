@@ -101,7 +101,7 @@ describe("lsp regressions", () => {
 			const filePath = `${tempDir.path()}/symbol.ts`;
 			await Bun.write(filePath, "winston.info('x');\n");
 
-			await expect(resolveSymbolColumn(filePath, 1, "nonexistent_symbol")).rejects.toThrow(
+			expect(resolveSymbolColumn(filePath, 1, "nonexistent_symbol")).rejects.toThrow(
 				'Symbol "nonexistent_symbol" not found on line 1',
 			);
 		} finally {
@@ -115,7 +115,7 @@ describe("lsp regressions", () => {
 			const filePath = `${tempDir.path()}/symbol.ts`;
 			await Bun.write(filePath, "foo();\n");
 
-			await expect(resolveSymbolColumn(filePath, 1, "foo#2")).rejects.toThrow(
+			expect(resolveSymbolColumn(filePath, 1, "foo#2")).rejects.toThrow(
 				'Symbol "foo" occurrence 2 is out of bounds on line 1 (found 1)',
 			);
 		} finally {

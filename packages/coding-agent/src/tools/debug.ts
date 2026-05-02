@@ -155,7 +155,12 @@ interface DebugToolDetails {
 }
 
 function formatLocation(snapshot: DapSessionSummary | undefined): string | null {
-	if (!snapshot?.source?.path || snapshot.line === undefined) {
+	if (
+		snapshot?.source?.path === null ||
+		snapshot?.source?.path === undefined ||
+		snapshot?.source?.path === "" ||
+		snapshot.line === undefined
+	) {
 		return null;
 	}
 	return `${snapshot.source.path}:${snapshot.line}${snapshot.column !== undefined ? `:${snapshot.column}` : ""}`;
@@ -168,14 +173,21 @@ function formatSessionSnapshot(snapshot: DapSessionSummary): string[] {
 		`Status: ${snapshot.status}`,
 		`CWD: ${snapshot.cwd}`,
 	];
-	if (snapshot.program) lines.push(`Program: ${snapshot.program}`);
-	if (snapshot.stopReason) lines.push(`Stop reason: ${snapshot.stopReason}`);
-	if (snapshot.frameName) lines.push(`Frame: ${snapshot.frameName}`);
-	if (snapshot.instructionPointerReference) {
+	if (snapshot.program !== null && snapshot.program !== undefined && snapshot.program !== "")
+		lines.push(`Program: ${snapshot.program}`);
+	if (snapshot.stopReason !== null && snapshot.stopReason !== undefined && snapshot.stopReason !== "")
+		lines.push(`Stop reason: ${snapshot.stopReason}`);
+	if (snapshot.frameName !== null && snapshot.frameName !== undefined && snapshot.frameName !== "")
+		lines.push(`Frame: ${snapshot.frameName}`);
+	if (
+		snapshot.instructionPointerReference !== null &&
+		snapshot.instructionPointerReference !== undefined &&
+		snapshot.instructionPointerReference !== ""
+	) {
 		lines.push(`Instruction pointer: ${snapshot.instructionPointerReference}`);
 	}
 	const location = formatLocation(snapshot);
-	if (location) lines.push(`Location: ${location}`);
+	if (location !== null && location !== undefined && location !== "") lines.push(`Location: ${location}`);
 	if (snapshot.needsConfigurationDone) {
 		lines.push("Configuration: pending configurationDone; set breakpoints, then continue.");
 	}
@@ -191,7 +203,7 @@ function formatBreakpoints(filePath: string, breakpoints: DapBreakpointRecord[])
 	}
 	for (const breakpoint of breakpoints) {
 		lines.push(
-			`- line ${breakpoint.line}: ${breakpoint.verified ? "verified" : "pending"}${breakpoint.condition ? ` if ${breakpoint.condition}` : ""}${breakpoint.message ? ` (${breakpoint.message})` : ""}`,
+			`- line ${breakpoint.line}: ${breakpoint.verified ? "verified" : "pending"}${breakpoint.condition !== null && breakpoint.condition !== undefined && breakpoint.condition !== "" ? ` if ${breakpoint.condition}` : ""}${breakpoint.message !== null && breakpoint.message !== undefined && breakpoint.message !== "" ? ` (${breakpoint.message})` : ""}`,
 		);
 	}
 	return lines.join("\n");
@@ -205,7 +217,7 @@ function formatFunctionBreakpoints(breakpoints: DapFunctionBreakpointRecord[]): 
 	}
 	for (const breakpoint of breakpoints) {
 		lines.push(
-			`- ${breakpoint.name}: ${breakpoint.verified ? "verified" : "pending"}${breakpoint.condition ? ` if ${breakpoint.condition}` : ""}${breakpoint.message ? ` (${breakpoint.message})` : ""}`,
+			`- ${breakpoint.name}: ${breakpoint.verified ? "verified" : "pending"}${breakpoint.condition !== null && breakpoint.condition !== undefined && breakpoint.condition !== "" ? ` if ${breakpoint.condition}` : ""}${breakpoint.message !== null && breakpoint.message !== undefined && breakpoint.message !== "" ? ` (${breakpoint.message})` : ""}`,
 		);
 	}
 	return lines.join("\n");
@@ -218,9 +230,10 @@ function formatStackFrames(frames: DapStackFrame[]): string {
 		return lines.join("\n");
 	}
 	for (const frame of frames) {
-		const location = frame.source?.path
-			? `${frame.source.path}:${frame.line}:${frame.column}`
-			: `<unknown>:${frame.line}:${frame.column}`;
+		const location =
+			frame.source?.path !== null && frame.source?.path !== undefined && frame.source?.path !== ""
+				? `${frame.source.path}:${frame.line}:${frame.column}`
+				: `<unknown>:${frame.line}:${frame.column}`;
 		lines.push(`- #${frame.id} ${frame.name} @ ${location}`);
 	}
 	return lines.join("\n");
@@ -246,7 +259,7 @@ function formatScopes(scopes: DapScope[]): string {
 	}
 	for (const scope of scopes) {
 		lines.push(
-			`- ${scope.name}: ref=${scope.variablesReference}, expensive=${scope.expensive ? "yes" : "no"}${scope.presentationHint ? `, hint=${scope.presentationHint}` : ""}`,
+			`- ${scope.name}: ref=${scope.variablesReference}, expensive=${scope.expensive ? "yes" : "no"}${scope.presentationHint !== null && scope.presentationHint !== undefined && scope.presentationHint !== "" ? `, hint=${scope.presentationHint}` : ""}`,
 		);
 	}
 	return lines.join("\n");
@@ -260,14 +273,17 @@ function formatVariables(variables: DapVariable[]): string {
 	}
 	for (const variable of variables) {
 		lines.push(
-			`- ${variable.name} = ${variable.value}${variable.type ? ` (${variable.type})` : ""}${variable.variablesReference > 0 ? ` [ref=${variable.variablesReference}]` : ""}`,
+			`- ${variable.name} = ${variable.value}${variable.type !== null && variable.type !== undefined && variable.type !== "" ? ` (${variable.type})` : ""}${variable.variablesReference > 0 ? ` [ref=${variable.variablesReference}]` : ""}`,
 		);
 	}
 	return lines.join("\n");
 }
 
 function formatSourceLabel(source: DapSource | undefined, line?: number, column?: number): string | null {
-	if (!source?.path && !source?.name) {
+	if (
+		(source?.path === null || source?.path === undefined || source?.path === "") &&
+		(source?.name === null || source?.name === undefined || source?.name === "")
+	) {
 		return null;
 	}
 	const base = source.path ?? source.name ?? "<unknown>";
@@ -292,10 +308,10 @@ function formatDisassembly(instructions: DapDisassembledInstruction[]): string {
 			(instruction.instructionBytes ?? "").padEnd(bytesWidth),
 			instruction.instruction,
 		];
-		if (instruction.symbol) {
+		if (instruction.symbol !== null && instruction.symbol !== undefined && instruction.symbol !== "") {
 			parts.push(`<${instruction.symbol}>`);
 		}
-		if (location) {
+		if (location !== null && location !== undefined && location !== "") {
 			parts.push(`[${location}]`);
 		}
 		lines.push(
@@ -310,7 +326,7 @@ function formatDisassembly(instructions: DapDisassembledInstruction[]): string {
 
 function formatMemoryRead(address: string, data: string | undefined, unreadableBytes?: number): string {
 	const lines = [`Memory at ${address}:`];
-	const buffer = data ? Buffer.from(data, "base64") : Buffer.alloc(0);
+	const buffer = data !== null && data !== undefined && data !== "" ? Buffer.from(data, "base64") : Buffer.alloc(0);
 	if (buffer.length === 0) {
 		lines.push("(no readable bytes)");
 	} else {
@@ -378,7 +394,7 @@ function formatInstructionBreakpoints(breakpoints: DapInstructionBreakpointRecor
 	for (const breakpoint of breakpoints) {
 		const location = `${breakpoint.instructionReference}${breakpoint.offset !== undefined ? `+${breakpoint.offset}` : ""}`;
 		lines.push(
-			`- ${location}: ${breakpoint.verified ? "verified" : "pending"}${breakpoint.condition ? ` if ${breakpoint.condition}` : ""}${breakpoint.hitCondition ? ` after ${breakpoint.hitCondition}` : ""}${breakpoint.message ? ` (${breakpoint.message})` : ""}`,
+			`- ${location}: ${breakpoint.verified ? "verified" : "pending"}${breakpoint.condition !== null && breakpoint.condition !== undefined && breakpoint.condition !== "" ? ` if ${breakpoint.condition}` : ""}${breakpoint.hitCondition !== null && breakpoint.hitCondition !== undefined && breakpoint.hitCondition !== "" ? ` after ${breakpoint.hitCondition}` : ""}${breakpoint.message !== null && breakpoint.message !== undefined && breakpoint.message !== "" ? ` (${breakpoint.message})` : ""}`,
 		);
 	}
 	return lines.join("\n");
@@ -404,7 +420,7 @@ function formatDataBreakpoints(breakpoints: DapDataBreakpointRecord[]): string {
 	}
 	for (const breakpoint of breakpoints) {
 		lines.push(
-			`- ${breakpoint.dataId}: ${breakpoint.verified ? "verified" : "pending"}${breakpoint.accessType ? ` (${breakpoint.accessType})` : ""}${breakpoint.condition ? ` if ${breakpoint.condition}` : ""}${breakpoint.hitCondition ? ` after ${breakpoint.hitCondition}` : ""}${breakpoint.message ? ` (${breakpoint.message})` : ""}`,
+			`- ${breakpoint.dataId}: ${breakpoint.verified ? "verified" : "pending"}${breakpoint.accessType ? ` (${breakpoint.accessType})` : ""}${breakpoint.condition !== null && breakpoint.condition !== undefined && breakpoint.condition !== "" ? ` if ${breakpoint.condition}` : ""}${breakpoint.hitCondition !== null && breakpoint.hitCondition !== undefined && breakpoint.hitCondition !== "" ? ` after ${breakpoint.hitCondition}` : ""}${breakpoint.message !== null && breakpoint.message !== undefined && breakpoint.message !== "" ? ` (${breakpoint.message})` : ""}`,
 		);
 	}
 	return lines.join("\n");
@@ -431,9 +447,13 @@ function formatSessions(sessions: DapSessionSummary[]): string {
 				`${session.id}: ${session.status}`,
 				`  adapter=${session.adapter}`,
 				`  cwd=${session.cwd}`,
-				...(session.program ? [`  program=${session.program}`] : []),
-				...(location ? [`  location=${location}`] : []),
-				...(session.stopReason ? [`  reason=${session.stopReason}`] : []),
+				...(session.program !== null && session.program !== undefined && session.program !== ""
+					? [`  program=${session.program}`]
+					: []),
+				...(location !== null && location !== undefined && location !== "" ? [`  location=${location}`] : []),
+				...(session.stopReason !== null && session.stopReason !== undefined && session.stopReason !== ""
+					? [`  reason=${session.stopReason}`]
+					: []),
 			].join("\n");
 		})
 		.join("\n\n");
@@ -441,7 +461,8 @@ function formatSessions(sessions: DapSessionSummary[]): string {
 
 function formatEvaluation(evaluation: DapEvaluateResponse): string {
 	const lines = [`Result: ${evaluation.result}`];
-	if (evaluation.type) lines.push(`Type: ${evaluation.type}`);
+	if (evaluation.type !== null && evaluation.type !== undefined && evaluation.type !== "")
+		lines.push(`Type: ${evaluation.type}`);
 	if (evaluation.variablesReference > 0) {
 		lines.push(`Variables ref: ${evaluation.variablesReference}`);
 	}
@@ -492,11 +513,15 @@ function requireCapability(capability: keyof DapCapabilities, description: strin
 }
 
 function resolveDisassemblyReference(memoryReference: string | undefined): string {
-	if (memoryReference) {
+	if (memoryReference !== null && memoryReference !== undefined && memoryReference !== "") {
 		return memoryReference;
 	}
 	const snapshot = getActiveSessionSnapshot();
-	if (snapshot.instructionPointerReference) {
+	if (
+		snapshot.instructionPointerReference !== null &&
+		snapshot.instructionPointerReference !== undefined &&
+		snapshot.instructionPointerReference !== ""
+	) {
 		return snapshot.instructionPointerReference;
 	}
 	throw new ToolError(
@@ -506,31 +531,35 @@ function resolveDisassemblyReference(memoryReference: string | undefined): strin
 
 function summarizeDebugCall(args: DebugRenderArgs): string {
 	const action = args.action ? args.action.replaceAll("_", " ") : "request";
-	if (args.program) {
+	if (args.program !== null && args.program !== undefined && args.program !== "") {
 		return `${action} ${truncateToWidth(args.program, TRUNCATE_LENGTHS.TITLE)}`;
 	}
-	if (args.file && args.line !== undefined) {
+	if (args.file !== null && args.file !== undefined && args.file !== "" && args.line !== undefined) {
 		return `${action} ${truncateToWidth(`${args.file}:${args.line}`, TRUNCATE_LENGTHS.TITLE)}`;
 	}
-	if (args.function) {
+	if (args.function !== null && args.function !== undefined && args.function !== "") {
 		return `${action} ${truncateToWidth(args.function, TRUNCATE_LENGTHS.TITLE)}`;
 	}
-	if (args.expression) {
+	if (args.expression !== null && args.expression !== undefined && args.expression !== "") {
 		return `${action} ${truncateToWidth(args.expression, TRUNCATE_LENGTHS.TITLE)}`;
 	}
-	if (args.command) {
+	if (args.command !== null && args.command !== undefined && args.command !== "") {
 		return `${action} ${truncateToWidth(args.command, TRUNCATE_LENGTHS.TITLE)}`;
 	}
-	if (args.memory_reference) {
+	if (args.memory_reference !== null && args.memory_reference !== undefined && args.memory_reference !== "") {
 		return `${action} ${truncateToWidth(args.memory_reference, TRUNCATE_LENGTHS.TITLE)}`;
 	}
-	if (args.instruction_reference) {
+	if (
+		args.instruction_reference !== null &&
+		args.instruction_reference !== undefined &&
+		args.instruction_reference !== ""
+	) {
 		return `${action} ${truncateToWidth(args.instruction_reference, TRUNCATE_LENGTHS.TITLE)}`;
 	}
-	if (args.data_id) {
+	if (args.data_id !== null && args.data_id !== undefined && args.data_id !== "") {
 		return `${action} ${truncateToWidth(args.data_id, TRUNCATE_LENGTHS.TITLE)}`;
 	}
-	if (args.name) {
+	if (args.name !== null && args.name !== undefined && args.name !== "") {
 		return `${action} ${truncateToWidth(args.name, TRUNCATE_LENGTHS.TITLE)}`;
 	}
 	return action;
@@ -552,7 +581,7 @@ export const debugToolRenderer = {
 		return {
 			render(width: number): string[] {
 				const action = (args?.action ?? result.details?.action ?? "debug").replaceAll("_", " ");
-				const status = options.isPartial ? "running" : result.isError ? "error" : "success";
+				const status = options.isPartial ? "running" : (result.isError === true ? "error" : "success");
 				const header = `${formatStatusIcon(status, theme, options.spinnerFrame)} Debug ${action}`;
 				const summaryLines = result.details?.snapshot
 					? formatSessionSnapshot(result.details.snapshot).map(line => replaceTabs(line))
@@ -572,7 +601,7 @@ export const debugToolRenderer = {
 				return outputBlock.render(
 					{
 						header,
-						state: result.isError ? "error" : "success",
+						state: result.isError === true ? "error" : "success",
 						sections: [
 							...(summaryLines.length > 0
 								? [{ label: theme.fg("toolTitle", "Session"), lines: summaryLines }]
@@ -624,10 +653,13 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 		const result = toolResult(details);
 		switch (params.action) {
 			case "launch": {
-				if (!params.program) {
+				if (params.program === null || params.program === undefined || params.program === "") {
 					throw new ToolError("program is required for launch");
 				}
-				const commandCwd = params.cwd ? resolveToCwd(params.cwd, this.session.cwd) : this.session.cwd;
+				const commandCwd =
+					params.cwd !== null && params.cwd !== undefined && params.cwd !== ""
+						? resolveToCwd(params.cwd, this.session.cwd)
+						: this.session.cwd;
 				const program = resolveToCwd(params.program, commandCwd);
 				const adapter = selectLaunchAdapter(program, commandCwd, params.adapter);
 				if (!adapter) {
@@ -648,7 +680,10 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 				if (params.pid === undefined && params.port === undefined) {
 					throw new ToolError("attach requires pid or port");
 				}
-				const commandCwd = params.cwd ? resolveToCwd(params.cwd, this.session.cwd) : this.session.cwd;
+				const commandCwd =
+					params.cwd !== null && params.cwd !== undefined && params.cwd !== ""
+						? resolveToCwd(params.cwd, this.session.cwd)
+						: this.session.cwd;
 				const adapter = selectAttachAdapter(commandCwd, params.adapter, params.port);
 				if (!adapter) {
 					throw new ToolError(
@@ -665,7 +700,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 				return result.text(formatSessionSnapshot(snapshot).join("\n")).done();
 			}
 			case "set_breakpoint": {
-				if (params.function) {
+				if (params.function !== null && params.function !== undefined && params.function !== "") {
 					const response = await dapSessionManager.setFunctionBreakpoint(
 						params.function,
 						params.condition,
@@ -676,7 +711,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 					details.functionBreakpoints = response.breakpoints;
 					return result.text(formatFunctionBreakpoints(response.breakpoints)).done();
 				}
-				if (!params.file || params.line === undefined) {
+				if (params.file === null || params.file === undefined || params.file === "" || params.line === undefined) {
 					throw new ToolError("set_breakpoint requires file+line or function");
 				}
 				const file = resolveToCwd(params.file, this.session.cwd);
@@ -692,7 +727,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 				return result.text(formatBreakpoints(response.sourcePath, response.breakpoints)).done();
 			}
 			case "remove_breakpoint": {
-				if (params.function) {
+				if (params.function !== null && params.function !== undefined && params.function !== "") {
 					const response = await dapSessionManager.removeFunctionBreakpoint(
 						params.function,
 						combinedSignal,
@@ -702,7 +737,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 					details.functionBreakpoints = response.breakpoints;
 					return result.text(formatFunctionBreakpoints(response.breakpoints)).done();
 				}
-				if (!params.file || params.line === undefined) {
+				if (params.file === null || params.file === undefined || params.file === "" || params.line === undefined) {
 					throw new ToolError("remove_breakpoint requires file+line or function");
 				}
 				const file = resolveToCwd(params.file, this.session.cwd);
@@ -718,7 +753,11 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 			}
 			case "set_instruction_breakpoint": {
 				requireCapability("supportsInstructionBreakpoints", "instruction breakpoints");
-				if (!params.instruction_reference) {
+				if (
+					params.instruction_reference === null ||
+					params.instruction_reference === undefined ||
+					params.instruction_reference === ""
+				) {
 					throw new ToolError("instruction_reference is required for set_instruction_breakpoint");
 				}
 				const response = await dapSessionManager.setInstructionBreakpoint(
@@ -735,7 +774,11 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 			}
 			case "remove_instruction_breakpoint": {
 				requireCapability("supportsInstructionBreakpoints", "instruction breakpoints");
-				if (!params.instruction_reference) {
+				if (
+					params.instruction_reference === null ||
+					params.instruction_reference === undefined ||
+					params.instruction_reference === ""
+				) {
 					throw new ToolError("instruction_reference is required for remove_instruction_breakpoint");
 				}
 				const response = await dapSessionManager.removeInstructionBreakpoint(
@@ -750,7 +793,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 			}
 			case "data_breakpoint_info": {
 				requireCapability("supportsDataBreakpoints", "data breakpoints");
-				if (!params.name) {
+				if (params.name === null || params.name === undefined || params.name === "") {
 					throw new ToolError("name is required for data_breakpoint_info");
 				}
 				const response = await dapSessionManager.dataBreakpointInfo(
@@ -766,7 +809,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 			}
 			case "set_data_breakpoint": {
 				requireCapability("supportsDataBreakpoints", "data breakpoints");
-				if (!params.data_id) {
+				if (params.data_id === null || params.data_id === undefined || params.data_id === "") {
 					throw new ToolError("data_id is required for set_data_breakpoint");
 				}
 				const response = await dapSessionManager.setDataBreakpoint(
@@ -783,7 +826,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 			}
 			case "remove_data_breakpoint": {
 				requireCapability("supportsDataBreakpoints", "data breakpoints");
-				if (!params.data_id) {
+				if (params.data_id === null || params.data_id === undefined || params.data_id === "") {
 					throw new ToolError("data_id is required for remove_data_breakpoint");
 				}
 				const response = await dapSessionManager.removeDataBreakpoint(
@@ -829,7 +872,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 				return result.text(formatSessionSnapshot(snapshot).concat("Program paused.").join("\n")).done();
 			}
 			case "evaluate": {
-				if (!params.expression) {
+				if (params.expression === null || params.expression === undefined || params.expression === "") {
 					throw new ToolError("expression is required for evaluate");
 				}
 				const evaluationContext = (params.context as DapEvaluateArguments["context"] | undefined) ?? "repl";
@@ -892,7 +935,11 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 			}
 			case "read_memory": {
 				requireCapability("supportsReadMemoryRequest", "memory reads");
-				if (!params.memory_reference) {
+				if (
+					params.memory_reference === null ||
+					params.memory_reference === undefined ||
+					params.memory_reference === ""
+				) {
 					throw new ToolError("memory_reference is required for read_memory");
 				}
 				if (params.count === undefined) {
@@ -913,10 +960,14 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 			}
 			case "write_memory": {
 				requireCapability("supportsWriteMemoryRequest", "memory writes");
-				if (!params.memory_reference) {
+				if (
+					params.memory_reference === null ||
+					params.memory_reference === undefined ||
+					params.memory_reference === ""
+				) {
 					throw new ToolError("memory_reference is required for write_memory");
 				}
-				if (!params.data) {
+				if (params.data === null || params.data === undefined || params.data === "") {
 					throw new ToolError("data is required for write_memory");
 				}
 				const response = await dapSessionManager.writeMemory(
@@ -959,7 +1010,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 				return result.text(formatLoadedSources(response.sources)).done();
 			}
 			case "custom_request": {
-				if (!params.command) {
+				if (params.command === null || params.command === undefined || params.command === "") {
 					throw new ToolError("command is required for custom_request");
 				}
 				const response = await dapSessionManager.customRequest(
@@ -992,7 +1043,7 @@ export class DebugTool implements AgentTool<typeof debugSchema, DebugToolDetails
 				return result.text(formatSessions(sessions)).done();
 			}
 			default:
-				throw new ToolError(`Unsupported debug action: ${params.action}`);
+				throw new ToolError(`Unsupported debug action: ${String(params.action)}`);
 		}
 	}
 }

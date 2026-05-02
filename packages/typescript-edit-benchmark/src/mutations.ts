@@ -54,12 +54,10 @@ function randomSample<T>(arr: T[], count: number, rng: () => number): T[] {
 
 function mutateIdentifier(identifier: string): string | null {
 	if (identifier.length < 2) return null;
-	let mutated: string;
-	if (identifier.length >= 3 && identifier[0] === identifier[1]) {
-		mutated = identifier[identifier.length - 1] + identifier.slice(1, -1) + identifier[0];
-	} else {
-		mutated = identifier[1] + identifier[0] + identifier.slice(2);
-	}
+	const mutated =
+		identifier.length >= 3 && identifier[0] === identifier[1]
+			? identifier[identifier.length - 1] + identifier.slice(1, -1) + identifier[0]
+			: identifier[1] + identifier[0] + identifier.slice(2);
 	return mutated === identifier ? null : mutated;
 }
 
@@ -122,32 +120,36 @@ function parseCode(code: string): Parsed | null {
  * Register it in VISITOR_KEYS (so the printer's isLastChild doesn't crash) and in
  * generatorInfosMap with a custom handler that unwraps the TSTypeAnnotation wrapper.
  */
+import { createRequire } from "node:module";
+
+type GeneratorPrinter = {
+	print: (node: unknown, printComments?: boolean) => void;
+	space: () => void;
+	word: (word: string) => void;
+};
+type GeneratorEntry = [(this: GeneratorPrinter, node: Record<string, unknown>) => void, number, unknown];
+
 t.VISITOR_KEYS.TSTypeCastExpression = ["expression", "typeAnnotation"];
 {
-	const { generatorInfosMap } = require("@babel/generator/lib/nodes") as {
-		generatorInfosMap: Map<string, [any, number, unknown]>;
+	const localRequire = createRequire(import.meta.url);
+	const babelGeneratorNodes = localRequire("@babel/generator/lib/nodes") as {
+		generatorInfosMap: Map<string, GeneratorEntry>;
 	};
+	const { generatorInfosMap } = babelGeneratorNodes;
 	if (!generatorInfosMap.has("TSTypeCastExpression")) {
 		const tsAs = generatorInfosMap.get("TSAsExpression");
 		if (tsAs) {
 			// Custom handler: like TSAsExpression but unwraps TSTypeAnnotation → TSType
-			function TSTypeCastExpression(
-				this: {
-					print: (node: unknown, printComments?: boolean) => void;
-					space: () => void;
-					word: (word: string) => void;
-				},
-				node: Record<string, unknown>,
-			): void {
+			function tsTypeCastExpression(this: GeneratorPrinter, node: Record<string, unknown>): void {
 				this.print(node.expression, true);
 				this.space();
 				this.word("as");
 				this.space();
 				const annot = node.typeAnnotation as Record<string, unknown> | undefined;
 				// TSTypeCastExpression.typeAnnotation is TSTypeAnnotation {typeAnnotation: TSType}
-				this.print(annot && "typeAnnotation" in annot ? annot.typeAnnotation : annot);
+				this.print(annot !== undefined && "typeAnnotation" in annot ? annot.typeAnnotation : annot);
 			}
-			generatorInfosMap.set("TSTypeCastExpression", [TSTypeCastExpression, tsAs[1], tsAs[2]]);
+			generatorInfosMap.set("TSTypeCastExpression", [tsTypeCastExpression, tsAs[1], tsAs[2]]);
 		}
 	}
 }
@@ -273,7 +275,8 @@ abstract class BaseAstMutation implements Mutation {
 		const edits = this.buildEdits(parsed, chosen, originalRange);
 		if (!edits) return [content, noopInfo()];
 		const mutated = applySourceEdits(content, edits);
-		if (!mutated || mutated === content) return [content, noopInfo()];
+		if (mutated === null || mutated === undefined || mutated === "" || mutated === content)
+			return [content, noopInfo()];
 		return [mutated, info];
 	}
 }
@@ -522,7 +525,8 @@ class CallArgumentSwapMutation extends BaseAstMutation {
 		const node = chosen.path.node;
 		const first = node.arguments[0];
 		const second = node.arguments[1];
-		if (!first || !second || t.isSpreadElement(first) || t.isSpreadElement(second)) return [content, noopInfo()];
+		if (first === undefined || second === undefined || t.isSpreadElement(first) || t.isSpreadElement(second))
+			return [content, noopInfo()];
 
 		const firstRange = nodeRange(first);
 		const secondRange = nodeRange(second);
@@ -536,7 +540,8 @@ class CallArgumentSwapMutation extends BaseAstMutation {
 		const mutated = applySourceEdits(content, [
 			{ start: firstRange.start, end: secondRange.end, replacement: swappedArgs },
 		]);
-		if (!mutated || mutated === content) return [content, noopInfo()];
+		if (mutated === null || mutated === undefined || mutated === "" || mutated === content)
+			return [content, noopInfo()];
 
 		return [
 			mutated,
@@ -553,7 +558,7 @@ class CallArgumentSwapMutation extends BaseAstMutation {
 		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
 		const first = node.arguments[0];
 		const second = node.arguments[1];
-		if (!first || !second) return noopInfo();
+		if (first === undefined || second === undefined) return noopInfo();
 		node.arguments[0] = second;
 		node.arguments[1] = first;
 		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
@@ -606,9 +611,7 @@ class RegexQuantifierSwapMutation extends BaseAstMutation {
 						},
 					});
 					if (hasQuantifier) out.push({ path });
-				} catch {
-					return;
-				}
+				} catch {}
 			},
 		});
 		return out;
@@ -792,13 +795,13 @@ class IdentifierMultiEditMutation extends BaseAstMutation {
 
 		const chosen = randomChoice(bindingCandidates, rng);
 		const mutated = mutateIdentifier(chosen.name);
-		if (!mutated) return [content, noopInfo()];
+		if (mutated === null || mutated === undefined || mutated === "") return [content, noopInfo()];
 
 		const refPaths = chosen.binding.referencePaths.filter((p): p is NodePath<t.Identifier> => t.isIdentifier(p.node));
 		const lineMap = new Map<number, NodePath<t.Identifier>[]>();
 		for (const refPath of refPaths) {
 			const line = refPath.node.loc?.start.line;
-			if (!line) continue;
+			if (line === null || line === undefined || line === 0) continue;
 			const list = lineMap.get(line) ?? [];
 			list.push(refPath);
 			lineMap.set(line, list);
@@ -828,7 +831,7 @@ class IdentifierMultiEditMutation extends BaseAstMutation {
 
 		const bindingId = chosen.binding.identifier;
 		const bindingLine = bindingId.loc?.start.line;
-		if (bindingLine && chosenLines.includes(bindingLine)) {
+		if (bindingLine !== null && bindingLine !== undefined && bindingLine !== 0 && chosenLines.includes(bindingLine)) {
 			const range = nodeRange(bindingId);
 			if (range) {
 				edits.push({ ...range, replacement: mutated });
@@ -842,7 +845,13 @@ class IdentifierMultiEditMutation extends BaseAstMutation {
 		if (deduped.size < 2) return [content, noopInfo()];
 
 		const mutatedContent = applySourceEdits(content, Array.from(deduped.values()));
-		if (!mutatedContent || mutatedContent === content) return [content, noopInfo()];
+		if (
+			mutatedContent === null ||
+			mutatedContent === undefined ||
+			mutatedContent === "" ||
+			mutatedContent === content
+		)
+			return [content, noopInfo()];
 
 		return [
 			mutatedContent,
@@ -888,13 +897,13 @@ class IdentifierMultiEditMutation extends BaseAstMutation {
 
 		const chosen = randomChoice(candidates, rng);
 		const mutated = mutateIdentifier(chosen.name);
-		if (!mutated) return noopInfo();
+		if (mutated === null || mutated === undefined || mutated === "") return noopInfo();
 
 		const refPaths = chosen.binding.referencePaths.filter((p): p is NodePath<t.Identifier> => t.isIdentifier(p.node));
 		const lineMap = new Map<number, NodePath<t.Identifier>[]>();
 		for (const refPath of refPaths) {
 			const line = refPath.node.loc?.start.line;
-			if (!line) continue;
+			if (line === null || line === undefined || line === 0) continue;
 			const list = lineMap.get(line) ?? [];
 			list.push(refPath);
 			lineMap.set(line, list);
@@ -920,7 +929,7 @@ class IdentifierMultiEditMutation extends BaseAstMutation {
 
 		const bindingId = chosen.binding.identifier;
 		const bindingLine = bindingId.loc?.start.line;
-		if (bindingLine && chosenLines.includes(bindingLine)) {
+		if (bindingLine !== null && bindingLine !== undefined && bindingLine !== 0 && chosenLines.includes(bindingLine)) {
 			bindingId.name = mutated;
 		}
 
@@ -1038,7 +1047,7 @@ class SwapAdjacentLinesMutation extends BaseAstMutation {
 			for (let i = 0; i < body.length - 1; i++) {
 				const left = body[i];
 				const right = body[i + 1];
-				if (!left || !right) continue;
+				if (left === undefined || right === undefined) continue;
 				if (!t.isStatement(left) || !t.isStatement(right)) continue;
 				if (!left.loc || !right.loc) continue;
 				if (left.loc.start.line !== left.loc.end.line) continue;
@@ -1082,7 +1091,7 @@ class SwapAdjacentLinesMutation extends BaseAstMutation {
 		const body = t.isProgram(container) ? container.body : container.body;
 		const left = body[index];
 		const right = body[index + 1];
-		if (!left || !right) return [content, noopInfo()];
+		if (left === undefined || right === undefined) return [content, noopInfo()];
 		if (!t.isStatement(left) || !t.isStatement(right)) return [content, noopInfo()];
 
 		const leftRange = nodeRange(left);
@@ -1095,7 +1104,8 @@ class SwapAdjacentLinesMutation extends BaseAstMutation {
 		const mutated = applySourceEdits(content, [
 			{ start: leftRange.start, end: rightRange.end, replacement: swapped },
 		]);
-		if (!mutated || mutated === content) return [content, noopInfo()];
+		if (mutated === null || mutated === undefined || mutated === "" || mutated === content)
+			return [content, noopInfo()];
 
 		return [
 			mutated,
@@ -1118,11 +1128,11 @@ class SwapAdjacentLinesMutation extends BaseAstMutation {
 		const body = t.isProgram(container) ? container.body : container.body;
 		const left = body[index];
 		const right = body[index + 1];
-		if (!left || !right) return noopInfo();
+		if (left === undefined || right === undefined) return noopInfo();
 		if (!t.isStatement(left) || !t.isStatement(right)) return noopInfo();
 
 		const before = `lines ${left.loc?.start.line ?? 0}-${right.loc?.end.line ?? 0}`;
-		[body[index], body[index + 1]] = [body[index + 1]!, body[index]!];
+		[body[index], body[index + 1]] = [right, left];
 		return {
 			lineNumber: left.loc?.start.line ?? 0,
 			originalSnippet: before,
@@ -1216,8 +1226,12 @@ class SwapNamedImportsMutation extends BaseAstMutation {
 					);
 				if (named.length < 2) return;
 				for (let i = 0; i < named.length; i++) {
+					const nI = named[i];
+					if (nI === undefined) continue;
 					for (let j = i + 1; j < named.length; j++) {
-						out.push({ path, meta: { i: named[i]!.idx, j: named[j]!.idx } });
+						const nJ = named[j];
+						if (nJ === undefined) continue;
+						out.push({ path, meta: { i: nI.idx, j: nJ.idx } });
 					}
 				}
 			},
@@ -1240,7 +1254,7 @@ class SwapNamedImportsMutation extends BaseAstMutation {
 
 		const left = node.specifiers[i];
 		const right = node.specifiers[j];
-		if (!left || !right) return [content, noopInfo()];
+		if (left === undefined || right === undefined) return [content, noopInfo()];
 		const leftRange = nodeRange(left);
 		const rightRange = nodeRange(right);
 		const importRange = nodeRange(node);
@@ -1253,7 +1267,8 @@ class SwapNamedImportsMutation extends BaseAstMutation {
 			{ start: leftRange.start, end: leftRange.end, replacement: rightText },
 			{ start: rightRange.start, end: rightRange.end, replacement: leftText },
 		]);
-		if (!mutated || mutated === content) return [content, noopInfo()];
+		if (mutated === null || mutated === undefined || mutated === "" || mutated === content)
+			return [content, noopInfo()];
 
 		return [
 			mutated,
@@ -1272,7 +1287,10 @@ class SwapNamedImportsMutation extends BaseAstMutation {
 		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
 		const { i, j } = indices;
 		if (i < 0 || j < 0 || i >= node.specifiers.length || j >= node.specifiers.length) return noopInfo();
-		[node.specifiers[i], node.specifiers[j]] = [node.specifiers[j]!, node.specifiers[i]!];
+		const specI = node.specifiers[i];
+		const specJ = node.specifiers[j];
+		if (specI === undefined || specJ === undefined) return noopInfo();
+		[node.specifiers[i], node.specifiers[j]] = [specJ, specI];
 		return {
 			lineNumber: nodeLine(node),
 			originalSnippet: before.trim(),
@@ -1333,7 +1351,7 @@ class OffByOneMutation extends BaseAstMutation {
 							parent.isIfStatement() ||
 							(parent.isBinaryExpression() && ["<", "<=", ">", ">="].includes(parent.node.operator))
 						);
-					}) != null;
+					}) !== null;
 				if (hasBoundaryAncestor) out.push({ path: path as NodePath<t.NumericLiteral | t.BinaryExpression> });
 			},
 			BinaryExpression: path => {

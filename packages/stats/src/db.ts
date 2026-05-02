@@ -256,35 +256,45 @@ export function insertMessageStats(stats: MessageStats[]): number {
 /**
  * Build aggregated stats from query results.
  */
-function buildAggregatedStats(rows: any[]): AggregatedStats {
-	if (rows.length === 0) {
-		return {
-			totalRequests: 0,
-			successfulRequests: 0,
-			failedRequests: 0,
-			errorRate: 0,
-			totalInputTokens: 0,
-			totalOutputTokens: 0,
-			totalCacheReadTokens: 0,
-			totalCacheWriteTokens: 0,
-			cacheRate: 0,
-			totalCost: 0,
-			totalPremiumRequests: 0,
-			avgDuration: null,
-			avgTtft: null,
-			avgTokensPerSecond: null,
-			firstTimestamp: 0,
-			lastTimestamp: 0,
-		};
-	}
+function emptyAggregatedStats(): AggregatedStats {
+	return {
+		totalRequests: 0,
+		successfulRequests: 0,
+		failedRequests: 0,
+		errorRate: 0,
+		totalInputTokens: 0,
+		totalOutputTokens: 0,
+		totalCacheReadTokens: 0,
+		totalCacheWriteTokens: 0,
+		cacheRate: 0,
+		totalCost: 0,
+		totalPremiumRequests: 0,
+		avgDuration: null,
+		avgTtft: null,
+		avgTokensPerSecond: null,
+		firstTimestamp: 0,
+		lastTimestamp: 0,
+	};
+}
+
+function asNumber(value: unknown): number {
+	return typeof value === "number" ? value : 0;
+}
+
+function asNumberOrNull(value: unknown): number | null {
+	return typeof value === "number" ? value : null;
+}
+
+function buildAggregatedStats(rows: Record<string, unknown>[]): AggregatedStats {
+	if (rows.length === 0) return emptyAggregatedStats();
 
 	const row = rows[0];
-	const totalRequests = row.total_requests || 0;
-	const failedRequests = row.failed_requests || 0;
+	const totalRequests = asNumber(row.total_requests);
+	const failedRequests = asNumber(row.failed_requests);
 	const successfulRequests = totalRequests - failedRequests;
-	const totalInputTokens = row.total_input_tokens || 0;
-	const totalCacheReadTokens = row.total_cache_read_tokens || 0;
-	const totalPremiumRequests = row.total_premium_requests || 0;
+	const totalInputTokens = asNumber(row.total_input_tokens);
+	const totalCacheReadTokens = asNumber(row.total_cache_read_tokens);
+	const totalPremiumRequests = asNumber(row.total_premium_requests);
 
 	return {
 		totalRequests,
@@ -292,20 +302,20 @@ function buildAggregatedStats(rows: any[]): AggregatedStats {
 		failedRequests,
 		errorRate: totalRequests > 0 ? failedRequests / totalRequests : 0,
 		totalInputTokens,
-		totalOutputTokens: row.total_output_tokens || 0,
+		totalOutputTokens: asNumber(row.total_output_tokens),
 		totalCacheReadTokens,
-		totalCacheWriteTokens: row.total_cache_write_tokens || 0,
+		totalCacheWriteTokens: asNumber(row.total_cache_write_tokens),
 		cacheRate:
 			totalInputTokens + totalCacheReadTokens > 0
 				? totalCacheReadTokens / (totalInputTokens + totalCacheReadTokens)
 				: 0,
-		totalCost: row.total_cost || 0,
+		totalCost: asNumber(row.total_cost),
 		totalPremiumRequests,
-		avgDuration: row.avg_duration,
-		avgTtft: row.avg_ttft,
-		avgTokensPerSecond: row.avg_tokens_per_second,
-		firstTimestamp: row.first_timestamp || 0,
-		lastTimestamp: row.last_timestamp || 0,
+		avgDuration: asNumberOrNull(row.avg_duration),
+		avgTtft: asNumberOrNull(row.avg_ttft),
+		avgTokensPerSecond: asNumberOrNull(row.avg_tokens_per_second),
+		firstTimestamp: asNumber(row.first_timestamp),
+		lastTimestamp: asNumber(row.last_timestamp),
 	};
 }
 
@@ -365,7 +375,7 @@ export function getStatsByModel(): ModelStats[] {
 		ORDER BY total_requests DESC
 	`);
 
-	const rows = stmt.all() as any[];
+	const rows = stmt.all() as Record<string, unknown>[];
 	return rows.map(row => ({
 		model: row.model,
 		provider: row.provider,
@@ -400,7 +410,7 @@ export function getStatsByFolder(): FolderStats[] {
 		ORDER BY total_requests DESC
 	`);
 
-	const rows = stmt.all() as any[];
+	const rows = stmt.all() as Record<string, unknown>[];
 	return rows.map(row => ({
 		folder: row.folder,
 		...buildAggregatedStats([row]),
@@ -428,7 +438,7 @@ export function getTimeSeries(hours = 24): TimeSeriesPoint[] {
 		ORDER BY bucket ASC
 	`);
 
-	const rows = stmt.all(cutoff) as any[];
+	const rows = stmt.all(cutoff) as Record<string, unknown>[];
 	return rows.map(row => ({
 		timestamp: row.bucket,
 		requests: row.requests,
@@ -461,7 +471,7 @@ export function getModelTimeSeries(days = 14): ModelTimeSeriesPoint[] {
 		ORDER BY bucket ASC
 	`);
 
-	const rows = stmt.all(cutoff) as any[];
+	const rows = stmt.all(cutoff) as Record<string, unknown>[];
 	return rows.map(row => ({
 		timestamp: row.bucket,
 		model: row.model,
@@ -492,7 +502,7 @@ export function getModelPerformanceSeries(days = 14): ModelPerformancePoint[] {
 		ORDER BY bucket ASC
 	`);
 
-	const rows = stmt.all(cutoff) as any[];
+	const rows = stmt.all(cutoff) as Record<string, unknown>[];
 	return rows.map(row => ({
 		timestamp: row.bucket,
 		model: row.model,
@@ -523,7 +533,7 @@ export function closeDb(): void {
 	}
 }
 
-function rowToMessageStats(row: any): MessageStats {
+function rowToMessageStats(row: Record<string, unknown>): MessageStats {
 	return {
 		id: row.id,
 		sessionFile: row.session_file,
@@ -562,7 +572,7 @@ export function getRecentRequests(limit = 100): MessageStats[] {
 		ORDER BY timestamp DESC 
 		LIMIT ?
 	`);
-	return (stmt.all(limit) as any[]).map(rowToMessageStats);
+	return (stmt.all(limit) as Record<string, unknown>[]).map(rowToMessageStats);
 }
 
 export function getRecentErrors(limit = 100): MessageStats[] {
@@ -573,14 +583,14 @@ export function getRecentErrors(limit = 100): MessageStats[] {
 		ORDER BY timestamp DESC 
 		LIMIT ?
 	`);
-	return (stmt.all(limit) as any[]).map(rowToMessageStats);
+	return (stmt.all(limit) as Record<string, unknown>[]).map(rowToMessageStats);
 }
 
 export function getMessageById(id: number): MessageStats | null {
 	if (!db) return null;
 	const stmt = db.prepare("SELECT * FROM messages WHERE id = ?");
 	const row = stmt.get(id);
-	return row ? rowToMessageStats(row) : null;
+	return row !== null && row !== undefined ? rowToMessageStats(row) : null;
 }
 
 /**
@@ -608,7 +618,7 @@ export function getCostTimeSeries(days = 90): CostTimeSeriesPoint[] {
 		ORDER BY bucket ASC
 	`);
 
-	const rows = stmt.all(cutoff) as any[];
+	const rows = stmt.all(cutoff) as Record<string, unknown>[];
 	return rows.map(row => ({
 		timestamp: row.bucket,
 		model: row.model,

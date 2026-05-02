@@ -68,9 +68,12 @@ export class MarketplaceManager {
 
 	// Invalidate fs caches for all registry paths the manager writes, then clear plugin roots.
 	#clearCache(): void {
-		const extra = this.#opts.projectInstalledRegistryPath
-			? ([this.#opts.projectInstalledRegistryPath] as readonly string[])
-			: undefined;
+		const extra =
+			this.#opts.projectInstalledRegistryPath !== null &&
+			this.#opts.projectInstalledRegistryPath !== undefined &&
+			this.#opts.projectInstalledRegistryPath !== ""
+				? ([this.#opts.projectInstalledRegistryPath] as readonly string[])
+				: undefined;
 		this.#opts.clearPluginRootsCache?.(extra);
 	}
 
@@ -83,14 +86,14 @@ export class MarketplaceManager {
 		const { catalog, clonePath } = await fetchMarketplace(source, this.#opts.marketplacesCacheDir);
 
 		if (existingNames.has(catalog.name)) {
-			if (clonePath) {
+			if (clonePath !== null && clonePath !== undefined && clonePath !== "") {
 				await fs.rm(clonePath, { recursive: true, force: true }).catch(() => {});
 			}
 			throw new Error(`Marketplace "${catalog.name}" already exists`);
 		}
 
 		// Promote the temp clone to its final cache location now that we know it's not a duplicate.
-		if (clonePath) {
+		if (clonePath !== null && clonePath !== undefined && clonePath !== "") {
 			await promoteCloneToCache(clonePath, this.#opts.marketplacesCacheDir, catalog.name);
 		}
 
@@ -148,7 +151,7 @@ export class MarketplaceManager {
 		// Guard against upstream catalog silently renaming itself — the registry
 		// entry is keyed by name, so a drift would corrupt the entry on next read.
 		if (catalog.name !== name) {
-			if (clonePath) {
+			if (clonePath !== null && clonePath !== undefined && clonePath !== "") {
 				await fs.rm(clonePath, { recursive: true, force: true }).catch(() => {});
 			}
 			throw new Error(
@@ -158,7 +161,7 @@ export class MarketplaceManager {
 		}
 
 		// Promote the temp clone to its final cache location now that drift check passed.
-		if (clonePath) {
+		if (clonePath !== null && clonePath !== undefined && clonePath !== "") {
 			await promoteCloneToCache(clonePath, this.#opts.marketplacesCacheDir, catalog.name);
 		}
 
@@ -182,12 +185,7 @@ export class MarketplaceManager {
 
 	async updateAllMarketplaces(): Promise<MarketplaceRegistryEntry[]> {
 		const marketplaces = await this.listMarketplaces();
-		const results: MarketplaceRegistryEntry[] = [];
-		for (const m of marketplaces) {
-			const updated = await this.updateMarketplace(m.name);
-			results.push(updated);
-		}
-		return results;
+		return Promise.all(marketplaces.map(m => this.updateMarketplace(m.name)));
 	}
 
 	async listMarketplaces(): Promise<MarketplaceRegistryEntry[]> {
@@ -292,7 +290,7 @@ export class MarketplaceManager {
 			cachePath = await cachePlugin(sourcePath, this.#opts.pluginsCacheDir, marketplace, name, version);
 		} finally {
 			// Clean up temp clone dirs created by resolvePluginSource; leave user-supplied local dirs alone
-			if (tempCloneRoot) {
+			if (tempCloneRoot !== null && tempCloneRoot !== undefined && tempCloneRoot !== "") {
 				await fs.rm(tempCloneRoot, { recursive: true, force: true }).catch(() => {});
 			}
 		}
@@ -306,23 +304,25 @@ export class MarketplaceManager {
 			// Read both registries AFTER removal — only delete paths no longer referenced by either.
 			const [userReg, projectReg] = await Promise.all([
 				readInstalledPluginsRegistry(this.#opts.installedRegistryPath),
-				this.#opts.projectInstalledRegistryPath
+				this.#opts.projectInstalledRegistryPath !== null &&
+				this.#opts.projectInstalledRegistryPath !== undefined &&
+				this.#opts.projectInstalledRegistryPath !== ""
 					? readInstalledPluginsRegistry(this.#opts.projectInstalledRegistryPath)
 					: Promise.resolve({ version: 2 as const, plugins: {} as Record<string, InstalledPluginEntry[]> }),
 			]);
 			const referenced = collectReferencedPaths(userReg, projectReg);
 
-			for (const entry of existing) {
-				if (entry.installPath !== cachePath && !referenced.has(entry.installPath)) {
-					await fs.rm(entry.installPath, { recursive: true, force: true });
-				}
-			}
+			await Promise.all(
+				existing
+					.filter(entry => entry.installPath !== cachePath && !referenced.has(entry.installPath))
+					.map(entry => fs.rm(entry.installPath, { recursive: true, force: true })),
+			);
 		}
 
 		// 6. Build and register the entry, preserving enabled state from previous install
 		const now = new Date().toISOString();
 		// Carry over enabled flag from existing entry — a disabled plugin must stay disabled after upgrade
-		const wasDisabled = existing?.some(e => e.enabled === false);
+		const wasDisabled = existing?.some(e => e.enabled === false) === true;
 		const installedEntry: InstalledPluginEntry = {
 			scope,
 			installPath: cachePath,
@@ -351,7 +351,7 @@ export class MarketplaceManager {
 	 */
 	async #resolvePluginVersion(entry: MarketplacePluginEntry, sourcePath: string): Promise<string> {
 		// 1. Catalog entry version
-		if (entry.version) return entry.version;
+		if (entry.version !== null && entry.version !== undefined && entry.version !== "") return entry.version;
 
 		// 2. Plugin manifest
 		for (const manifestPath of [
@@ -360,7 +360,7 @@ export class MarketplaceManager {
 		]) {
 			try {
 				const content = await Bun.file(manifestPath).json();
-				if (typeof content?.version === "string" && content.version) {
+				if (typeof content?.version === "string" && content.version !== null && content.version !== undefined) {
 					return content.version;
 				}
 			} catch {
@@ -369,7 +369,13 @@ export class MarketplaceManager {
 		}
 
 		// 3. Git SHA from source definition
-		if (typeof entry.source === "object" && "sha" in entry.source && entry.source.sha) {
+		if (
+			typeof entry.source === "object" &&
+			"sha" in entry.source &&
+			entry.source.sha !== null &&
+			entry.source.sha !== undefined &&
+			entry.source.sha !== ""
+		) {
 			return entry.source.sha.slice(0, 7);
 		}
 
@@ -384,8 +390,8 @@ export class MarketplaceManager {
 
 		const { userEntries, projectEntries, userReg, projectReg } = await this.#findInBothRegistries(pluginId);
 
-		const inUser = userEntries && userEntries.length > 0;
-		const inProject = projectEntries && projectEntries.length > 0;
+		const inUser = (userEntries?.length ?? 0) > 0;
+		const inProject = (projectEntries?.length ?? 0) > 0;
 
 		if (!inUser && !inProject) {
 			throw new Error(`Plugin "${pluginId}" is not installed`);
@@ -422,7 +428,9 @@ export class MarketplaceManager {
 		// Read both registries AFTER removal — only delete paths no longer referenced by either.
 		const [freshUserReg, freshProjectReg] = await Promise.all([
 			readInstalledPluginsRegistry(this.#opts.installedRegistryPath),
-			this.#opts.projectInstalledRegistryPath
+			this.#opts.projectInstalledRegistryPath !== null &&
+			this.#opts.projectInstalledRegistryPath !== undefined &&
+			this.#opts.projectInstalledRegistryPath !== ""
 				? readInstalledPluginsRegistry(this.#opts.projectInstalledRegistryPath)
 				: Promise.resolve({ version: 2 as const, plugins: {} as Record<string, InstalledPluginEntry[]> }),
 		]);
@@ -443,9 +451,12 @@ export class MarketplaceManager {
 
 	async listInstalledPlugins(): Promise<InstalledPluginSummary[]> {
 		const userReg = await readInstalledPluginsRegistry(this.#opts.installedRegistryPath);
-		const projectReg = this.#opts.projectInstalledRegistryPath
-			? await readInstalledPluginsRegistry(this.#opts.projectInstalledRegistryPath)
-			: null;
+		const projectReg =
+			this.#opts.projectInstalledRegistryPath !== null &&
+			this.#opts.projectInstalledRegistryPath !== undefined &&
+			this.#opts.projectInstalledRegistryPath !== ""
+				? await readInstalledPluginsRegistry(this.#opts.projectInstalledRegistryPath)
+				: null;
 
 		// Only enabled project installs shadow user installs — a disabled project copy leaves
 		// the user entry as the active one and must not be reported as shadowed.
@@ -479,8 +490,8 @@ export class MarketplaceManager {
 	async setPluginEnabled(pluginId: string, enabled: boolean, scope?: "user" | "project"): Promise<void> {
 		const { userEntries, projectEntries, userReg, projectReg } = await this.#findInBothRegistries(pluginId);
 
-		const inUser = userEntries && userEntries.length > 0;
-		const inProject = projectEntries && projectEntries.length > 0;
+		const inUser = (userEntries?.length ?? 0) > 0;
+		const inProject = (projectEntries?.length ?? 0) > 0;
 
 		if (!inUser && !inProject) {
 			throw new Error(`Plugin "${pluginId}" is not installed`);
@@ -553,7 +564,11 @@ export class MarketplaceManager {
 		// Keyed by (path, scope) so each scope is checked independently.
 		// A plugin current in user scope but stale in project scope must still appear.
 		const registryEntries: Array<[string, "user" | "project"]> = [[this.#opts.installedRegistryPath, "user"]];
-		if (this.#opts.projectInstalledRegistryPath) {
+		if (
+			this.#opts.projectInstalledRegistryPath !== null &&
+			this.#opts.projectInstalledRegistryPath !== undefined &&
+			this.#opts.projectInstalledRegistryPath !== ""
+		) {
 			registryEntries.push([this.#opts.projectInstalledRegistryPath, "project"]);
 		}
 
@@ -576,7 +591,13 @@ export class MarketplaceManager {
 					continue;
 				}
 
-				if (!catalogVersion || catalogVersion === installed.version) continue;
+				if (
+					catalogVersion === null ||
+					catalogVersion === undefined ||
+					catalogVersion === "" ||
+					catalogVersion === installed.version
+				)
+					continue;
 
 				// Treat newer semver as an update; fall back to inequality for non-semver tags.
 				let isNewer: boolean;
@@ -604,8 +625,8 @@ export class MarketplaceManager {
 
 		const { userEntries, projectEntries } = await this.#findInBothRegistries(pluginId);
 
-		const inUser = userEntries && userEntries.length > 0;
-		const inProject = projectEntries && projectEntries.length > 0;
+		const inUser = (userEntries?.length ?? 0) > 0;
+		const inProject = (projectEntries?.length ?? 0) > 0;
 
 		if (!inUser && !inProject) {
 			throw new Error(`Plugin "${pluginId}" is not installed`);
@@ -640,8 +661,8 @@ export class MarketplaceManager {
 
 		const { userEntries, projectEntries } = await this.#findInBothRegistries(pluginId);
 
-		const inUser = userEntries && userEntries.length > 0;
-		const inProject = projectEntries && projectEntries.length > 0;
+		const inUser = (userEntries?.length ?? 0) > 0;
+		const inProject = (projectEntries?.length ?? 0) > 0;
 
 		if (!inUser && !inProject) {
 			throw new Error(`Plugin "${pluginId}" is not installed`);
@@ -684,7 +705,11 @@ export class MarketplaceManager {
 
 	#registryPath(scope: "user" | "project"): string {
 		if (scope === "project") {
-			if (!this.#opts.projectInstalledRegistryPath) {
+			if (
+				this.#opts.projectInstalledRegistryPath === null ||
+				this.#opts.projectInstalledRegistryPath === undefined ||
+				this.#opts.projectInstalledRegistryPath === ""
+			) {
 				throw new Error("project-scoped install requires running inside a project directory");
 			}
 			return this.#opts.projectInstalledRegistryPath;
@@ -700,7 +725,9 @@ export class MarketplaceManager {
 	}> {
 		const [userReg, projectReg] = await Promise.all([
 			readInstalledPluginsRegistry(this.#opts.installedRegistryPath),
-			this.#opts.projectInstalledRegistryPath
+			this.#opts.projectInstalledRegistryPath !== null &&
+			this.#opts.projectInstalledRegistryPath !== undefined &&
+			this.#opts.projectInstalledRegistryPath !== ""
 				? readInstalledPluginsRegistry(this.#opts.projectInstalledRegistryPath)
 				: Promise.resolve({ version: 2 as const, plugins: {} as Record<string, InstalledPluginEntry[]> }),
 		]);
@@ -716,13 +743,13 @@ export class MarketplaceManager {
 		try {
 			const content = await Bun.file(entry.catalogPath).text();
 			return parseMarketplaceCatalog(content, entry.catalogPath);
-		} catch (err) {
-			if (isEnoent(err)) {
+		} catch (error) {
+			if (isEnoent(error)) {
 				throw new Error(
 					`Marketplace catalog not found at ${entry.catalogPath}. Try: /marketplace update ${entry.name}`,
 				);
 			}
-			throw err;
+			throw error;
 		}
 	}
 

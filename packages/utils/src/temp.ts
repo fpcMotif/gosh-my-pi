@@ -68,7 +68,7 @@ export class TempDir {
 const kTempDir = os.tmpdir();
 
 function normalizePrefix(prefix?: string): string {
-	if (!prefix) {
+	if (prefix === null || prefix === undefined || prefix === "") {
 		return `${kTempDir}${path.sep}pi-temp-`;
 	} else if (prefix.startsWith("@")) {
 		return path.join(kTempDir, prefix.slice(1));

@@ -58,7 +58,6 @@ export default function swarmExtension(pi: ExtensionAPI): void {
 						].join("\n"),
 						"info",
 					);
-					return;
 			}
 		},
 	});
@@ -84,8 +83,8 @@ async function handleRun(yamlPath: string, ctx: ExtensionCommandContext, pi: Ext
 	let def: SwarmDefinition;
 	try {
 		def = parseSwarmYaml(content);
-	} catch (err) {
-		ctx.ui.notify(`YAML error: ${err instanceof Error ? err.message : String(err)}`, "error");
+	} catch (error) {
+		ctx.ui.notify(`YAML error: ${error instanceof Error ? error.message : String(error)}`, "error");
 		return;
 	}
 
@@ -163,9 +162,12 @@ async function handleRun(yamlPath: string, ctx: ExtensionCommandContext, pi: Ext
 	// 11. Clear widget and show summary
 	ctx.ui.setWidget(widgetKey, undefined);
 
-	const elapsed = stateTracker.state.completedAt
-		? formatDuration(stateTracker.state.completedAt - stateTracker.state.startedAt)
-		: "unknown";
+	const elapsed =
+		stateTracker.state.completedAt !== null &&
+		stateTracker.state.completedAt !== undefined &&
+		stateTracker.state.completedAt !== 0
+			? formatDuration(stateTracker.state.completedAt - stateTracker.state.startedAt)
+			: "unknown";
 
 	const summaryParts = [
 		`Swarm '${def.name}' ${result.status}`,
@@ -208,7 +210,7 @@ async function handleRun(yamlPath: string, ctx: ExtensionCommandContext, pi: Ext
 // ============================================================================
 
 async function handleStatus(name: string | undefined, ctx: ExtensionCommandContext): Promise<void> {
-	if (!name) {
+	if (name === null || name === undefined || name === "") {
 		ctx.ui.notify("Usage: /swarm status <name>  (reads .swarm_<name>/state/pipeline.json from cwd)", "info");
 		return;
 	}
@@ -248,8 +250,17 @@ function buildSummaryMessage(
 	lines.push("");
 	for (const [name, agent] of Object.entries(stateTracker.state.agents)) {
 		const duration =
-			agent.startedAt && agent.completedAt ? formatDuration(agent.completedAt - agent.startedAt) : "n/a";
-		lines.push(`- **${name}**: ${agent.status} (${duration})${agent.error ? ` — ${agent.error}` : ""}`);
+			agent.startedAt !== null &&
+			agent.startedAt !== undefined &&
+			agent.startedAt !== 0 &&
+			agent.completedAt !== null &&
+			agent.completedAt !== undefined &&
+			agent.completedAt !== 0
+				? formatDuration(agent.completedAt - agent.startedAt)
+				: "n/a";
+		lines.push(
+			`- **${name}**: ${agent.status} (${duration})${agent.error !== null && agent.error !== undefined && agent.error !== "" ? ` — ${agent.error}` : ""}`,
+		);
 	}
 
 	if (result.errors.length > 0) {

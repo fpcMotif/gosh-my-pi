@@ -119,4 +119,26 @@ describe("InputController keybinding setup", () => {
 		expect(spies.showModelSelector).toHaveBeenNthCalledWith(1, { temporaryOnly: true });
 		expect(spies.showModelSelector).toHaveBeenNthCalledWith(2);
 	});
+
+	it("refreshes session chrome after a successful thinking-level cycle", () => {
+		const invalidate = vi.fn();
+		const updateEditorBorderColor = vi.fn();
+		const refreshSessionChrome = vi.fn();
+		const ctx = {
+			session: {
+				cycleThinkingLevel: vi.fn(() => "low"),
+			},
+			statusLine: { invalidate },
+			updateEditorBorderColor,
+			refreshSessionChrome,
+			showStatus: vi.fn(),
+		} as unknown as InteractiveModeContext;
+		const controller = new InputController(ctx);
+
+		controller.cycleThinkingLevel();
+
+		expect(invalidate).toHaveBeenCalledTimes(1);
+		expect(updateEditorBorderColor).toHaveBeenCalledTimes(1);
+		expect(refreshSessionChrome).toHaveBeenCalledTimes(1);
+	});
 });

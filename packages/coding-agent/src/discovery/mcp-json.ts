@@ -99,11 +99,14 @@ function transformMCPConfig(config: MCPConfigFile, source: SourceMeta): MCPServe
 			};
 
 			// Expand environment variables
-			if (server.command) server.command = expandEnvVarsDeep(server.command);
+			if (server.command !== null && server.command !== undefined && server.command !== "")
+				server.command = expandEnvVarsDeep(server.command);
 			if (server.args) server.args = expandEnvVarsDeep(server.args);
 			if (server.env) server.env = expandEnvVarsDeep(server.env);
-			if (server.cwd) server.cwd = expandEnvVarsDeep(server.cwd);
-			if (server.url) server.url = expandEnvVarsDeep(server.url);
+			if (server.cwd !== null && server.cwd !== undefined && server.cwd !== "")
+				server.cwd = expandEnvVarsDeep(server.cwd);
+			if (server.url !== null && server.url !== undefined && server.url !== "")
+				server.url = expandEnvVarsDeep(server.url);
 			if (server.headers) server.headers = expandEnvVarsDeep(server.headers);
 			if (server.auth) server.auth = expandEnvVarsDeep(server.auth);
 			if (server.oauth) server.oauth = expandEnvVarsDeep(server.oauth);

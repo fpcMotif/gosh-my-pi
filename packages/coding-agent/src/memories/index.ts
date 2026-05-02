@@ -127,7 +127,7 @@ export function startMemoryStartupTask(options: {
 	const cfg = loadMemoryConfig(settings);
 	if (!cfg.enabled) return;
 	if (taskDepth > 0) return;
-	if (!session.sessionManager.getSessionFile()) return;
+	if (session.sessionManager.getSessionFile() === undefined || session.sessionManager.getSessionFile() === "") return;
 
 	const dbPath = getAgentDbPath(agentDir);
 	try {
@@ -237,7 +237,7 @@ async function runPhase1(options: {
 			return;
 		}
 		const phase1ApiKey = await modelRegistry.getApiKey(phase1Model, session.sessionManager.getSessionId());
-		if (!phase1ApiKey) {
+		if (phase1ApiKey === null || phase1ApiKey === undefined || phase1ApiKey === "") {
 			logger.debug("Phase1 skipped: no API key for phase1 model", {
 				provider: phase1Model.provider,
 				model: phase1Model.id,
@@ -322,7 +322,7 @@ async function runPhase1(options: {
 				stats.usage.output += result.usage.output;
 				stats.usage.cacheRead += result.usage.cacheRead;
 				stats.usage.cacheWrite += result.usage.cacheWrite;
-				stats.usage.total += result.usage.totalTokens || 0;
+				stats.usage.total += result.usage.totalTokens ?? 0;
 			}
 		});
 
@@ -398,7 +398,7 @@ async function runPhase2(options: {
 			return;
 		}
 		const phase2ApiKey = await modelRegistry.getApiKey(phase2Model, session.sessionManager.getSessionId());
-		if (!phase2ApiKey) {
+		if (phase2ApiKey === null || phase2ApiKey === undefined || phase2ApiKey === "") {
 			markPhase2FailureWithFallback(db, {
 				claim,
 				retryDelaySeconds: config.phase2RetryDelaySeconds,
@@ -489,7 +489,7 @@ function markPhase2FailureWithFallback(
 	});
 	if (!unownedFailed) {
 		logger.warn("Phase2 could not mark failure (ownership lost and unowned fallback skipped)", {
-			error: error ? String(error) : undefined,
+			error: error !== null && error !== undefined ? String(error) : undefined,
 			memoryRoot,
 			reason,
 			inputWatermark: claim.inputWatermark,
@@ -525,7 +525,8 @@ async function collectThreads(session: AgentSession, currentThreadId?: string): 
 			// ignore malformed session files
 		}
 
-		if (currentThreadId && id === currentThreadId) continue;
+		if (currentThreadId !== null && currentThreadId !== undefined && currentThreadId !== "" && id === currentThreadId)
+			continue;
 		threads.push({
 			id,
 			updatedAt: Math.floor(stat.mtimeMs / 1000),
@@ -556,11 +557,11 @@ function extractPersistableMessages(payload: string): AgentMessage[] {
 	if (!Array.isArray(rows)) return [];
 	const messages: AgentMessage[] = [];
 	for (const row of rows) {
-		if (!row || typeof row !== "object") continue;
+		if (row === null || row === undefined || typeof row !== "object") continue;
 		const entry = row as Record<string, unknown>;
 		if (entry.type !== "message") continue;
 		const maybeMessage = entry.message;
-		if (!maybeMessage || typeof maybeMessage !== "object") continue;
+		if (maybeMessage === null || maybeMessage === undefined || typeof maybeMessage !== "object") continue;
 		const message = maybeMessage as AgentMessage;
 		if (shouldPersistResponseItemForMemories(message)) {
 			messages.push(message);
@@ -613,7 +614,7 @@ async function runStage1Job(options: {
 		);
 
 		if (response.stopReason === "error") {
-			return { kind: "failed", reason: response.errorMessage || "stage1 model error" };
+			return { kind: "failed", reason: response.errorMessage ?? "stage1 model error" };
 		}
 		const text = response.content
 			.filter((c): c is { type: "text"; text: string } => c.type === "text")
@@ -640,7 +641,7 @@ async function runStage1Job(options: {
 			output: {
 				rawMemory,
 				rolloutSummary,
-				rolloutSlug: rolloutSlug || null,
+				rolloutSlug: rolloutSlug ?? null,
 			},
 			usage: response.usage,
 		};
@@ -738,7 +739,7 @@ async function runConsolidationModel(options: { memoryRoot: string; model: Model
 		{ apiKey, maxTokens: 8192, reasoning: Effort.Medium },
 	);
 	if (response.stopReason === "error") {
-		throw new Error(response.errorMessage || "phase2 model error");
+		throw new Error(response.errorMessage ?? "phase2 model error");
 	}
 	const text = response.content
 		.filter((c): c is { type: "text"; text: string } => c.type === "text")
@@ -869,7 +870,7 @@ function computeCompletionWatermark(claimedInputWatermark: number, outputs: Stag
 }
 
 function formatRolloutFilename(threadId: string, rolloutSlug: string | null): string {
-	if (!rolloutSlug) return threadId;
+	if (rolloutSlug === null || rolloutSlug === undefined || rolloutSlug === "") return threadId;
 	const normalized = rolloutSlug
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "_")
@@ -883,7 +884,7 @@ function parseJsonObject(text: string): Record<string, unknown> | undefined {
 	if (!text) return undefined;
 	try {
 		const parsed = JSON.parse(text) as unknown;
-		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+		if (parsed !== null && parsed !== undefined && typeof parsed === "object" && !Array.isArray(parsed)) {
 			return parsed as Record<string, unknown>;
 		}
 	} catch {
@@ -891,7 +892,7 @@ function parseJsonObject(text: string): Record<string, unknown> | undefined {
 		if (!match) return undefined;
 		try {
 			const parsed = JSON.parse(match[0]) as unknown;
-			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+			if (parsed !== null && parsed !== undefined && typeof parsed === "object" && !Array.isArray(parsed)) {
 				return parsed as Record<string, unknown>;
 			}
 		} catch {
@@ -920,7 +921,7 @@ function parseConsolidationOutputSchema(value: Record<string, unknown>): Consoli
 	if (!Array.isArray(value.skills)) return undefined;
 	const skills: ConsolidationSkillSchema[] = [];
 	for (const item of value.skills) {
-		if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
+		if (item === null || item === undefined || typeof item !== "object" || Array.isArray(item)) return undefined;
 		const data = item as Record<string, unknown>;
 		if (!hasExactKeys(data, ["name", "content", "scripts", "templates", "examples"], true)) return undefined;
 		if (typeof data.name !== "string") return undefined;
@@ -984,7 +985,7 @@ function parseConsolidationSkillFileArray(value: unknown): ConsolidationSkillFil
 	if (!Array.isArray(value)) return undefined;
 	const files: ConsolidationSkillFileSchema[] = [];
 	for (const item of value) {
-		if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
+		if (item === null || item === undefined || typeof item !== "object" || Array.isArray(item)) return undefined;
 		const data = item as Record<string, unknown>;
 		if (!hasExactKeys(data, ["path", "content"])) return undefined;
 		if (typeof data.path !== "string" || typeof data.content !== "string") return undefined;
@@ -1001,7 +1002,7 @@ function sanitizeConsolidationSkillFiles(
 	const sanitized = new Map<string, string>();
 	for (const file of files) {
 		const relativePath = sanitizeSkillRelativePath(file.path);
-		if (!relativePath) continue;
+		if (relativePath === null || relativePath === undefined || relativePath === "") continue;
 		const content = redactSecrets(file.content).trim();
 		if (!content) continue;
 		sanitized.set(path.posix.join(bucket, relativePath), content);
@@ -1063,8 +1064,8 @@ async function resolveMemoryModel(options: {
 	fallbackRole: string;
 }): Promise<Model | undefined> {
 	const { modelRegistry, session, fallbackRole } = options;
-	const requestedModel = session.settings.getModelRole(fallbackRole) || session.settings.getModelRole("default");
-	if (requestedModel) {
+	const requestedModel = session.settings.getModelRole(fallbackRole) ?? session.settings.getModelRole("default");
+	if (requestedModel !== null && requestedModel !== undefined && requestedModel !== "") {
 		const resolved = resolveModelRoleValue(requestedModel, modelRegistry.getAll(), {
 			settings: session.settings,
 			matchPreferences: { usageOrder: session.settings.getStorage()?.getModelUsageOrder() },
@@ -1118,7 +1119,7 @@ async function runWithConcurrency<T>(
 	const workers = new Array(Math.max(1, concurrency)).fill(0).map(async () => {
 		while (queue.length > 0) {
 			const item = queue.shift();
-			if (!item) return;
+			if (item === null || item === undefined) return;
 			await worker(item);
 		}
 	});

@@ -96,8 +96,10 @@ export class SessionObserverRegistry {
 				if (existing) {
 					existing.status = status;
 					existing.lastUpdate = Date.now();
-					if (payload.description) existing.description = payload.description;
-					if (payload.sessionFile) existing.sessionFile = payload.sessionFile;
+					if (payload.description !== null && payload.description !== undefined && payload.description !== "")
+						existing.description = payload.description;
+					if (payload.sessionFile !== null && payload.sessionFile !== undefined && payload.sessionFile !== "")
+						existing.sessionFile = payload.sessionFile;
 				} else {
 					this.#sessions.set(payload.id, {
 						id: payload.id,
@@ -124,8 +126,10 @@ export class SessionObserverRegistry {
 				if (existing) {
 					existing.lastUpdate = Date.now();
 					existing.progress = progress;
-					if (progress.description) existing.description = progress.description;
-					if (payload.sessionFile) existing.sessionFile = payload.sessionFile;
+					if (progress.description !== null && progress.description !== undefined && progress.description !== "")
+						existing.description = progress.description;
+					if (payload.sessionFile !== null && payload.sessionFile !== undefined && payload.sessionFile !== "")
+						existing.sessionFile = payload.sessionFile;
 				} else {
 					this.#sessions.set(id, {
 						id,

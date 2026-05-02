@@ -24,25 +24,21 @@ export const EMBEDDED_CLIENT_ARCHIVE_TAR_GZ_BASE64 = "";
 
 async function collectFiles(dir: string): Promise<string[]> {
 	const entries = await fs.readdir(dir, { withFileTypes: true });
-	const files: string[] = [];
-	for (const entry of entries) {
-		const fullPath = path.join(dir, entry.name);
-		if (entry.isDirectory()) {
-			files.push(...(await collectFiles(fullPath)));
-		} else if (entry.isFile()) {
-			files.push(fullPath);
-		}
-	}
+	const subDirs = entries.filter(entry => entry.isDirectory()).map(entry => path.join(dir, entry.name));
+	const subResults = await Promise.all(subDirs.map(sub => collectFiles(sub)));
+	const fileEntries = entries.filter(entry => entry.isFile()).map(entry => path.join(dir, entry.name));
+	const files = [...fileEntries, ...subResults.flat()];
 	files.sort((a, b) => a.localeCompare(b));
 	return files;
 }
 
 async function buildArchiveBase64(dir: string): Promise<string> {
 	const files = await collectFiles(dir);
+	const fileContents = await Promise.all(files.map(filePath => fs.readFile(filePath)));
 	const entries: Record<string, Uint8Array> = {};
-	for (const filePath of files) {
+	for (const [i, filePath] of files.entries()) {
 		const relativePath = path.relative(dir, filePath).split(path.sep).join("/");
-		entries[relativePath] = await fs.readFile(filePath);
+		entries[relativePath] = fileContents[i];
 	}
 
 	const tempArchivePath = path.join(

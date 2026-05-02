@@ -9,7 +9,7 @@ import type { NestedRepoPatch } from "./worktree";
 export type AgentSource = "bundled" | "user" | "project";
 
 const parseNumber = (value: string | undefined, defaultValue: number): number => {
-	if (value) {
+	if (value !== null && value !== undefined && value !== "") {
 		try {
 			const number = Number.parseInt(value, 10);
 			if (!Number.isNaN(number) && number > 0) {

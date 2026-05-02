@@ -25,7 +25,9 @@ import {
 } from "./runner";
 import { type EditTask, loadTasksFromDir, validateFixturesFromDir } from "./tasks";
 
-const COLOR_ENABLED = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+const COLOR_ENABLED =
+	Boolean(process.stdout.isTTY) &&
+	(process.env.NO_COLOR === null || process.env.NO_COLOR === undefined || process.env.NO_COLOR === "");
 
 const ANSI = {
 	reset: "\x1b[0m",
@@ -261,7 +263,12 @@ async function main(): Promise<void> {
 		process.exit(0);
 	}
 
-	if (values["check-fixtures"] && values.fixtures) {
+	if (
+		values["check-fixtures"] &&
+		values.fixtures !== null &&
+		values.fixtures !== undefined &&
+		values.fixtures !== ""
+	) {
 		const issues = await validateFixturesFromDir(values.fixtures);
 		if (issues.length === 0) {
 			console.log("Fixtures OK");
@@ -290,7 +297,7 @@ async function main(): Promise<void> {
 	let thinkingLevel: ResolvedThinkingLevel = Effort.Low;
 	if (values.thinking) {
 		const level = parseThinkingLevel(values.thinking);
-		if (!level) {
+		if (level === undefined) {
 			console.error(`Invalid thinking level: ${values.thinking}`);
 			console.error(`Valid levels: ${[ThinkingLevel.Off, ...THINKING_EFFORTS].join(", ")}`);
 			process.exit(1);
@@ -335,7 +342,7 @@ async function main(): Promise<void> {
 	const connectionTimeout = parseInt(values["connection-timeout"] ?? "30000", 10);
 
 	let tasksToRun = allTasks;
-	if (values.tasks) {
+	if (values.tasks !== null && values.tasks !== undefined && values.tasks !== "") {
 		const taskIds = values.tasks.split(",").map(s => s.trim());
 		tasksToRun = [];
 		for (const id of taskIds) {
@@ -351,7 +358,11 @@ async function main(): Promise<void> {
 
 	// Apply --max-tasks sampling (deterministic by sorting on id)
 	const maxTasks = parseInt(values["max-tasks"] ?? "80", 10);
-	if (maxTasks > 0 && tasksToRun.length > maxTasks && !values.tasks) {
+	if (
+		maxTasks > 0 &&
+		tasksToRun.length > maxTasks &&
+		(values.tasks === null || values.tasks === undefined || values.tasks === "")
+	) {
 		// Evenly sample across mutation categories for representative coverage
 		const sorted = tasksToRun.slice().sort((a, b) => a.id.localeCompare(b.id));
 		const step = sorted.length / maxTasks;
@@ -424,30 +435,30 @@ async function main(): Promise<void> {
 	console.log("==============");
 	console.log(`Provider: ${config.provider}`);
 	console.log(`Model: ${config.model}`);
-	if (config.thinkingLevel) {
+	if (config.thinkingLevel !== undefined) {
 		console.log(`Thinking: ${config.thinkingLevel}`);
 	}
 	console.log(`Runs per task: ${config.runsPerTask}`);
 	console.log(`Timeout: ${config.timeout}ms`);
 	console.log(`Task concurrency: ${config.taskConcurrency}`);
-	if (config.autoFormat) {
+	if (config.autoFormat === true) {
 		console.log("Auto-format: enabled");
 	}
-	console.log(`Guided mode: ${config.guided ? "enabled" : "disabled"}`);
+	console.log(`Guided mode: ${config.guided === true ? "enabled" : "disabled"}`);
 	console.log(`Max attempts: ${config.maxAttempts}`);
 	if (config.maxTurns !== undefined) {
 		console.log(`Max turns per attempt: ${config.maxTurns}`);
 	}
-	if (config.requireEditToolCall) {
+	if (config.requireEditToolCall === true) {
 		console.log("Require edit tool call: yes");
 	}
-	if (config.requireReadToolCall) {
+	if (config.requireReadToolCall === true) {
 		console.log("Require read tool call: yes");
 	}
-	if (config.noEditRequired) {
+	if (config.noEditRequired === true) {
 		console.log("No-edit-required baseline: yes");
 	}
-	if (config.editVariant) {
+	if (config.editVariant !== null && config.editVariant !== undefined && config.editVariant !== "") {
 		console.log(`Edit variant: ${config.editVariant}`);
 	}
 	if (config.editFuzzy !== undefined) {
@@ -484,7 +495,11 @@ async function main(): Promise<void> {
 			const report = formatType === "json" ? generateJsonReport(result) : generateReport(result);
 			await Bun.write(outputPath, report);
 			console.log(`Report written to: ${outputPath}`);
-			if (config.conversationDumpDir) {
+			if (
+				config.conversationDumpDir !== null &&
+				config.conversationDumpDir !== undefined &&
+				config.conversationDumpDir !== ""
+			) {
 				console.log(await conversationDumpStatus(config.conversationDumpDir));
 			}
 		})();
@@ -584,11 +599,11 @@ class LiveProgress {
 		}
 
 		const result = event.result;
-		if (result && !result.success && result.error) {
+		if (result && !result.success && result.error !== null && result.error !== undefined && result.error !== "") {
 			this.#flushLine();
 			const header = paint(ANSI.red, `[${event.taskId}] Run ${event.runIndex + 1}/${this.#runsPerTask} failed:`);
 			console.log(`  ${header} ${result.error}`);
-			if (result.diff) {
+			if (result.diff !== null && result.diff !== undefined && result.diff !== "") {
 				const changeLines = result.diff
 					.split("\n")
 					.filter(line => /^[-+@]/.test(line) && !/^(---|\+\+\+)/.test(line));
@@ -599,7 +614,7 @@ class LiveProgress {
 					if (line.startsWith("@@")) color = ANSI.cyan;
 					else if (line.startsWith("-")) color = ANSI.red;
 					else if (line.startsWith("+")) color = ANSI.green;
-					console.log(`    ${color ? paint(color, line) : line}`);
+					console.log(`    ${color !== null && color !== undefined && color !== "" ? paint(color, line) : line}`);
 				}
 				if (changeLines.length > maxLines) {
 					console.log(paint(ANSI.dim, `    ... (${changeLines.length - maxLines} more change lines)`));
@@ -612,7 +627,7 @@ class LiveProgress {
 			for (const [i, failure] of result.editFailures.entries()) {
 				const args = (failure.args ?? {}) as Record<string, unknown>;
 				const target =
-					typeof args.path === "string" ? args.path : typeof args.file === "string" ? args.file : undefined;
+					typeof args.path === "string" ? args.path : (typeof args.file === "string" ? args.file : undefined);
 				const op = typeof args.operation === "string" ? args.operation : undefined;
 				const oneLine = failure.error.replace(/\s+/g, " ").trim();
 				const clipped = oneLine.length > 240 ? `${oneLine.slice(0, 237)}...` : oneLine;
@@ -624,7 +639,7 @@ class LiveProgress {
 		}
 
 		if (!this.#isTty) {
-			const status = event.result?.success ? "completed" : "failed";
+			const status = event.result?.success === true ? "completed" : "failed";
 			console.log(`  [${event.taskId}] Run ${event.runIndex + 1}/${this.#runsPerTask} ${status}`);
 		}
 
@@ -711,7 +726,7 @@ class LiveProgress {
 	}
 }
 
-main().catch(err => {
-	console.error("Benchmark failed:", err);
+main().catch(error => {
+	console.error("Benchmark failed:", error);
 	process.exit(1);
 });

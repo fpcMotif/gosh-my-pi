@@ -65,7 +65,7 @@ export const handleStackOverflow: SpecialHandler = async (
 	try {
 		const parsed = new URL(url);
 		const site = getSiteParam(parsed.hostname);
-		if (!site) return null;
+		if (site === null || site === undefined || site === "") return null;
 
 		// Extract question ID from URL patterns like /questions/12345/...
 		const match = parsed.pathname.match(/\/questions\/(\d+)/);
@@ -81,7 +81,8 @@ export const handleStackOverflow: SpecialHandler = async (
 		if (!qResult.ok) return null;
 
 		const qData = tryParseJson<{ items: SOQuestion[] }>(qResult.content);
-		if (!qData?.items?.length) return null;
+		if (qData?.items?.length === null || qData?.items?.length === undefined || qData?.items?.length === 0)
+			return null;
 
 		const question = qData.items[0];
 
@@ -98,7 +99,7 @@ export const handleStackOverflow: SpecialHandler = async (
 
 		if (aResult.ok) {
 			const aData = tryParseJson<{ items: SOAnswer[] }>(aResult.content);
-			if (aData?.items?.length) {
+			if (aData?.items?.length !== null && aData?.items?.length !== undefined && aData?.items?.length !== 0) {
 				md += `---\n\n## Answers\n\n`;
 				for (const answer of aData.items.slice(0, 5)) {
 					const accepted = answer.is_accepted ? " (Accepted)" : "";

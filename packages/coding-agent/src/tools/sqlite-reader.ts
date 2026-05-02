@@ -230,7 +230,7 @@ function coerceLookupValue(key: string, type: string): SqliteBinding {
 }
 
 function resolveOrderClause(order: string | undefined, columns: string[]): string {
-	if (!order) return "";
+	if (order === null || order === undefined || order === "") return "";
 	const trimmed = order.trim();
 	if (!trimmed) return "";
 
@@ -285,7 +285,7 @@ function findWhereClauseViolation(sql: string): string | null {
 	let keywordViolation: string | null = null;
 
 	const flushToken = (end: number): void => {
-		if (tokenStart < 0 || keywordViolation) {
+		if (tokenStart < 0 || (keywordViolation !== null && keywordViolation !== undefined && keywordViolation !== "")) {
 			tokenStart = -1;
 			return;
 		}
@@ -348,11 +348,11 @@ function findWhereClauseViolation(sql: string): string | null {
 }
 
 function validateWhereClause(where: string | undefined): string | undefined {
-	if (!where) return undefined;
+	if (where === null || where === undefined || where === "") return undefined;
 	const trimmed = where.trim();
 	if (!trimmed) return undefined;
 	const violation = findWhereClauseViolation(trimmed);
-	if (violation) {
+	if (violation !== null && violation !== undefined && violation !== "") {
 		throw new ToolError(violation);
 	}
 	return trimmed;
@@ -514,7 +514,7 @@ export function listTables(db: Database): { name: string; rowCount: number }[] {
 
 export function getTableSchema(db: Database, table: string): string {
 	const row = getTableMasterRow(db, table);
-	if (!row.sql) {
+	if (row.sql === null || row.sql === undefined || row.sql === "") {
 		throw new ToolError(`SQLite schema for table '${table}' is unavailable`);
 	}
 	return row.sql;
@@ -555,7 +555,10 @@ export function queryRows(
 ): { columns: string[]; rows: Record<string, unknown>[]; totalCount: number } {
 	const columns = getTableColumns(db, table);
 	const validatedWhere = validateWhereClause(opts.where);
-	const whereClause = validatedWhere ? ` WHERE ${validatedWhere}` : "";
+	const whereClause =
+		validatedWhere !== null && validatedWhere !== undefined && validatedWhere !== ""
+			? ` WHERE ${validatedWhere}`
+			: "";
 	const orderClause = resolveOrderClause(opts.order, columns);
 	const countSql = `SELECT COUNT(*) AS count FROM ${quoteSqliteIdentifier(table)}${whereClause}`;
 	const selectSql = `SELECT * FROM ${quoteSqliteIdentifier(table)}${whereClause}${orderClause} LIMIT ? OFFSET ?`;

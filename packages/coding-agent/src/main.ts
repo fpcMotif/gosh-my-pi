@@ -14,7 +14,7 @@ import type { ImageContent } from "@oh-my-pi/pi-ai";
 import { $env, getConfigDirName, getProjectDir, logger, postmortem, setProjectDir, VERSION } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { invalidate as invalidateFsCache } from "./capability/fs";
-import type { Args } from "./cli/args";
+import { expandInlineFlagValues, type Args } from "./cli/args";
 import { processFileArguments } from "./cli/file-processor";
 import { buildInitialMessage } from "./cli/initial-message";
 import { listModels } from "./cli/list-models";
@@ -62,7 +62,12 @@ async function checkForNewVersion(currentVersion: string): Promise<string | unde
 		const data = (await response.json()) as { version?: string };
 		const latestVersion = data.version;
 
-		if (latestVersion && Bun.semver.order(latestVersion, currentVersion) > 0) {
+		if (
+			latestVersion !== null &&
+			latestVersion !== undefined &&
+			latestVersion !== "" &&
+			Bun.semver.order(latestVersion, currentVersion) > 0
+		) {
 			return latestVersion;
 		}
 
@@ -168,7 +173,7 @@ async function runInteractiveMode(
 			if (!settings.get("startup.checkUpdate")) {
 				return;
 			}
-			if (newVersion) {
+			if (newVersion !== null && newVersion !== undefined && newVersion !== "") {
 				mode.showNewVersionNotification(newVersion);
 			}
 		})
@@ -237,7 +242,7 @@ async function promptForkSession(session: SessionInfo): Promise<boolean> {
 }
 
 async function getChangelogForDisplay(parsed: Args): Promise<string | undefined> {
-	if (parsed.continue || parsed.resume) {
+	if (parsed.continue ?? parsed.resume) {
 		return undefined;
 	}
 
@@ -245,7 +250,7 @@ async function getChangelogForDisplay(parsed: Args): Promise<string | undefined>
 	const changelogPath = getChangelogPath();
 	const entries = await parseChangelog(changelogPath);
 
-	if (!lastVersion) {
+	if (lastVersion === null || lastVersion === undefined || lastVersion === "") {
 		if (entries.length > 0) {
 			settings.set("lastChangelogVersion", VERSION);
 			return entries.map(e => e.content).join("\n\n");
@@ -262,8 +267,8 @@ async function getChangelogForDisplay(parsed: Args): Promise<string | undefined>
 }
 
 async function createSessionManager(parsed: Args, cwd: string): Promise<SessionManager | undefined> {
-	if (parsed.fork) {
-		if (parsed.noSession) {
+	if (parsed.fork !== null && parsed.fork !== undefined && parsed.fork !== "") {
+		if (parsed.noSession === true) {
 			throw new Error("--fork requires session persistence");
 		}
 		const forkSource = parsed.fork;
@@ -277,7 +282,7 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 		return await SessionManager.forkFrom(match.session.path, cwd, parsed.sessionDir);
 	}
 
-	if (parsed.noSession) {
+	if (parsed.noSession === true) {
 		return SessionManager.inMemory();
 	}
 	if (typeof parsed.resume === "string") {
@@ -302,12 +307,12 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 		}
 		return await SessionManager.open(match.session.path, parsed.sessionDir);
 	}
-	if (parsed.continue) {
+	if (parsed.continue === true) {
 		return await SessionManager.continueRecent(cwd, parsed.sessionDir);
 	}
 	// --resume without value is handled separately (needs picker UI)
 	// If --session-dir provided without --continue/--resume, create new session there
-	if (parsed.sessionDir) {
+	if (parsed.sessionDir !== null && parsed.sessionDir !== undefined && parsed.sessionDir !== "") {
 		return SessionManager.create(cwd, parsed.sessionDir);
 	}
 	// Auto-resume: behave like --continue if the setting is enabled and a prior
@@ -326,7 +331,7 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 }
 
 async function maybeAutoChdir(parsed: Args): Promise<void> {
-	if (parsed.allowHome || parsed.cwd) {
+	if (parsed.allowHome ?? (parsed.cwd !== null && parsed.cwd !== undefined && parsed.cwd !== "")) {
 		return;
 	}
 
@@ -382,12 +387,12 @@ async function maybeAutoChdir(parsed: Args): Promise<void> {
 function discoverSystemPromptFile(): string | undefined {
 	// Check project-local first (.omp/SYSTEM.md, .pi/SYSTEM.md legacy)
 	const projectPath = findConfigFile("SYSTEM.md", { user: false });
-	if (projectPath) {
+	if (projectPath !== null && projectPath !== undefined && projectPath !== "") {
 		return projectPath;
 	}
 	// If not found, check SYSTEM.md file in the global directory.
 	const globalPath = findConfigFile("SYSTEM.md", { user: true });
-	if (globalPath) {
+	if (globalPath !== null && globalPath !== undefined && globalPath !== "") {
 		return globalPath;
 	}
 	return undefined;
@@ -396,11 +401,11 @@ function discoverSystemPromptFile(): string | undefined {
 /** Discover APPEND_SYSTEM.md file if no CLI append system prompt was provided */
 function discoverAppendSystemPromptFile(): string | undefined {
 	const projectPath = findConfigFile("APPEND_SYSTEM.md", { user: false });
-	if (projectPath) {
+	if (projectPath !== null && projectPath !== undefined && projectPath !== "") {
 		return projectPath;
 	}
 	const globalPath = findConfigFile("APPEND_SYSTEM.md", { user: true });
-	if (globalPath) {
+	if (globalPath !== null && globalPath !== undefined && globalPath !== "") {
 		return globalPath;
 	}
 	return undefined;
@@ -425,7 +430,7 @@ async function buildSessionOptions(
 	if (sessionManager) {
 		options.sessionManager = sessionManager;
 	}
-	if (parsed.providerSessionId) {
+	if (parsed.providerSessionId !== null && parsed.providerSessionId !== undefined && parsed.providerSessionId !== "") {
 		options.providerSessionId = parsed.providerSessionId;
 	}
 
@@ -435,18 +440,21 @@ async function buildSessionOptions(
 	const modelMatchPreferences = {
 		usageOrder: settings.getStorage()?.getModelUsageOrder(),
 	};
-	if (parsed.model) {
+	if (parsed.model !== null && parsed.model !== undefined && parsed.model !== "") {
 		const resolved = resolveCliModel({
 			cliProvider: parsed.provider,
 			cliModel: parsed.model,
 			modelRegistry,
 			preferences: modelMatchPreferences,
 		});
-		if (resolved.warning) {
+		if (resolved.warning !== null && resolved.warning !== undefined && resolved.warning !== "") {
 			process.stderr.write(`${chalk.yellow(`Warning: ${resolved.warning}`)}\n`);
 		}
-		if (resolved.error) {
-			if (!parsed.provider && !parsed.model.includes(":")) {
+		if (resolved.error !== null && resolved.error !== undefined && resolved.error !== "") {
+			if (
+				(parsed.provider === null || parsed.provider === undefined || parsed.provider === "") &&
+				!parsed.model.includes(":")
+			) {
 				// Model not found in built-in registry — defer resolution to after extensions load
 				// (extensions may register additional providers/models via registerProvider)
 				options.modelPattern = parsed.model;
@@ -459,13 +467,13 @@ async function buildSessionOptions(
 			settings.overrideModelRoles({
 				default: resolved.selector ?? `${resolved.model.provider}/${resolved.model.id}`,
 			});
-			if (!parsed.thinking && resolved.thinkingLevel) {
+			if (parsed.thinking === undefined && resolved.thinkingLevel !== undefined) {
 				options.thinkingLevel = resolved.thinkingLevel;
 			}
 		}
-	} else if (scopedModels.length > 0 && !parsed.continue && !parsed.resume) {
+	} else if (scopedModels.length > 0 && parsed.continue !== true && !parsed.resume) {
 		const remembered = settings.getModelRole("default");
-		if (remembered) {
+		if (remembered !== null && remembered !== undefined && remembered !== "") {
 			const rememberedSpec = resolveModelRoleValue(
 				remembered,
 				scopedModels.map(scopedModel => scopedModel.model),
@@ -486,7 +494,11 @@ async function buildSessionOptions(
 			if (rememberedModel) {
 				options.model = rememberedModel.model;
 				// Apply explicit thinking level from remembered role value
-				if (!parsed.thinking && rememberedSpec.explicitThinkingLevel && rememberedSpec.thinkingLevel) {
+				if (
+					parsed.thinking === undefined &&
+					rememberedSpec.explicitThinkingLevel &&
+					rememberedSpec.thinkingLevel !== undefined
+				) {
 					options.thinkingLevel = rememberedSpec.thinkingLevel;
 				}
 			}
@@ -495,12 +507,12 @@ async function buildSessionOptions(
 	}
 
 	// Thinking level
-	if (parsed.thinking) {
+	if (parsed.thinking !== undefined) {
 		options.thinkingLevel = parsed.thinking;
 	} else if (
 		scopedModels.length > 0 &&
 		scopedModels[0].explicitThinkingLevel === true &&
-		!parsed.continue &&
+		parsed.continue !== true &&
 		!parsed.resume
 	) {
 		options.thinkingLevel = scopedModels[0].thinkingLevel;
@@ -521,27 +533,34 @@ async function buildSessionOptions(
 	// (handled by caller before createAgentSession)
 
 	// System prompt
-	if (resolvedSystemPrompt && resolvedAppendPrompt) {
+	if (
+		resolvedSystemPrompt !== null &&
+		resolvedSystemPrompt !== undefined &&
+		resolvedSystemPrompt !== "" &&
+		resolvedAppendPrompt !== null &&
+		resolvedAppendPrompt !== undefined &&
+		resolvedAppendPrompt !== ""
+	) {
 		options.systemPrompt = `${resolvedSystemPrompt}\n\n${resolvedAppendPrompt}`;
-	} else if (resolvedSystemPrompt) {
+	} else if (resolvedSystemPrompt !== null && resolvedSystemPrompt !== undefined && resolvedSystemPrompt !== "") {
 		options.systemPrompt = resolvedSystemPrompt;
-	} else if (resolvedAppendPrompt) {
+	} else if (resolvedAppendPrompt !== null && resolvedAppendPrompt !== undefined && resolvedAppendPrompt !== "") {
 		options.systemPrompt = defaultPrompt => `${defaultPrompt}\n\n${resolvedAppendPrompt}`;
 	}
 
 	// Tools
-	if (parsed.noTools) {
+	if (parsed.noTools === true) {
 		options.toolNames = parsed.tools && parsed.tools.length > 0 ? parsed.tools : [];
 	} else if (parsed.tools) {
 		options.toolNames = parsed.tools;
 	}
 
-	if (parsed.noLsp) {
+	if (parsed.noLsp === true) {
 		options.enableLsp = false;
 	}
 
 	// Skills
-	if (parsed.noSkills) {
+	if (parsed.noSkills === true) {
 		options.skills = [];
 	} else if (parsed.skills && parsed.skills.length > 0) {
 		// Override includeSkills for this session
@@ -549,17 +568,18 @@ async function buildSessionOptions(
 	}
 
 	// Rules
-	if (parsed.noRules) {
+	if (parsed.noRules === true) {
 		options.rules = [];
 	}
 
 	// Additional extension paths from CLI
-	const cliExtensionPaths = parsed.noExtensions ? [] : [...(parsed.extensions ?? []), ...(parsed.hooks ?? [])];
+	const cliExtensionPaths =
+		parsed.noExtensions === true ? [] : [...(parsed.extensions ?? []), ...(parsed.hooks ?? [])];
 	if (cliExtensionPaths.length > 0) {
 		options.additionalExtensionPaths = cliExtensionPaths;
 	}
 
-	if (parsed.noExtensions) {
+	if (parsed.noExtensions === true) {
 		options.disableExtensionDiscovery = true;
 		options.additionalExtensionPaths = [];
 	}
@@ -583,7 +603,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	const authStorage = await logger.time("discoverModels", discoverAuthStorage);
 	const modelRegistry = new ModelRegistry(authStorage);
 
-	if (parsedArgs.version) {
+	if (parsedArgs.version === true) {
 		process.stdout.write(`${VERSION}\n`);
 		process.exit(0);
 	}
@@ -596,7 +616,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		process.exit(0);
 	}
 
-	if (parsedArgs.export) {
+	if (parsedArgs.export !== null && parsedArgs.export !== undefined && parsedArgs.export !== "") {
 		let result: string;
 		try {
 			const outputPath = parsedArgs.messages.length > 0 ? parsedArgs.messages[0] : undefined;
@@ -620,10 +640,10 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	if (parsedArgs.mode === "rpc") {
 		applyRpcDefaultSettingOverrides();
 	}
-	if (parsedArgs.noPty) {
+	if (parsedArgs.noPty === true) {
 		Bun.env.PI_NO_PTY = "1";
 	}
-	if (parsedArgs.noTitle || parsedArgs.mode === "rpc") {
+	if (parsedArgs.noTitle ?? parsedArgs.mode === "rpc") {
 		Bun.env.PI_NO_TITLE = "1";
 	}
 	const { pipedInput, fileText, fileImages } = await logger.time("prepareInitialMessage", async () => {
@@ -642,8 +662,8 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		fileImages,
 		stdinContent: pipedInput,
 	});
-	const autoPrint = pipedInput !== undefined && !parsedArgs.print && parsedArgs.mode === undefined;
-	const isInteractive = !parsedArgs.print && !autoPrint && parsedArgs.mode === undefined;
+	const autoPrint = pipedInput !== undefined && parsedArgs.print !== true && parsedArgs.mode === undefined;
+	const isInteractive = parsedArgs.print !== true && !autoPrint && parsedArgs.mode === undefined;
 	const mode = parsedArgs.mode || "text";
 
 	// Initialize discovery system with settings for provider persistence
@@ -692,14 +712,17 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	let sessionManager = await logger.time("createSessionManager", createSessionManager, parsedArgs, cwd);
 
 	// Handle --resume (no value): show session picker
-	if (parsedArgs.resume === true && !parsedArgs.fork) {
+	if (
+		parsedArgs.resume === true &&
+		(parsedArgs.fork === null || parsedArgs.fork === undefined || parsedArgs.fork === "")
+	) {
 		const sessions = await logger.time("SessionManager.list", SessionManager.list, cwd, parsedArgs.sessionDir);
 		if (sessions.length === 0) {
 			process.stdout.write(`${chalk.dim("No sessions found")}\n`);
 			return;
 		}
 		const selectedPath = await logger.time("selectSession", selectSession, sessions);
-		if (!selectedPath) {
+		if (selectedPath === null || selectedPath === undefined || selectedPath === "") {
 			process.stdout.write(`${chalk.dim("No session selected")}\n`);
 			return;
 		}
@@ -761,8 +784,13 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	sessionOptions.hasUI = isInteractive;
 
 	// Handle CLI --api-key as runtime override (not persisted)
-	if (parsedArgs.apiKey) {
-		if (!sessionOptions.model && !sessionOptions.modelPattern) {
+	if (parsedArgs.apiKey !== null && parsedArgs.apiKey !== undefined && parsedArgs.apiKey !== "") {
+		if (
+			!sessionOptions.model &&
+			(sessionOptions.modelPattern === null ||
+				sessionOptions.modelPattern === undefined ||
+				sessionOptions.modelPattern === "")
+		) {
 			process.stderr.write(
 				`${chalk.red("--api-key requires a model to be specified via --model, --provider/--model, or --models")}\n`,
 			);
@@ -779,11 +807,17 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		sessionOptions,
 	);
 	logger.time("main:afterCreateSession");
-	if (parsedArgs.apiKey && !sessionOptions.model && session.model) {
+	if (
+		parsedArgs.apiKey !== null &&
+		parsedArgs.apiKey !== undefined &&
+		parsedArgs.apiKey !== "" &&
+		!sessionOptions.model &&
+		session.model
+	) {
 		authStorage.setRuntimeApiKey(session.model.provider, parsedArgs.apiKey);
 	}
 
-	if (modelFallbackMessage) {
+	if (modelFallbackMessage !== null && modelFallbackMessage !== undefined && modelFallbackMessage !== "") {
 		notifs.push({ kind: "warn", message: modelFallbackMessage });
 	}
 
@@ -796,8 +830,9 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	if (session.extensionRunner) {
 		const extFlags = session.extensionRunner.getFlags();
 		if (extFlags.size > 0) {
-			for (let i = 0; i < rawArgs.length; i++) {
-				const arg = rawArgs[i];
+			const expandedRawArgs = expandInlineFlagValues(rawArgs);
+			for (let i = 0; i < expandedRawArgs.length; i++) {
+				const arg = expandedRawArgs[i];
 				if (!arg.startsWith("--")) {
 					continue;
 				}
@@ -810,15 +845,15 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 					session.extensionRunner.setFlagValue(flagName, true);
 					continue;
 				}
-				if (i + 1 < rawArgs.length) {
-					session.extensionRunner.setFlagValue(flagName, rawArgs[++i]);
+				if (i + 1 < expandedRawArgs.length) {
+					session.extensionRunner.setFlagValue(flagName, expandedRawArgs[++i]);
 				}
 			}
 		}
 	}
 
 	if (!isInteractive && !session.model) {
-		if (modelFallbackMessage) {
+		if (modelFallbackMessage !== null && modelFallbackMessage !== undefined && modelFallbackMessage !== "") {
 			process.stderr.write(`${chalk.red(modelFallbackMessage)}\n`);
 		} else {
 			process.stderr.write(`${chalk.red("No models available.")}\n`);
@@ -863,7 +898,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		if (scopedModelsForDisplay.length > 0) {
 			const modelList = scopedModelsForDisplay
 				.map(scopedModel => {
-					const thinkingStr = !scopedModel.thinkingLevel ? `:${scopedModel.thinkingLevel}` : "";
+					const thinkingStr = scopedModel.thinkingLevel === undefined ? `:${scopedModel.thinkingLevel}` : "";
 					return `${scopedModel.model.id}${thinkingStr}`;
 				})
 				.join(", ");

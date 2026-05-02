@@ -114,8 +114,8 @@ export class DebugSelectorComponent extends Container {
 		let session: ProfilerSession;
 		try {
 			session = await startCpuProfile();
-		} catch (err) {
-			this.ctx.showError(`Failed to start profiler: ${err instanceof Error ? err.message : String(err)}`);
+		} catch (error) {
+			this.ctx.showError(`Failed to start profiler: ${error instanceof Error ? error.message : String(error)}`);
 			return;
 		}
 
@@ -177,10 +177,10 @@ export class DebugSelectorComponent extends Container {
 			);
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatFileHyperlink(result.path)), 1, 0));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
-		} catch (err) {
+		} catch (error) {
 			loader.stop();
 			this.ctx.statusContainer.clear();
-			this.ctx.showError(`Failed to create report: ${err instanceof Error ? err.message : String(err)}`);
+			this.ctx.showError(`Failed to create report: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
 		this.ctx.ui.requestRender();
@@ -190,7 +190,7 @@ export class DebugSelectorComponent extends Container {
 		try {
 			const workProfile = getWorkProfile(30);
 
-			if (!workProfile.svg) {
+			if (workProfile.svg === null || workProfile.svg === undefined || workProfile.svg === "") {
 				this.ctx.showWarning(`No work profile data (${workProfile.sampleCount} samples)`);
 				return;
 			}
@@ -205,8 +205,8 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.chatContainer.addChild(
 				new Text(theme.fg("dim", `Opened flamegraph (${workProfile.sampleCount} samples)`), 1, 0),
 			);
-		} catch (err) {
-			this.ctx.showError(`Failed to open profile: ${err instanceof Error ? err.message : String(err)}`);
+		} catch (error) {
+			this.ctx.showError(`Failed to open profile: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
 		this.ctx.ui.requestRender();
@@ -238,10 +238,10 @@ export class DebugSelectorComponent extends Container {
 			);
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatFileHyperlink(result.path)), 1, 0));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
-		} catch (err) {
+		} catch (error) {
 			loader.stop();
 			this.ctx.statusContainer.clear();
-			this.ctx.showError(`Failed to create report: ${err instanceof Error ? err.message : String(err)}`);
+			this.ctx.showError(`Failed to create report: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
 		this.ctx.ui.requestRender();
@@ -277,10 +277,10 @@ export class DebugSelectorComponent extends Container {
 			);
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatFileHyperlink(result.path)), 1, 0));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
-		} catch (err) {
+		} catch (error) {
 			loader.stop();
 			this.ctx.statusContainer.clear();
-			this.ctx.showError(`Failed to create report: ${err instanceof Error ? err.message : String(err)}`);
+			this.ctx.showError(`Failed to create report: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
 		this.ctx.ui.requestRender();
@@ -308,8 +308,8 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.editorContainer.clear();
 			this.ctx.editorContainer.addChild(viewer);
 			this.ctx.ui.setFocus(viewer);
-		} catch (err) {
-			this.ctx.showError(`Failed to read logs: ${err instanceof Error ? err.message : String(err)}`);
+		} catch (error) {
+			this.ctx.showError(`Failed to read logs: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
 		this.ctx.ui.requestRender();
@@ -324,8 +324,8 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.chatContainer.addChild(new DynamicBorder());
 			this.ctx.chatContainer.addChild(new Text(formatted, 1, 0));
 			this.ctx.chatContainer.addChild(new DynamicBorder());
-		} catch (err) {
-			this.ctx.showError(`Failed to collect system info: ${err instanceof Error ? err.message : String(err)}`);
+		} catch (error) {
+			this.ctx.showError(`Failed to collect system info: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
 		this.ctx.ui.requestRender();
@@ -336,7 +336,7 @@ export class DebugSelectorComponent extends Container {
 	}
 	async #handleOpenArtifacts(): Promise<void> {
 		const sessionFile = this.ctx.sessionManager.getSessionFile();
-		if (!sessionFile) {
+		if (sessionFile === null || sessionFile === undefined || sessionFile === "") {
 			this.ctx.showWarning("No active session file.");
 			return;
 		}
@@ -408,10 +408,10 @@ export class DebugSelectorComponent extends Container {
 					0,
 				),
 			);
-		} catch (err) {
+		} catch (error) {
 			loader.stop();
 			this.ctx.statusContainer.clear();
-			this.ctx.showError(`Failed to clear cache: ${err instanceof Error ? err.message : String(err)}`);
+			this.ctx.showError(`Failed to clear cache: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
 		this.ctx.ui.requestRender();

@@ -94,20 +94,20 @@ export async function* iterateWithIdleTimeout<T>(
 		);
 
 	let onFirst: (() => void) | null = () => {
-		watchdog && clearTimeout(watchdog);
+		if (watchdog !== undefined && watchdog !== null) clearTimeout(watchdog);
 		onFirst = null;
 	};
 
 	while (true) {
 		const nextResultPromise = withRacy(iterator.next());
-		const activeTimeoutMs = !onFirst ? options.idleTimeoutMs : firstItemTimeoutMs;
+		const activeTimeoutMs = onFirst === null ? options.idleTimeoutMs : firstItemTimeoutMs;
 
 		if (activeTimeoutMs === undefined || activeTimeoutMs <= 0) {
 			const outcome = await nextResultPromise;
 			if (outcome.kind === "error") {
 				throw outcome.error;
 			}
-			if (outcome.result.done) {
+			if (outcome.result.done === true) {
 				return;
 			}
 			onFirst?.();
@@ -123,23 +123,25 @@ export async function* iterateWithIdleTimeout<T>(
 		try {
 			const outcome = await Promise.race([nextResultPromise, timeoutPromise]);
 			if (outcome.kind === "timeout") {
-				if (!onFirst) {
+				if (onFirst === null) {
 					options.onIdle?.();
 				} else {
 					options.onFirstItemTimeout?.();
 				}
 				const returnPromise = iterator.return?.();
-				if (returnPromise) {
+				if (returnPromise !== undefined && returnPromise !== null) {
 					void returnPromise.catch(() => {});
 				}
-				throw new Error(!onFirst ? options.errorMessage : (options.firstItemErrorMessage ?? options.errorMessage));
+				throw new Error(
+					onFirst === null ? options.errorMessage : (options.firstItemErrorMessage ?? options.errorMessage),
+				);
 			}
-			watchdog && clearTimeout(watchdog);
+			if (watchdog !== undefined && watchdog !== null) clearTimeout(watchdog);
 			watchdog = undefined;
 			if (outcome.kind === "error") {
 				throw outcome.error;
 			}
-			if (outcome.result.done) {
+			if (outcome.result.done === true) {
 				return;
 			}
 			onFirst?.();

@@ -78,12 +78,13 @@ export const handleNuGet: SpecialHandler = async (
 			latestPage = fetched;
 		}
 
-		if (!latestPage.items?.length) return null;
+		if (latestPage.items?.length === null || latestPage.items?.length === undefined || latestPage.items?.length === 0)
+			return null;
 
 		// Find the requested version or get the latest
 		let targetEntry: NuGetCatalogEntry | null = null;
 
-		if (requestedVersion) {
+		if (requestedVersion !== null && requestedVersion !== undefined && requestedVersion !== "") {
 			// Search all pages for the requested version
 			for (const page of index.items) {
 				let pageItems = page.items;
@@ -127,12 +128,21 @@ export const handleNuGet: SpecialHandler = async (
 
 		// Format markdown output
 		let md = `# ${targetEntry.id}\n\n`;
-		if (targetEntry.description) md += `${targetEntry.description}\n\n`;
+		if (targetEntry.description !== null && targetEntry.description !== undefined && targetEntry.description !== "")
+			md += `${targetEntry.description}\n\n`;
 
 		md += `**Version:** ${targetEntry.version}`;
-		if (targetEntry.licenseExpression) {
+		if (
+			targetEntry.licenseExpression !== null &&
+			targetEntry.licenseExpression !== undefined &&
+			targetEntry.licenseExpression !== ""
+		) {
 			md += ` · **License:** ${targetEntry.licenseExpression}`;
-		} else if (targetEntry.licenseUrl) {
+		} else if (
+			targetEntry.licenseUrl !== null &&
+			targetEntry.licenseUrl !== undefined &&
+			targetEntry.licenseUrl !== ""
+		) {
 			md += ` · **License:** [View](${targetEntry.licenseUrl})`;
 		}
 		md += "\n";
@@ -141,10 +151,13 @@ export const handleNuGet: SpecialHandler = async (
 			md += `**Total Downloads:** ${formatNumber(totalDownloads)}\n`;
 		}
 
-		if (targetEntry.authors) md += `**Authors:** ${targetEntry.authors}\n`;
-		if (targetEntry.projectUrl) md += `**Project URL:** ${targetEntry.projectUrl}\n`;
-		if (targetEntry.tags?.length) md += `**Tags:** ${targetEntry.tags.join(", ")}\n`;
-		if (targetEntry.published) {
+		if (targetEntry.authors !== null && targetEntry.authors !== undefined && targetEntry.authors !== "")
+			md += `**Authors:** ${targetEntry.authors}\n`;
+		if (targetEntry.projectUrl !== null && targetEntry.projectUrl !== undefined && targetEntry.projectUrl !== "")
+			md += `**Project URL:** ${targetEntry.projectUrl}\n`;
+		if (targetEntry.tags?.length !== null && targetEntry.tags?.length !== undefined && targetEntry.tags?.length !== 0)
+			md += `**Tags:** ${targetEntry.tags.join(", ")}\n`;
+		if (targetEntry.published !== null && targetEntry.published !== undefined && targetEntry.published !== "") {
 			md += `**Published:** ${formatIsoDate(targetEntry.published)}\n`;
 		}
 

@@ -55,15 +55,21 @@ export const handleDevTo: SpecialHandler = async (
 			for (const article of articles) {
 				const tags = article.tag_list || article.tags || [];
 				const reactions = article.positive_reactions_count ?? article.public_reactions_count ?? 0;
-				const readTime = article.reading_time_minutes ? ` · ${article.reading_time_minutes} min read` : "";
+				const readTime =
+					article.reading_time_minutes !== null &&
+					article.reading_time_minutes !== undefined &&
+					article.reading_time_minutes !== 0
+						? ` · ${article.reading_time_minutes} min read`
+						: "";
 				const reactStr = reactions > 0 ? ` · ${formatNumber(reactions)} reactions` : "";
 
 				md += `### ${article.title}\n\n`;
-				md += `by **${article.user?.name || "Unknown"}** (@${article.user?.username || "unknown"})`;
+				md += `by **${article.user?.name ?? "Unknown"}** (@${article.user?.username ?? "unknown"})`;
 				md += `${readTime}${reactStr}\n`;
-				md += `*${formatIsoDate(article.published_at || article.published_timestamp || "")}*\n`;
+				md += `*${formatIsoDate((article.published_at || article.published_timestamp) ?? "")}*\n`;
 				if (tags.length > 0) md += `Tags: ${tags.map(t => `#${t}`).join(", ")}\n`;
-				if (article.description) md += `\n${article.description}\n`;
+				if (article.description !== null && article.description !== undefined && article.description !== "")
+					md += `\n${article.description}\n`;
 				md += `\n---\n\n`;
 			}
 
@@ -88,14 +94,20 @@ export const handleDevTo: SpecialHandler = async (
 			for (const article of articles) {
 				const tags = article.tag_list || article.tags || [];
 				const reactions = article.positive_reactions_count ?? article.public_reactions_count ?? 0;
-				const readTime = article.reading_time_minutes ? ` · ${article.reading_time_minutes} min read` : "";
+				const readTime =
+					article.reading_time_minutes !== null &&
+					article.reading_time_minutes !== undefined &&
+					article.reading_time_minutes !== 0
+						? ` · ${article.reading_time_minutes} min read`
+						: "";
 				const reactStr = reactions > 0 ? ` · ${formatNumber(reactions)} reactions` : "";
 
 				md += `### ${article.title}\n\n`;
 				md += `${readTime.substring(3)}${reactStr}\n`;
-				md += `*${formatIsoDate(article.published_at || article.published_timestamp || "")}*\n`;
+				md += `*${formatIsoDate((article.published_at || article.published_timestamp) ?? "")}*\n`;
 				if (tags.length > 0) md += `Tags: ${tags.map(t => `#${t}`).join(", ")}\n`;
-				if (article.description) md += `\n${article.description}\n`;
+				if (article.description !== null && article.description !== undefined && article.description !== "")
+					md += `\n${article.description}\n`;
 				md += `\n---\n\n`;
 			}
 
@@ -121,8 +133,8 @@ export const handleDevTo: SpecialHandler = async (
 			const readTime = article.reading_time_minutes ?? 0;
 
 			let md = `# ${article.title}\n\n`;
-			md += `**Author:** ${article.user?.name || "Unknown"} (@${article.user?.username || username})\n`;
-			md += `**Published:** ${formatIsoDate(article.published_at || article.published_timestamp || "")}\n`;
+			md += `**Author:** ${article.user?.name ?? "Unknown"} (@${article.user?.username ?? username})\n`;
+			md += `**Published:** ${formatIsoDate((article.published_at || article.published_timestamp) ?? "")}\n`;
 			if (readTime > 0) md += `**Reading time:** ${readTime} min\n`;
 			if (reactions > 0) md += `**Reactions:** ${formatNumber(reactions)}\n`;
 			if (comments > 0) md += `**Comments:** ${formatNumber(comments)}\n`;
@@ -130,9 +142,9 @@ export const handleDevTo: SpecialHandler = async (
 			md += `\n---\n\n`;
 
 			// Prefer body_markdown over body_html
-			if (article.body_markdown) {
+			if (article.body_markdown !== null && article.body_markdown !== undefined && article.body_markdown !== "") {
 				md += article.body_markdown;
-			} else if (article.body_html) {
+			} else if (article.body_html !== null && article.body_html !== undefined && article.body_html !== "") {
 				md += htmlToBasicMarkdown(article.body_html);
 			}
 

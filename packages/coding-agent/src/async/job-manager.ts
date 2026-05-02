@@ -280,7 +280,7 @@ export class AsyncJobManager {
 
 	#resolveJobId(preferredId?: string): string {
 		preferredId = preferredId?.trim();
-		if (!preferredId) {
+		if (preferredId === null || preferredId === undefined || preferredId === "") {
 			let candidate = 1;
 			while (true) {
 				const id = `bg_${candidate}`;

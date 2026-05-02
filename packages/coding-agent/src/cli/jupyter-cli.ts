@@ -66,10 +66,10 @@ async function runStatus(): Promise<void> {
 	if (status.uptime !== null) {
 		console.log(`  Uptime: ${formatUptime(status.uptime)}`);
 	}
-	if (status.pythonPath) {
+	if (status.pythonPath !== null && status.pythonPath !== undefined && status.pythonPath !== "") {
 		console.log(`  Python: ${status.pythonPath}`);
 	}
-	if (status.venvPath) {
+	if (status.venvPath !== null && status.venvPath !== undefined && status.venvPath !== "") {
 		console.log(`  Venv:   ${status.venvPath}`);
 	}
 }

@@ -48,13 +48,7 @@ import { TreeSelectorComponent } from "../components/tree-selector";
 import { UserMessageSelectorComponent } from "../components/user-message-selector";
 import type { SessionObserverRegistry } from "../session-observer-registry";
 
-const CALLBACK_SERVER_PROVIDERS = new Set<OAuthProvider>([
-	"anthropic",
-	"openai-codex",
-	"gitlab-duo",
-	"google-gemini-cli",
-	"google-antigravity",
-]);
+const CALLBACK_SERVER_PROVIDERS = new Set<OAuthProvider>(["openai-codex"]);
 
 const MANUAL_LOGIN_TIP = "Tip: You can complete pairing with /login <redirect URL>.";
 
@@ -89,7 +83,7 @@ export class SelectorController {
 	}
 
 	showSettingsSelector(): void {
-		getAvailableThemes().then(availableThemes => {
+		void getAvailableThemes().then(availableThemes => {
 			this.showSelector(done => {
 				const selector = new SettingsSelectorComponent(
 					{
@@ -219,7 +213,7 @@ export class SelectorController {
 		// Discovery provider toggles
 		if (id.startsWith("discovery.")) {
 			const providerId = id.replace("discovery.", "");
-			if (value) {
+			if (value !== null && value !== undefined) {
 				enableProvider(providerId);
 			} else {
 				disableProvider(providerId);
@@ -247,6 +241,7 @@ export class SelectorController {
 				this.ctx.session.setThinkingLevel(value as ThinkingLevel, true);
 				this.ctx.statusLine.invalidate();
 				this.ctx.updateEditorBorderColor();
+				this.ctx.refreshSessionChrome?.();
 				break;
 
 			case "clearOnShrink":
@@ -276,18 +271,20 @@ export class SelectorController {
 				this.ctx.rebuildChatFromMessages();
 				break;
 			case "theme": {
-				setTheme(value as string, true).then(result => {
+				void setTheme(value as string, true).then(result => {
 					this.ctx.statusLine.invalidate();
 					this.ctx.updateEditorTopBorder();
 					this.ctx.ui.invalidate();
 					if (!result.success) {
-						this.ctx.showError(`Failed to load theme "${value}": ${result.error}\nFell back to dark theme.`);
+						this.ctx.showError(
+							`Failed to load theme "${String(value)}": ${result.error}\nFell back to dark theme.`,
+						);
 					}
 				});
 				break;
 			}
 			case "symbolPreset": {
-				setSymbolPreset(value as "unicode" | "nerd" | "ascii").then(() => {
+				void setSymbolPreset(value as "unicode" | "nerd" | "ascii").then(() => {
 					this.ctx.statusLine.invalidate();
 					this.ctx.updateEditorTopBorder();
 					this.ctx.ui.invalidate();
@@ -295,7 +292,7 @@ export class SelectorController {
 				break;
 			}
 			case "colorBlindMode": {
-				setColorBlindMode(value === "true" || value === true).then(() => {
+				void setColorBlindMode(value === "true" || value === true).then(() => {
 					this.ctx.ui.invalidate();
 				});
 				break;
@@ -395,6 +392,7 @@ export class SelectorController {
 							await this.ctx.session.setModelTemporary(model);
 							this.ctx.statusLine.invalidate();
 							this.ctx.updateEditorBorderColor();
+							this.ctx.refreshSessionChrome?.();
 							this.ctx.showStatus(`Temporary model: ${selector ?? model.id}`);
 							done();
 							this.ctx.ui.requestRender();
@@ -404,11 +402,12 @@ export class SelectorController {
 								selector,
 								thinkingLevel,
 							});
-							if (thinkingLevel && thinkingLevel !== ThinkingLevel.Inherit) {
+							if (thinkingLevel !== undefined && thinkingLevel !== ThinkingLevel.Inherit) {
 								this.ctx.session.setThinkingLevel(thinkingLevel);
 							}
 							this.ctx.statusLine.invalidate();
 							this.ctx.updateEditorBorderColor();
+							this.ctx.refreshSessionChrome?.();
 							this.ctx.showStatus(`Default model: ${selector ?? model.id}`);
 							// Don't call done() - selector stays open for role assignment
 						} else {
@@ -478,8 +477,8 @@ export class SelectorController {
 						try {
 							await mgr.uninstallPlugin(pluginId, scope);
 							this.ctx.showStatus(`Uninstalled ${pluginId}`);
-						} catch (err) {
-							this.ctx.showStatus(`Uninstall failed: ${err}`);
+						} catch (error) {
+							this.ctx.showStatus(`Uninstall failed: ${String(error)}`);
 						}
 						this.ctx.ui.requestRender();
 					},
@@ -515,8 +514,8 @@ export class SelectorController {
 						const force = installedIds.has(`${name}@${marketplace}`);
 						await mgr.installPlugin(name, marketplace, { force });
 						this.ctx.showStatus(`Installed ${name} from ${marketplace}`);
-					} catch (err) {
-						this.ctx.showStatus(`Install failed: ${err}`);
+					} catch (error) {
+						this.ctx.showStatus(`Install failed: ${String(error)}`);
 					}
 					this.ctx.ui.requestRender();
 				},
@@ -648,7 +647,7 @@ export class SelectorController {
 							customInstructions,
 						});
 
-						if (result.aborted) {
+						if (result.aborted === true) {
 							// Summarization aborted - re-show tree selector
 							this.ctx.showStatus("Branch summarization cancelled");
 							this.showTreeSelector();
@@ -663,7 +662,12 @@ export class SelectorController {
 						this.ctx.chatContainer.clear();
 						this.ctx.renderInitialMessages(result.sessionContext);
 						await this.ctx.reloadTodos();
-						if (result.editorText && !this.ctx.editor.getText().trim()) {
+						if (
+							result.editorText !== null &&
+							result.editorText !== undefined &&
+							result.editorText !== "" &&
+							!this.ctx.editor.getText().trim()
+						) {
 							this.ctx.editor.setText(result.editorText);
 						}
 						this.ctx.showStatus("Navigated to selected point");
@@ -718,10 +722,13 @@ export class SelectorController {
 					try {
 						await storage.deleteSessionWithArtifacts(session.path);
 						return true;
-					} catch (err) {
-						throw new Error(`Failed to delete session: ${err instanceof Error ? err.message : String(err)}`, {
-							cause: err,
-						});
+					} catch (error) {
+						throw new Error(
+							`Failed to delete session: ${error instanceof Error ? error.message : String(error)}`,
+							{
+								cause: error,
+							},
+						);
 					}
 				},
 			);
@@ -763,6 +770,7 @@ export class SelectorController {
 			return false;
 		}
 		this.#refreshSessionTerminalTitle();
+		this.ctx.refreshSessionChrome?.();
 
 		this.#clearTransientSessionUi();
 		this.ctx.statusLine.invalidate();
@@ -782,6 +790,7 @@ export class SelectorController {
 		await this.ctx.session.switchSession(sessionPath);
 		this.#refreshSessionTerminalTitle();
 		this.ctx.updateEditorBorderColor();
+		this.ctx.refreshSessionChrome?.();
 
 		// Clear and re-render the chat
 		this.ctx.chatContainer.clear();
@@ -792,7 +801,7 @@ export class SelectorController {
 
 	async handleSessionDeleteCommand(): Promise<void> {
 		const sessionFile = this.ctx.sessionManager.getSessionFile();
-		if (!sessionFile) {
+		if (sessionFile === null || sessionFile === undefined || sessionFile === "") {
 			this.ctx.showError("No session file to delete (in-memory session)");
 			return;
 		}
@@ -839,7 +848,7 @@ export class SelectorController {
 					this.ctx.chatContainer.addChild(new Text(theme.fg("dim", info.url), 1, 0));
 					const hyperlink = `\x1b]8;;${info.url}\x07Click here to login\x1b]8;;\x07`;
 					this.ctx.chatContainer.addChild(new Text(theme.fg("accent", hyperlink), 1, 0));
-					if (info.instructions) {
+					if (info.instructions !== null && info.instructions !== undefined && info.instructions !== "") {
 						this.ctx.chatContainer.addChild(new Spacer(1));
 						this.ctx.chatContainer.addChild(new Text(theme.fg("warning", info.instructions), 1, 0));
 					}
@@ -853,7 +862,7 @@ export class SelectorController {
 				onPrompt: async (prompt: { message: string; placeholder?: string }) => {
 					this.ctx.chatContainer.addChild(new Spacer(1));
 					this.ctx.chatContainer.addChild(new Text(theme.fg("warning", prompt.message), 1, 0));
-					if (prompt.placeholder) {
+					if (prompt.placeholder !== null && prompt.placeholder !== undefined && prompt.placeholder !== "") {
 						this.ctx.chatContainer.addChild(new Text(theme.fg("dim", prompt.placeholder), 1, 0));
 					}
 					this.ctx.ui.requestRender();
@@ -912,7 +921,7 @@ export class SelectorController {
 	}
 
 	async showOAuthSelector(mode: "login" | "logout", providerId?: string): Promise<void> {
-		if (providerId) {
+		if (providerId !== null && providerId !== undefined && providerId !== "") {
 			if (mode === "login") {
 				await this.#handleOAuthLogin(providerId);
 			} else {
@@ -958,7 +967,7 @@ export class SelectorController {
 							selectedProviderId,
 							this.ctx.session.sessionId,
 						);
-						return !!apiKey;
+						return !(apiKey === null || apiKey === undefined || apiKey === "");
 					},
 					requestRender: () => {
 						this.ctx.ui.requestRender();

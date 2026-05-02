@@ -52,10 +52,12 @@ export const handlePubDev: SpecialHandler = async (url: string, timeout: number,
 		const pubspec = latest.pubspec;
 
 		let md = `# ${name}\n\n`;
-		if (pubspec.description) md += `${pubspec.description}\n\n`;
+		if (pubspec.description !== null && pubspec.description !== undefined && pubspec.description !== "")
+			md += `${pubspec.description}\n\n`;
 
 		md += `**Latest:** ${latest.version}`;
-		if (publisherId) md += ` · **Publisher:** ${publisherId}`;
+		if (publisherId !== null && publisherId !== undefined && publisherId !== "")
+			md += ` · **Publisher:** ${publisherId}`;
 		md += "\n";
 
 		// Add metrics if available
@@ -78,9 +80,12 @@ export const handlePubDev: SpecialHandler = async (url: string, timeout: number,
 
 		md += "\n";
 
-		if (pubspec.homepage) md += `**Homepage:** ${pubspec.homepage}\n`;
-		if (pubspec.repository) md += `**Repository:** ${pubspec.repository}\n`;
-		if (pubspec.documentation) md += `**Documentation:** ${pubspec.documentation}\n`;
+		if (pubspec.homepage !== null && pubspec.homepage !== undefined && pubspec.homepage !== "")
+			md += `**Homepage:** ${pubspec.homepage}\n`;
+		if (pubspec.repository !== null && pubspec.repository !== undefined && pubspec.repository !== "")
+			md += `**Repository:** ${pubspec.repository}\n`;
+		if (pubspec.documentation !== null && pubspec.documentation !== undefined && pubspec.documentation !== "")
+			md += `**Documentation:** ${pubspec.documentation}\n`;
 
 		// SDK constraints
 		if (pubspec.environment) {
@@ -103,7 +108,7 @@ export const handlePubDev: SpecialHandler = async (url: string, timeout: number,
 				for (const dep of deps.slice(0, 20)) {
 					const constraint = pubspec.dependencies[dep];
 					const constraintStr =
-						typeof constraint === "string" ? constraint : typeof constraint === "object" ? "complex" : "";
+						typeof constraint === "string" ? constraint : (typeof constraint === "object" ? "complex" : "");
 					md += `- ${dep}`;
 					if (constraintStr) md += `: ${constraintStr}`;
 					md += "\n";

@@ -280,7 +280,7 @@ describe("searchExa", () => {
 		using _hook = mockFetch(makeMockExaResponse());
 		await searchExa({ query: "check body" });
 		expect(capturedRequestBody).toBeDefined();
-		expect(capturedRequestBody!.contents).toEqual({ summary: { query: "check body" } });
+		expect(capturedRequestBody?.contents).toEqual({ summary: { query: "check body" } });
 	});
 
 	it("sends correct full request shape", async () => {
@@ -604,13 +604,11 @@ describe("searchExa", () => {
 			);
 		});
 
-		await expect(searchExa({ query: "bad content" })).rejects.toThrow(
-			"Exa MCP search returned unexpected response shape.",
-		);
+		expect(searchExa({ query: "bad content" })).rejects.toThrow("Exa MCP search returned unexpected response shape.");
 	});
 
 	it("throws SearchProviderError on non-ok HTTP response", async () => {
 		using _hook = mockFetch("Forbidden", 403);
-		await expect(searchExa({ query: "forbidden" })).rejects.toThrow("Exa API error (403)");
+		expect(searchExa({ query: "forbidden" })).rejects.toThrow("Exa API error (403)");
 	});
 });

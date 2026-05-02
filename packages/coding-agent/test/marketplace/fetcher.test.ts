@@ -171,31 +171,31 @@ describe("fetchMarketplace", () => {
 
 	it("throws a clear error for nonexistent local directory", async () => {
 		const missing = path.join(tmpDir, "nonexistent");
-		await expect(fetchMarketplace(missing, tmpDir)).rejects.toThrow(/Marketplace catalog not found/);
+		expect(fetchMarketplace(missing, tmpDir)).rejects.toThrow(/Marketplace catalog not found/);
 	});
 
 	it("throws a clear error for relative nonexistent path", async () => {
 		// Use a path that resolves within tmpDir but doesn't exist
 		const fakeSrc = path.join(tmpDir, "ghost-marketplace");
-		await expect(fetchMarketplace(fakeSrc, tmpDir)).rejects.toThrow(/Marketplace catalog not found/);
+		expect(fetchMarketplace(fakeSrc, tmpDir)).rejects.toThrow(/Marketplace catalog not found/);
 	});
 
 	// Network-dependent tests — skip in CI / offline environments.
 	// These verify real git clone and HTTP fetch error handling.
 	it.skip("github source throws on nonexistent repo", async () => {
-		await expect(fetchMarketplace("nonexistent-owner-xyz/nonexistent-repo-xyz", tmpDir)).rejects.toThrow(
+		expect(fetchMarketplace("nonexistent-owner-xyz/nonexistent-repo-xyz", tmpDir)).rejects.toThrow(
 			/git clone failed/,
 		);
 	});
 
 	it.skip("git source throws on nonexistent repo", async () => {
-		await expect(
-			fetchMarketplace("git@github.com:nonexistent-owner-xyz/nonexistent-repo-xyz.git", tmpDir),
-		).rejects.toThrow(/git clone failed/);
+		expect(fetchMarketplace("git@github.com:nonexistent-owner-xyz/nonexistent-repo-xyz.git", tmpDir)).rejects.toThrow(
+			/git clone failed/,
+		);
 	});
 
 	it.skip("url source throws on non-2xx response", async () => {
-		await expect(fetchMarketplace("https://example.com/nonexistent-catalog-xyz.json", tmpDir)).rejects.toThrow(
+		expect(fetchMarketplace("https://example.com/nonexistent-catalog-xyz.json", tmpDir)).rejects.toThrow(
 			/HTTP [45]\d\d/,
 		);
 	});

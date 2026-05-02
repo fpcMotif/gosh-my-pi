@@ -40,7 +40,7 @@ export const handlePubMed: SpecialHandler = async (
 			if (match) pmid = match[1];
 		}
 
-		if (!pmid) return null;
+		if (pmid === null || pmid === undefined || pmid === "") return null;
 
 		const fetchedAt = new Date().toISOString();
 		const notes: string[] = [];
@@ -102,7 +102,7 @@ export const handlePubMed: SpecialHandler = async (
 		}
 
 		const article = summaryData.result?.[pmid];
-		if (!article) {
+		if (article === null || article === undefined) {
 			return buildFallback(["PubMed record unavailable from E-utilities summary endpoint"]);
 		}
 
@@ -119,37 +119,41 @@ export const handlePubMed: SpecialHandler = async (
 		// Extract DOI and PMCID
 		let doi = "";
 		let pmcid = "";
-		if (article.articleids) {
+		if (article.articleids !== null && article.articleids !== undefined) {
 			for (const id of article.articleids) {
 				if (id.idtype === "doi") doi = id.value;
 				if (id.idtype === "pmc") pmcid = id.value;
 			}
 		}
-		if (!doi && article.elocationid) {
+		if (!doi && article.elocationid !== null && article.elocationid !== undefined && article.elocationid !== "") {
 			doi = article.elocationid;
 		}
 
 		// Build markdown output
-		let md = `# ${article.title || "PubMed Article"}\n\n`;
+		let md = `# ${article.title ?? "PubMed Article"}\n\n`;
 
 		// Authors
-		if (article.authors && article.authors.length > 0) {
+		if (article.authors !== null && article.authors !== undefined && article.authors.length > 0) {
 			const authorNames = article.authors.map(a => a.name).join(", ");
 			md += `**Authors:** ${authorNames}\n`;
 		}
 
 		// Journal info
-		if (article.fulljournalname) {
+		if (article.fulljournalname !== null && article.fulljournalname !== undefined && article.fulljournalname !== "") {
 			md += `**Journal:** ${article.fulljournalname}`;
-			if (article.pubdate) md += ` (${article.pubdate})`;
+			if (article.pubdate !== null && article.pubdate !== undefined && article.pubdate !== "")
+				md += ` (${article.pubdate})`;
 			md += "\n";
 		}
 
 		// Volume/Issue/Pages
 		const citation: string[] = [];
-		if (article.volume) citation.push(`Vol ${article.volume}`);
-		if (article.issue) citation.push(`Issue ${article.issue}`);
-		if (article.pages) citation.push(`pp ${article.pages}`);
+		if (article.volume !== null && article.volume !== undefined && article.volume !== "")
+			citation.push(`Vol ${article.volume}`);
+		if (article.issue !== null && article.issue !== undefined && article.issue !== "")
+			citation.push(`Issue ${article.issue}`);
+		if (article.pages !== null && article.pages !== undefined && article.pages !== "")
+			citation.push(`pp ${article.pages}`);
 		if (citation.length > 0) {
 			md += `**Citation:** ${citation.join(", ")}\n`;
 		}

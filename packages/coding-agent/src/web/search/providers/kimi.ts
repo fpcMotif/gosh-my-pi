@@ -42,23 +42,19 @@ interface KimiSearchResponse {
 }
 
 function asTrimmed(value: string | undefined): string | undefined {
-	if (!value) return undefined;
+	if (value === null || value === undefined || value === "") return undefined;
 	const trimmed = value.trim();
 	return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function resolveBaseUrl(): string {
-	return asTrimmed($env.MOONSHOT_SEARCH_BASE_URL) ?? asTrimmed($env.KIMI_SEARCH_BASE_URL) ?? KIMI_SEARCH_URL;
+	return asTrimmed($env.KIMI_SEARCH_BASE_URL) ?? KIMI_SEARCH_URL;
 }
 
 /** Find Kimi search credentials from environment or agent.db credentials. */
 async function findApiKey(): Promise<string | null> {
-	const envKey =
-		asTrimmed($env.MOONSHOT_SEARCH_API_KEY) ??
-		asTrimmed($env.KIMI_SEARCH_API_KEY) ??
-		getEnvApiKey("moonshot") ??
-		null;
-	return findCredential(envKey, "moonshot", "kimi-code");
+	const envKey = asTrimmed($env.KIMI_SEARCH_API_KEY) ?? getEnvApiKey("kimi-code") ?? null;
+	return findCredential(envKey, "kimi-code");
 }
 
 async function callKimiSearch(
@@ -98,9 +94,9 @@ async function callKimiSearch(
 /** Execute Kimi web search. */
 export async function searchKimi(params: KimiSearchParams): Promise<SearchResponse> {
 	const apiKey = await findApiKey();
-	if (!apiKey) {
+	if (apiKey === null || apiKey === undefined || apiKey === "") {
 		throw new Error(
-			"Kimi search credentials not found. Set MOONSHOT_SEARCH_API_KEY, KIMI_SEARCH_API_KEY, MOONSHOT_API_KEY, or login with 'omp /login moonshot'.",
+			"Kimi search credentials not found. Set KIMI_SEARCH_API_KEY, KIMI_API_KEY, or login with 'omp /login kimi-code'.",
 		);
 	}
 
@@ -114,7 +110,7 @@ export async function searchKimi(params: KimiSearchParams): Promise<SearchRespon
 	const sources: SearchSource[] = [];
 
 	for (const result of response.search_results ?? []) {
-		if (!result.url) continue;
+		if (result.url === null || result.url === undefined || result.url === "") continue;
 		const publishedDate = asTrimmed(result.date);
 		const snippet = asTrimmed(result.snippet) ?? asTrimmed(result.content);
 		sources.push({

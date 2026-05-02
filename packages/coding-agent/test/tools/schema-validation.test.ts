@@ -241,7 +241,7 @@ describe("tool schema validation (post-sanitization)", () => {
 
 		for (const tool of tools) {
 			const schema = tool.parameters;
-			if (!schema) continue;
+			if (schema === null || schema === undefined) continue;
 
 			// Apply the same sanitization that happens before sending to providers
 			const sanitized = sanitizeSchemaForGoogle(schema);
@@ -273,7 +273,7 @@ describe("tool schema validation (post-sanitization)", () => {
 
 		for (const tool of tools) {
 			const schema = tool.parameters;
-			if (!schema) continue;
+			if (schema === null || schema === undefined) continue;
 
 			const sanitized = sanitizeSchemaForGoogle(schema);
 			const violations = validateSchema(sanitized, tool.name).filter(v => v.key === "$schema");
@@ -287,7 +287,7 @@ describe("tool schema validation (post-sanitization)", () => {
 
 		for (const tool of tools) {
 			const schema = tool.parameters;
-			if (!schema) continue;
+			if (schema === null || schema === undefined) continue;
 
 			const sanitized = sanitizeSchemaForGoogle(schema);
 			const violations = validateSchema(sanitized, tool.name).filter(v => v.key === "$ref" || v.key === "$defs");
@@ -309,7 +309,7 @@ describe("tool schema validation (post-sanitization)", () => {
 
 		for (const tool of tools) {
 			const schema = tool.parameters;
-			if (!schema) continue;
+			if (schema === null || schema === undefined) continue;
 
 			const sanitized = sanitizeSchemaForGoogle(schema);
 			const violations = validateSchema(sanitized, tool.name).filter(v => draft2020Features.includes(v.key));
@@ -323,7 +323,7 @@ describe("tool schema validation (post-sanitization)", () => {
 
 		for (const tool of tools) {
 			const schema = tool.parameters;
-			if (!schema) continue;
+			if (schema === null || schema === undefined) continue;
 
 			const sanitized = sanitizeSchemaForGoogle(schema);
 			const violations = validateSchema(sanitized, tool.name).filter(v => v.key === "const");
@@ -337,7 +337,7 @@ describe("tool schema validation (post-sanitization)", () => {
 
 		for (const tool of tools) {
 			const schema = tool.parameters;
-			if (!schema) continue;
+			if (schema === null || schema === undefined) continue;
 
 			const sanitized = sanitizeSchemaForGoogle(schema);
 			const violations = validateSchema(sanitized, tool.name).filter(v => v.key === "examples");
@@ -353,7 +353,7 @@ describe("tool schema validation (post-sanitization)", () => {
 			if (!tool) continue;
 
 			const schema = tool.parameters;
-			if (!schema) continue;
+			if (schema === null || schema === undefined) continue;
 
 			const sanitized = sanitizeSchemaForGoogle(schema);
 			const violations = validateSchema(sanitized, name);
@@ -374,7 +374,7 @@ describe("tool schema validation (post-sanitization)", () => {
 
 		for (const tool of tools) {
 			const schema = tool.parameters;
-			if (!schema) continue;
+			if (schema === null || schema === undefined) continue;
 
 			const sanitized = sanitizeSchemaForGoogle(schema);
 			const violations = validateSchema(sanitized, tool.name);

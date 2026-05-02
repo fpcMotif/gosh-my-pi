@@ -98,13 +98,18 @@ export class JobsProtocolHandler implements ProtocolHandler {
 			`- duration: ${formatJobDuration(job.startTime)}`,
 		];
 
-		if (job.status === "completed" && job.resultText) {
+		if (
+			job.status === "completed" &&
+			job.resultText !== null &&
+			job.resultText !== undefined &&
+			job.resultText !== ""
+		) {
 			sections.push("", "## Result", "", "```", job.resultText, "```");
 		}
-		if (job.status === "failed" && job.errorText) {
+		if (job.status === "failed" && job.errorText !== null && job.errorText !== undefined && job.errorText !== "") {
 			sections.push("", "## Error", "", "```", job.errorText, "```");
 		}
-		if (job.status === "cancelled" && job.errorText) {
+		if (job.status === "cancelled" && job.errorText !== null && job.errorText !== undefined && job.errorText !== "") {
 			sections.push("", "## Cancellation", "", "```", job.errorText, "```");
 		}
 

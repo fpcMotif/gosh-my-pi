@@ -47,7 +47,10 @@ const WAIT_DURATION_MS: Record<string, number> = {
 };
 
 function parseWaitDurationMs(value: string | undefined): number {
-	return (value ? WAIT_DURATION_MS[value] : undefined) ?? WAIT_DURATION_MS["30s"];
+	return (
+		(value !== null && value !== undefined && value !== "" ? WAIT_DURATION_MS[value] : undefined) ??
+		WAIT_DURATION_MS["30s"]
+	);
 }
 
 interface JobSnapshot {
@@ -133,21 +136,21 @@ export class JobTool implements AgentTool<typeof jobSchema, JobToolDetails> {
 		const shouldPoll = requestedPollIds !== undefined || cancelIds.length === 0;
 
 		if (!shouldPoll) {
-			const cancelledJobs = cancelIds.map(id => manager.getJob(id)).filter(j => j != null);
-			return this.#buildResult(manager, cancelledJobs, cancelOutcomes);
+			const cancelledJobs = cancelIds.map(id => manager.getJob(id)).filter(Boolean) as any[];
+			return this.#buildResult(manager, cancelledJobs as any, cancelOutcomes);
 		}
 
 		// Resolve which jobs to watch.
 		// - If `poll` was passed explicitly, watch exactly those (filtered to existing).
 		// - If `poll` was omitted (and so was `cancel`), default to all running jobs.
 		const jobsToWatch = requestedPollIds
-			? requestedPollIds.map(id => manager.getJob(id)).filter(j => j != null)
+			? (requestedPollIds.map(id => manager.getJob(id)).filter(Boolean) as any[])
 			: manager.getRunningJobs();
 
 		if (jobsToWatch.length === 0) {
 			if (cancelOutcomes.length > 0) {
-				const cancelledJobs = cancelIds.map(id => manager.getJob(id)).filter(j => j != null);
-				return this.#buildResult(manager, cancelledJobs, cancelOutcomes);
+				const cancelledJobs = cancelIds.map(id => manager.getJob(id)).filter(Boolean) as any[];
+				return this.#buildResult(manager, cancelledJobs as any, cancelOutcomes);
 			}
 			const message = requestedPollIds?.length
 				? `No matching jobs found for IDs: ${requestedPollIds.join(", ")}`
@@ -161,7 +164,7 @@ export class JobTool implements AgentTool<typeof jobSchema, JobToolDetails> {
 		// If all watched jobs are already done, build immediate result.
 		const runningJobs = jobsToWatch.filter(j => j.status === "running");
 		if (runningJobs.length === 0) {
-			const cancelledJobs = cancelIds.map(id => manager.getJob(id)).filter(j => j != null);
+			const cancelledJobs = cancelIds.map(id => manager.getJob(id)).filter(Boolean) as any[];
 			return this.#buildResult(manager, [...cancelledJobs, ...jobsToWatch], cancelOutcomes);
 		}
 
@@ -175,7 +178,7 @@ export class JobTool implements AgentTool<typeof jobSchema, JobToolDetails> {
 		const watchedJobIds = runningJobs.map(job => job.id);
 		manager.watchJobs(watchedJobIds);
 
-		const cancelledJobs = cancelIds.map(id => manager.getJob(id)).filter(j => j != null);
+		const cancelledJobs = cancelIds.map(id => manager.getJob(id)).filter(Boolean) as any[];
 		const allTrackedJobs = [...cancelledJobs, ...jobsToWatch];
 
 		const PROGRESS_INTERVAL_MS = 500;
@@ -239,8 +242,12 @@ export class JobTool implements AgentTool<typeof jobSchema, JobToolDetails> {
 				status: latest.status as JobSnapshot["status"],
 				label: latest.label,
 				durationMs: Math.max(0, now - latest.startTime),
-				...(latest.resultText ? { resultText: latest.resultText } : {}),
-				...(latest.errorText ? { errorText: latest.errorText } : {}),
+				...(latest.resultText !== null && latest.resultText !== undefined && latest.resultText !== ""
+					? { resultText: latest.resultText }
+					: {}),
+				...(latest.errorText !== null && latest.errorText !== undefined && latest.errorText !== ""
+					? { errorText: latest.errorText }
+					: {}),
 			};
 		});
 	}
@@ -285,10 +292,10 @@ export class JobTool implements AgentTool<typeof jobSchema, JobToolDetails> {
 			for (const j of completed) {
 				lines.push(`### ${j.id} [${j.type}] — ${j.status}`);
 				lines.push(`Label: ${j.label}`);
-				if (j.resultText) {
+				if (j.resultText !== null && j.resultText !== undefined && j.resultText !== "") {
 					lines.push("```", j.resultText, "```");
 				}
-				if (j.errorText) {
+				if (j.errorText !== null && j.errorText !== undefined && j.errorText !== "") {
 					lines.push(`Error: ${j.errorText}`);
 				}
 				lines.push("");
@@ -398,7 +405,7 @@ export const jobToolRenderer = {
 		if (counts.cancelled > 0) meta.push(uiTheme.fg("warning", `${counts.cancelled} cancelled`));
 		if (counts.running > 0) meta.push(uiTheme.fg("accent", `${counts.running} running`));
 
-		const headerIcon: ToolUIStatus = counts.failed > 0 ? "warning" : counts.running > 0 ? "info" : "success";
+		const headerIcon: ToolUIStatus = counts.failed > 0 ? "warning" : (counts.running > 0 ? "info" : "success");
 		const description =
 			counts.running > 0
 				? `waiting on ${counts.running} of ${jobs.length}`
@@ -460,11 +467,14 @@ export const jobToolRenderer = {
 							const durationText = uiTheme.fg("dim", formatDuration(job.durationMs));
 							lines.push(`${icon} ${idText} ${typeBadge} ${labelText} ${durationText}`);
 
-							const preview = job.errorText?.trim() || job.resultText?.trim();
-							if (preview) {
+							const preview = job.errorText?.trim() ?? job.resultText?.trim();
+							if (preview !== null && preview !== undefined && preview !== "") {
 								const maxLines = expanded ? PREVIEW_LINES_EXPANDED : PREVIEW_LINES_COLLAPSED;
 								const previewLines = getPreviewLines(preview, maxLines, PREVIEW_LINE_WIDTH, Ellipsis.Unicode);
-								const tone = job.errorText ? "error" : "dim";
+								const tone =
+									job.errorText !== null && job.errorText !== undefined && job.errorText !== ""
+										? "error"
+										: "dim";
 								for (const pl of previewLines) {
 									lines.push(`  ${uiTheme.fg(tone, pl)}`);
 								}

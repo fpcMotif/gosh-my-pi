@@ -70,7 +70,7 @@ let inspectorOpened = false;
 function formatFatalError(label: string, err: Error): string {
 	const name = err.name || "Error";
 	const message = err.message || "(no message)";
-	const stack = err.stack || "";
+	const stack = err.stack ?? "";
 	const stackLines = stack.split("\n").slice(1);
 	const formattedStack = stackLines.length > 0 ? `\n${stackLines.join("\n")}` : "";
 	return `\n[${label}] ${name}: ${message}${formattedStack}\n`;
@@ -78,9 +78,10 @@ function formatFatalError(label: string, err: Error): string {
 
 if (isMainThread) {
 	process
-		.on("SIGINT", async () => {
-			await runCleanup(Reason.SIGINT);
-			process.exit(130); // 128 + SIGINT (2)
+		.on("SIGINT", () => {
+			void runCleanup(Reason.SIGINT).then(() => {
+				process.exit(130); // 128 + SIGINT (2)
+			});
 		})
 		.on("SIGUSR1", () => {
 			if (inspectorOpened) return;
@@ -89,29 +90,33 @@ if (isMainThread) {
 			const url = inspector.url();
 			process.stderr.write(`Inspector opened: ${url}\n`);
 		})
-		.on("uncaughtException", async err => {
+		.on("uncaughtException", err => {
 			process.stderr.write(formatFatalError("Uncaught Exception", err));
 			logger.error("Uncaught exception", { err, stack: err.stack });
-			await runCleanup(Reason.UNCAUGHT_EXCEPTION);
-			process.exit(1);
+			void runCleanup(Reason.UNCAUGHT_EXCEPTION).then(() => {
+				process.exit(1);
+			});
 		})
-		.on("unhandledRejection", async reason => {
+		.on("unhandledRejection", reason => {
 			const err = reason instanceof Error ? reason : new Error(String(reason));
 			process.stderr.write(formatFatalError("Unhandled Rejection", err));
 			logger.error("Unhandled rejection", { err, stack: err.stack });
-			await runCleanup(Reason.UNHANDLED_REJECTION);
-			process.exit(1);
+			void runCleanup(Reason.UNHANDLED_REJECTION).then(() => {
+				process.exit(1);
+			});
 		})
-		.on("exit", async () => {
+		.on("exit", () => {
 			void runCleanup(Reason.EXIT); // fire and forget (exit imminent)
 		})
-		.on("SIGTERM", async () => {
-			await runCleanup(Reason.SIGTERM);
-			process.exit(143); // 128 + SIGTERM (15)
+		.on("SIGTERM", () => {
+			void runCleanup(Reason.SIGTERM).then(() => {
+				process.exit(143); // 128 + SIGTERM (15)
+			});
 		})
-		.on("SIGHUP", async () => {
-			await runCleanup(Reason.SIGHUP);
-			process.exit(129); // 128 + SIGHUP (1)
+		.on("SIGHUP", () => {
+			void runCleanup(Reason.SIGHUP).then(() => {
+				process.exit(129); // 128 + SIGHUP (1)
+			});
 		});
 } else {
 	// Worker thread: only register exit handler for cleanup.
@@ -136,8 +141,8 @@ export function register(id: string, callback: (reason: Reason) => void | Promis
 		done = true;
 		try {
 			return callback(reason);
-		} catch (e) {
-			const err = e instanceof Error ? e : new Error(String(e));
+		} catch (error) {
+			const err = error instanceof Error ? error : new Error(String(error));
 			logger.error("Cleanup callback failed", { err, id, stack: err.stack });
 		}
 	};
@@ -154,9 +159,9 @@ export function register(id: string, callback: (reason: Reason) => void | Promis
 		// If cleanup is already running/completed, warn and run on microtask.
 		logger.warn("Cleanup invoked recursively", { id });
 		try {
-			callback(Reason.MANUAL);
-		} catch (e) {
-			const err = e instanceof Error ? e : new Error(String(e));
+			void callback(Reason.MANUAL);
+		} catch (error) {
+			const err = error instanceof Error ? error : new Error(String(error));
 			logger.error("Cleanup callback failed", { err, id, stack: err.stack });
 		}
 		return () => {};

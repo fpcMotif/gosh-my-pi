@@ -41,7 +41,8 @@ function validateClaudeRegistryFormat(content: string): Record<string, unknown> 
 	if (!data || typeof data !== "object") return null;
 	if (
 		typeof data.version !== "number" ||
-		!data.plugins ||
+		data.plugins === null ||
+		data.plugins === undefined ||
 		typeof data.plugins !== "object" ||
 		Array.isArray(data.plugins)
 	)

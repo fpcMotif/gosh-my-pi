@@ -75,7 +75,7 @@ export async function installPlugin(packageName: string): Promise<InstalledPlugi
 		name: pkg.name,
 		version: pkg.version,
 		path: path.join(PLUGINS_DIR, "node_modules", actualName),
-		manifest: pkg.omp || pkg.pi || { version: pkg.version },
+		manifest: pkg.omp ?? pkg.pi ?? { version: pkg.version },
 		enabledFeatures: null,
 		enabled: true,
 	};
@@ -108,7 +108,7 @@ export async function listPlugins(): Promise<InstalledPlugin[]> {
 	}
 
 	const pkg = await pkgJsonPath.json();
-	const deps = pkg.dependencies || {};
+	const deps = pkg.dependencies ?? {};
 
 	const plugins: InstalledPlugin[] = [];
 	for (const [name, _version] of Object.entries(deps)) {
@@ -120,7 +120,7 @@ export async function listPlugins(): Promise<InstalledPlugin[]> {
 				name,
 				version: pkg.version,
 				path: pluginPath,
-				manifest: pkg.omp || pkg.pi || { version: pkg.version },
+				manifest: pkg.omp ?? pkg.pi ?? { version: pkg.version },
 				enabledFeatures: null,
 				enabled: true,
 			});
@@ -150,11 +150,11 @@ export async function linkPlugin(localPath: string): Promise<void> {
 	let pkg: { name?: string };
 	try {
 		pkg = await pkgFile.json();
-	} catch (err) {
-		throw new Error(`Invalid package.json at ${absolutePath}: ${err}`);
+	} catch (error) {
+		throw new Error(`Invalid package.json at ${absolutePath}: ${String(error)}`);
 	}
 
-	if (!pkg.name || typeof pkg.name !== "string") {
+	if (pkg.name === null || pkg.name === undefined || pkg.name === "" || typeof pkg.name !== "string") {
 		throw new Error("package.json must have a valid name field");
 	}
 
@@ -183,8 +183,8 @@ export async function linkPlugin(localPath: string): Promise<void> {
 		if (stats.isSymbolicLink() || stats.isDirectory()) {
 			await fs.unlink(linkPath);
 		}
-	} catch (err) {
-		if (!isEnoent(err)) throw err;
+	} catch (error) {
+		if (!isEnoent(error)) throw error;
 	}
 
 	// Create symlink using fs instead of shell command

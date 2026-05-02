@@ -42,10 +42,10 @@ export class AgentStorage {
 		this.#ensureDir(dbPath);
 		try {
 			this.#db = new Database(dbPath);
-		} catch (err) {
+		} catch (error) {
 			const dir = path.dirname(dbPath);
 			const dirExists = fs.existsSync(dir);
-			const errMsg = err instanceof Error ? err.message : String(err);
+			const errMsg = error instanceof Error ? error.message : String(error);
 			throw new Error(
 				`Failed to open agent database at '${dbPath}': ${errMsg}\n` +
 					`Directory '${dir}' exists: ${dirExists}\n` +
@@ -103,7 +103,7 @@ CREATE TABLE settings (
 			// Migrate v1 schema: single JSON blob in `data` column → per-key rows
 			let legacySettings: Record<string, unknown> | null = null;
 			const row = this.#db.prepare("SELECT data FROM settings WHERE id = 1").get() as { data?: string } | undefined;
-			if (row?.data) {
+			if (row?.data !== null && row?.data !== undefined && row?.data !== "") {
 				try {
 					const parsed = JSON.parse(row.data);
 					if (isRecord(parsed)) {
@@ -220,12 +220,16 @@ FROM model_usage_legacy
 				const storage = new AgentStorage(dbPath);
 				instances.set(dbPath, storage);
 				return storage;
-			} catch (err) {
-				const isSqliteBusy = err && typeof err === "object" && (err as { code?: string }).code === "SQLITE_BUSY";
-				if (!isSqliteBusy) {
-					throw err;
+			} catch (error) {
+				const isSqliteBusy =
+					error !== null &&
+					error !== undefined &&
+					typeof error === "object" &&
+					(error as { code?: string }).code === "SQLITE_BUSY";
+				if (isSqliteBusy === null || isSqliteBusy === undefined) {
+					throw error;
 				}
-				lastError = err as Error;
+				lastError = error as Error;
 				const delayMs = baseDelayMs * 2 ** attempt;
 				await Bun.sleep(delayMs);
 			}
@@ -320,11 +324,13 @@ FROM model_usage_legacy
 		if (!includeDisabled) return credentials;
 
 		const stmt = this.#db.prepare(
-			provider
+			provider !== null && provider !== undefined && provider !== ""
 				? "SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials WHERE provider = ? ORDER BY id ASC"
 				: "SELECT id, provider, credential_type, data, disabled_cause FROM auth_credentials ORDER BY id ASC",
 		);
-		const rows = (provider ? stmt.all(provider) : stmt.all()) as Array<{
+		const rows = (
+			provider !== null && provider !== undefined && provider !== "" ? stmt.all(provider) : stmt.all()
+		) as Array<{
 			id: number;
 			provider: string;
 			credential_type: string;
@@ -336,7 +342,7 @@ FROM model_usage_legacy
 		for (const row of rows) {
 			try {
 				const parsed = JSON.parse(row.data);
-				if (!parsed || typeof parsed !== "object") continue;
+				if (parsed === null || parsed === undefined || typeof parsed !== "object") continue;
 
 				let credential: AuthCredential;
 				if (row.credential_type === "api_key" && typeof (parsed as { key?: unknown }).key === "string") {
@@ -420,11 +426,11 @@ FROM model_usage_legacy
 		const dir = path.dirname(dbPath);
 		try {
 			fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-		} catch (err) {
-			const code = (err as NodeJS.ErrnoException).code;
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
 			// EEXIST is fine - directory already exists
 			if (code !== "EEXIST") {
-				throw new Error(`Failed to create agent storage directory '${dir}': ${code || err}`);
+				throw new Error(`Failed to create agent storage directory '${dir}': ${code ?? error}`);
 			}
 		}
 		// Verify directory was created

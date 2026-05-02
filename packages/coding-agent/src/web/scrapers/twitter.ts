@@ -42,11 +42,11 @@ export const handleTwitter: SpecialHandler = async (
 				const date = doc.querySelector(".tweet-date a")?.textContent?.trim();
 				const stats = doc.querySelector(".tweet-stats")?.textContent?.trim();
 
-				if (tweetContent) {
-					let md = `# Tweet by ${fullname || "Unknown"} (${username || "@?"})\n\n`;
-					if (date) md += `*${date}*\n\n`;
+				if (tweetContent !== null && tweetContent !== undefined) {
+					let md = `# Tweet by ${fullname ?? "Unknown"} (${username ?? "@?"})\n\n`;
+					if (date !== null && date !== undefined) md += `*${date}*\n\n`;
 					md += `${tweetContent}\n\n`;
-					if (stats) md += `---\n${stats.replace(/\s+/g, " ")}\n`;
+					if (stats !== null && stats !== undefined) md += `---\n${stats.replace(/\s+/g, " ")}\n`;
 
 					// Check for replies/thread
 					const replies = Array.from(doc.querySelectorAll(".timeline-item .tweet-content")) as HTMLElement[];
@@ -54,7 +54,7 @@ export const handleTwitter: SpecialHandler = async (
 						md += `\n---\n\n## Thread/Replies\n\n`;
 						for (const reply of replies.slice(1, 10)) {
 							const replyUser = reply.parentElement?.querySelector(".username")?.textContent?.trim();
-							md += `**${replyUser || "@?"}**: ${reply.textContent?.trim()}\n\n`;
+							md += `**${replyUser ?? "@?"}**: ${reply.textContent?.trim()}\n\n`;
 						}
 					}
 
@@ -69,12 +69,12 @@ export const handleTwitter: SpecialHandler = async (
 			}
 		}
 	} catch {
-		if (signal?.aborted) {
+		if (signal !== undefined && signal.aborted) {
 			throw new ToolAbortError();
 		}
 	}
 
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		throw new ToolAbortError();
 	}
 

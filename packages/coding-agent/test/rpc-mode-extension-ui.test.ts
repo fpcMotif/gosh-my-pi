@@ -38,7 +38,7 @@ describe("requestRpcEditor", () => {
 		}
 		pending.resolve({ type: "extension_ui_response", id: request.id, value: "custom response" });
 
-		await expect(promise).resolves.toBe("custom response");
+		expect(promise).resolves.toBe("custom response");
 		expect(pendingRequests.size).toBe(0);
 	});
 
@@ -76,7 +76,7 @@ describe("requestRpcEditor", () => {
 			throw new Error("Expected a cancel request");
 		}
 		expect(cancelRequest.targetId).toBe(request.id);
-		await expect(promise).resolves.toBeUndefined();
+		expect(promise).resolves.toBeUndefined();
 		expect(pendingRequests.has(request.id)).toBe(false);
 	});
 });

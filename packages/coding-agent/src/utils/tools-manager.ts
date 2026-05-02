@@ -120,11 +120,11 @@ async function getLatestVersion(repo: string, signal?: AbortSignal): Promise<str
 			headers: { "User-Agent": `${APP_NAME}-coding-agent` },
 			signal: ptree.combineSignals(signal, TOOL_METADATA_TIMEOUT_MS),
 		});
-	} catch (err) {
-		if (err instanceof Error && err.name === "AbortError") {
+	} catch (error) {
+		if (error instanceof Error && error.name === "AbortError") {
 			throw new Error("GitHub API request timed out");
 		}
-		throw err;
+		throw error;
 	}
 
 	if (!response.ok) {
@@ -142,11 +142,11 @@ async function downloadFile(url: string, dest: string, signal?: AbortSignal): Pr
 		response = await fetch(url, {
 			signal: ptree.combineSignals(signal, TOOL_DOWNLOAD_TIMEOUT_MS),
 		});
-	} catch (err) {
-		if (err instanceof Error && err.name === "AbortError") {
+	} catch (error) {
+		if (error instanceof Error && error.name === "AbortError") {
 			throw new Error(`Download timed out: ${url}`);
 		}
-		throw err;
+		throw error;
 	}
 	if (!response.ok) {
 		throw new Error(`Failed to download: ${response.status}`);
@@ -169,7 +169,7 @@ async function downloadTool(tool: ToolName, signal?: AbortSignal): Promise<strin
 
 	// Get asset name for this platform
 	const assetName = config.getAssetName(version, plat, architecture);
-	if (!assetName) {
+	if (assetName === null || assetName === undefined || assetName === "") {
 		throw new Error(`Unsupported platform: ${plat}/${architecture}`);
 	}
 
@@ -181,7 +181,7 @@ async function downloadTool(tool: ToolName, signal?: AbortSignal): Promise<strin
 	const binaryPath = path.join(TOOLS_DIR, config.binaryName + binaryExt);
 
 	// Handle direct binary downloads (no archive extraction needed)
-	if (config.isDirectBinary) {
+	if (config.isDirectBinary === true) {
 		await downloadFile(downloadUrl, binaryPath, signal);
 		if (plat !== "win32") {
 			await fs.promises.chmod(binaryPath, 0o755);
@@ -213,8 +213,8 @@ async function downloadTool(tool: ToolName, signal?: AbortSignal): Promise<strin
 				}
 				await Bun.write(outputPath, file);
 			}
-		} catch (err) {
-			throw new Error(`Failed to extract ${assetName}: ${err instanceof Error ? err.message : String(err)}`);
+		} catch (error) {
+			throw new Error(`Failed to extract ${assetName}: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
 		// Find the binary in extracted files
@@ -250,7 +250,7 @@ async function downloadTool(tool: ToolName, signal?: AbortSignal): Promise<strin
 async function installPythonPackage(pkg: string, signal?: AbortSignal): Promise<boolean> {
 	// Try uv first (faster, better isolation)
 	const uv = $which("uv");
-	if (uv) {
+	if (uv !== null && uv !== undefined && uv !== "") {
 		const result = await ptree.exec(["uv", "tool", "install", pkg], {
 			signal,
 			allowNonZero: true,
@@ -261,8 +261,8 @@ async function installPythonPackage(pkg: string, signal?: AbortSignal): Promise<
 	}
 
 	// Fall back to pip
-	const pip = $which("pip3") || $which("pip");
-	if (pip) {
+	const pip = $which("pip3") ?? $which("pip");
+	if (pip !== null && pip !== undefined && pip !== "") {
 		const result = await ptree.exec(["pip", "install", "--user", pkg], {
 			signal,
 			allowNonZero: true,
@@ -292,7 +292,7 @@ type EnsureToolOptions = {
 export async function ensureTool(tool: ToolName, silentOrOptions?: EnsureToolOptions): Promise<string | undefined> {
 	const { signal, silent = false, notify } = silentOrOptions ?? {};
 	const existingPath = getToolPath(tool);
-	if (existingPath) {
+	if (existingPath !== null && existingPath !== undefined && existingPath !== "") {
 		return existingPath;
 	}
 
@@ -317,7 +317,7 @@ export async function ensureTool(tool: ToolName, silentOrOptions?: EnsureToolOpt
 		if (success) {
 			// Re-check for the command after installation
 			const path = $which(pythonConfig.binaryName);
-			if (path) {
+			if (path !== null && path !== undefined && path !== "") {
 				if (!silent) {
 					logger.debug(`${pythonConfig.name} installed successfully`);
 				}
@@ -345,10 +345,10 @@ export async function ensureTool(tool: ToolName, silentOrOptions?: EnsureToolOpt
 			logger.debug(`${config.name} installed to ${path}`);
 		}
 		return path;
-	} catch (e) {
+	} catch (error) {
 		if (!silent) {
 			logger.warn(`Failed to download ${config.name}`, {
-				error: e instanceof Error ? e.message : String(e),
+				error: error instanceof Error ? error.message : String(error),
 			});
 		}
 		return undefined;

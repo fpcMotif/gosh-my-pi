@@ -54,9 +54,9 @@ function getRunLabel(run: GhRunWatchRunDetails): string {
 
 function getRunMeta(run: GhRunWatchRunDetails): string[] {
 	const parts: string[] = [];
-	if (run.branch) {
+	if (run.branch !== null && run.branch !== undefined && run.branch !== "") {
 		parts.push(replaceTabs(run.branch));
-	} else if (run.headSha) {
+	} else if (run.headSha !== null && run.headSha !== undefined && run.headSha !== "") {
 		parts.push(formatShortSha(run.headSha) ?? run.headSha);
 	}
 	parts.push(`#${run.id}`);
@@ -76,7 +76,12 @@ function getJobStateVisual(
 	job: GhRunWatchJobDetails,
 	theme: Theme,
 ): { iconRaw: string; iconColor: ToolUIColor; textColor: ThemeColor } {
-	if (job.conclusion && SUCCESS_CONCLUSIONS.has(job.conclusion)) {
+	if (
+		job.conclusion !== null &&
+		job.conclusion !== undefined &&
+		job.conclusion !== "" &&
+		SUCCESS_CONCLUSIONS.has(job.conclusion)
+	) {
 		return {
 			iconRaw: theme.status.success,
 			iconColor: "success",
@@ -84,7 +89,12 @@ function getJobStateVisual(
 		};
 	}
 
-	if (job.conclusion && FAILURE_CONCLUSIONS.has(job.conclusion)) {
+	if (
+		job.conclusion !== null &&
+		job.conclusion !== undefined &&
+		job.conclusion !== "" &&
+		FAILURE_CONCLUSIONS.has(job.conclusion)
+	) {
 		return {
 			iconRaw: theme.status.error,
 			iconColor: "error",
@@ -92,7 +102,7 @@ function getJobStateVisual(
 		};
 	}
 
-	if (job.status && RUNNING_STATUSES.has(job.status)) {
+	if (job.status !== null && job.status !== undefined && job.status !== "" && RUNNING_STATUSES.has(job.status)) {
 		return {
 			iconRaw: theme.status.enabled,
 			iconColor: "warning",
@@ -100,7 +110,7 @@ function getJobStateVisual(
 		};
 	}
 
-	if (job.status && PENDING_STATUSES.has(job.status)) {
+	if (job.status !== null && job.status !== undefined && job.status !== "" && PENDING_STATUSES.has(job.status)) {
 		return {
 			iconRaw: theme.status.shadowed,
 			iconColor: "muted",
@@ -119,12 +129,19 @@ function renderJobLine(job: GhRunWatchJobDetails, width: number, theme: Theme): 
 	const visual = getJobStateVisual(job, theme);
 	const prefix = theme.fg(visual.iconColor, `${visual.iconRaw} `);
 	const durationLabel = job.durationSeconds !== undefined ? `${job.durationSeconds}s` : undefined;
-	const styledDuration = durationLabel ? theme.fg(visual.textColor, durationLabel) : undefined;
-	const reservedWidth = visibleWidth(prefix) + (styledDuration ? 1 + visibleWidth(styledDuration) : 0);
+	const styledDuration =
+		durationLabel !== null && durationLabel !== undefined && durationLabel !== ""
+			? theme.fg(visual.textColor, durationLabel)
+			: undefined;
+	const reservedWidth =
+		visibleWidth(prefix) +
+		(styledDuration !== null && styledDuration !== undefined && styledDuration !== ""
+			? 1 + visibleWidth(styledDuration)
+			: 0);
 	const nameWidth = Math.max(8, width - reservedWidth);
 	const jobName = theme.fg(visual.textColor, truncateVisualWidth(replaceTabs(job.name), nameWidth));
 	let line = `${prefix}${jobName}`;
-	if (styledDuration) {
+	if (styledDuration !== null && styledDuration !== undefined && styledDuration !== "") {
 		line += padding(Math.max(1, width - visibleWidth(line) - visibleWidth(styledDuration)));
 		line += styledDuration;
 	}
@@ -156,12 +173,15 @@ function renderFailedLogs(
 
 	const lines = ["", theme.fg("error", "failed logs")];
 	for (const entry of failedLogs) {
-		const context = entry.workflowName ? `${entry.workflowName}  #${entry.runId}` : `run #${entry.runId}`;
+		const context =
+			entry.workflowName !== null && entry.workflowName !== undefined && entry.workflowName !== ""
+				? `${entry.workflowName}  #${entry.runId}`
+				: `run #${entry.runId}`;
 		lines.push(
 			theme.fg("error", `${theme.status.error} ${replaceTabs(entry.jobName)}  ${theme.fg("muted", context)}`),
 		);
 
-		if (!entry.available || !entry.tail) {
+		if (!entry.available || entry.tail === null || entry.tail === undefined || entry.tail === "") {
 			lines.push(theme.fg("dim", "  log tail unavailable"));
 			continue;
 		}
@@ -191,7 +211,7 @@ function buildRenderedLines(
 ): string[] {
 	const lines = [theme.fg("muted", getWatchHeader(watch))];
 
-	if (watch.note) {
+	if (watch.note !== null && watch.note !== undefined && watch.note !== "") {
 		lines.push(theme.fg("dim", replaceTabs(watch.note)));
 	}
 
@@ -230,9 +250,9 @@ function renderFallbackText(
 
 	const header = renderStatusLine(
 		{
-			icon: result.isError ? "error" : "warning",
+			icon: result.isError === true ? "error" : "warning",
 			title: "GitHub Run Watch",
-			description: result.isError ? "failed" : "no output",
+			description: result.isError === true ? "failed" : "no output",
 		},
 		theme,
 	);
@@ -254,18 +274,18 @@ export const githubToolRenderer = {
 		const branch = typeof args.branch === "string" && args.branch.trim().length > 0 ? args.branch.trim() : undefined;
 
 		const op = typeof args.op === "string" && args.op.trim().length > 0 ? args.op.trim() : undefined;
-		if (op && op !== "run_watch") {
+		if (op !== null && op !== undefined && op !== "" && op !== "run_watch") {
 			const title = uiTheme.fg("accent", `GitHub ${op}`);
 			lines.push(`${icon} ${title}`);
 			return new Text(lines.join("\n"), 0, 0);
 		}
 
-		if (runId) {
+		if (runId !== null && runId !== undefined && runId !== "") {
 			// "⠋ GitHub Run Watch  run #12345"
 			const title = uiTheme.fg("accent", "GitHub Run Watch");
 			const meta = uiTheme.fg("muted", `#${runId}`);
 			lines.push(`${icon} ${title}  ${meta}`);
-		} else if (branch) {
+		} else if (branch !== null && branch !== undefined && branch !== "") {
 			// "⠋ GitHub Run Watch  feature-branch"
 			const title = uiTheme.fg("accent", "GitHub Run Watch");
 			const meta = uiTheme.fg("text", branch);

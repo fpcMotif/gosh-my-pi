@@ -45,7 +45,7 @@ export function getCustomSharePath(): string | null {
  */
 export async function loadCustomShare(): Promise<LoadedCustomShare | null> {
 	const scriptPath = getCustomSharePath();
-	if (!scriptPath) {
+	if (scriptPath === null || scriptPath === undefined || scriptPath === "") {
 		return null;
 	}
 
@@ -58,8 +58,8 @@ export async function loadCustomShare(): Promise<LoadedCustomShare | null> {
 		}
 
 		return { path: scriptPath, fn };
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
 		throw new Error(`Failed to load share script: ${message}`);
 	}
 }

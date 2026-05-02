@@ -68,9 +68,9 @@ async function loadPuppeteer(): Promise<typeof Puppeteer> {
 let chromiumExecutablePromise: Promise<string | undefined> | undefined;
 async function ensureChromiumExecutable(): Promise<string | undefined> {
 	const sysChrome = resolveSystemChromium();
-	if (sysChrome) return sysChrome;
+	if (sysChrome !== null && sysChrome !== undefined && sysChrome !== "") return sysChrome;
 	const envPath = process.env.PUPPETEER_EXECUTABLE_PATH;
-	if (envPath) return envPath;
+	if (envPath !== null && envPath !== undefined && envPath !== "") return envPath;
 	if (chromiumExecutablePromise) return chromiumExecutablePromise;
 
 	chromiumExecutablePromise = (async () => {
@@ -79,7 +79,7 @@ async function ensureChromiumExecutable(): Promise<string | undefined> {
 			import("puppeteer-core/internal/revisions.js"),
 		]);
 		const platform = browsers.detectBrowserPlatform();
-		if (!platform) {
+		if (platform === undefined) {
 			logger.warn("Could not detect browser platform; relying on puppeteer default resolution");
 			return undefined;
 		}
@@ -120,10 +120,10 @@ async function ensureChromiumExecutable(): Promise<string | undefined> {
 			},
 		});
 		return executablePath;
-	})().catch(err => {
+	})().catch(error => {
 		chromiumExecutablePromise = undefined;
 		throw new ToolError(
-			`Failed to install Chromium for puppeteer: ${(err as Error).message}. ` +
+			`Failed to install Chromium for puppeteer: ${(error as Error).message}. ` +
 				"Set PUPPETEER_EXECUTABLE_PATH to use an existing Chrome/Chromium binary, or install one manually.",
 		);
 	});
@@ -175,7 +175,7 @@ function systemChromiumCandidates(): string[] {
 			const names = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser", "chrome"];
 			for (const name of names) {
 				const found = $which(name);
-				if (found) candidates.push(found);
+				if (found !== null && found !== undefined && found !== "") candidates.push(found);
 			}
 			candidates.push(
 				"/usr/bin/google-chrome-stable",
@@ -292,7 +292,7 @@ function normalizeSelector(selector: string): string {
 		// Playwright-style: p-aria/[name="Sign in"] → aria/Sign in
 		const nameMatch = rest.match(/\[\s*name\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\]]+))\s*\]/);
 		const name = nameMatch?.[1] ?? nameMatch?.[2] ?? nameMatch?.[3];
-		if (name) return `aria/${name.trim()}`;
+		if (name !== null && name !== undefined && name !== "") return `aria/${name.trim()}`;
 		return `aria/${rest}`;
 	}
 	return selector;
@@ -428,8 +428,8 @@ async function clickQueryHandlerText(
 			try {
 				await untilAborted(clickSignal, () => target.click());
 				return;
-			} catch (err) {
-				lastReason = err instanceof Error ? err.message : String(err);
+			} catch (error) {
+				lastReason = error instanceof Error ? error.message : String(error);
 				await Bun.sleep(100);
 			}
 		} finally {
@@ -630,7 +630,7 @@ type ReadableFormat = "text" | "markdown";
 /** Trim to non-empty string or undefined. */
 function normalize(text: string | null | undefined): string | undefined {
 	const trimmed = text?.trim();
-	return trimmed || undefined;
+	return trimmed ?? undefined;
 }
 
 /**
@@ -664,10 +664,10 @@ export function extractReadableFromHtml(html: string, url: string, format: Reada
 		document.body,
 	];
 	for (const el of candidates) {
-		if (!el) continue;
+		if (el === null || el === undefined) continue;
 		const innerHTML = el.innerHTML?.trim();
 		const textContent = el.textContent?.trim();
-		if (!innerHTML || !textContent) continue;
+		if (innerHTML === null || innerHTML === undefined || textContent === null || textContent === undefined) continue;
 		const result = toReadableResult(url, format, textContent, innerHTML, {
 			title: document.title,
 			excerpt: textContent.slice(0, 240),
@@ -690,7 +690,11 @@ function toReadableResult(
 	const text = normalize(textContent);
 	const markdown = format === "markdown" ? (normalize(htmlToBasicMarkdown(htmlContent ?? "")) ?? text) : undefined;
 	const normalizedText = format === "text" ? text : undefined;
-	if (!normalizedText && !markdown) return null;
+	if (
+		(normalizedText === null || normalizedText === undefined || normalizedText === "") &&
+		(markdown === null || markdown === undefined || markdown === "")
+	)
+		return null;
 	return {
 		url,
 		title: normalize(meta.title),
@@ -748,7 +752,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 			await this.#page.close();
 		}
 		this.#page = null;
-		if (this.#browser?.connected) {
+		if (this.#browser?.connected === true) {
 			await this.#browser.close();
 		}
 		this.#browser = null;
@@ -775,7 +779,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 			`--window-size=${initialViewport.width},${initialViewport.height}`,
 		];
 		const proxy = process.env.PUPPETEER_PROXY;
-		if (proxy) {
+		if (proxy !== null && proxy !== undefined && proxy !== "") {
 			launchArgs.push(`--proxy-server=${proxy}`);
 			// Chrome (since v72) bypasses proxies for localhost by default. When PUPPETEER_PROXY_BYPASS_LOOPBACK
 			// is true, add <-loopback> so traffic to localhost reaches the proxy (e.g. for mitmdump/auth capture).
@@ -816,12 +820,12 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		if (this.#page && !this.#page.isClosed()) {
 			return this.#page;
 		}
-		if (!this.#browser?.isConnected()) {
+		if (this.#browser?.isConnected() !== true) {
 			return this.#resetBrowser(params);
 		}
 		this.#page = await this.#browser.newPage();
 		await this.#applyStealthPatches(this.#page);
-		if (this.#currentHeadless || params?.viewport) {
+		if (this.#currentHeadless ?? params?.viewport) {
 			await this.#applyViewport(this.#page, params?.viewport);
 		}
 		return this.#page;
@@ -851,9 +855,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 			handles.map(async handle => {
 				try {
 					await handle.dispose();
-				} catch {
-					return;
-				}
+				} catch {}
 			}),
 		);
 	}
@@ -906,17 +908,17 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				if (inViewport) {
 					const id = ++this.#elementIdCounter;
 					const states: string[] = [];
-					if (node.disabled) states.push("disabled");
+					if (node.disabled === true) states.push("disabled");
 					if (node.checked !== undefined) states.push(`checked=${String(node.checked)}`);
 					if (node.pressed !== undefined) states.push(`pressed=${String(node.pressed)}`);
 					if (node.selected !== undefined) states.push(`selected=${String(node.selected)}`);
 					if (node.expanded !== undefined) states.push(`expanded=${String(node.expanded)}`);
-					if (node.required) states.push("required");
-					if (node.readonly) states.push("readonly");
-					if (node.multiselectable) states.push("multiselectable");
-					if (node.multiline) states.push("multiline");
-					if (node.modal) states.push("modal");
-					if (node.focused) states.push("focused");
+					if (node.required === true) states.push("required");
+					if (node.readonly === true) states.push("readonly");
+					if (node.multiselectable === true) states.push("multiselectable");
+					if (node.multiline === true) states.push("multiline");
+					if (node.modal === true) states.push("modal");
+					if (node.focused === true) states.push("focused");
 					this.#elementCache.set(id, handle);
 					entries.push({
 						id,
@@ -942,16 +944,24 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		const scroll = `x=${observation.scroll.x} y=${observation.scroll.y} viewport=${observation.scroll.width}x${observation.scroll.height} doc=${observation.scroll.scrollWidth}x${observation.scroll.scrollHeight}`;
 		const lines = [
 			`URL: ${observation.url}`,
-			observation.title ? `Title: ${observation.title}` : "Title:",
+			observation.title !== null && observation.title !== undefined && observation.title !== ""
+				? `Title: ${observation.title}`
+				: "Title:",
 			`Viewport: ${viewport}`,
 			`Scroll: ${scroll}`,
 			"Elements:",
 		];
 		for (const entry of observation.elements) {
-			const name = entry.name ? ` "${entry.name}"` : "";
+			const name = entry.name !== null && entry.name !== undefined && entry.name !== "" ? ` "${entry.name}"` : "";
 			const value = entry.value !== undefined ? ` value=${JSON.stringify(entry.value)}` : "";
-			const description = entry.description ? ` desc=${JSON.stringify(entry.description)}` : "";
-			const shortcuts = entry.keyshortcuts ? ` shortcuts=${JSON.stringify(entry.keyshortcuts)}` : "";
+			const description =
+				entry.description !== null && entry.description !== undefined && entry.description !== ""
+					? ` desc=${JSON.stringify(entry.description)}`
+					: "";
+			const shortcuts =
+				entry.keyshortcuts !== null && entry.keyshortcuts !== undefined && entry.keyshortcuts !== ""
+					? ` shortcuts=${JSON.stringify(entry.keyshortcuts)}`
+					: "";
 			const state = entry.states.length ? ` (${entry.states.join(", ")})` : "";
 			lines.push(`${entry.id}. ${entry.role}${name}${value}${description}${shortcuts}${state}`);
 		}
@@ -1130,9 +1140,9 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 			const key =
 				method === "Runtime.evaluate"
 					? "expression"
-					: method === "Runtime.callFunctionOn"
+					: (method === "Runtime.callFunctionOn"
 						? "functionDeclaration"
-						: null;
+						: null);
 			if (!key) {
 				return next(params);
 			}
@@ -1392,7 +1402,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				case "press": {
 					const key = ensureParam(params.key, "key", params.action) as KeyInput;
 					const page = await this.#ensurePage(params);
-					if (params.selector) {
+					if (params.selector !== null && params.selector !== undefined && params.selector !== "") {
 						const resolvedSelector = normalizeSelector(params.selector as string);
 						await untilAborted(signal, () => page.focus(resolvedSelector));
 					}
@@ -1473,7 +1483,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				}
 				case "get_text": {
 					const page = await this.#ensurePage(params);
-					if (params.args?.length) {
+					if (params.args?.length !== null && params.args?.length !== undefined && params.args?.length !== 0) {
 						const values = (await Promise.all(
 							params.args.map((arg, index) => {
 								const selector = ensureParam(arg.selector, `args[${index}].selector`, params.action);
@@ -1499,7 +1509,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				}
 				case "get_html": {
 					const page = await this.#ensurePage(params);
-					if (params.args?.length) {
+					if (params.args?.length !== null && params.args?.length !== undefined && params.args?.length !== 0) {
 						const values = (await Promise.all(
 							params.args.map((arg, index) => {
 								const selector = ensureParam(arg.selector, `args[${index}].selector`, params.action);
@@ -1525,7 +1535,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				}
 				case "get_attribute": {
 					const page = await this.#ensurePage(params);
-					if (params.args?.length) {
+					if (params.args?.length !== null && params.args?.length !== undefined && params.args?.length !== 0) {
 						const values = (await Promise.all(
 							params.args.map((arg, index) => {
 								const selector = ensureParam(arg.selector, `args[${index}].selector`, params.action);
@@ -1579,10 +1589,13 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				}
 				case "screenshot": {
 					const page = await this.#ensurePage(params);
-					const fullPage = params.selector ? false : (params.full_page ?? false);
+					const fullPage =
+						params.selector !== null && params.selector !== undefined && params.selector !== ""
+							? false
+							: (params.full_page ?? false);
 					let buffer: Buffer;
 
-					if (params.selector) {
+					if (params.selector !== null && params.selector !== undefined && params.selector !== "") {
 						const resolvedSelector = normalizeSelector(params.selector as string);
 						const handle = (await untilAborted(signal, () => page.$(resolvedSelector))) as ElementHandle | null;
 						if (!handle) {
@@ -1605,13 +1618,16 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					// Resolve destination: user-defined path > screenshotDir (auto-named) > temp file.
 					const screenshotDir = (() => {
 						const v = this.session.settings.get("browser.screenshotDir") as string | undefined;
-						return v ? expandPath(v) : undefined;
+						return v !== null && v !== undefined && v !== "" ? expandPath(v) : undefined;
 					})();
-					const paramPath = params.path ? resolveToCwd(params.path as string, this.session.cwd) : undefined;
+					const paramPath =
+						params.path !== null && params.path !== undefined && params.path !== ""
+							? resolveToCwd(params.path as string, this.session.cwd)
+							: undefined;
 					let dest: string;
-					if (paramPath) {
+					if (paramPath !== null && paramPath !== undefined && paramPath !== "") {
 						dest = paramPath;
-					} else if (screenshotDir) {
+					} else if (screenshotDir !== null && screenshotDir !== undefined && screenshotDir !== "") {
 						const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -1);
 						dest = path.join(screenshotDir, `screenshot-${ts}.png`);
 					} else {
@@ -1619,7 +1635,10 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					}
 					await fs.promises.mkdir(path.dirname(dest), { recursive: true });
 					// Full-res buffer when saving to a user-defined location; resized (API copy) for temp-only.
-					const saveFullRes = !!(paramPath || screenshotDir);
+					const saveFullRes = !!(
+						paramPath ??
+						(screenshotDir !== null && screenshotDir !== undefined && screenshotDir !== "")
+					);
 					const savedBuffer = saveFullRes ? buffer : resized.buffer;
 					const savedMimeType = saveFullRes ? "image/png" : resized.mimeType;
 					await Bun.write(dest, savedBuffer);
@@ -1642,7 +1661,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						.done();
 				}
 				default:
-					throw new ToolError(`Unsupported action: ${params.action}`);
+					throw new ToolError(`Unsupported action: ${String(params.action)}`);
 			}
 		} catch (error) {
 			if (error instanceof ToolAbortError) throw error;

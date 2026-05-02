@@ -101,9 +101,12 @@ export class EditMatchError extends Error {
 		const thresholdPercent = Math.round(options.threshold * 100);
 
 		const hint = options.allowFuzzy
-			? options.fuzzyMatches && options.fuzzyMatches > 1
+			? (options.fuzzyMatches !== null &&
+				options.fuzzyMatches !== undefined &&
+				options.fuzzyMatches !== 0 &&
+				options.fuzzyMatches > 1
 				? `Found ${options.fuzzyMatches} high-confidence matches. Provide more context to make it unique.`
-				: `Closest match was below the ${thresholdPercent}% similarity threshold.`
+				: `Closest match was below the ${thresholdPercent}% similarity threshold.`)
 			: "Fuzzy matching is disabled. Enable 'Edit fuzzy match' in settings to accept high-confidence matches.";
 
 		return [
@@ -134,7 +137,10 @@ function findFirstDifferentLine(oldLines: string[], newLines: string[]): { oldLi
 function formatOccurrenceError(path: string, matchOutcome: MatchOutcome): string {
 	const previews = matchOutcome.occurrencePreviews?.join("\n\n") ?? "";
 	const moreMsg =
-		matchOutcome.occurrences && matchOutcome.occurrences > MAX_RECORDED_MATCHES
+		matchOutcome.occurrences !== null &&
+		matchOutcome.occurrences !== undefined &&
+		matchOutcome.occurrences !== 0 &&
+		matchOutcome.occurrences > MAX_RECORDED_MATCHES
 			? ` (showing first ${MAX_RECORDED_MATCHES} of ${matchOutcome.occurrences})`
 			: "";
 	return `Found ${matchOutcome.occurrences} occurrences in ${path}${moreMsg}:\n\n${previews}\n\nAdd more context lines to disambiguate.`;
@@ -963,7 +969,7 @@ export function findContextLine(
 		};
 	}
 
-	if (!options?.skipFunctionFallback && trimmedContext.endsWith("()")) {
+	if (options?.skipFunctionFallback !== true && trimmedContext.endsWith("()")) {
 		const withParen = trimmedContext.replace(/\(\)\s*$/u, "(");
 		const withoutParen = trimmedContext.replace(/\(\)\s*$/u, "");
 		const parenResult = findContextLine(lines, withParen, startFrom, { allowFuzzy, skipFunctionFallback: true });
@@ -1054,7 +1060,12 @@ export async function executeReplaceSingle(
 			threshold: fuzzyThreshold,
 		});
 
-		if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
+		if (
+			matchOutcome.occurrences !== null &&
+			matchOutcome.occurrences !== undefined &&
+			matchOutcome.occurrences !== 0 &&
+			matchOutcome.occurrences > 1
+		) {
 			throw new Error(formatOccurrenceError(path, matchOutcome));
 		}
 

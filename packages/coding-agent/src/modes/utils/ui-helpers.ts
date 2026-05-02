@@ -114,7 +114,9 @@ export class UiHelpers {
 							theme.fg("success", `${theme.status.success} Background job completed`),
 							theme.fg("dim", typeLabel),
 							theme.fg("accent", jobId),
-							duration ? theme.fg("dim", `(${duration})`) : undefined,
+							duration !== null && duration !== undefined && duration !== ""
+								? theme.fg("dim", `(${duration})`)
+								: undefined,
 						]
 							.filter(Boolean)
 							.join(" ");
@@ -200,9 +202,9 @@ export class UiHelpers {
 					} else {
 						suffix = file.image
 							? "(image)"
-							: file.lineCount === undefined
+							: (file.lineCount === undefined
 								? "(unknown lines)"
-								: `(${file.lineCount} lines)`;
+								: `(${file.lineCount} lines)`);
 					}
 					const text = `${theme.fg("dim", `${theme.tree.last} `)}${theme.fg("muted", "Read")} ${theme.fg(
 						"accent",
@@ -222,7 +224,7 @@ export class UiHelpers {
 					if (!isSynthetic) {
 						this.ctx.notifyHasMessages?.();
 					}
-					if (options?.populateHistory && message.role === "user" && !isSynthetic) {
+					if (options?.populateHistory === true && message.role === "user" && !isSynthetic) {
 						this.ctx.editor.addToHistory(textContent);
 					}
 				}
@@ -256,7 +258,7 @@ export class UiHelpers {
 		// Preserved: message_start handler owns this lifecycle (see #783)
 		this.ctx.pendingTools.clear();
 
-		if (options.updateFooter) {
+		if (options.updateFooter === true) {
 			this.ctx.statusLine.invalidate();
 			this.ctx.updateEditorBorderColor();
 		}
@@ -282,14 +284,14 @@ export class UiHelpers {
 				readGroup = null;
 				const hasErrorStop = message.stopReason === "aborted" || message.stopReason === "error";
 				const errorMessage = hasErrorStop
-					? message.stopReason === "aborted"
+					? (message.stopReason === "aborted"
 						? (() => {
 								const retryAttempt = this.ctx.session.retryAttempt;
 								return retryAttempt > 0
 									? `Aborted after ${retryAttempt} retry attempt${retryAttempt > 1 ? "s" : ""}`
 									: "Operation aborted";
 							})()
-						: message.errorMessage || "Error"
+						: (message.errorMessage ?? "Error"))
 					: null;
 
 				// Render tool call components
@@ -299,7 +301,7 @@ export class UiHelpers {
 					}
 
 					if (content.name === "read") {
-						if (hasErrorStop && errorMessage) {
+						if (hasErrorStop && errorMessage !== null && errorMessage !== undefined && errorMessage !== "") {
 							if (!readGroup) {
 								readGroup = new ReadToolGroupComponent({
 									showContentPreview: this.ctx.settings.get("read.toolResultPreview"),
@@ -348,7 +350,7 @@ export class UiHelpers {
 					component.setExpanded(this.ctx.toolOutputExpanded);
 					this.ctx.chatContainer.addChild(component);
 
-					if (hasErrorStop && errorMessage) {
+					if (hasErrorStop && errorMessage !== null && errorMessage !== undefined && errorMessage !== "") {
 						component.updateResult(
 							{ content: [{ type: "text", text: errorMessage }], isError: true },
 							false,
@@ -480,10 +482,10 @@ export class UiHelpers {
 		this.ctx.chatContainer.addChild(new DynamicBorder(text => theme.fg("warning", text)));
 		this.ctx.chatContainer.addChild(
 			new Text(
-				theme.bold(theme.fg("warning", "Update Available")) +
-					"\n" +
-					theme.fg("muted", `New version ${newVersion} is available. Run: `) +
-					theme.fg("accent", "omp update"),
+				`${theme.bold(theme.fg("warning", "Update Available"))}\n${theme.fg(
+					"muted",
+					`New version ${newVersion} is available. Run: `,
+				)}${theme.fg("accent", "omp update")}`,
 				1,
 				0,
 			),
@@ -577,7 +579,7 @@ export class UiHelpers {
 		};
 
 		try {
-			if (options?.willRetry) {
+			if (options?.willRetry === true) {
 				for (const message of queuedMessages) {
 					if (this.ctx.isKnownSlashCommand(message.text)) {
 						await this.ctx.session.prompt(message.text);

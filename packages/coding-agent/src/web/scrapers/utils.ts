@@ -37,13 +37,13 @@ async function readResponseWithLimit(response: Response, maxBytes: number, signa
 
 	try {
 		while (true) {
-			if (signal?.aborted) {
+			if (signal !== undefined && signal.aborted) {
 				await reader.cancel();
 				throw new ToolAbortError();
 			}
 			const { done, value } = await reader.read();
 			if (done) break;
-			if (!value || value.byteLength === 0) continue;
+			if (value === null || value === undefined || value.byteLength === 0) continue;
 
 			totalBytes += value.byteLength;
 			if (totalBytes > maxBytes) {
@@ -78,9 +78,9 @@ export async function fetchBinary(url: string, timeout: number = 20, signal?: Ab
 			return { ok: false, error: `HTTP ${response.status}` };
 		}
 
-		const contentDisposition = response.headers.get("content-disposition") || undefined;
+		const contentDisposition = response.headers.get("content-disposition") ?? undefined;
 		const contentLength = response.headers.get("content-length");
-		if (contentLength) {
+		if (contentLength !== null && contentLength !== undefined && contentLength !== "") {
 			const size = Number.parseInt(contentLength, 10);
 			if (Number.isFinite(size) && size > MAX_BYTES) {
 				return { ok: false, error: `content-length ${size} exceeds ${MAX_BYTES}` };
@@ -88,10 +88,10 @@ export async function fetchBinary(url: string, timeout: number = 20, signal?: Ab
 		}
 		const buffer = await readResponseWithLimit(response, MAX_BYTES, requestSignal);
 		return { ok: true, buffer, contentDisposition };
-	} catch (err) {
-		if (signal?.aborted) throw new ToolAbortError();
-		if (requestSignal?.aborted) return { ok: false, error: "aborted" };
-		return { ok: false, error: err instanceof Error ? err.message : "Failed to fetch binary" };
+	} catch (error) {
+		if (signal !== undefined && signal.aborted) throw new ToolAbortError();
+		if (requestSignal !== undefined && requestSignal.aborted) return { ok: false, error: "aborted" };
+		return { ok: false, error: error instanceof Error ? error.message : "Failed to fetch binary" };
 	}
 }
 

@@ -23,12 +23,12 @@ export function enforcePlanModeWrite(
 	options?: { move?: string; op?: "create" | "update" | "delete" },
 ): void {
 	const state = session.getPlanModeState?.();
-	if (!state?.enabled) return;
+	if (state?.enabled !== true) return;
 
 	const resolvedTarget = resolvePlanPath(session, targetPath);
 	const resolvedPlan = resolvePlanPath(session, state.planFilePath);
 
-	if (options?.move) {
+	if (options?.move !== null && options?.move !== undefined && options?.move !== "") {
 		throw new ToolError("Plan mode: renaming files is not allowed.");
 	}
 

@@ -85,8 +85,8 @@ class FileSessionStorageWriter implements SessionStorageWriter {
 				}
 				offset += written;
 			}
-		} catch (err) {
-			throw this.#recordError(err);
+		} catch (error) {
+			throw this.#recordError(error);
 		}
 	}
 
@@ -100,8 +100,8 @@ class FileSessionStorageWriter implements SessionStorageWriter {
 		if (this.#error) throw this.#error;
 		try {
 			fs.fsyncSync(this.#fd);
-		} catch (err) {
-			throw this.#recordError(err);
+		} catch (error) {
+			throw this.#recordError(error);
 		}
 	}
 
@@ -155,9 +155,9 @@ export class FileSessionStorage implements SessionStorage {
 		try {
 			await fs.promises.access(path);
 			return true;
-		} catch (err) {
-			if (isEnoent(err)) return false;
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) return false;
+			throw error;
 		}
 	}
 
@@ -176,8 +176,8 @@ export class FileSessionStorage implements SessionStorage {
 	async rename(path: string, nextPath: string): Promise<void> {
 		try {
 			await fs.promises.rename(path, nextPath);
-		} catch (err) {
-			throw toError(err);
+		} catch (error) {
+			throw toError(error);
 		}
 	}
 
@@ -204,8 +204,8 @@ export class FileSessionStorage implements SessionStorage {
 		// surface real cleanup failures because the session file is already gone.
 		try {
 			await fsp.rm(artifactsDir, { recursive: true, force: true });
-		} catch (err) {
-			const error = toError(err);
+		} catch (error) {
+			const error = toError(error);
 			throw new Error(
 				`Session file deleted but failed to remove artifacts directory ${artifactsDir}: ${error.message}`,
 				{
@@ -263,8 +263,8 @@ class MemorySessionStorageWriter implements SessionStorageWriter {
 		try {
 			const existing = this.#storage.existsSync(this.#path) ? await this.#storage.readText(this.#path) : "";
 			await this.#storage.writeText(this.#path, `${existing}${line}`);
-		} catch (err) {
-			throw this.#recordError(err);
+		} catch (error) {
+			throw this.#recordError(error);
 		}
 	}
 

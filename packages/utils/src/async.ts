@@ -4,7 +4,7 @@
  * Cleans up all listeners on settlement.
  */
 export function withTimeout<T>(promise: Promise<T>, ms: number, message: string, signal?: AbortSignal): Promise<T> {
-	if (signal?.aborted) {
+	if (signal !== undefined && signal.aborted) {
 		const reason = signal.reason instanceof Error ? signal.reason : new Error("Aborted");
 		return Promise.reject(reason);
 	}
@@ -37,12 +37,12 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, message: string,
 			if (signal) signal.removeEventListener("abort", onAbort);
 			resolve(value);
 		},
-		err => {
+		error => {
 			if (settled) return;
 			settled = true;
 			clearTimeout(timeoutId);
 			if (signal) signal.removeEventListener("abort", onAbort);
-			reject(err);
+			reject(error);
 		},
 	);
 

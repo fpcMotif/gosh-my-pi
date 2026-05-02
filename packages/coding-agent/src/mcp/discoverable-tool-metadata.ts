@@ -57,9 +57,11 @@ export function isMCPToolName(name: string): boolean {
 }
 
 function getSchemaPropertyKeys(parameters: unknown): string[] {
-	if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) return [];
+	if (parameters === null || parameters === undefined || typeof parameters !== "object" || Array.isArray(parameters))
+		return [];
 	const properties = (parameters as { properties?: unknown }).properties;
-	if (!properties || typeof properties !== "object" || Array.isArray(properties)) return [];
+	if (properties === null || properties === undefined || typeof properties !== "object" || Array.isArray(properties))
+		return [];
 	return Object.keys(properties as Record<string, unknown>).sort();
 }
 
@@ -74,7 +76,7 @@ function tokenize(value: string): string[] {
 }
 
 function addWeightedTokens(termFrequencies: Map<string, number>, value: string | undefined, weight: number): void {
-	if (!value) return;
+	if (value === null || value === undefined || value === "") return;
 	for (const token of tokenize(value)) {
 		termFrequencies.set(token, (termFrequencies.get(token) ?? 0) + weight);
 	}
@@ -137,7 +139,7 @@ export function selectDiscoverableMCPToolNamesByServer(
 export function summarizeDiscoverableMCPTools(tools: DiscoverableMCPTool[]): DiscoverableMCPToolSummary {
 	const serverToolCounts = new Map<string, number>();
 	for (const tool of tools) {
-		if (!tool.serverName) continue;
+		if (tool.serverName === null || tool.serverName === undefined || tool.serverName === "") continue;
 		serverToolCounts.set(tool.serverName, (serverToolCounts.get(tool.serverName) ?? 0) + 1);
 	}
 	const servers = Array.from(serverToolCounts.entries())

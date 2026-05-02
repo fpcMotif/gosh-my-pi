@@ -40,8 +40,10 @@ export class SkillMessageComponent extends Container {
 		const args = details?.args?.trim();
 		const infoLines = [
 			`Skill: ${details?.name ?? "unknown"}`,
-			args ? `Args: ${args}` : undefined,
-			details?.path ? `Path: ${details.path}` : undefined,
+			args !== null && args !== undefined && args !== "" ? `Args: ${args}` : undefined,
+			details?.path !== null && details?.path !== undefined && details?.path !== ""
+				? `Path: ${details.path}`
+				: undefined,
 			typeof details?.lineCount === "number" ? `Prompt: ${details.lineCount} lines` : undefined,
 		].filter((line): line is string => Boolean(line));
 

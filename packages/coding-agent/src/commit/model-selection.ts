@@ -27,15 +27,16 @@ export async function resolvePrimaryModel(
 ): Promise<ResolvedCommitModel> {
 	const available = modelRegistry.getAvailable();
 	const matchPreferences = { usageOrder: settings.getStorage()?.getModelUsageOrder() };
-	const resolved = override
-		? resolveModelRoleValue(override, available, { settings, matchPreferences, modelRegistry })
-		: resolveRoleSelection(["commit", "smol", ...MODEL_ROLE_IDS], settings, available, modelRegistry);
+	const resolved =
+		override !== null && override !== undefined && override !== ""
+			? resolveModelRoleValue(override, available, { settings, matchPreferences, modelRegistry })
+			: resolveRoleSelection(["commit", "smol", ...MODEL_ROLE_IDS], settings, available, modelRegistry);
 	const model = resolved?.model;
 	if (!model) {
 		throw new Error("No model available for commit generation");
 	}
 	const apiKey = await modelRegistry.getApiKey(model);
-	if (!apiKey) {
+	if (apiKey === null || apiKey === undefined || apiKey === "") {
 		throw new Error(`No API key available for model ${model.provider}/${model.id}`);
 	}
 	return { model, apiKey, thinkingLevel: resolved?.thinkingLevel };
@@ -51,7 +52,8 @@ export async function resolveSmolModel(
 	const resolvedSmol = resolveRoleSelection(["smol"], settings, available, modelRegistry);
 	if (resolvedSmol?.model) {
 		const apiKey = await modelRegistry.getApiKey(resolvedSmol.model);
-		if (apiKey) return { model: resolvedSmol.model, apiKey, thinkingLevel: resolvedSmol.thinkingLevel };
+		if (apiKey !== null && apiKey !== undefined && apiKey !== "")
+			return { model: resolvedSmol.model, apiKey, thinkingLevel: resolvedSmol.thinkingLevel };
 	}
 
 	const matchPreferences = { usageOrder: settings.getStorage()?.getModelUsageOrder() };
@@ -59,7 +61,7 @@ export async function resolveSmolModel(
 		const candidate = parseModelPattern(pattern, available, matchPreferences, { modelRegistry }).model;
 		if (!candidate) continue;
 		const apiKey = await modelRegistry.getApiKey(candidate);
-		if (apiKey) return { model: candidate, apiKey };
+		if (apiKey !== null && apiKey !== undefined && apiKey !== "") return { model: candidate, apiKey };
 	}
 
 	return { model: fallbackModel, apiKey: fallbackApiKey };

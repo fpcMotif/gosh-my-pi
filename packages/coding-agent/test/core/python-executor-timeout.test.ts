@@ -22,7 +22,7 @@ describe("executePythonWithKernel cancellation", () => {
 		const kernel = new FakeKernel(
 			{ status: "ok", cancelled: true, timedOut: true, stdinRequested: false },
 			options => {
-				options?.onChunk?.("tick\n");
+				void options?.onChunk?.("tick\n");
 			},
 		);
 

@@ -37,7 +37,7 @@ describe("executePythonWithKernel result mapping", () => {
 		const kernel = new FakeKernel(
 			{ status: "error", cancelled: false, timedOut: false, stdinRequested: false },
 			options => {
-				options?.onChunk?.("Traceback...\n");
+				void options?.onChunk?.("Traceback...\n");
 			},
 		);
 

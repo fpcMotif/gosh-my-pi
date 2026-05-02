@@ -81,8 +81,8 @@ function parseAsiValue(raw: string): ASIValue {
 export function mergeAsi(base: ASIData | null, override: ASIData | undefined): ASIData | undefined {
 	if (!base && !override) return undefined;
 	return {
-		...(base ?? {}),
-		...(override ?? {}),
+		...base,
+		...override,
 	};
 }
 
@@ -337,7 +337,7 @@ export function readMaxExperiments(cwd: string): number | null {
 
 export function resolveWorkDir(cwd: string): string {
 	const configured = readConfig(cwd).workingDir;
-	if (!configured) return cwd;
+	if (configured === null || configured === undefined || configured === "") return cwd;
 	return path.isAbsolute(configured) ? configured : path.resolve(cwd, configured);
 }
 
@@ -411,9 +411,9 @@ function parsePendingRunSummary(
 	const checksPass =
 		typeof candidate.checks?.passed === "boolean"
 			? candidate.checks.passed
-			: typeof candidate.checks?.timedOut === "boolean" && candidate.checks.timedOut
+			: (typeof candidate.checks?.timedOut === "boolean" && candidate.checks.timedOut
 				? false
-				: null;
+				: null);
 	const exitCode =
 		typeof candidate.exitCode === "number" && Number.isFinite(candidate.exitCode) ? candidate.exitCode : null;
 	const timedOut = candidate.timedOut === true;

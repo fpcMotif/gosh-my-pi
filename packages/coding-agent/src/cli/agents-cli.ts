@@ -37,15 +37,15 @@ function writeStdout(line: string): void {
 }
 
 function resolveTargetDir(flags: AgentsCommandArgs["flags"]): string {
-	if (flags.dir && flags.dir.trim().length > 0) {
+	if (flags.dir !== null && flags.dir !== undefined && flags.dir !== "" && flags.dir.trim().length > 0) {
 		return path.resolve(getProjectDir(), flags.dir.trim());
 	}
 
-	if (flags.user && flags.project) {
+	if (flags.user === true && flags.project === true) {
 		throw new Error("Choose either --user or --project, not both.");
 	}
 
-	if (flags.project) {
+	if (flags.project === true) {
 		return path.resolve(getProjectDir(), ".omp", "agents");
 	}
 
@@ -61,9 +61,9 @@ function toFrontmatter(agent: AgentDefinition): Record<string, unknown> {
 	if (agent.tools && agent.tools.length > 0) frontmatter.tools = agent.tools;
 	if (agent.spawns !== undefined) frontmatter.spawns = agent.spawns;
 	if (agent.model && agent.model.length > 0) frontmatter.model = agent.model;
-	if (agent.thinkingLevel) frontmatter.thinkingLevel = agent.thinkingLevel;
+	if (agent.thinkingLevel !== undefined) frontmatter.thinkingLevel = agent.thinkingLevel;
 	if (agent.output !== undefined) frontmatter.output = agent.output;
-	if (agent.blocking) frontmatter.blocking = true;
+	if (agent.blocking === true) frontmatter.blocking = true;
 
 	return frontmatter;
 }
@@ -84,7 +84,7 @@ async function unpackBundledAgents(flags: AgentsCommandArgs["flags"]): Promise<U
 
 	for (const agent of bundledAgents) {
 		const filePath = path.join(targetDir, `${agent.name}.md`);
-		if (!flags.force) {
+		if (flags.force !== true) {
 			try {
 				await fs.stat(filePath);
 				skipped.push(filePath);
@@ -110,7 +110,7 @@ export async function runAgentsCommand(cmd: AgentsCommandArgs): Promise<void> {
 	switch (cmd.action) {
 		case "unpack": {
 			const result = await unpackBundledAgents(cmd.flags);
-			if (cmd.flags.json) {
+			if (cmd.flags.json === true) {
 				writeStdout(JSON.stringify(result, null, 2));
 				return;
 			}
@@ -132,7 +132,6 @@ export async function runAgentsCommand(cmd: AgentsCommandArgs): Promise<void> {
 			for (const filePath of result.skipped) {
 				writeStdout(chalk.dim(`  = ${filePath}`));
 			}
-			return;
 		}
 	}
 }

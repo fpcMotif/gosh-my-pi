@@ -218,7 +218,7 @@ export class ToolExecutionComponent extends Container {
 		if (!strategy) return;
 
 		const args = this.#args;
-		if (args == null || typeof args !== "object") return;
+		if (args === null || typeof args !== "object") return;
 
 		const partialJson = (args as { __partialJson?: string }).__partialJson;
 		let effectiveArgs: unknown;
@@ -255,9 +255,9 @@ export class ToolExecutionComponent extends Container {
 				this.#updateDisplay();
 				this.#ui.requestRender();
 			}
-		} catch (err) {
+		} catch (error) {
 			if (controller.signal.aborted) return;
-			logger.warn("Edit preview diff failed", { tool: this.#toolName, error: String(err) });
+			logger.warn("Edit preview diff failed", { tool: this.#toolName, error: String(error) });
 		}
 	}
 
@@ -289,7 +289,7 @@ export class ToolExecutionComponent extends Container {
 	#getAllImageBlocks(): Array<{ data?: string; mimeType?: string }> {
 		if (!this.#result) return [];
 		const contentImages = this.#result.content?.filter((c: any) => c.type === "image") || [];
-		const detailImages = this.#result.details?.images || [];
+		const detailImages = this.#result.details?.images ?? [];
 		return [...contentImages, ...detailImages];
 	}
 
@@ -306,7 +306,15 @@ export class ToolExecutionComponent extends Container {
 
 		for (let i = 0; i < imageBlocks.length; i++) {
 			const img = imageBlocks[i];
-			if (!img.data || !img.mimeType) continue;
+			if (
+				img.data === null ||
+				img.data === undefined ||
+				img.data === "" ||
+				img.mimeType === null ||
+				img.mimeType === undefined ||
+				img.mimeType === ""
+			)
+				continue;
 			// Skip if already PNG or already converted
 			if (img.mimeType === "image/png") continue;
 			if (this.#convertedImages.has(i)) continue;
@@ -388,9 +396,9 @@ export class ToolExecutionComponent extends Container {
 		// Set background based on state
 		const bgFn = this.#isPartial
 			? (text: string) => theme.bg("toolPendingBg", text)
-			: this.#result?.isError
+			: (this.#result?.isError === true
 				? (text: string) => theme.bg("toolErrorBg", text)
-				: (text: string) => theme.bg("toolSuccessBg", text);
+				: (text: string) => theme.bg("toolSuccessBg", text));
 
 		// Sync shared mutable render state for component closures
 		this.#renderState.expanded = this.#expanded;
@@ -411,11 +419,11 @@ export class ToolExecutionComponent extends Container {
 			if (shouldRenderCall && tool.renderCall) {
 				try {
 					const callComponent = tool.renderCall(this.#getCallArgsForRender(), this.#renderState, theme);
-					if (callComponent) {
+					if (callComponent !== null && callComponent !== undefined) {
 						this.#contentBox.addChild(ensureInvalidate(callComponent));
 					}
-				} catch (err) {
-					logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(err) });
+				} catch (error) {
+					logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(error) });
 					// Fall back to default on error
 					this.#contentBox.addChild(new Text(theme.fg("toolTitle", theme.bold(this.#toolLabel)), 0, 0));
 				}
@@ -446,8 +454,8 @@ export class ToolExecutionComponent extends Container {
 					if (resultComponent) {
 						this.#contentBox.addChild(ensureInvalidate(resultComponent));
 					}
-				} catch (err) {
-					logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(err) });
+				} catch (error) {
+					logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(error) });
 					// Fall back to showing raw output on error
 					const output = this.#getTextOutput();
 					if (output) {
@@ -490,9 +498,10 @@ export class ToolExecutionComponent extends Container {
 						this.#multiFileBoxes.push(spacer);
 						this.addChild(spacer);
 					}
-					const fileBgFn = fileResult.isError
-						? (text: string) => theme.bg("toolErrorBg", text)
-						: (text: string) => theme.bg("toolSuccessBg", text);
+					const fileBgFn =
+						fileResult.isError === true
+							? (text: string) => theme.bg("toolErrorBg", text)
+							: (text: string) => theme.bg("toolSuccessBg", text);
 					const fileBox = new Box(1, 1, fileBgFn);
 					try {
 						const resultComponent = renderer.renderResult(
@@ -503,17 +512,18 @@ export class ToolExecutionComponent extends Container {
 						if (resultComponent) {
 							fileBox.addChild(ensureInvalidate(resultComponent));
 						}
-					} catch (err) {
-						logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(err) });
+					} catch (error) {
+						logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(error) });
 					}
 					this.#multiFileBoxes.push(fileBox);
 					this.addChild(fileBox);
 				}
 
 				// Show pending indicator for remaining files
-				const totalFiles = this.#args?.edits
-					? new Set((this.#args.edits as any[]).map((e: any) => e?.path).filter(Boolean)).size
-					: 0;
+				const totalFiles =
+					this.#args?.edits !== null && this.#args?.edits !== undefined
+						? new Set((this.#args.edits as any[]).map((e: any) => e?.path).filter(Boolean)).size
+						: 0;
 				const remaining = Math.max(0, totalFiles - perFileResults.length);
 				if (remaining > 0 && this.#isPartial) {
 					const pendingSpacer = new Spacer(1);
@@ -535,13 +545,13 @@ export class ToolExecutionComponent extends Container {
 			} else {
 				// Single-file or no result: standard rendering
 				// Inline renderers skip background styling
-				this.#contentBox.setBgFn(renderer.inline ? undefined : bgFn);
+				this.#contentBox.setBgFn(renderer.inline === true ? undefined : bgFn);
 				this.#contentBox.clear();
 
 				const renderContext = this.#buildRenderContext();
 				this.#renderState.renderContext = renderContext;
 
-				const shouldRenderCall = !this.#result || !renderer.mergeCallAndResult;
+				const shouldRenderCall = !this.#result || renderer.mergeCallAndResult !== true;
 				if (shouldRenderCall) {
 					// Render call component
 					try {
@@ -549,8 +559,8 @@ export class ToolExecutionComponent extends Container {
 						if (callComponent) {
 							this.#contentBox.addChild(ensureInvalidate(callComponent));
 						}
-					} catch (err) {
-						logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(err) });
+					} catch (error) {
+						logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(error) });
 						// Fall back to default on error
 						this.#contentBox.addChild(new Text(theme.fg("toolTitle", theme.bold(this.#toolLabel)), 0, 0));
 					}
@@ -572,8 +582,8 @@ export class ToolExecutionComponent extends Container {
 						if (resultComponent) {
 							this.#contentBox.addChild(ensureInvalidate(resultComponent));
 						}
-					} catch (err) {
-						logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(err) });
+					} catch (error) {
+						logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(error) });
 						// Fall back to showing raw output on error
 						const output = this.#getTextOutput();
 						if (output) {
@@ -603,7 +613,16 @@ export class ToolExecutionComponent extends Container {
 
 			for (let i = 0; i < imageBlocks.length; i++) {
 				const img = imageBlocks[i];
-				if (TERMINAL.imageProtocol && this.#showImages && img.data && img.mimeType) {
+				if (
+					TERMINAL.imageProtocol !== undefined &&
+					this.#showImages &&
+					img.data !== null &&
+					img.data !== undefined &&
+					img.data !== "" &&
+					img.mimeType !== null &&
+					img.mimeType !== undefined &&
+					img.mimeType !== ""
+				) {
 					// Use converted PNG for Kitty protocol if available
 					const converted = this.#convertedImages.get(i);
 					const imageData = converted?.data ?? img.data;
@@ -641,7 +660,7 @@ export class ToolExecutionComponent extends Container {
 		// Single-file previews feed the existing `previewDiff` channel consumed
 		// by `formatStreamingDiff` in the renderer.
 		const first = previews[0];
-		if (!first?.diff) {
+		if (first?.diff === null || first?.diff === undefined || first?.diff === "") {
 			return this.#args;
 		}
 		return { ...(this.#args as Record<string, unknown>), previewDiff: first.diff };
@@ -679,10 +698,11 @@ export class ToolExecutionComponent extends Container {
 			const previews = this.#editDiffPreview;
 			if (previews && previews.length > 0) {
 				const first = previews[0];
-				if (first?.diff || first?.error) {
-					context.editDiffPreview = first.error
-						? { error: first.error }
-						: { diff: first.diff ?? "", firstChangedLine: first.firstChangedLine };
+				if (first?.diff ?? (first?.error !== null && first?.error !== undefined && first?.error !== "")) {
+					context.editDiffPreview =
+						first.error !== null && first.error !== undefined && first.error !== ""
+							? { error: first.error }
+							: { diff: first.diff ?? "", firstChangedLine: first.firstChangedLine };
 				}
 				if (previews.length > 1) {
 					context.perFileDiffPreview = previews;
@@ -702,14 +722,17 @@ export class ToolExecutionComponent extends Container {
 
 		let output = textBlocks
 			.map((c: any) => {
-				return sanitizeWithOptionalSixelPassthrough(c.text || "", sanitizeText);
+				return sanitizeWithOptionalSixelPassthrough(c.text ?? "", sanitizeText);
 			})
 			.join("\n");
 
-		if (imageBlocks.length > 0 && (!TERMINAL.imageProtocol || !this.#showImages)) {
+		if (imageBlocks.length > 0 && (TERMINAL.imageProtocol === undefined || !this.#showImages)) {
 			const imageIndicators = imageBlocks
 				.map((img: any) => {
-					const dims = img.data ? (getImageDimensions(img.data, img.mimeType) ?? undefined) : undefined;
+					const dims =
+						img.data !== null && img.data !== undefined
+							? (getImageDimensions(img.data, img.mimeType) ?? undefined)
+							: undefined;
 					return imageFallback(img.mimeType, dims);
 				})
 				.join("\n");
@@ -724,10 +747,13 @@ export class ToolExecutionComponent extends Container {
 	 */
 	#formatToolExecution(): string {
 		const lines: string[] = [];
-		const icon = this.#isPartial ? "pending" : this.#result?.isError ? "error" : "success";
+		const icon = this.#isPartial ? "pending" : (this.#result?.isError === true ? "error" : "success");
 		lines.push(renderStatusLine({ icon, title: this.#toolLabel }, theme));
 
-		const argsObject = this.#args && typeof this.#args === "object" ? (this.#args as Record<string, unknown>) : null;
+		const argsObject =
+			this.#args !== null && this.#args !== undefined && typeof this.#args === "object"
+				? (this.#args as Record<string, unknown>)
+				: null;
 		if (!this.#expanded && argsObject && Object.keys(argsObject).length > 0) {
 			const preview = formatArgsInline(argsObject, 70);
 			if (preview) {

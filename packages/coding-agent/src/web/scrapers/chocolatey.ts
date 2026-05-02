@@ -56,7 +56,7 @@ export const handleChocolatey: SpecialHandler = async (
 
 		// Build OData query - filter by Id and optionally version
 		let apiUrl = `https://community.chocolatey.org/api/v2/Packages()?$filter=Id%20eq%20'${encodeURIComponent(packageName)}'`;
-		if (specificVersion) {
+		if (specificVersion !== null && specificVersion !== undefined && specificVersion !== "") {
 			apiUrl += `%20and%20Version%20eq%20'${encodeURIComponent(specificVersion)}'`;
 		} else {
 			// Get latest version by ordering and taking first
@@ -88,7 +88,7 @@ export const handleChocolatey: SpecialHandler = async (
 
 		if (!pkg) {
 			const xmlId = extractXmlField(result.content, "Id");
-			if (!xmlId) {
+			if (xmlId === null || xmlId === undefined || xmlId === "") {
 				const fallback = `# ${packageName}\n\nChocolatey package metadata could not be parsed.\n\n---\n**Install:** \`choco install ${packageName}\`\n`;
 				return buildResult(fallback, {
 					url,
@@ -100,42 +100,43 @@ export const handleChocolatey: SpecialHandler = async (
 
 			pkg = {
 				Id: xmlId,
-				Version: extractXmlField(result.content, "Version") || "",
-				Title: extractXmlField(result.content, "Title") || undefined,
-				Description: extractXmlField(result.content, "Description") || undefined,
-				Summary: extractXmlField(result.content, "Summary") || undefined,
-				Authors: extractXmlField(result.content, "Authors") || undefined,
-				ProjectUrl: extractXmlField(result.content, "ProjectUrl") || undefined,
-				PackageSourceUrl: extractXmlField(result.content, "PackageSourceUrl") || undefined,
-				Tags: extractXmlField(result.content, "Tags") || undefined,
+				Version: extractXmlField(result.content, "Version") ?? "",
+				Title: extractXmlField(result.content, "Title") ?? undefined,
+				Description: extractXmlField(result.content, "Description") ?? undefined,
+				Summary: extractXmlField(result.content, "Summary") ?? undefined,
+				Authors: extractXmlField(result.content, "Authors") ?? undefined,
+				ProjectUrl: extractXmlField(result.content, "ProjectUrl") ?? undefined,
+				PackageSourceUrl: extractXmlField(result.content, "PackageSourceUrl") ?? undefined,
+				Tags: extractXmlField(result.content, "Tags") ?? undefined,
 				DownloadCount: (() => {
 					const value = extractXmlField(result.content, "DownloadCount");
-					return value ? Number.parseInt(value, 10) : undefined;
+					return value !== null && value !== undefined && value !== "" ? Number.parseInt(value, 10) : undefined;
 				})(),
 				VersionDownloadCount: (() => {
 					const value = extractXmlField(result.content, "VersionDownloadCount");
-					return value ? Number.parseInt(value, 10) : undefined;
+					return value !== null && value !== undefined && value !== "" ? Number.parseInt(value, 10) : undefined;
 				})(),
-				Published: extractXmlField(result.content, "Published") || undefined,
-				LicenseUrl: extractXmlField(result.content, "LicenseUrl") || undefined,
-				ReleaseNotes: extractXmlField(result.content, "ReleaseNotes") || undefined,
-				Dependencies: extractXmlField(result.content, "Dependencies") || undefined,
+				Published: extractXmlField(result.content, "Published") ?? undefined,
+				LicenseUrl: extractXmlField(result.content, "LicenseUrl") ?? undefined,
+				ReleaseNotes: extractXmlField(result.content, "ReleaseNotes") ?? undefined,
+				Dependencies: extractXmlField(result.content, "Dependencies") ?? undefined,
 			};
 		}
 
 		// Build markdown output
-		let md = `# ${pkg.Title || pkg.Id}\n\n`;
+		let md = `# ${pkg.Title ?? pkg.Id}\n\n`;
 
-		if (pkg.Summary) {
+		if (pkg.Summary !== null && pkg.Summary !== undefined && pkg.Summary !== "") {
 			md += `${pkg.Summary}\n\n`;
-		} else if (pkg.Description) {
+		} else if (pkg.Description !== null && pkg.Description !== undefined && pkg.Description !== "") {
 			// Use first paragraph of description as summary
 			const firstPara = pkg.Description.split(/\n\n/)[0];
 			md += `${firstPara}\n\n`;
 		}
 
 		md += `**Version:** ${pkg.Version}`;
-		if (pkg.Authors) md += ` · **Authors:** ${pkg.Authors}`;
+		if (pkg.Authors !== null && pkg.Authors !== undefined && pkg.Authors !== "")
+			md += ` · **Authors:** ${pkg.Authors}`;
 		md += "\n";
 
 		if (pkg.DownloadCount !== undefined) {
@@ -146,18 +147,21 @@ export const handleChocolatey: SpecialHandler = async (
 			md += "\n";
 		}
 
-		if (pkg.Published) {
+		if (pkg.Published !== null && pkg.Published !== undefined && pkg.Published !== "") {
 			const published = formatIsoDate(pkg.Published);
 			if (published) md += `**Published:** ${published}\n`;
 		}
 
 		md += "\n";
 
-		if (pkg.ProjectUrl) md += `**Project URL:** ${pkg.ProjectUrl}\n`;
-		if (pkg.PackageSourceUrl) md += `**Source:** ${pkg.PackageSourceUrl}\n`;
-		if (pkg.LicenseUrl) md += `**License:** ${pkg.LicenseUrl}\n`;
+		if (pkg.ProjectUrl !== null && pkg.ProjectUrl !== undefined && pkg.ProjectUrl !== "")
+			md += `**Project URL:** ${pkg.ProjectUrl}\n`;
+		if (pkg.PackageSourceUrl !== null && pkg.PackageSourceUrl !== undefined && pkg.PackageSourceUrl !== "")
+			md += `**Source:** ${pkg.PackageSourceUrl}\n`;
+		if (pkg.LicenseUrl !== null && pkg.LicenseUrl !== undefined && pkg.LicenseUrl !== "")
+			md += `**License:** ${pkg.LicenseUrl}\n`;
 
-		if (pkg.Tags) {
+		if (pkg.Tags !== null && pkg.Tags !== undefined && pkg.Tags !== "") {
 			const tags = pkg.Tags.split(/\s+/).filter(t => t.length > 0);
 			if (tags.length > 0) {
 				md += `**Tags:** ${tags.join(", ")}\n`;
@@ -165,15 +169,20 @@ export const handleChocolatey: SpecialHandler = async (
 		}
 
 		// Full description if different from summary
-		if (pkg.Description && pkg.Description !== pkg.Summary) {
+		if (
+			pkg.Description !== null &&
+			pkg.Description !== undefined &&
+			pkg.Description !== "" &&
+			pkg.Description !== pkg.Summary
+		) {
 			md += `\n## Description\n\n${pkg.Description}\n`;
 		}
 
-		if (pkg.ReleaseNotes) {
+		if (pkg.ReleaseNotes !== null && pkg.ReleaseNotes !== undefined && pkg.ReleaseNotes !== "") {
 			md += `\n## Release Notes\n\n${pkg.ReleaseNotes}\n`;
 		}
 
-		if (pkg.Dependencies) {
+		if (pkg.Dependencies !== null && pkg.Dependencies !== undefined && pkg.Dependencies !== "") {
 			// Dependencies format: "id:version|id:version"
 			const deps = pkg.Dependencies.split("|").filter(d => d.trim().length > 0);
 			if (deps.length > 0) {

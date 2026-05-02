@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import type { ClipboardImage } from "@oh-my-pi/pi-natives";
 import * as native from "@oh-my-pi/pi-natives";
 
-const hasDisplay = process.platform !== "linux" || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+const hasDisplay = process.platform !== "linux" || Boolean(process.env.DISPLAY ?? process.env.WAYLAND_DISPLAY);
 
 /**
  * Copy text to the system clipboard.
@@ -19,7 +19,6 @@ export async function copyToClipboard(text: string): Promise<void> {
 			process.stdout.off("error", onError);
 			// Prevent unhandled 'error' from crashing the process when stdout is a closed pipe.
 			if ((err as NodeJS.ErrnoException | null | undefined)?.code === "EPIPE") {
-				return;
 			}
 		};
 		try {
@@ -31,12 +30,11 @@ export async function copyToClipboard(text: string): Promise<void> {
 				// If stdout is closed (e.g. piped to a process that exits early),
 				// ignore EPIPE and proceed with native clipboard best-effort.
 				if ((err as NodeJS.ErrnoException | null | undefined)?.code === "EPIPE") {
-					return;
 				}
 			});
-		} catch (err) {
+		} catch (error) {
 			process.stdout.off("error", onError);
-			if ((err as NodeJS.ErrnoException | null | undefined)?.code !== "EPIPE") {
+			if ((error as NodeJS.ErrnoException | null | undefined)?.code !== "EPIPE") {
 				// Ignore all write failures (OSC 52 is best-effort).
 			}
 		}
@@ -44,7 +42,11 @@ export async function copyToClipboard(text: string): Promise<void> {
 
 	// Also try native tools (best effort for local sessions)
 	try {
-		if (process.env.TERMUX_VERSION) {
+		if (
+			process.env.TERMUX_VERSION !== null &&
+			process.env.TERMUX_VERSION !== undefined &&
+			process.env.TERMUX_VERSION !== ""
+		) {
 			try {
 				execSync("termux-clipboard-set", { input: text, timeout: 5000 });
 				return;
@@ -53,7 +55,7 @@ export async function copyToClipboard(text: string): Promise<void> {
 			}
 		}
 
-		await native.copyToClipboard(text);
+		native.copyToClipboard(text);
 	} catch {
 		// Ignore — clipboard copy is best-effort
 	}
@@ -68,7 +70,11 @@ export async function copyToClipboard(text: string): Promise<void> {
  * @returns PNG payload or null when no image is available.
  */
 export async function readImageFromClipboard(): Promise<ClipboardImage | null> {
-	if (process.env.TERMUX_VERSION) {
+	if (
+		process.env.TERMUX_VERSION !== null &&
+		process.env.TERMUX_VERSION !== undefined &&
+		process.env.TERMUX_VERSION !== ""
+	) {
 		return null;
 	}
 

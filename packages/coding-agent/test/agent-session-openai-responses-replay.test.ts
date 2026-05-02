@@ -156,7 +156,7 @@ async function createPersistedSession(
 	const result = populate(sessionManager);
 	await sessionManager.flush();
 	const sessionFile = sessionManager.getSessionFile();
-	if (!sessionFile) {
+	if (sessionFile === null || sessionFile === undefined || sessionFile === "") {
 		throw new Error("Expected persisted session file");
 	}
 	await sessionManager.close();
@@ -215,7 +215,7 @@ describe("AgentSession OpenAI Responses replay boundaries", () => {
 		}
 		while (tempDirs.length > 0) {
 			const tempDir = tempDirs.pop();
-			if (tempDir && fs.existsSync(tempDir)) {
+			if (tempDir !== null && tempDir !== undefined && tempDir !== "" && fs.existsSync(tempDir)) {
 				fs.rmSync(tempDir, { recursive: true, force: true });
 			}
 		}
@@ -603,7 +603,7 @@ describe("AgentSession OpenAI Responses replay boundaries", () => {
 		session.providerSessionState.set("openai-responses:openai", { close: closeSpy } satisfies ProviderSessionState);
 
 		try {
-			await expect(session.switchSession(sessionFile)).resolves.toBe(true);
+			expect(session.switchSession(sessionFile)).resolves.toBe(true);
 		} finally {
 			fs.chmodSync(sessionDir, originalMode);
 		}
@@ -683,7 +683,7 @@ describe("AgentSession OpenAI Responses replay boundaries", () => {
 			return { treeTargetId: archivedAssistantId };
 		});
 
-		if (!treeTargetId) {
+		if (treeTargetId === null || treeTargetId === undefined || treeTargetId === "") {
 			throw new Error("Expected archived branch target id");
 		}
 

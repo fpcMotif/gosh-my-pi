@@ -42,9 +42,9 @@ export function buildInitialMessage({
 
 	const initialMessage =
 		stdinContent !== undefined
-			? body.length > 0
+			? (body.length > 0
 				? `${stdinContent}\n${body}`
-				: stdinContent
+				: stdinContent)
 			: body.length > 0
 				? body
 				: fileImages && fileImages.length > 0

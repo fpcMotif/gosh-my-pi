@@ -43,7 +43,7 @@ export function getTerminalId(): string | null {
 	if (process.stdin.isTTY) {
 		try {
 			const ttyPath = getTtyPath();
-			if (ttyPath?.startsWith("/dev/")) {
+			if (ttyPath?.startsWith("/dev/") === true) {
 				return ttyPath.slice(5).replace(/\//g, "-"); // /dev/pts/3 -> pts-3
 			}
 		} catch {}
@@ -51,16 +51,17 @@ export function getTerminalId(): string | null {
 
 	// Fallback to terminal-specific env vars
 	const kittyId = process.env.KITTY_WINDOW_ID;
-	if (kittyId) return `kitty-${kittyId}`;
+	if (kittyId !== null && kittyId !== undefined && kittyId !== "") return `kitty-${kittyId}`;
 
 	const tmuxPane = process.env.TMUX_PANE;
-	if (tmuxPane) return `tmux-${tmuxPane}`;
+	if (tmuxPane !== null && tmuxPane !== undefined && tmuxPane !== "") return `tmux-${tmuxPane}`;
 
 	const terminalSessionId = process.env.TERM_SESSION_ID; // macOS Terminal.app
-	if (terminalSessionId) return `apple-${terminalSessionId}`;
+	if (terminalSessionId !== null && terminalSessionId !== undefined && terminalSessionId !== "")
+		return `apple-${terminalSessionId}`;
 
 	const wtSession = process.env.WT_SESSION; // Windows Terminal
-	if (wtSession) return `wt-${wtSession}`;
+	if (wtSession !== null && wtSession !== undefined && wtSession !== "") return `wt-${wtSession}`;
 
 	return null;
 }

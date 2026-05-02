@@ -1,6 +1,6 @@
 /** Calculate age in seconds from an ISO date string. Returns undefined on invalid input. */
 export function dateToAgeSeconds(dateStr: string | null | undefined): number | undefined {
-	if (!dateStr) return undefined;
+	if (dateStr === null || dateStr === undefined || dateStr === "") return undefined;
 	try {
 		const date = new Date(dateStr);
 		if (Number.isNaN(date.getTime())) return undefined;
@@ -12,6 +12,6 @@ export function dateToAgeSeconds(dateStr: string | null | undefined): number | u
 
 /** Clamp a result count to [1, maxVal], returning defaultVal when value is absent or NaN. */
 export function clampNumResults(value: number | undefined, defaultVal: number, maxVal: number): number {
-	if (!value || Number.isNaN(value)) return defaultVal;
+	if (value === null || value === undefined || value === 0 || Number.isNaN(value)) return defaultVal;
 	return Math.min(maxVal, Math.max(1, value));
 }

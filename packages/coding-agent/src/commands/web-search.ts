@@ -34,7 +34,7 @@ export default class Search extends Command {
 			provider: flags.provider as SearchCommandArgs["provider"],
 			recency: flags.recency as SearchCommandArgs["recency"],
 			limit: flags.limit,
-			expanded: !flags.compact,
+			expanded: flags.compact !== true,
 		};
 
 		await runSearchCommand(cmd);

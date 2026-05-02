@@ -62,10 +62,10 @@ describe("LocalProtocolHandler", () => {
 	it("blocks path traversal attempts", async () => {
 		await withTempDir(async tempDir => {
 			const router = createRouter({ artifactsDir: path.join(tempDir, "artifacts"), sessionId: "session-c" });
-			await expect(router.resolve("local://../secret.txt")).rejects.toThrow(
+			expect(router.resolve("local://../secret.txt")).rejects.toThrow(
 				"Path traversal (..) is not allowed in local:// URLs",
 			);
-			await expect(router.resolve("local://%2E%2E/secret.txt")).rejects.toThrow(
+			expect(router.resolve("local://%2E%2E/secret.txt")).rejects.toThrow(
 				"Path traversal (..) is not allowed in local:// URLs",
 			);
 		});
@@ -92,7 +92,7 @@ describe("LocalProtocolHandler", () => {
 			await fs.symlink(outsideDir, path.join(localRoot, "linked"));
 
 			const router = createRouter({ artifactsDir, sessionId: "session-d" });
-			await expect(router.resolve("local://linked/secret.txt")).rejects.toThrow("local:// URL escapes local root");
+			expect(router.resolve("local://linked/secret.txt")).rejects.toThrow("local:// URL escapes local root");
 		});
 	});
 });

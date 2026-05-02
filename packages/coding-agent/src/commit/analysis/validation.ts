@@ -23,7 +23,7 @@ export function validateSummary(summary: string, maxChars: number): ValidationRe
 }
 
 export function validateScope(scope: string | null): ValidationResult {
-	if (!scope) return { valid: true, errors: [] };
+	if (scope === null || scope === undefined || scope === "") return { valid: true, errors: [] };
 	const errors: string[] = [];
 	const segments = scope.split("/");
 	if (segments.length > 2) {

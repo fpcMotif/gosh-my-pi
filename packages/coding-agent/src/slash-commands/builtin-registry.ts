@@ -80,7 +80,7 @@ function parseBuiltinSlashCommand(text: string): ParsedBuiltinSlashCommand | nul
 	const firstWhitespace = body.search(/\s/);
 	const firstColon = body.indexOf(":");
 	const firstSeparator =
-		firstWhitespace === -1 ? firstColon : firstColon === -1 ? firstWhitespace : Math.min(firstWhitespace, firstColon);
+		firstWhitespace === -1 ? firstColon : (firstColon === -1 ? firstWhitespace : Math.min(firstWhitespace, firstColon));
 
 	if (firstSeparator === -1) {
 		return {
@@ -195,7 +195,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		name: "dump",
 		description: "Copy session transcript to clipboard",
 		handle: async (_command, runtime) => {
-			await runtime.ctx.handleDumpCommand();
+			runtime.ctx.handleDumpCommand();
 			runtime.ctx.editor.setText("");
 		},
 	},
@@ -264,7 +264,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		allowArgs: true,
 		handle: async (command, runtime) => {
 			const sub = command.args.trim().toLowerCase() || undefined;
-			await runtime.ctx.handleCopyCommand(sub);
+			runtime.ctx.handleCopyCommand(sub);
 			runtime.ctx.editor.setText("");
 		},
 	},
@@ -421,9 +421,10 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 				if (matchedProvider) {
 					if (manualInput.hasPending()) {
 						const pendingProvider = manualInput.pendingProviderId;
-						const message = pendingProvider
-							? `OAuth login already in progress for ${pendingProvider}. Paste the redirect URL with /login <url>.`
-							: "OAuth login already in progress. Paste the redirect URL with /login <url>.";
+						const message =
+							pendingProvider !== null && pendingProvider !== undefined && pendingProvider !== ""
+								? `OAuth login already in progress for ${pendingProvider}. Paste the redirect URL with /login <url>.`
+								: "OAuth login already in progress. Paste the redirect URL with /login <url>.";
 						runtime.ctx.showWarning(message);
 						runtime.ctx.editor.setText("");
 						return;
@@ -444,9 +445,10 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 
 			if (manualInput.hasPending()) {
 				const provider = manualInput.pendingProviderId;
-				const message = provider
-					? `OAuth login already in progress for ${provider}. Paste the redirect URL with /login <url>.`
-					: "OAuth login already in progress. Paste the redirect URL with /login <url>.";
+				const message =
+					provider !== null && provider !== undefined && provider !== ""
+						? `OAuth login already in progress for ${provider}. Paste the redirect URL with /login <url>.`
+						: "OAuth login already in progress. Paste the redirect URL with /login <url>.";
 				runtime.ctx.showWarning(message);
 				runtime.ctx.editor.setText("");
 				return;
@@ -679,8 +681,8 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 			if ((sub === "install" && !rest) || (!args[0] && !command.args.trim())) {
 				try {
 					runtime.ctx.showPluginSelector("install");
-				} catch (err) {
-					runtime.ctx.showStatus(`Marketplace error: ${err}`);
+				} catch (error) {
+					runtime.ctx.showStatus(`Marketplace error: ${String(error)}`);
 				}
 				return;
 			}
@@ -741,7 +743,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 						} else {
 							const lines = plugins.map(
 								p =>
-									`  ${p.name}${p.version ? `@${p.version}` : ""}${p.description ? ` - ${p.description}` : ""}`,
+									`  ${p.name}${p.version !== null && p.version !== undefined && p.version !== "" ? `@${p.version}` : ""}${p.description !== null && p.description !== undefined && p.description !== "" ? ` - ${p.description}` : ""}`,
 							);
 							runtime.ctx.showStatus(`Available plugins:\n${lines.join("\n")}`);
 						}
@@ -851,8 +853,8 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 						break;
 					}
 				}
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error);
 				runtime.ctx.showStatus(`Marketplace error: ${msg}`);
 			}
 		},
@@ -933,8 +935,8 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 						break;
 					}
 				}
-			} catch (err) {
-				runtime.ctx.showStatus(`Plugin error: ${err}`);
+			} catch (error) {
+				runtime.ctx.showStatus(`Plugin error: ${String(error)}`);
 			}
 		},
 	},
@@ -948,7 +950,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 			invalidateFsCache(path.join(home, ".claude", "plugins", "installed_plugins.json"));
 			invalidateFsCache(path.join(home, getConfigDirName(), "plugins", "installed_plugins.json"));
 			const projectPath = await resolveActiveProjectRegistryPath(runtime.ctx.sessionManager.getCwd());
-			if (projectPath) invalidateFsCache(projectPath);
+			if (projectPath !== null && projectPath !== undefined && projectPath !== "") invalidateFsCache(projectPath);
 			clearClaudePluginRootsCache();
 			await runtime.ctx.refreshSlashCommandState();
 			runtime.ctx.showStatus("Plugins reloaded.");
@@ -1027,7 +1029,7 @@ export async function executeBuiltinSlashCommand(
 
 	const command = BUILTIN_SLASH_COMMAND_LOOKUP.get(parsed.name);
 	if (!command) return false;
-	if (parsed.args.length > 0 && !command.allowArgs) {
+	if (parsed.args.length > 0 && command.allowArgs !== true) {
 		return false;
 	}
 

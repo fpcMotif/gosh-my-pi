@@ -68,9 +68,18 @@ function extractRating(plugin: PluginData): { value: number | null; votes: numbe
 }
 
 function formatBuildCompatibility(update: UpdateData): string | null {
-	if (update.sinceUntil) return update.sinceUntil;
-	if (update.since && update.until) return `${update.since} - ${update.until}`;
-	if (update.since) return `${update.since}+`;
+	if (update.sinceUntil !== null && update.sinceUntil !== undefined && update.sinceUntil !== "")
+		return update.sinceUntil;
+	if (
+		update.since !== null &&
+		update.since !== undefined &&
+		update.since !== "" &&
+		update.until !== null &&
+		update.until !== undefined &&
+		update.until !== ""
+	)
+		return `${update.since} - ${update.until}`;
+	if (update.since !== null && update.since !== undefined && update.since !== "") return `${update.since}+`;
 	return null;
 }
 
@@ -104,7 +113,7 @@ export const handleJetBrainsMarketplace: SpecialHandler = async (
 		if (!plugin || !updates) return null;
 
 		const update = updates[0];
-		if (!plugin?.name) return null;
+		if (plugin?.name === null || plugin?.name === undefined || plugin?.name === "") return null;
 
 		const vendorName = plugin.vendor?.name ?? plugin.vendor?.publicName;
 		const descriptionSource = plugin.description ?? plugin.preview ?? "";
@@ -117,7 +126,7 @@ export const handleJetBrainsMarketplace: SpecialHandler = async (
 		if (description) md += `${description}\n\n`;
 
 		md += `**Plugin ID:** ${pluginId}\n`;
-		if (vendorName) md += `**Vendor:** ${vendorName}\n`;
+		if (vendorName !== null && vendorName !== undefined && vendorName !== "") md += `**Vendor:** ${vendorName}\n`;
 		if (plugin.downloads !== undefined) {
 			md += `**Downloads:** ${formatNumber(plugin.downloads)}\n`;
 		}
@@ -130,9 +139,12 @@ export const handleJetBrainsMarketplace: SpecialHandler = async (
 
 		if (update) {
 			md += "\n## Latest Release\n\n";
-			if (update.version) md += `**Version:** ${update.version}\n`;
-			if (update.channel) md += `**Channel:** ${update.channel}\n`;
-			if (buildCompatibility) md += `**Build Compatibility:** ${buildCompatibility}\n`;
+			if (update.version !== null && update.version !== undefined && update.version !== "")
+				md += `**Version:** ${update.version}\n`;
+			if (update.channel !== null && update.channel !== undefined && update.channel !== "")
+				md += `**Channel:** ${update.channel}\n`;
+			if (buildCompatibility !== null && buildCompatibility !== undefined && buildCompatibility !== "")
+				md += `**Build Compatibility:** ${buildCompatibility}\n`;
 			if (update.downloads !== undefined) {
 				md += `**Release Downloads:** ${formatNumber(update.downloads)}\n`;
 			}

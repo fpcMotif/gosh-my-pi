@@ -26,7 +26,7 @@ export const handleGitHubGist: SpecialHandler = async (
 
 		// Fetch via GitHub API
 		const result = await fetchGitHubApi(`/gists/${gistId}`, timeout, signal);
-		if (!result.ok || !result.data) return null;
+		if (!result.ok || result.data === null || result.data === undefined) return null;
 
 		const gist = result.data as {
 			description: string | null;
@@ -38,15 +38,16 @@ export const handleGitHubGist: SpecialHandler = async (
 		};
 
 		const files = Object.values(gist.files);
-		const owner = gist.owner?.login || "anonymous";
+		const owner = gist.owner?.login ?? "anonymous";
 
 		let md = `# Gist by ${owner}\n\n`;
-		if (gist.description) md += `${gist.description}\n\n`;
+		if (gist.description !== null && gist.description !== undefined && gist.description !== "")
+			md += `${gist.description}\n\n`;
 		md += `**Created:** ${gist.created_at} · **Updated:** ${gist.updated_at}\n`;
 		md += `**Files:** ${files.length}\n\n`;
 
 		for (const file of files) {
-			const lang = file.language?.toLowerCase() || "";
+			const lang = file.language?.toLowerCase() ?? "";
 			md += `---\n\n## ${file.filename}\n\n`;
 			md += `\`\`\`${lang}\n${file.content}\n\`\`\`\n\n`;
 		}

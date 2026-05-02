@@ -17,7 +17,7 @@ export async function resolveIsolationBackendForTaskExecution(
 ): Promise<IsolationBackendResolution> {
 	let effectiveIsolationMode = requestedMode;
 	let warning = "";
-	if (!(isIsolated && repoRoot)) {
+	if (!(isIsolated && repoRoot !== null && repoRoot !== undefined && repoRoot !== "")) {
 		return { effectiveIsolationMode, warning };
 	}
 
@@ -42,7 +42,8 @@ export async function resolveIsolationBackendForTaskExecution(
 	const probe = projfsOverlayProbe();
 	if (!probe.available) {
 		effectiveIsolationMode = "worktree";
-		const reason = probe.reason ? ` Reason: ${probe.reason}` : "";
+		const reason =
+			probe.reason !== null && probe.reason !== undefined && probe.reason !== "" ? ` Reason: ${probe.reason}` : "";
 		warning = `<system-notification>ProjFS is unavailable on this host. Falling back to worktree isolation.${reason}</system-notification>`;
 		return { effectiveIsolationMode, warning };
 	}
@@ -51,19 +52,19 @@ export async function resolveIsolationBackendForTaskExecution(
 	let probeIsolationDir: string | null = null;
 	try {
 		probeIsolationDir = await ensureProjfsOverlay(repoRoot, probeIsolationId);
-	} catch (err) {
-		if (isProjfsUnavailableError(err)) {
+	} catch (error) {
+		if (isProjfsUnavailableError(error)) {
 			effectiveIsolationMode = "worktree";
-			const raw = err instanceof Error ? err.message : String(err);
+			const raw = error instanceof Error ? error.message : String(error);
 			const reason = raw.replace(/^PROJFS_UNAVAILABLE:\s*/, "");
 			const detail = reason ? ` Reason: ${reason}` : "";
 			warning = `<system-notification>ProjFS prerequisites are unavailable for this repository. Falling back to worktree isolation.${detail}</system-notification>`;
 		} else {
-			const message = err instanceof Error ? err.message : String(err);
+			const message = error instanceof Error ? error.message : String(error);
 			throw new Error(`ProjFS isolation initialization failed. ${message}`);
 		}
 	} finally {
-		if (probeIsolationDir) {
+		if (probeIsolationDir !== null && probeIsolationDir !== undefined && probeIsolationDir !== "") {
 			await cleanupProjfsOverlay(probeIsolationDir);
 		}
 	}

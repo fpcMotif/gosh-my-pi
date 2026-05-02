@@ -92,7 +92,8 @@ export class MessageFrame implements Component {
 	#renderContentLines(width: number): string[] {
 		const lines: string[] = [];
 		// Vivid layout suppresses inline labels — the rail color carries the role semantics.
-		const showLabel = this.#label && theme.layout !== "vivid";
+		const showLabel =
+			this.#label !== null && this.#label !== undefined && this.#label !== "" && theme.layout !== "vivid";
 		if (showLabel) {
 			lines.push(theme.fg(this.#labelColor, theme.bold(this.#label as string)));
 		}

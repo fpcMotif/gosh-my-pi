@@ -29,7 +29,7 @@ export async function ensureAutoresearchBranch(
 	goal: string | null,
 ): Promise<EnsureAutoresearchBranchResult> {
 	const repoRoot = await git.repo.root(workDir);
-	if (!repoRoot) {
+	if (repoRoot === null || repoRoot === undefined || repoRoot === "") {
 		return {
 			error: "Autoresearch requires a git repository so it can isolate experiments and revert failed runs safely.",
 			ok: false,
@@ -43,9 +43,9 @@ export async function ensureAutoresearchBranch(
 			untrackedFiles: "all",
 			z: true,
 		});
-	} catch (err) {
+	} catch (error) {
 		return {
-			error: `Unable to inspect git status before starting autoresearch: ${err instanceof Error ? err.message : String(err)}`,
+			error: `Unable to inspect git status before starting autoresearch: ${error instanceof Error ? error.message : String(error)}`,
 			ok: false,
 		};
 	}
@@ -53,7 +53,7 @@ export async function ensureAutoresearchBranch(
 	const workDirPrefix = await readGitWorkDirPrefix(api, workDir);
 	const unsafeDirtyPaths = collectUnsafeDirtyPaths(dirtyPathsOutput, workDirPrefix);
 	const currentBranch = await getCurrentAutoresearchBranch(api, workDir);
-	if (currentBranch) {
+	if (currentBranch !== null && currentBranch !== undefined && currentBranch !== "") {
 		if (unsafeDirtyPaths.length > 0) {
 			return buildUnsafeDirtyPathsFailure(unsafeDirtyPaths);
 		}
@@ -70,9 +70,9 @@ export async function ensureAutoresearchBranch(
 	const branchName = await allocateBranchName(api, workDir, goal);
 	try {
 		await git.branch.checkoutNew(workDir, branchName);
-	} catch (err) {
+	} catch (error) {
 		return {
-			error: `Failed to create autoresearch branch ${branchName}: ${err instanceof Error ? err.message : String(err)}`,
+			error: `Failed to create autoresearch branch ${branchName}: ${error instanceof Error ? error.message : String(error)}`,
 			ok: false,
 		};
 	}
@@ -229,7 +229,12 @@ function collectUnsafeDirtyPaths(statusOutput: string, workDirPrefix: string): s
 	const unsafeDirtyPaths: string[] = [];
 	for (const dirtyPath of parseDirtyPaths(statusOutput)) {
 		const relativePath = relativizeGitPathToWorkDir(dirtyPath, workDirPrefix);
-		if (relativePath && isAutoresearchLocalStatePath(relativePath)) {
+		if (
+			relativePath !== null &&
+			relativePath !== undefined &&
+			relativePath !== "" &&
+			isAutoresearchLocalStatePath(relativePath)
+		) {
 			continue;
 		}
 		unsafeDirtyPaths.push(relativePath ?? normalizeStatusPath(dirtyPath));

@@ -142,7 +142,10 @@ export function formatDiagnostic(diagnostic: Diagnostic, filePath: string): stri
 	const severity = severityToString(diagnostic.severity);
 	const line = diagnostic.range.start.line + 1;
 	const col = diagnostic.range.start.character + 1;
-	const source = diagnostic.source ? `[${diagnostic.source}] ` : "";
+	const source =
+		diagnostic.source !== null && diagnostic.source !== undefined && diagnostic.source !== ""
+			? `[${diagnostic.source}] `
+			: "";
 	const code = diagnostic.code ? ` (${diagnostic.code})` : "";
 	const message = stripDiagnosticNoise(diagnostic.message);
 
@@ -396,7 +399,8 @@ export function formatDocumentSymbol(symbol: DocumentSymbol, indent = 0): string
 	const prefix = "  ".repeat(indent);
 	const icon = symbolKindToIcon(symbol.kind);
 	const line = symbol.range.start.line + 1;
-	const detail = symbol.detail ? ` ${symbol.detail}` : "";
+	const detail =
+		symbol.detail !== null && symbol.detail !== undefined && symbol.detail !== "" ? ` ${symbol.detail}` : "";
 	const results = [`${prefix}${icon} ${symbol.name}${detail} @ line ${line}`];
 
 	if (symbol.children) {
@@ -414,7 +418,10 @@ export function formatDocumentSymbol(symbol: DocumentSymbol, indent = 0): string
 export function formatSymbolInformation(symbol: SymbolInformation, cwd: string): string {
 	const icon = symbolKindToIcon(symbol.kind);
 	const location = formatLocation(symbol.location, cwd);
-	const container = symbol.containerName ? ` (${symbol.containerName})` : "";
+	const container =
+		symbol.containerName !== null && symbol.containerName !== undefined && symbol.containerName !== ""
+			? ` (${symbol.containerName})`
+			: "";
 	return `${icon} ${symbol.name}${container} @ ${location}`;
 }
 
@@ -447,8 +454,11 @@ export function dedupeWorkspaceSymbols(symbols: SymbolInformation[]): SymbolInfo
 }
 
 export function formatCodeAction(action: CodeAction | Command, index: number): string {
-	const kind = "kind" in action && action.kind ? action.kind : "action";
-	const preferred = "isPreferred" in action && action.isPreferred ? " (preferred)" : "";
+	const kind =
+		"kind" in action && action.kind !== null && action.kind !== undefined && action.kind !== ""
+			? action.kind
+			: "action";
+	const preferred = "isPreferred" in action && action.isPreferred === true ? " (preferred)" : "";
 	const disabled = "disabled" in action && action.disabled ? ` (disabled: ${action.disabled.reason})` : "";
 	return `${index}: [${kind}] ${action.title}${preferred}${disabled}`;
 }
@@ -616,7 +626,7 @@ export async function resolveSymbolColumn(filePath: string, line: number, symbol
 		const fileText = await Bun.file(filePath).text();
 		const lines = fileText.split("\n");
 		const targetLine = lines[lineNumber - 1] ?? "";
-		if (!symbolSpec) {
+		if (symbolSpec === null || symbolSpec === undefined || symbolSpec === "") {
 			return firstNonWhitespaceColumn(targetLine);
 		}
 

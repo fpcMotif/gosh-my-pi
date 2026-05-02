@@ -95,7 +95,7 @@ export class ToolChoiceQueue {
 				onInvoked: options?.onInvoked,
 			},
 		};
-		if (options?.now) {
+		if (options?.now === true) {
 			this.#queue.unshift(directive);
 		} else {
 			this.#queue.push(directive);
@@ -112,7 +112,7 @@ export class ToolChoiceQueue {
 		while (this.#queue.length > 0) {
 			const head = this.#queue[0]!;
 			const result = head.generator.next();
-			if (result.done) {
+			if (result.done === true) {
 				this.#queue.shift();
 				continue;
 			}

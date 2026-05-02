@@ -32,7 +32,7 @@ export function renderStatusLine(options: StatusLineOptions, theme: Theme): stri
 	const title = theme.fg(titleColor, options.title);
 	let line = icon ? `${icon} ${title}` : title;
 
-	if (options.description) {
+	if (options.description !== null && options.description !== undefined && options.description !== "") {
 		line += `: ${theme.fg("muted", options.description)}`;
 	}
 

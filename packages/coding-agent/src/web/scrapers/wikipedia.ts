@@ -36,7 +36,8 @@ export const handleWikipedia: SpecialHandler = async (
 				extract: string;
 			};
 			md = `# ${summary.title}\n\n`;
-			if (summary.description) md += `*${summary.description}*\n\n`;
+			if (summary.description !== null && summary.description !== undefined && summary.description !== "")
+				md += `*${summary.description}*\n\n`;
 			md += `${summary.extract}\n\n---\n\n`;
 		}
 
@@ -54,13 +55,14 @@ export const handleWikipedia: SpecialHandler = async (
 				const headingText = heading?.textContent?.trim();
 				// Skip certain sections
 				if (
-					headingText &&
+					headingText !== null &&
+					headingText !== undefined &&
 					["References", "External links", "See also", "Notes", "Further reading"].includes(headingText)
 				) {
 					continue;
 				}
 
-				if (headingText) {
+				if (headingText !== null && headingText !== undefined) {
 					const level = heading?.tagName === "H2" ? "##" : "###";
 					md += `${level} ${headingText}\n\n`;
 				}
@@ -68,7 +70,7 @@ export const handleWikipedia: SpecialHandler = async (
 				const paragraphs = section.querySelectorAll("p");
 				for (const p of paragraphs) {
 					const text = p.textContent?.trim();
-					if (text && text.length > 20) {
+					if (text !== null && text !== undefined && text.length > 20) {
 						md += `${text}\n\n`;
 					}
 				}

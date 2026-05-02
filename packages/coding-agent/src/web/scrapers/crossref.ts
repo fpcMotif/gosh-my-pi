@@ -44,7 +44,7 @@ function formatAuthors(authors?: CrossrefAuthor[]): string | null {
 	if (!authors || authors.length === 0) return null;
 	const names = authors
 		.map(author => {
-			if (author.name) return author.name;
+			if (author.name !== null && author.name !== undefined && author.name !== "") return author.name;
 			const parts = [author.given, author.family].filter(Boolean);
 			return parts.length > 0 ? parts.join(" ") : null;
 		})
@@ -67,7 +67,7 @@ function formatDate(date?: CrossrefDate): string | null {
 }
 
 function formatAbstract(abstract?: string): string | null {
-	if (!abstract) return null;
+	if (abstract === null || abstract === undefined || abstract === "") return null;
 	const normalized = abstract.replace(/<\/?jats:p[^>]*>/g, match => (match.startsWith("</") ? "</p>" : "<p>"));
 	const markdown = htmlToBasicMarkdown(normalized);
 	return markdown.trim().length > 0 ? markdown : null;
@@ -83,7 +83,7 @@ export const handleCrossref: SpecialHandler = async (
 		if (!DOI_HOSTS.has(parsed.hostname.toLowerCase())) return null;
 
 		const doi = extractDoi(parsed.pathname);
-		if (!doi) return null;
+		if (doi === null || doi === undefined || doi === "") return null;
 
 		const fetchedAt = new Date().toISOString();
 		const apiUrl = `https://api.crossref.org/works/${encodeURIComponent(doi)}`;
@@ -113,20 +113,20 @@ export const handleCrossref: SpecialHandler = async (
 			formatDate(message["published-online"]) ||
 			formatDate(message.issued) ||
 			formatDate(message.created);
-		const doiValue = message.DOI || doi;
+		const doiValue = message.DOI ?? doi;
 		const abstract = formatAbstract(message.abstract);
 		const type = message.type?.replace(/-/g, " ");
 
 		let md = `# ${title}\n\n`;
-		if (authors) md += `**Authors:** ${authors}\n`;
-		if (journal) md += `**Journal:** ${journal}\n`;
-		if (publisher) md += `**Publisher:** ${publisher}\n`;
-		if (published) md += `**Published:** ${published}\n`;
+		if (authors !== null && authors !== undefined && authors !== "") md += `**Authors:** ${authors}\n`;
+		if (journal !== null && journal !== undefined && journal !== "") md += `**Journal:** ${journal}\n`;
+		if (publisher !== null && publisher !== undefined && publisher !== "") md += `**Publisher:** ${publisher}\n`;
+		if (published !== null && published !== undefined && published !== "") md += `**Published:** ${published}\n`;
 		md += `**DOI:** ${doiValue}\n`;
-		if (type) md += `**Type:** ${type}\n`;
+		if (type !== null && type !== undefined && type !== "") md += `**Type:** ${type}\n`;
 		md += "\n---\n\n";
 		md += "## Abstract\n\n";
-		md += abstract || "No abstract available.";
+		md += abstract ?? "No abstract available.";
 		md += "\n";
 
 		return buildResult(md, { url, method: "crossref", fetchedAt, notes: ["Fetched via CrossRef API"] });

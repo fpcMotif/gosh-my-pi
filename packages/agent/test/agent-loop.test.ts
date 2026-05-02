@@ -7,6 +7,7 @@ import type {
 	AgentMessage,
 	AgentTool,
 	AgentToolContext,
+	AgentToolResult,
 	ToolCallContext,
 } from "@oh-my-pi/pi-agent-core/types";
 import type { AssistantMessage, Context, Message, Model, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai";
@@ -666,8 +667,9 @@ describe("agentLoop with AgentMessage", () => {
 		expect(toolEnds.length).toBe(2);
 		expect(toolEnds[0].isError).toBe(false);
 		expect(toolEnds[1].isError).toBe(true);
-		if (toolEnds[1].result.content[0]?.type === "text") {
-			expect(toolEnds[1].result.content[0].text).toContain("Skipped due to queued user message");
+		const skippedResult = toolEnds[1].result as AgentToolResult;
+		if (skippedResult.content[0]?.type === "text") {
+			expect(skippedResult.content[0].text).toContain("Skipped due to queued user message");
 		}
 
 		// Queued message should appear in events after the tool results and before the next model call.
@@ -814,7 +816,8 @@ describe("agentLoopContinue with AgentMessage", () => {
 		// Should NOT have user message events (that's the key difference from agentLoop)
 		const messageEndEvents = events.filter(e => e.type === "message_end");
 		expect(messageEndEvents.length).toBe(1);
-		expect((messageEndEvents[0] as any).message.role).toBe("assistant");
+		const firstMessageEnd = messageEndEvents[0] as Extract<AgentEvent, { type: "message_end" }>;
+		expect(firstMessageEnd.message.role).toBe("assistant");
 	});
 
 	it("should allow custom message types as last message (caller responsibility)", async () => {
@@ -843,11 +846,12 @@ describe("agentLoopContinue with AgentMessage", () => {
 				// Convert hookMessage to user message
 				return messages
 					.map(m => {
-						if ((m as any).role === "hookMessage") {
+						const candidate = m as { role?: string; text?: string; timestamp: number };
+						if (candidate.role === "hookMessage") {
 							return {
 								role: "user" as const,
-								content: (m as any).text,
-								timestamp: m.timestamp,
+								content: candidate.text ?? "",
+								timestamp: candidate.timestamp,
 							};
 						}
 						return m;

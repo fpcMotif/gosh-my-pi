@@ -55,7 +55,12 @@ export async function discoverSharedInfra(options: DiscoverSharedInfraOptions = 
 
 	// Initialize global Settings singleton (required by code paths that use the global `settings` proxy)
 	const overrides: Record<string, unknown> = {};
-	if (options.editVariant && options.editVariant !== "auto") {
+	if (
+		options.editVariant !== null &&
+		options.editVariant !== undefined &&
+		options.editVariant !== "" &&
+		options.editVariant !== "auto"
+	) {
 		overrides["edit.mode"] = options.editVariant;
 	}
 	if (options.editFuzzy !== undefined && options.editFuzzy !== "auto") {
@@ -93,9 +98,12 @@ export class InProcessClient {
 			authStorage: shared?.authStorage,
 			modelRegistry: shared?.modelRegistry,
 			sessionManager: SessionManager.inMemory(this.#options.cwd),
-			systemPrompt: this.#options.appendSystemPrompt
-				? (defaultPrompt: string) => `${defaultPrompt}\n\n${this.#options.appendSystemPrompt}`
-				: undefined,
+			systemPrompt:
+				this.#options.appendSystemPrompt !== null &&
+				this.#options.appendSystemPrompt !== undefined &&
+				this.#options.appendSystemPrompt !== ""
+					? (defaultPrompt: string) => `${defaultPrompt}\n\n${this.#options.appendSystemPrompt}`
+					: undefined,
 			toolNames: this.#options.tools ?? ["read", "edit", "write"],
 			hasUI: false,
 			enableMCP: false,
@@ -145,7 +153,7 @@ export class InProcessClient {
 	}
 
 	abort(): void {
-		this.#session?.abort();
+		void this.#session?.abort();
 	}
 
 	async getSessionStats(): Promise<SessionStats> {

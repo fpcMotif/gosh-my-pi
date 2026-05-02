@@ -93,8 +93,8 @@ async function runBiome(
 		const exitCode = await proc.exited;
 
 		return { stdout, stderr, success: exitCode === 0 };
-	} catch (err) {
-		return { stdout: "", stderr: String(err), success: false };
+	} catch (error) {
+		return { stdout: "", stderr: String(error), success: false };
 	}
 }
 
@@ -151,7 +151,8 @@ export class BiomeClient implements LinterClient {
 
 			for (const diag of parsed.diagnostics) {
 				const location = diag.location;
-				if (!location?.path?.file) continue;
+				if (location?.path?.file === null || location?.path?.file === undefined || location?.path?.file === "")
+					continue;
 
 				// Resolve file path
 				const diagFile = path.isAbsolute(location.path.file)
@@ -169,7 +170,12 @@ export class BiomeClient implements LinterClient {
 				let endLine = 1;
 				let endColumn = 1;
 
-				if (location.span && location.sourceCode) {
+				if (
+					location.span &&
+					location.sourceCode !== null &&
+					location.sourceCode !== undefined &&
+					location.sourceCode !== ""
+				) {
 					const startPos = offsetToPosition(location.sourceCode, location.span[0]);
 					const endPos = offsetToPosition(location.sourceCode, location.span[1]);
 					startLine = startPos.line;

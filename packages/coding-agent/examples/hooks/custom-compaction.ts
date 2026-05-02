@@ -109,7 +109,6 @@ ${conversationText}
 			const message = error instanceof Error ? error.message : String(error);
 			ctx.ui.notify(`Compaction failed: ${message}`, "error");
 			// Fall back to default compaction on error
-			return;
 		}
 	});
 }

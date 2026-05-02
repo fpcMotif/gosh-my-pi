@@ -378,7 +378,7 @@ const migratedSessionRoots = new Set<string>();
  */
 function migrateSessionDirPath(oldPath: string, newPath: string): void {
 	const existing = fs.statSync(newPath, { throwIfNoEntry: false });
-	if (existing?.isDirectory()) {
+	if (existing?.isDirectory() === true) {
 		for (const file of fs.readdirSync(oldPath)) {
 			const src = path.join(oldPath, file);
 			const dst = path.join(newPath, file);
@@ -412,9 +412,9 @@ function getDefaultSessionDirName(cwd: string): { encodedDirName: string; resolv
 	const tempRoot = resolveEquivalentPath(os.tmpdir());
 	const encodedDirName = pathIsWithin(home, canonicalCwd)
 		? encodeRelativeSessionDirName("-", home, canonicalCwd)
-		: pathIsWithin(tempRoot, canonicalCwd)
+		: (pathIsWithin(tempRoot, canonicalCwd)
 			? encodeRelativeSessionDirName("-tmp", tempRoot, canonicalCwd)
-			: encodeLegacyAbsoluteSessionDirName(canonicalCwd);
+			: encodeLegacyAbsoluteSessionDirName(canonicalCwd));
 	return { encodedDirName, resolvedCwd };
 }
 
@@ -527,7 +527,7 @@ export function buildSessionContext(
 			mode: "none",
 		};
 	}
-	if (leafId) {
+	if (leafId !== null && leafId !== undefined && leafId !== "") {
 		leaf = byId.get(leafId);
 	}
 	if (!leaf) {
@@ -553,7 +553,10 @@ export function buildSessionContext(
 	let current: SessionEntry | undefined = leaf;
 	while (current) {
 		path.unshift(current);
-		current = current.parentId ? byId.get(current.parentId) : undefined;
+		current =
+			current.parentId !== null && current.parentId !== undefined && current.parentId !== ""
+				? byId.get(current.parentId)
+				: undefined;
 	}
 
 	// Extract settings and find compaction
@@ -645,7 +648,7 @@ export function buildSessionContext(
 	if (compaction) {
 		const providerPayload: ProviderPayload | undefined = (() => {
 			const candidate = compaction.preserveData?.openaiRemoteCompaction;
-			if (!candidate || typeof candidate !== "object") return undefined;
+			if (candidate === null || candidate === undefined || typeof candidate !== "object") return undefined;
 			const remote = candidate as { provider?: unknown; replacementHistory?: unknown };
 			if (typeof remote.provider !== "string" || remote.provider.length === 0) return undefined;
 			if (!Array.isArray(remote.replacementHistory)) return undefined;
@@ -739,7 +742,7 @@ function computeDefaultSessionDir(
  */
 function writeTerminalBreadcrumb(cwd: string, sessionFile: string): void {
 	const terminalId = getTerminalId();
-	if (!terminalId) return;
+	if (terminalId === null || terminalId === undefined || terminalId === "") return;
 
 	const breadcrumbDir = getTerminalSessionsDir();
 	const breadcrumbFile = path.join(breadcrumbDir, terminalId);
@@ -754,7 +757,7 @@ function writeTerminalBreadcrumb(cwd: string, sessionFile: string): void {
  */
 async function readTerminalBreadcrumb(cwd: string): Promise<string | null> {
 	const terminalId = getTerminalId();
-	if (!terminalId) return null;
+	if (terminalId === null || terminalId === undefined || terminalId === "") return null;
 
 	try {
 		const breadcrumbFile = path.join(getTerminalSessionsDir(), terminalId);
@@ -770,9 +773,9 @@ async function readTerminalBreadcrumb(cwd: string): Promise<string | null> {
 
 		// Verify the session file still exists
 		const stat = fs.statSync(sessionFile, { throwIfNoEntry: false });
-		if (stat?.isFile()) return sessionFile;
-	} catch (err) {
-		if (!isEnoent(err)) logger.debug("Terminal breadcrumb read failed", { err });
+		if (stat?.isFile() === true) return sessionFile;
+	} catch (error) {
+		if (!isEnoent(error)) logger.debug("Terminal breadcrumb read failed", { error });
 		// Breadcrumb doesn't exist or is corrupt — fall through
 	}
 	return null;
@@ -786,9 +789,9 @@ export async function loadEntriesFromFile(
 	let content: string;
 	try {
 		content = await storage.readText(filePath);
-	} catch (err) {
-		if (isEnoent(err)) return [];
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) return [];
+		throw error;
 	}
 	const entries = parseJsonlLenient<FileEntry>(content);
 
@@ -861,7 +864,7 @@ async function resolveBlobRefsInEntries(entries: FileEntry[], blobStore: BlobSto
  * Uses lazy getters to defer string formatting until actually displayed.
  */
 function sanitizeSessionName(value: string | undefined): string | undefined {
-	if (!value) return undefined;
+	if (value === null || value === undefined || value === "") return undefined;
 	const firstLine = value.split(/\r?\n/)[0] ?? "";
 	const stripped = firstLine.replace(/[\x00-\x1F\x7F]/g, "");
 	const trimmed = stripped.trim();
@@ -889,14 +892,14 @@ class RecentSessionInfo {
 
 	/** Full session name from header, or filename without extension as fallback */
 	get fullName(): string {
-		if (this.#fullName) return this.#fullName;
+		if (this.#fullName !== null && this.#fullName !== undefined && this.#fullName !== "") return this.#fullName;
 		this.#fullName = this.path.split("/").pop()?.replace(".jsonl", "") ?? "Unknown";
 		return this.#fullName;
 	}
 
 	/** Truncated name for display (max 40 chars) */
 	get name(): string {
-		if (this.#name) return this.#name;
+		if (this.#name !== null && this.#name !== undefined && this.#name !== "") return this.#name;
 		const fullName = this.fullName;
 		this.#name = fullName.length <= 40 ? fullName : `${fullName.slice(0, 39)}…`;
 		return this.#name;
@@ -904,7 +907,7 @@ class RecentSessionInfo {
 
 	/** Human-readable relative time (e.g., "2 hours ago") */
 	get timeAgo(): string {
-		if (this.#timeAgo) return this.#timeAgo;
+		if (this.#timeAgo !== null && this.#timeAgo !== undefined && this.#timeAgo !== "") return this.#timeAgo;
 		this.#timeAgo = formatTimeAgo(new Date(this.mtime));
 		return this.#timeAgo;
 	}
@@ -951,7 +954,8 @@ async function getSortedSessions(sessionDir: string, storage: SessionStorage): P
 					const header = entries[0] as Record<string, unknown>;
 					if (header.type !== "session" || typeof header.id !== "string") return;
 					const mtime = storage.statSync(path).mtimeMs;
-					const firstPrompt = header.title ? undefined : extractFirstUserPrompt(entries);
+					const firstPrompt =
+						header.title !== null && header.title !== undefined ? undefined : extractFirstUserPrompt(entries);
 					sessions.push(new RecentSessionInfo(path, mtime, header, firstPrompt));
 				} catch {}
 			}),
@@ -1151,8 +1155,8 @@ class NdjsonFileWriter {
 			await task();
 		};
 		const next = this.#pendingWrites.then(run);
-		void next.catch((err: unknown) => {
-			if (!this.#error) this.#error = toError(err);
+		void next.catch((error: unknown) => {
+			if (!this.#error) this.#error = toError(error);
 		});
 		this.#pendingWrites = next;
 		return next;
@@ -1162,8 +1166,8 @@ class NdjsonFileWriter {
 		if (this.#error) throw this.#error;
 		try {
 			await this.#writer.writeLine(line);
-		} catch (err) {
-			throw this.#recordError(err);
+		} catch (error) {
+			throw this.#recordError(error);
 		}
 	}
 
@@ -1186,8 +1190,8 @@ class NdjsonFileWriter {
 
 		try {
 			await this.#writer.flush();
-		} catch (err) {
-			throw this.#recordError(err);
+		} catch (error) {
+			throw this.#recordError(error);
 		}
 	}
 
@@ -1197,8 +1201,8 @@ class NdjsonFileWriter {
 		if (this.#error) throw this.#error;
 		try {
 			await this.#writer.fsync();
-		} catch (err) {
-			throw this.#recordError(err);
+		} catch (error) {
+			throw this.#recordError(error);
 		}
 	}
 
@@ -1210,20 +1214,20 @@ class NdjsonFileWriter {
 		let closeError: Error | undefined;
 		try {
 			await this.flush();
-		} catch (err) {
-			closeError = toError(err);
+		} catch (error) {
+			closeError = toError(error);
 		}
 
 		try {
 			await this.#pendingWrites;
-		} catch (err) {
-			if (!closeError) closeError = toError(err);
+		} catch (error) {
+			if (!closeError) closeError = toError(error);
 		}
 
 		try {
 			await this.#writer.close();
-		} catch (err) {
-			const endErr = this.#recordError(err);
+		} catch (error) {
+			const endErr = this.#recordError(error);
 			if (!closeError) closeError = endErr;
 		}
 
@@ -1270,10 +1274,10 @@ export interface UsageStatistics {
 }
 
 function getTaskToolUsage(details: unknown): Usage | undefined {
-	if (!details || typeof details !== "object") return undefined;
+	if (details === null || details === undefined || typeof details !== "object") return undefined;
 	const record = details as Record<string, unknown>;
 	const usage = record.usage;
-	if (!usage || typeof usage !== "object") return undefined;
+	if (usage === null || usage === undefined || typeof usage !== "object") return undefined;
 	return usage as Usage;
 }
 
@@ -1414,7 +1418,7 @@ function parseSessionListHeader(
 	if (extractStringProperty(firstLine, "type") !== "session") return undefined;
 
 	const id = extractStringProperty(firstLine, "id");
-	if (!id) return undefined;
+	if (id === null || id === undefined || id === "") return undefined;
 
 	return {
 		type: "session",
@@ -1569,7 +1573,7 @@ export async function resolveResumableSession(
 		return { session: localMatch, scope: "local" };
 	}
 
-	if (sessionDir) {
+	if (sessionDir !== null && sessionDir !== undefined && sessionDir !== "") {
 		return undefined;
 	}
 
@@ -1672,7 +1676,7 @@ export class SessionManager {
 		this.#artifactManager = null;
 		this.#artifactManagerSessionFile = null;
 		this.#buildIndex();
-		if (this.#sessionFile) {
+		if (this.#sessionFile !== null && this.#sessionFile !== undefined && this.#sessionFile !== "") {
 			writeTerminalBreadcrumb(this.cwd, this.#sessionFile);
 		}
 	}
@@ -1716,7 +1720,6 @@ export class SessionManager {
 			await this.#rewriteFile();
 			this.#flushed = true;
 			this.#ensuredOnDisk = true;
-			return;
 		}
 	}
 
@@ -1731,9 +1734,9 @@ export class SessionManager {
 		await this.#closePersistWriter();
 		try {
 			await this.storage.deleteSessionWithArtifacts(sessionPath);
-		} catch (err) {
-			if (isEnoent(err)) return;
-			throw err;
+		} catch (error) {
+			if (isEnoent(error)) return;
+			throw error;
 		}
 	}
 
@@ -1743,7 +1746,7 @@ export class SessionManager {
 	 * @returns { oldSessionFile, newSessionFile } or undefined if not persisting
 	 */
 	async fork(): Promise<{ oldSessionFile: string; newSessionFile: string } | undefined> {
-		if (!this.persist || !this.#sessionFile) {
+		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "") {
 			return undefined;
 		}
 
@@ -1798,9 +1801,10 @@ export class SessionManager {
 		if (resolvedCwd === this.cwd) return;
 
 		const managedSessionsRoot = resolveManagedSessionRoot(this.sessionDir, this.cwd);
-		const newSessionDir = managedSessionsRoot
-			? computeDefaultSessionDir(resolvedCwd, this.storage, managedSessionsRoot)
-			: computeDefaultSessionDir(resolvedCwd, this.storage);
+		const newSessionDir =
+			managedSessionsRoot !== null && managedSessionsRoot !== undefined && managedSessionsRoot !== ""
+				? computeDefaultSessionDir(resolvedCwd, this.storage, managedSessionsRoot)
+				: computeDefaultSessionDir(resolvedCwd, this.storage);
 		let hadSessionFile = false;
 
 		if (this.persist && this.#sessionFile) {
@@ -1831,29 +1835,29 @@ export class SessionManager {
 						await fs.promises.rename(oldArtifactDir, newArtifactDir);
 						movedArtifactDir = true;
 					}
-				} catch (err) {
-					if (!isEnoent(err)) throw err;
+				} catch (error) {
+					if (!isEnoent(error)) throw error;
 				}
-			} catch (err) {
+			} catch (error) {
 				if (movedArtifactDir) {
 					try {
 						await fs.promises.rename(newArtifactDir, oldArtifactDir);
-					} catch (rollbackErr) {
+					} catch (error) {
 						throw new Error(
-							`Failed to move artifacts and rollback: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`,
+							`Failed to move artifacts and rollback: ${error instanceof Error ? error.message : String(error)}`,
 						);
 					}
 				}
 				if (movedSessionFile) {
 					try {
 						await fs.promises.rename(newSessionFile, oldSessionFile);
-					} catch (rollbackErr) {
+					} catch (error) {
 						throw new Error(
-							`Failed to move session file and rollback: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`,
+							`Failed to move session file and rollback: ${error instanceof Error ? error.message : String(error)}`,
 						);
 					}
 				}
-				throw err;
+				throw error;
 			}
 			this.#sessionFile = newSessionFile;
 		}
@@ -1878,7 +1882,7 @@ export class SessionManager {
 		}
 
 		// Update terminal breadcrumb
-		if (this.#sessionFile) {
+		if (this.#sessionFile !== null && this.#sessionFile !== undefined && this.#sessionFile !== "") {
 			writeTerminalBreadcrumb(resolvedCwd, this.#sessionFile);
 		}
 	}
@@ -1929,7 +1933,7 @@ export class SessionManager {
 			this.#byId.set(entry.id, entry);
 			this.#leafId = entry.id;
 			if (entry.type === "label") {
-				if (entry.label) {
+				if (entry.label !== null && entry.label !== undefined && entry.label !== "") {
 					this.#labelsById.set(entry.targetId, entry.label);
 				} else {
 					this.#labelsById.delete(entry.targetId);
@@ -1975,17 +1979,18 @@ export class SessionManager {
 
 	#queuePersistTask(task: () => Promise<void>, options?: { ignoreError?: boolean }): Promise<void> {
 		const next = this.#persistChain.then(async () => {
-			if (this.#persistError && !options?.ignoreError) throw this.#persistError;
+			if (this.#persistError && options?.ignoreError !== true) throw this.#persistError;
 			await task();
 		});
-		this.#persistChain = next.catch(err => {
-			this.#recordPersistError(err);
+		this.#persistChain = next.catch(error => {
+			this.#recordPersistError(error);
 		});
 		return next;
 	}
 
 	#ensurePersistWriter(): NdjsonFileWriter | undefined {
-		if (!this.persist || !this.#sessionFile) return undefined;
+		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
+			return undefined;
 		if (this.#persistError) throw this.#persistError;
 		if (this.#persistWriter && this.#persistWriterPath === this.#sessionFile) return this.#persistWriter;
 		// Note: caller must await _closePersistWriter() before calling this if switching files
@@ -2016,7 +2021,7 @@ export class SessionManager {
 	}
 
 	async #writeEntriesAtomically(entries: FileEntry[]): Promise<void> {
-		if (!this.#sessionFile) return;
+		if (this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "") return;
 		const dir = path.resolve(this.#sessionFile, "..");
 		const tempPath = path.join(dir, `.${path.basename(this.#sessionFile)}.${Snowflake.next()}.tmp`);
 		const writer = new NdjsonFileWriter(this.storage, tempPath, { flags: "w" });
@@ -2028,7 +2033,7 @@ export class SessionManager {
 			await writer.fsync();
 			await writer.close();
 			await this.storage.rename(tempPath, this.#sessionFile);
-		} catch (err) {
+		} catch (error) {
 			try {
 				await writer.close();
 			} catch {
@@ -2039,12 +2044,13 @@ export class SessionManager {
 			} catch {
 				// Ignore cleanup errors
 			}
-			throw toError(err);
+			throw toError(error);
 		}
 	}
 
 	async #rewriteFile(): Promise<void> {
-		if (!this.persist || !this.#sessionFile) return;
+		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
+			return;
 		await this.#queuePersistTask(async () => {
 			await this.#closePersistWriterInternal();
 			const entries = await Promise.all(
@@ -2065,7 +2071,8 @@ export class SessionManager {
 	 * Used by ACP mode where session/new must create a discoverable session immediately.
 	 */
 	async ensureOnDisk(): Promise<void> {
-		if (!this.persist || !this.#sessionFile) return;
+		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
+			return;
 		if (this.#flushed && !this.#needsFullRewriteOnNextPersist) return;
 		await this.#rewriteFile();
 		this.#ensuredOnDisk = true;
@@ -2119,7 +2126,7 @@ export class SessionManager {
 	 */
 	getArtifactsDir(): string | null {
 		const sessionFile = this.#sessionFile;
-		return sessionFile ? sessionFile.slice(0, -6) : null;
+		return sessionFile !== null && sessionFile !== undefined && sessionFile !== "" ? sessionFile.slice(0, -6) : null;
 	}
 
 	/**
@@ -2128,7 +2135,7 @@ export class SessionManager {
 	 */
 	#getOrCreateArtifactManager(): ArtifactManager | null {
 		const sessionFile = this.#sessionFile;
-		if (!sessionFile) {
+		if (sessionFile === null || sessionFile === undefined || sessionFile === "") {
 			this.#artifactManager = null;
 			this.#artifactManagerSessionFile = null;
 			return null;
@@ -2219,14 +2226,21 @@ export class SessionManager {
 
 		// Update the session file header with the title (if already flushed)
 		const sessionFile = this.#sessionFile;
-		if (this.persist && sessionFile && this.storage.existsSync(sessionFile)) {
+		if (
+			this.persist &&
+			sessionFile !== null &&
+			sessionFile !== undefined &&
+			sessionFile !== "" &&
+			this.storage.existsSync(sessionFile)
+		) {
 			await this.#rewriteFile();
 		}
 		return true;
 	}
 
 	_persist(entry: SessionEntry): void {
-		if (!this.persist || !this.#sessionFile) return;
+		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
+			return;
 		if (this.#persistError) throw this.#persistError;
 
 		// Normally we wait for the first assistant message before persisting to avoid
@@ -2429,7 +2443,8 @@ export class SessionManager {
 	 * Use sparingly (e.g., pruning old tool outputs).
 	 */
 	async rewriteEntries(): Promise<void> {
-		if (!this.persist || !this.#sessionFile) return;
+		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
+			return;
 		await this.#rewriteFile();
 	}
 
@@ -2528,7 +2543,9 @@ export class SessionManager {
 	}
 
 	getLeafEntry(): SessionEntry | undefined {
-		return this.#leafId ? this.#byId.get(this.#leafId) : undefined;
+		return this.#leafId !== null && this.#leafId !== undefined && this.#leafId !== ""
+			? this.#byId.get(this.#leafId)
+			: undefined;
 	}
 
 	/**
@@ -2541,7 +2558,10 @@ export class SessionManager {
 			if (current.type === "model_change") {
 				return current.role ?? "default";
 			}
-			current = current.parentId ? this.#byId.get(current.parentId) : undefined;
+			current =
+				current.parentId !== null && current.parentId !== undefined && current.parentId !== ""
+					? this.#byId.get(current.parentId)
+					: undefined;
 		}
 		return undefined;
 	}
@@ -2588,7 +2608,7 @@ export class SessionManager {
 			label,
 		};
 		this.#appendEntry(entry);
-		if (label) {
+		if (label !== null && label !== undefined && label !== "") {
 			this.#labelsById.set(targetId, label);
 		} else {
 			this.#labelsById.delete(targetId);
@@ -2604,10 +2624,13 @@ export class SessionManager {
 	getBranch(fromId?: string): SessionEntry[] {
 		const path: SessionEntry[] = [];
 		const startId = fromId ?? this.#leafId;
-		let current = startId ? this.#byId.get(startId) : undefined;
+		let current = startId !== null && startId !== undefined && startId !== "" ? this.#byId.get(startId) : undefined;
 		while (current) {
 			path.unshift(current);
-			current = current.parentId ? this.#byId.get(current.parentId) : undefined;
+			current =
+				current.parentId !== null && current.parentId !== undefined && current.parentId !== ""
+					? this.#byId.get(current.parentId)
+					: undefined;
 		}
 		return path;
 	}
@@ -2932,7 +2955,7 @@ export class SessionManager {
 		const terminalSession = await readTerminalBreadcrumb(cwd);
 		const mostRecent = terminalSession ?? (await findMostRecentSession(dir, storage));
 		const manager = new SessionManager(cwd, dir, true, storage);
-		if (mostRecent) {
+		if (mostRecent !== null && mostRecent !== undefined && mostRecent !== "") {
 			await manager.#initSessionFile(mostRecent);
 		} else {
 			manager.#initNewSession();

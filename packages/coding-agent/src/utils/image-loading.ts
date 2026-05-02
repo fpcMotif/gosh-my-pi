@@ -49,11 +49,12 @@ export async function ensureSupportedImageInput(image: ImageContent): Promise<Im
 export async function loadImageInput(options: LoadImageInputOptions): Promise<LoadedImageInput | null> {
 	const maxBytes = options.maxBytes ?? MAX_IMAGE_INPUT_BYTES;
 	const resolvedPath = options.resolvedPath ?? resolveReadPath(options.path, options.cwd);
-	const metadata = options.detectedMimeType
-		? { mimeType: options.detectedMimeType }
-		: await readImageMetadata(resolvedPath);
+	const metadata =
+		options.detectedMimeType !== null && options.detectedMimeType !== undefined && options.detectedMimeType !== ""
+			? { mimeType: options.detectedMimeType }
+			: await readImageMetadata(resolvedPath);
 	const mimeType = metadata?.mimeType;
-	if (!mimeType) return null;
+	if (mimeType === null || mimeType === undefined || mimeType === "") return null;
 
 	const stat = await Bun.file(resolvedPath).stat();
 	if (stat.size > maxBytes) {
@@ -83,7 +84,7 @@ export async function loadImageInput(options: LoadImageInputOptions): Promise<Lo
 	}
 
 	let textNote = `Read image file [${outputMimeType}]`;
-	if (dimensionNote) {
+	if (dimensionNote !== null && dimensionNote !== undefined && dimensionNote !== "") {
 		textNote += `\n${dimensionNote}`;
 	}
 

@@ -38,7 +38,7 @@ function extractPaperId(url: string): string | null {
 
 	for (const pattern of patterns) {
 		const match = url.match(pattern);
-		if (match?.[1]) return match[1];
+		if (match?.[1] !== undefined && match?.[1] !== "") return match[1];
 	}
 
 	return null;
@@ -48,7 +48,7 @@ export const handleSemanticScholar: SpecialHandler = async (url: string, timeout
 	if (!url.includes("semanticscholar.org")) return null;
 
 	const paperId = extractPaperId(url);
-	if (!paperId) {
+	if (paperId === null || paperId === undefined || paperId === "") {
 		return buildResult("Failed to extract paper ID from Semantic Scholar URL", {
 			url,
 			method: "semantic-scholar",
@@ -112,8 +112,9 @@ export const handleSemanticScholar: SpecialHandler = async (url: string, timeout
 	}
 
 	const metadata: string[] = [];
-	if (paper.year) metadata.push(`Year: ${paper.year}`);
-	if (paper.journal?.name) metadata.push(`Venue: ${paper.journal.name}`);
+	if (paper.year !== null && paper.year !== undefined && paper.year !== 0) metadata.push(`Year: ${paper.year}`);
+	if (paper.journal?.name !== null && paper.journal?.name !== undefined && paper.journal?.name !== "")
+		metadata.push(`Venue: ${paper.journal.name}`);
 	if (paper.citationCount !== undefined) {
 		metadata.push(`Citations: ${formatNumber(paper.citationCount)}`);
 	}
@@ -130,14 +131,14 @@ export const handleSemanticScholar: SpecialHandler = async (url: string, timeout
 		sections.push("");
 	}
 
-	if (paper.tldr?.text) {
+	if (paper.tldr?.text !== null && paper.tldr?.text !== undefined && paper.tldr?.text !== "") {
 		sections.push("## TL;DR");
 		sections.push("");
 		sections.push(paper.tldr.text);
 		sections.push("");
 	}
 
-	if (paper.abstract) {
+	if (paper.abstract !== null && paper.abstract !== undefined && paper.abstract !== "") {
 		sections.push("## Abstract");
 		sections.push("");
 		sections.push(paper.abstract);
@@ -145,16 +146,20 @@ export const handleSemanticScholar: SpecialHandler = async (url: string, timeout
 	}
 
 	const links: string[] = [];
-	if (paper.openAccessPdf?.url) {
+	if (paper.openAccessPdf?.url !== null && paper.openAccessPdf?.url !== undefined && paper.openAccessPdf?.url !== "") {
 		links.push(`[PDF](${paper.openAccessPdf.url})`);
 	}
-	if (paper.externalIds?.ArXiv) {
+	if (paper.externalIds?.ArXiv !== null && paper.externalIds?.ArXiv !== undefined && paper.externalIds?.ArXiv !== "") {
 		links.push(`[arXiv](https://arxiv.org/abs/${paper.externalIds.ArXiv})`);
 	}
-	if (paper.externalIds?.DOI) {
+	if (paper.externalIds?.DOI !== null && paper.externalIds?.DOI !== undefined && paper.externalIds?.DOI !== "") {
 		links.push(`[DOI](https://doi.org/${paper.externalIds.DOI})`);
 	}
-	if (paper.externalIds?.PubMed) {
+	if (
+		paper.externalIds?.PubMed !== null &&
+		paper.externalIds?.PubMed !== undefined &&
+		paper.externalIds?.PubMed !== ""
+	) {
 		links.push(`[PubMed](https://pubmed.ncbi.nlm.nih.gov/${paper.externalIds.PubMed}/)`);
 	}
 	links.push(`[Semantic Scholar](https://www.semanticscholar.org/paper/${paper.paperId})`);

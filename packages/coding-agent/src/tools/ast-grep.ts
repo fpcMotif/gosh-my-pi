@@ -96,12 +96,12 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 				throw new ToolError("`path` must be a non-empty path or glob");
 			}
 			const internalRouter = this.session.internalRouter;
-			if (internalRouter?.canHandle(rawPath)) {
+			if (internalRouter?.canHandle(rawPath) === true) {
 				if (hasGlobPathChars(rawPath)) {
 					throw new ToolError(`Glob patterns are not supported for internal URLs: ${rawPath}`);
 				}
 				const resource = await internalRouter.resolve(rawPath);
-				if (!resource.sourcePath) {
+				if (resource.sourcePath === null || resource.sourcePath === undefined || resource.sourcePath === "") {
 					throw new ToolError(`Cannot search internal URL without backing file: ${rawPath}`);
 				}
 				searchPath = resource.sourcePath;
@@ -265,7 +265,7 @@ export const astGrepToolRenderer = {
 	inline: true,
 	renderCall(args: AstGrepRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const meta: string[] = [];
-		if (args.path) meta.push(`in ${args.path}`);
+		if (args.path !== null && args.path !== undefined && args.path !== "") meta.push(`in ${args.path}`);
 		if (args.skip !== undefined && args.skip > 0) meta.push(`skip:${args.skip}`);
 
 		const description = args.pat ?? "?";
@@ -281,7 +281,7 @@ export const astGrepToolRenderer = {
 	): Component {
 		const details = result.details;
 
-		if (result.isError) {
+		if (result.isError === true) {
 			const errorText = result.content?.find(c => c.type === "text")?.text || "Unknown error";
 			return new Text(formatErrorMessage(errorText, uiTheme), 0, 0);
 		}
@@ -294,11 +294,16 @@ export const astGrepToolRenderer = {
 		if (matchCount === 0) {
 			const description = args?.pat;
 			const meta = ["0 matches"];
-			if (details?.scopePath) meta.push(`in ${details.scopePath}`);
+			if (details?.scopePath !== null && details?.scopePath !== undefined && details?.scopePath !== "")
+				meta.push(`in ${details.scopePath}`);
 			if (filesSearched > 0) meta.push(`searched ${filesSearched}`);
 			const header = renderStatusLine({ icon: "warning", title: "AST Grep", description, meta }, uiTheme);
 			const lines = [header, formatEmptyMessage("No matches found", uiTheme)];
-			if (details?.parseErrors?.length) {
+			if (
+				details?.parseErrors?.length !== null &&
+				details?.parseErrors?.length !== undefined &&
+				details?.parseErrors?.length !== 0
+			) {
 				lines.push(uiTheme.fg("warning", "Query may be mis-scoped; narrow `path` before concluding absence"));
 				const capped = details.parseErrors.slice(0, PARSE_ERRORS_LIMIT);
 				for (const err of capped) {
@@ -313,7 +318,8 @@ export const astGrepToolRenderer = {
 
 		const summaryParts = [formatCount("match", matchCount), formatCount("file", fileCount)];
 		const meta = [...summaryParts];
-		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
+		if (details?.scopePath !== null && details?.scopePath !== undefined && details?.scopePath !== "")
+			meta.push(`in ${details.scopePath}`);
 		meta.push(`searched ${filesSearched}`);
 		if (limitReached) meta.push(uiTheme.fg("warning", "limit reached"));
 		const description = args?.pat;
@@ -353,7 +359,11 @@ export const astGrepToolRenderer = {
 		if (limitReached) {
 			extraLines.push(uiTheme.fg("warning", "limit reached; narrow path pattern or increase limit"));
 		}
-		if (details?.parseErrors?.length) {
+		if (
+			details?.parseErrors?.length !== null &&
+			details?.parseErrors?.length !== undefined &&
+			details?.parseErrors?.length !== 0
+		) {
 			const total = details.parseErrors.length;
 			const label =
 				total > PARSE_ERRORS_LIMIT

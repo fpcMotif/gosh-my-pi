@@ -2,8 +2,11 @@ import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import type { ToolChoice } from "@oh-my-pi/pi-ai";
 import { $env, $flag, isBunTestRuntime, logger } from "@oh-my-pi/pi-utils";
 import type { AsyncJobManager } from "../async";
+import type { ModelRegistry } from "../config/model-registry";
 import type { PromptTemplate } from "../config/prompt-templates";
 import type { Settings } from "../config/settings";
+import type { AuthStorage } from "../session/auth-storage";
+import type { MCPManager } from "../mcp/manager";
 import { EditTool } from "../edit";
 import type { Skill } from "../extensibility/skills";
 import type { InternalUrlRouter } from "../internal-urls";
@@ -23,6 +26,7 @@ import { AskTool } from "./ask";
 import { AstEditTool } from "./ast-edit";
 import { AstGrepTool } from "./ast-grep";
 import { BashTool } from "./bash";
+import type { ToolName } from "./builtin-tool-names";
 import { BrowserTool } from "./browser";
 import { CalculatorTool } from "./calculator";
 import { type CheckpointState, CheckpointTool, RewindTool } from "./checkpoint";
@@ -62,6 +66,7 @@ export * from "./ask";
 export * from "./ast-edit";
 export * from "./ast-grep";
 export * from "./bash";
+export * from "./builtin-tool-names";
 export * from "./browser";
 export * from "./calculator";
 export * from "./checkpoint";
@@ -153,11 +158,11 @@ export interface ToolSession {
 	/** Get the current session model string, regardless of how it was chosen */
 	getActiveModelString?: () => string | undefined;
 	/** Auth storage for passing to subagents (avoids re-discovery) */
-	authStorage?: import("../session/auth-storage").AuthStorage;
+	authStorage?: AuthStorage;
 	/** Model registry for passing to subagents (avoids re-discovery) */
-	modelRegistry?: import("../config/model-registry").ModelRegistry;
+	modelRegistry?: ModelRegistry;
 	/** MCP manager for proxying MCP calls through parent */
-	mcpManager?: import("../mcp/manager").MCPManager;
+	mcpManager?: MCPManager;
 	/** Internal URL router for protocols like agent://, skill://, and mcp:// */
 	internalRouter?: InternalUrlRouter;
 	/** Agent output manager for unique agent:// IDs across task invocations */
@@ -203,7 +208,7 @@ export interface ToolSession {
 
 type ToolFactory = (session: ToolSession) => Tool | null | Promise<Tool | null>;
 
-export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
+export const BUILTIN_TOOLS = {
 	ast_grep: s => new AstGrepTool(s),
 	ast_edit: s => new AstEditTool(s),
 	render_mermaid: s => new RenderMermaidTool(s),
@@ -232,7 +237,7 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	web_search: s => new WebSearchTool(s),
 	search_tool_bm25: SearchToolBm25Tool.createIf,
 	write: s => new WriteTool(s),
-};
+} satisfies Record<ToolName, ToolFactory>;
 
 export const HIDDEN_TOOLS: Record<string, ToolFactory> = {
 	yield: s => new YieldTool(s),
@@ -241,8 +246,6 @@ export const HIDDEN_TOOLS: Record<string, ToolFactory> = {
 	exit_plan_mode: s => new ExitPlanModeTool(s),
 	resolve: s => new ResolveTool(s),
 };
-
-export type ToolName = keyof typeof BUILTIN_TOOLS;
 
 export type PythonToolMode = "ipy-only" | "bash-only" | "both";
 
@@ -307,7 +310,10 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		} else if (shouldWarmPython) {
 			const sessionFile = session.getSessionFile?.() ?? undefined;
 			const kernelOwnerId = session.getPythonKernelOwnerId?.() ?? undefined;
-			const warmSessionId = sessionFile ? `session:${sessionFile}:cwd:${session.cwd}` : `cwd:${session.cwd}`;
+			const warmSessionId =
+				sessionFile !== null && sessionFile !== undefined && sessionFile !== ""
+					? `session:${sessionFile}:cwd:${session.cwd}`
+					: `cwd:${session.cwd}`;
 			const warmupAbortController = new AbortController();
 			try {
 				session.assertPythonExecutionAllowed?.();
@@ -336,9 +342,9 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 						);
 				await (session.trackPythonExecution?.(warmupExecution, warmupAbortController) ?? warmupExecution);
 				session.assertPythonExecutionAllowed?.();
-			} catch (err) {
+			} catch (error) {
 				logger.warn("Failed to warm Python environment", {
-					error: err instanceof Error ? err.message : String(err),
+					error: error instanceof Error ? error.message : String(error),
 				});
 			}
 		}

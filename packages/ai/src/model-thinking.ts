@@ -1,5 +1,5 @@
-import { resolveOpenAICompat } from "./providers/openai-completions-compat";
-import type { Api, Model as ApiModel, ThinkingConfig } from "./types";
+import { type Api, type Model, type ThinkingConfig } from "./types";
+import { parseKnownModel, semverGte, type ParsedModel, type OpenAIModel } from "./utils/model-parser";
 
 /** User-facing thinking levels, ordered least to most intensive. */
 export const enum Effort {
@@ -19,202 +19,40 @@ export const THINKING_EFFORTS: readonly Effort[] = [
 ];
 
 const DEFAULT_REASONING_EFFORTS: readonly Effort[] = [Effort.Minimal, Effort.Low, Effort.Medium, Effort.High];
-const DEFAULT_REASONING_EFFORTS_WITH_XHIGH: readonly Effort[] = [
-	Effort.Minimal,
-	Effort.Low,
-	Effort.Medium,
-	Effort.High,
-	Effort.XHigh,
-];
-const GEMINI_3_PRO_EFFORTS: readonly Effort[] = [Effort.Low, Effort.High];
-const GEMINI_3_FLASH_EFFORTS: readonly Effort[] = [Effort.Minimal, Effort.Low, Effort.Medium, Effort.High];
 const GPT_5_2_PLUS_EFFORTS: readonly Effort[] = [Effort.Low, Effort.Medium, Effort.High, Effort.XHigh];
-const GPT_5_1_CODEX_MINI_EFFORTS: readonly Effort[] = [Effort.Medium, Effort.High];
-const CLOUDFLARE_AI_GATEWAY_BASE_URL = "https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/anthropic";
 
-type SemVer = {
-	major: number;
-	minor: number;
-	patch: number;
-};
-
-type GeminiKind = "pro" | "flash";
-type AnthropicKind = "opus" | "sonnet";
-type OpenAIVariant = "base" | "codex" | "codex-max" | "codex-mini" | "codex-spark" | "mini" | "max" | "nano";
-
-const CODEX_GPT_5_4_PRIORITY_BY_VARIANT: Partial<Record<OpenAIVariant, number>> = {
-	base: 0,
-	mini: 1,
-	nano: 2,
-};
-
-const COPILOT_GENERATED_LIMITS: Record<string, { contextWindow: number; maxTokens: number }> = {
-	"claude-opus-4.6": { contextWindow: 168000, maxTokens: 32000 },
-	"gpt-5.2": { contextWindow: 272000, maxTokens: 128000 },
-	"gpt-5.4": { contextWindow: 272000, maxTokens: 128000 },
-	"gpt-5.4-mini": { contextWindow: 272000, maxTokens: 128000 },
-	"grok-code-fast-1": { contextWindow: 192000, maxTokens: 64000 },
-};
-
-interface GeminiModel {
-	family: "gemini";
-	kind: GeminiKind;
-	version: SemVer;
-}
-
-interface AnthropicModel {
-	family: "anthropic";
-	kind: AnthropicKind;
-	version: SemVer;
-}
-
-interface OpenAIModel {
-	family: "openai";
-	variant: OpenAIVariant;
-	version: SemVer;
-}
-
-interface UnknownModel {
-	family: "unknown";
-	id: string;
-}
-
-type ParsedModel = GeminiModel | AnthropicModel | OpenAIModel | UnknownModel;
-
-/**
- * Static fallback model injected when Cloudflare AI Gateway discovery
- * returns no results. Ensures the provider always has at least one usable
- * model entry in the catalog.
- */
-export const CLOUDFLARE_FALLBACK_MODEL: ApiModel<"anthropic-messages"> = {
-	id: "claude-sonnet-4-5",
-	name: "Claude Sonnet 4.5",
-	api: "anthropic-messages",
-	provider: "cloudflare-ai-gateway",
-	baseUrl: CLOUDFLARE_AI_GATEWAY_BASE_URL,
-	reasoning: true,
-	input: ["text", "image"],
-	cost: {
-		input: 3,
-		output: 15,
-		cacheRead: 0.3,
-		cacheWrite: 3.75,
-	},
-	contextWindow: 200000,
-	maxTokens: 64000,
-};
-
-/**
- * Returns a copy of the model with canonical thinking metadata attached.
- *
- * This helper belongs to catalog enrichment only. Runtime consumers should
- * trust `model.thinking` and avoid inferring capabilities on demand.
- */
-export function enrichModelThinking<TApi extends Api>(model: ApiModel<TApi>): ApiModel<TApi> {
-	const normalizedThinking = normalizeThinkingConfig(model.thinking);
-	if (!model.reasoning) {
-		return normalizedThinking === undefined && model.thinking === undefined
-			? model
-			: { ...model, thinking: undefined };
-	}
-
-	const thinking = normalizedThinking ?? inferModelThinking(model);
-	if (thinkingsEqual(normalizedThinking, thinking)) {
-		return model;
-	}
-	return { ...model, thinking };
-}
-
-/**
- * Returns a copy of the model with thinking metadata recomputed from the
- * canonical rules, replacing any existing `thinking`.
- */
-export function refreshModelThinking<TApi extends Api>(model: ApiModel<TApi>): ApiModel<TApi> {
-	if (!model.reasoning) {
-		const normalizedThinking = normalizeThinkingConfig(model.thinking);
-		return normalizedThinking === undefined && model.thinking === undefined
-			? model
-			: { ...model, thinking: undefined };
-	}
-	return { ...model, thinking: inferModelThinking(model) };
-}
-
-/**
- * Apply upstream metadata corrections to a mutable array of models.
- *
- * Each model is first normalized through `refreshModelThinking()` so generated
- * catalogs keep canonical thinking metadata and policy fixes in one pass.
- */
-export function applyGeneratedModelPolicies(models: ApiModel<Api>[]): void {
-	for (let index = 0; index < models.length; index++) {
-		const model = refreshModelThinking(models[index]!);
-		applyGeneratedModelPolicy(model);
-		models[index] = model;
-	}
-}
-
-/**
- * Link OpenAI model variants to their context promotion targets.
- *
- * When a model's context is exhausted, the agent can promote to a sibling
- * model with a larger context window on the same provider:
- * - `codex-spark` variants promote to `gpt-5.5`.
- * - `gpt-5.5` (270K input) promotes to `gpt-5.4` (1M input).
- */
-export function linkOpenAIPromotionTargets(models: ApiModel<Api>[]): void {
-	for (const candidate of models) {
-		const parsedCandidate = parseKnownModel(candidate.id);
-		if (parsedCandidate.family !== "openai") continue;
-		let targetId: string | undefined;
-		if (parsedCandidate.variant === "codex-spark") {
-			targetId = "gpt-5.5";
-		} else if (parsedCandidate.variant === "base" && semverEqual(parsedCandidate.version, "5.5")) {
-			targetId = "gpt-5.4";
-		} else {
-			continue;
-		}
-		const fallback = models.find(
-			model => model.provider === candidate.provider && model.api === candidate.api && model.id === targetId,
-		);
-		if (!fallback) continue;
-		candidate.contextPromotionTarget = `${fallback.provider}/${fallback.id}`;
-	}
-}
+type ApiModel<TApi extends Api> = Pick<Model<TApi>, "api" | "id" | "provider" | "reasoning" | "thinking">;
 
 /**
  * Returns supported thinking efforts from canonical model rules constrained by
  * explicit model metadata.
- *
- * @throws Error when a reasoning-capable model is missing thinking metadata
  */
 export function getSupportedEfforts<TApi extends Api>(model: ApiModel<TApi>): readonly Effort[] {
-	if (!model.reasoning) {
+	if (model.reasoning === false) {
 		return [];
 	}
-	if (!model.thinking) {
-		throw new Error(`Model ${model.provider}/${model.id} is missing thinking metadata`);
+	if (model.thinking === undefined || model.thinking === null) {
+		return DEFAULT_REASONING_EFFORTS;
 	}
 	const configuredEfforts = expandEffortRange(model.thinking);
 	const parsedModel = parseKnownModel(model.id);
 	if (parsedModel.family === "unknown") {
 		return configuredEfforts;
 	}
-	return intersectEfforts(configuredEfforts, inferSupportedEfforts(parsedModel, model));
+	return intersectEfforts(configuredEfforts, inferSupportedEfforts(parsedModel));
 }
 
 /**
  * Clamps a requested thinking level against explicit model metadata.
- *
- * Non-reasoning models always resolve to `undefined`.
  */
 export function clampThinkingLevelForModel<TApi extends Api>(
 	model: ApiModel<TApi> | undefined,
 	requested: Effort | undefined,
 ): Effort | undefined {
-	if (!model) {
+	if (model === undefined || model === null) {
 		return requested;
 	}
-	if (!model.reasoning || requested === undefined) {
+	if (model.reasoning === false || requested === undefined) {
 		return undefined;
 	}
 
@@ -240,11 +78,11 @@ export function clampThinkingLevelForModel<TApi extends Api>(
 }
 
 export function requireSupportedEffort<TApi extends Api>(model: ApiModel<TApi>, effort: Effort): Effort {
-	if (!model.reasoning) {
+	if (model.reasoning === false) {
 		throw new Error(`Model ${model.provider}/${model.id} does not support thinking`);
 	}
 	const levels = getSupportedEfforts(model);
-	if (!levels.includes(effort)) {
+	if (levels.includes(effort) === false) {
 		throw new Error(
 			`Thinking effort ${effort} is not supported by ${model.provider}/${model.id}. Supported efforts: ${levels.join(", ")}`,
 		);
@@ -252,144 +90,53 @@ export function requireSupportedEffort<TApi extends Api>(model: ApiModel<TApi>, 
 	return effort;
 }
 
-/** Maps a normalized thinking effort to Google's `thinkingLevel` enum values. */
-export function mapEffortToGoogleThinkingLevel<TApi extends Api>(
-	model: ApiModel<TApi>,
-	effort: Effort,
-): "MINIMAL" | "LOW" | "MEDIUM" | "HIGH" {
-	switch (requireSupportedEffort(model, effort)) {
-		case Effort.Minimal:
-			return "MINIMAL";
-		case Effort.Low:
-			return "LOW";
-		case Effort.Medium:
-			return "MEDIUM";
-		case Effort.High:
-		case Effort.XHigh:
-			return "HIGH";
+export function enrichModelThinking<TApi extends Api>(model: Model<TApi>): Model<TApi> {
+	const normalizedThinking = normalizeThinkingConfig(model.thinking);
+	if (model.reasoning === false) {
+		return normalizedThinking === undefined && model.thinking === undefined
+			? model
+			: { ...model, thinking: undefined };
 	}
+
+	const thinking =
+		normalizedThinking !== undefined && normalizedThinking !== null ? normalizedThinking : inferModelThinking(model);
+	if (thinkingsEqual(normalizedThinking, thinking)) {
+		return model;
+	}
+	return { ...model, thinking };
 }
 
-/** Maps a normalized thinking effort to Anthropic adaptive effort values. */
-export function mapEffortToAnthropicAdaptiveEffort<TApi extends Api>(
-	model: ApiModel<TApi>,
-	effort: Effort,
-): "low" | "medium" | "high" | "xhigh" | "max" {
-	switch (requireSupportedEffort(model, effort)) {
-		case Effort.Minimal:
-		case Effort.Low:
-			return "low";
-		case Effort.Medium:
-			return "medium";
-		case Effort.High:
-			return "high";
-		case Effort.XHigh:
-			// Opus 4.7+ introduced a distinct "xhigh" effort level (between "high" and "max").
-			// The Anthropic docs scope this to the Messages API only, so Bedrock Converse and
-			// older adaptive-thinking Opus 4.6 models keep the legacy "max" alias.
-			return anthropicModelHasRealXHighEffort(model) ? "xhigh" : "max";
+export function refreshModelThinking<TApi extends Api>(model: Model<TApi>): Model<TApi> {
+	if (model.reasoning === false) {
+		const normalizedThinking = normalizeThinkingConfig(model.thinking);
+		return normalizedThinking === undefined && model.thinking === undefined
+			? model
+			: { ...model, thinking: undefined };
 	}
+	return { ...model, thinking: inferModelThinking(model) };
 }
 
-/**
- * Returns true for Anthropic models with Opus 4.7 API restrictions:
- * - Sampling parameters (temperature/top_p/top_k) return 400 error
- * - Thinking content is omitted by default (needs display: "summarized")
- */
-export function hasOpus47ApiRestrictions(modelId: string): boolean {
-	const parsed = parseAnthropicModel(getCanonicalModelId(modelId));
-	if (!parsed) return false;
-	return semverGte(parsed.version, "4.7") && parsed.kind === "opus";
-}
-
-function anthropicModelHasRealXHighEffort<TApi extends Api>(model: ApiModel<TApi>): boolean {
-	if (model.api !== "anthropic-messages") return false;
-	const parsedModel = parseKnownModel(model.id);
-	if (parsedModel.family !== "anthropic" || parsedModel.kind !== "opus") return false;
-	return semverGte(parsedModel.version, "4.7");
-}
-
-function applyGeneratedModelPolicy(model: ApiModel<Api>): void {
-	const copilotLimits = model.provider === "github-copilot" ? COPILOT_GENERATED_LIMITS[model.id] : undefined;
-	if (copilotLimits) {
-		model.contextWindow = copilotLimits.contextWindow;
-		model.maxTokens = copilotLimits.maxTokens;
-	}
-
-	const parsedModel = parseKnownModel(model.id);
-	const applyPatchToolType = inferGeneratedApplyPatchToolType(model, parsedModel);
-	if (applyPatchToolType) {
-		model.applyPatchToolType = applyPatchToolType;
-	} else {
-		delete model.applyPatchToolType;
-	}
-	if (parsedModel.family === "anthropic") {
-		applyAnthropicCatalogPolicy(model, parsedModel);
-	}
-	if (parsedModel.family === "openai") {
-		applyOpenAICatalogPolicy(model, parsedModel);
-	}
-}
-
-function applyAnthropicCatalogPolicy(model: ApiModel<Api>, parsedModel: AnthropicModel): void {
-	// Claude Opus 4.5: models.dev reports 3x the correct cache pricing.
-	if (model.provider === "anthropic" && parsedModel.kind === "opus" && semverEqual(parsedModel.version, "4.5")) {
-		model.cost.cacheRead = 0.5;
-		model.cost.cacheWrite = 6.25;
-	}
-
-	// Bedrock Opus 4.6: upstream metadata is stale for cache pricing and context.
-	if (model.provider === "amazon-bedrock" && parsedModel.kind === "opus" && semverEqual(parsedModel.version, "4.6")) {
-		model.cost.cacheRead = 0.5;
-		model.cost.cacheWrite = 6.25;
-		model.contextWindow = 1000000;
-		model.maxTokens = 128000;
-	}
-}
-
-function inferGeneratedApplyPatchToolType(
-	model: ApiModel<Api>,
-	parsedModel: ParsedModel,
-): ApiModel<Api>["applyPatchToolType"] {
-	if (parsedModel.family !== "openai" || parsedModel.version.major !== 5) {
-		return undefined;
-	}
-	if (model.provider === "openai" && model.api === "openai-responses") {
-		return "freeform";
-	}
-	if (model.provider === "openai-codex" && model.api === "openai-codex-responses") {
-		return "freeform";
-	}
-	return undefined;
-}
-
-function applyOpenAICatalogPolicy(model: ApiModel<Api>, parsedModel: OpenAIModel): void {
-	// Codex models: 400K figure includes output budget; input window is 272K.
-	if (parsedModel.variant.startsWith("codex") && parsedModel.variant !== "codex-spark") {
-		model.contextWindow = 272000;
-		return;
-	}
-	// GPT-5.4 mini/nano use plain OpenAI IDs on the Codex transport, but Codex still
-	// enforces the lower prompt budget for these variants. Codex discovery can also
-	// report inconsistent priorities for the GPT-5.4 family, so normalize by parsed
-	// variant instead of special-casing raw model ids.
-	if (model.api === "openai-codex-responses" && semverEqual(parsedModel.version, "5.4")) {
-		const normalizedPriority = CODEX_GPT_5_4_PRIORITY_BY_VARIANT[parsedModel.variant];
-		if (normalizedPriority !== undefined) {
-			model.priority = normalizedPriority;
-		}
-		if (parsedModel.variant === "mini" || parsedModel.variant === "nano") {
-			model.contextWindow = 272000;
+export function applyGeneratedModelPolicies(models: Model<Api>[]): void {
+	for (let index = 0; index < models.length; index++) {
+		const modelEntry = models[index];
+		if (modelEntry !== undefined && modelEntry !== null) {
+			const model = refreshModelThinking(modelEntry);
+			applyGeneratedModelPolicy(model);
+			models[index] = model;
 		}
 	}
+}
+
+function applyGeneratedModelPolicy(_model: Model<Api>): void {
+	// Provider-specific catalog policies (e.g. context window adjustments)
 }
 
 function inferModelThinking<TApi extends Api>(model: ApiModel<TApi>): ThinkingConfig {
 	const parsedModel = parseKnownModel(model.id);
-	const efforts = inferSupportedEfforts(parsedModel, model);
+	const efforts = inferSupportedEfforts(parsedModel);
 	const minLevel = efforts[0];
 	const maxLevel = efforts.at(-1);
-	if (!minLevel || !maxLevel) {
+	if (minLevel === undefined || minLevel === null || maxLevel === undefined || maxLevel === null) {
 		throw new Error(`Model ${model.provider}/${model.id} resolved to an empty thinking range`);
 	}
 	return {
@@ -400,7 +147,7 @@ function inferModelThinking<TApi extends Api>(model: ApiModel<TApi>): ThinkingCo
 }
 
 function normalizeThinkingConfig(thinking: ThinkingConfig | undefined): ThinkingConfig | undefined {
-	if (!thinking || expandEffortRange(thinking).length === 0) {
+	if (thinking === undefined || thinking === null || expandEffortRange(thinking).length === 0) {
 		return undefined;
 	}
 	return thinking;
@@ -408,7 +155,7 @@ function normalizeThinkingConfig(thinking: ThinkingConfig | undefined): Thinking
 
 function thinkingsEqual(left: ThinkingConfig | undefined, right: ThinkingConfig | undefined): boolean {
 	if (left === right) return true;
-	if (!left || !right) return false;
+	if (left === undefined || left === null || right === undefined || right === null) return false;
 	return left.mode === right.mode && left.minLevel === right.minLevel && left.maxLevel === right.maxLevel;
 }
 
@@ -425,205 +172,89 @@ function intersectEfforts(left: readonly Effort[], right: readonly Effort[]): re
 	return left.filter(effort => right.includes(effort));
 }
 
-function inferSupportedEfforts<TApi extends Api>(parsedModel: ParsedModel, model: ApiModel<TApi>): readonly Effort[] {
+function inferSupportedEfforts(parsedModel: ParsedModel): readonly Effort[] {
 	switch (parsedModel.family) {
 		case "openai":
 			return inferOpenAISupportedEfforts(parsedModel);
-		case "gemini":
-			return inferGeminiSupportedEfforts(parsedModel);
-		case "anthropic":
-			return inferAnthropicSupportedEfforts(parsedModel, model);
-		case "unknown":
-			return inferFallbackEfforts(model);
+		default:
+			return DEFAULT_REASONING_EFFORTS;
 	}
 }
 
 function inferOpenAISupportedEfforts(model: OpenAIModel): readonly Effort[] {
-	if (model.variant === "codex-mini" && semverEqual(model.version, "5.1")) {
-		return GPT_5_1_CODEX_MINI_EFFORTS;
-	}
 	if (semverGte(model.version, "5.2")) {
 		return GPT_5_2_PLUS_EFFORTS;
 	}
 	return DEFAULT_REASONING_EFFORTS;
 }
 
-function inferGeminiSupportedEfforts(model: GeminiModel): readonly Effort[] {
-	if (!semverGte(model.version, "3.0")) {
-		return DEFAULT_REASONING_EFFORTS;
-	}
-	return model.kind === "pro" ? GEMINI_3_PRO_EFFORTS : GEMINI_3_FLASH_EFFORTS;
-}
-
-function inferAnthropicSupportedEfforts<TApi extends Api>(
-	parsedModel: AnthropicModel,
-	model: ApiModel<TApi>,
-): readonly Effort[] {
-	if (
-		(model.api === "anthropic-messages" || model.api === "bedrock-converse-stream") &&
-		semverGte(parsedModel.version, "4.6")
-	) {
-		return parsedModel.kind === "opus" ? DEFAULT_REASONING_EFFORTS_WITH_XHIGH : DEFAULT_REASONING_EFFORTS;
-	}
-	return inferFallbackEfforts(model);
-}
-
-function inferFallbackEfforts<TApi extends Api>(model: ApiModel<TApi>): readonly Effort[] {
-	if (model.api === "anthropic-messages") {
-		return DEFAULT_REASONING_EFFORTS_WITH_XHIGH;
-	}
-	if (model.name.includes("deepseek-v4")) {
-		return DEFAULT_REASONING_EFFORTS_WITH_XHIGH;
-	}
-	if (model.api === "bedrock-converse-stream") {
-		return DEFAULT_REASONING_EFFORTS;
-	}
-	if (model.api === "openai-completions") {
-		const compat = resolveOpenAICompat(model as ApiModel<"openai-completions">);
-		if (compat.thinkingFormat === "openai" && compat.supportsReasoningEffort) {
-			return DEFAULT_REASONING_EFFORTS_WITH_XHIGH;
-		}
-		return DEFAULT_REASONING_EFFORTS;
-	}
-	// OpenAI Responses APIs encode discrete effort levels, including xhigh.
-	if (model.api === "openai-responses" || model.api === "openai-codex-responses") {
-		return DEFAULT_REASONING_EFFORTS_WITH_XHIGH;
-	}
-	return DEFAULT_REASONING_EFFORTS;
-}
-
-function inferThinkingControlMode<TApi extends Api>(
-	model: ApiModel<TApi>,
-	parsedModel: ParsedModel,
+export function inferThinkingControlMode<TApi extends Api>(
+	_model: { api: string; id: string },
+	_parsedModel: ParsedModel,
 ): ThinkingConfig["mode"] {
-	switch (model.api) {
-		case "google-generative-ai":
-		case "google-gemini-cli":
-		case "google-vertex":
-			return parsedModel.family === "gemini" &&
-				semverGte(parsedModel.version, "3.0") &&
-				parsedModel.version.major === 3
-				? "google-level"
-				: "budget";
-
-		case "anthropic-messages":
-			if (parsedModel.family === "anthropic") {
-				if (semverGte(parsedModel.version, "4.6")) {
-					return "anthropic-adaptive";
-				}
-				if (semverGte(parsedModel.version, "4.5")) {
-					return "anthropic-budget-effort";
-				}
-			}
-			return "budget";
-
-		case "bedrock-converse-stream":
-			if (parsedModel.family === "anthropic") {
-				if (semverGte(parsedModel.version, "4.6") && parsedModel.kind === "opus") {
-					return "anthropic-adaptive";
-				}
-				if (semverGte(parsedModel.version, "4.5")) {
-					return "anthropic-budget-effort";
-				}
-			}
-			return "budget";
-
-		default:
-			return "effort";
-	}
+	return "effort";
 }
 
-function parseKnownModel(modelId: string): ParsedModel {
-	const canonicalId = getCanonicalModelId(modelId);
-	return (
-		parseGeminiModel(canonicalId) ??
-		parseAnthropicModel(canonicalId) ??
-		parseOpenAIModel(canonicalId) ?? { family: "unknown", id: canonicalId }
-	);
-}
-
-const GEMINI_SUFFIX = "-preview";
-function parseGeminiModel(modelId: string): GeminiModel | null {
-	if (modelId.endsWith(GEMINI_SUFFIX)) {
-		modelId = modelId.slice(0, -GEMINI_SUFFIX.length);
-	}
-	const match = /gemini-(\d+(?:\.\d+){0,2})-(pro|flash)\b/.exec(modelId);
-	if (!match) {
-		return null;
-	}
-	const version = parseSemVer(match[1]);
-	if (!version) {
-		return null;
-	}
-	return { family: "gemini", kind: match[2] as GeminiKind, version };
-}
-
-function parseAnthropicModel(modelId: string): AnthropicModel | null {
-	const match = /claude-(opus|sonnet)-(\d{1,2}(?:[.-]\d{1,2}){0,2})\b/.exec(modelId);
-	if (!match) {
-		return null;
-	}
-	const version = parseSemVer(match[2]);
-	if (!version) {
-		return null;
-	}
-	return { family: "anthropic", kind: match[1] as AnthropicKind, version };
-}
-
-function parseOpenAIModel(modelId: string): OpenAIModel | null {
-	const match = /gpt-(\d+(?:\.\d+){0,2})(?:-(codex-spark|codex-mini|codex-max|codex|mini|max|nano))?\b/.exec(modelId);
-	if (!match) {
-		return null;
-	}
-	const version = parseSemVer(match[1]);
-	if (!version) {
-		return null;
-	}
-	return { family: "openai", variant: (match[2] as OpenAIVariant | undefined) ?? "base", version };
-}
-
-function createSemVer(major: number, minor: number, patch = 0): SemVer {
-	return { major, minor, patch };
-}
-
-// extend this table if we need anything more than 9.10
-const precomputeTable: Record<string, SemVer> = {};
-for (let major = 0; major <= 9; major++) {
-	for (let minor = 0; minor <= 10; minor++) {
-		const version = createSemVer(major, minor, 0);
-		precomputeTable[`${major}.${minor}`] = version;
-		precomputeTable[`${major}-${minor}`] = version;
-	}
-	precomputeTable[`${major}`] = createSemVer(major, 0, 0);
-}
-
-function parseSemVer(version: string): SemVer | null {
-	return precomputeTable[version] ?? null;
-}
-
-function semverGte(left: SemVer | string, right: SemVer | string): boolean {
-	return compareSemVer(left, right) >= 0;
-}
-
-function semverEqual(left: SemVer | string, right: SemVer | string): boolean {
-	return compareSemVer(left, right) === 0;
-}
-
-function compareSemVer(left: SemVer | string | null, right: SemVer | string | null): number {
-	left = typeof left === "string" ? parseSemVer(left) : left;
-	right = typeof right === "string" ? parseSemVer(right) : right;
-	if (!left || !right) return (left ? 1 : 0) - (right ? 1 : 0);
-
-	if (left.major !== right.major) {
-		return left.major - right.major;
-	}
-	if (left.minor !== right.minor) {
-		return left.minor - right.minor;
-	}
-	return left.patch - right.patch;
-}
-
-function getCanonicalModelId(modelId: string): string {
+/**
+ * Extract model ID from full resource name.
+ */
+export function extractModelId(modelId: string): string {
 	const p = modelId.lastIndexOf("/");
-	return p !== -1 ? modelId.slice(p + 1) : modelId;
+	return p === -1 ? modelId : modelId.slice(p + 1);
+}
+
+/**
+ * Finalize an error message for an assistant response.
+ */
+export async function finalizeErrorMessage(
+	error: unknown,
+	requestDump: string | undefined,
+	errorResponse?: Response,
+): Promise<string> {
+	let message = error instanceof Error ? error.message : String(error);
+	if (errorResponse !== undefined && errorResponse !== null) {
+		try {
+			const body = await errorResponse.text();
+			if (body !== undefined && body !== null && body.length > 0) {
+				message = `${message}\n\nServer Response: ${body}`;
+			}
+		} catch {
+			// Ignore read errors
+		}
+	}
+	if (requestDump !== undefined && requestDump !== null && requestDump.length > 0) {
+		message = `${message}\n\nRequest Context: ${requestDump}`;
+	}
+	return message;
+}
+
+/**
+ * Utility for tracking abort signal state across async boundaries.
+ */
+export class AbortTracker {
+	#aborted = false;
+	#signal?: AbortSignal;
+
+	constructor(signal?: AbortSignal) {
+		this.#signal = signal;
+		if ((signal?.aborted === true) === true) {
+			this.#aborted = true;
+		} else {
+			signal?.addEventListener(
+				"abort",
+				() => {
+					this.#aborted = true;
+				},
+				{ once: true },
+			);
+		}
+	}
+
+	get aborted(): boolean {
+		return this.#aborted;
+	}
+
+	wasCallerAbort(): boolean {
+		return this.#aborted && (this.#signal?.aborted === true) === true;
+	}
 }

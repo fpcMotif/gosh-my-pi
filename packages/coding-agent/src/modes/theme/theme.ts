@@ -9,7 +9,7 @@ import {
 	highlightCode as nativeHighlightCode,
 	supportsLanguage as nativeSupportsLanguage,
 } from "@oh-my-pi/pi-natives";
-import type { EditorTheme, MarkdownTheme, SelectListTheme, SymbolTheme } from "@oh-my-pi/pi-tui";
+import type { EditorTheme, MarkdownTheme, SelectListTheme, SettingsListTheme, SymbolTheme } from "@oh-my-pi/pi-tui";
 import { adjustHsv, getCustomThemesDir, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
@@ -19,8 +19,10 @@ import darkThemeJson from "./dark.json" with { type: "json" };
 import { defaultThemes } from "./defaults";
 import lightThemeJson from "./light.json" with { type: "json" };
 import { resolveMermaidAscii } from "./mermaid-cache";
+import { SPINNER_FRAMES, SYMBOL_PRESETS, type SpinnerType, type SymbolMap } from "./symbols";
 
 export { getLanguageFromPath } from "../../utils/lang-from-path";
+export type { SpinnerType } from "./symbols";
 
 // ============================================================================
 // Symbol Presets
@@ -196,625 +198,6 @@ export type SymbolKey =
 	| "tool.statusOk"
 	| "tool.statusErr"
 	| "tool.statusRun";
-
-type SymbolMap = Record<SymbolKey, string>;
-
-const UNICODE_SYMBOLS: SymbolMap = {
-	// Status
-	"status.success": "✔",
-	"status.error": "✘",
-	"status.warning": "⚠",
-	"status.info": "ⓘ",
-	"status.pending": "⏳",
-	"status.disabled": "⦸",
-	"status.enabled": "●",
-	"status.running": "⟳",
-	"status.shadowed": "◌",
-	"status.aborted": "⏹",
-	// Navigation
-	"nav.cursor": "❯",
-	"nav.selected": "➤",
-	"nav.expand": "▸",
-	"nav.collapse": "▾",
-	"nav.back": "⟵",
-	// Tree
-	"tree.branch": "├─",
-	"tree.last": "└─",
-	"tree.vertical": "│",
-	"tree.horizontal": "─",
-	"tree.hook": "└",
-	// Box (rounded)
-	"boxRound.topLeft": "╭",
-	"boxRound.topRight": "╮",
-	"boxRound.bottomLeft": "╰",
-	"boxRound.bottomRight": "╯",
-	"boxRound.horizontal": "─",
-	"boxRound.vertical": "│",
-	// Box (sharp)
-	"boxSharp.topLeft": "┌",
-	"boxSharp.topRight": "┐",
-	"boxSharp.bottomLeft": "└",
-	"boxSharp.bottomRight": "┘",
-	"boxSharp.horizontal": "─",
-	"boxSharp.vertical": "│",
-	"boxSharp.cross": "┼",
-	"boxSharp.teeDown": "┬",
-	"boxSharp.teeUp": "┴",
-	"boxSharp.teeRight": "├",
-	"boxSharp.teeLeft": "┤",
-	// Separators (powerline-ish, but pure Unicode)
-	"sep.powerline": "▕",
-	"sep.powerlineThin": "┆",
-	"sep.powerlineLeft": "▶",
-	"sep.powerlineRight": "◀",
-	"sep.powerlineThinLeft": ">",
-	"sep.powerlineThinRight": "<",
-	"sep.block": "▌",
-	"sep.space": " ",
-	"sep.asciiLeft": ">",
-	"sep.asciiRight": "<",
-	"sep.dot": " · ",
-	"sep.slash": " / ",
-	"sep.pipe": " │ ",
-	// Icons
-	"icon.model": "⬢",
-	"icon.plan": "🗺",
-	"icon.loop": "↻",
-	"icon.folder": "📁",
-	"icon.file": "📄",
-	"icon.git": "⎇",
-	"icon.branch": "⑂",
-	"icon.pr": "⤴",
-	"icon.tokens": "🪙",
-	"icon.context": "◫",
-	"icon.cost": "💲",
-	"icon.time": "⏱",
-	"icon.pi": "π",
-	"icon.agents": "👥",
-	"icon.cache": "💾",
-	"icon.input": "⤵",
-	"icon.output": "⤴",
-	"icon.host": "🖥",
-	"icon.session": "🆔",
-	"icon.package": "📦",
-	"icon.warning": "⚠",
-	"icon.rewind": "↶",
-	"icon.auto": "⟲",
-	"icon.fast": "⚡",
-	"icon.extensionSkill": "✦",
-	"icon.extensionTool": "🛠",
-	"icon.extensionSlashCommand": "⌘",
-	"icon.extensionMcp": "🔌",
-	"icon.extensionRule": "⚖",
-	"icon.extensionHook": "🪝",
-	"icon.extensionPrompt": "✎",
-	"icon.extensionContextFile": "📎",
-	"icon.extensionInstruction": "📘",
-	// STT
-	"icon.mic": "🎤",
-	// Thinking levels
-	"thinking.minimal": "◔ min",
-	"thinking.low": "◑ low",
-	"thinking.medium": "◒ med",
-	"thinking.high": "◕ high",
-	"thinking.xhigh": "◉ xhi",
-	// Checkboxes
-	"checkbox.checked": "☑",
-	"checkbox.unchecked": "☐",
-	// Formatting
-	"format.bullet": "•",
-	"format.dash": "—",
-	"format.bracketLeft": "⟦",
-	"format.bracketRight": "⟧",
-	// Markdown
-	"md.quoteBorder": "▏",
-	"md.hrChar": "─",
-	"md.bullet": "•",
-	// Language/file icons (emoji-centric, no Nerd Font required)
-	"lang.default": "⌘",
-	"lang.typescript": "🟦",
-	"lang.javascript": "🟨",
-	"lang.python": "🐍",
-	"lang.rust": "🦀",
-	"lang.go": "🐹",
-	"lang.java": "☕",
-	"lang.c": "Ⓒ",
-	"lang.cpp": "➕",
-	"lang.csharp": "♯",
-	"lang.ruby": "💎",
-	"lang.php": "🐘",
-	"lang.swift": "🕊",
-	"lang.kotlin": "🅺",
-	"lang.shell": "💻",
-	"lang.html": "🌐",
-	"lang.css": "🎨",
-	"lang.json": "🧾",
-	"lang.yaml": "📋",
-	"lang.markdown": "📝",
-	"lang.sql": "🗄",
-	"lang.docker": "🐳",
-	"lang.lua": "🌙",
-	"lang.text": "🗒",
-	"lang.env": "🔧",
-	"lang.toml": "🧾",
-	"lang.xml": "⟨⟩",
-	"lang.ini": "⚙",
-	"lang.conf": "⚙",
-	"lang.log": "📜",
-	"lang.csv": "📑",
-	"lang.tsv": "📑",
-	"lang.image": "🖼",
-	"lang.pdf": "📕",
-	"lang.archive": "🗜",
-	"lang.binary": "⚙",
-	// Settings tabs
-	"tab.appearance": "🎨",
-	"tab.model": "🤖",
-	"tab.interaction": "⌨",
-	"tab.context": "📋",
-	"tab.editing": "💻",
-	"tab.tools": "🔧",
-	"tab.tasks": "📦",
-	"tab.providers": "🌐",
-	// Vivid layout
-	"rail.thin": "│",
-	"rail.thick": "▌",
-	"prompt.sigil": ":::",
-	"badge.sep": "╱╱╱",
-	"tool.statusOk": "✓",
-	"tool.statusErr": "×",
-	"tool.statusRun": "●",
-};
-
-const NERD_SYMBOLS: SymbolMap = {
-	// Status Indicators
-	// pick:  | alt:   
-	"status.success": "\uf00c",
-	// pick:  | alt:   
-	"status.error": "\uf00d",
-	// pick:  | alt:  
-	"status.warning": "\uf12a",
-	// pick:  | alt: 
-	"status.info": "\uf129",
-	// pick:  | alt:   
-	"status.pending": "\uf254",
-	// pick:  | alt:  
-	"status.disabled": "\uf05e",
-	// pick:  | alt:  
-	"status.enabled": "\uf111",
-	// pick:  | alt:   
-	"status.running": "\uf110",
-	// pick: ◐ | alt: ◑ ◒ ◓ ◔
-	"status.shadowed": "◐",
-	// pick:  | alt:  
-	"status.aborted": "\uf04d",
-	// Navigation
-	// pick:  | alt:  
-	"nav.cursor": "\uf054",
-	// pick:  | alt:  
-	"nav.selected": "\uf178",
-	// pick:  | alt:  
-	"nav.expand": "\uf0da",
-	// pick:  | alt:  
-	"nav.collapse": "\uf0d7",
-	// pick:  | alt:  
-	"nav.back": "\uf060",
-	// Tree Connectors (same as unicode)
-	// pick: ├─ | alt: ├╴ ├╌ ╠═ ┣━
-	"tree.branch": "\u251c\u2500",
-	// pick: └─ | alt: └╴ └╌ ╚═ ┗━
-	"tree.last": "\u2514\u2500",
-	// pick: │ | alt: ┃ ║ ▏ ▕
-	"tree.vertical": "\u2502",
-	// pick: ─ | alt: ━ ═ ╌ ┄
-	"tree.horizontal": "\u2500",
-	// pick: └ | alt: ╰ ⎿ ↳
-	"tree.hook": "\u2514",
-	// Box Drawing - Rounded (same as unicode)
-	// pick: ╭ | alt: ┌ ┏ ╔
-	"boxRound.topLeft": "\u256d",
-	// pick: ╮ | alt: ┐ ┓ ╗
-	"boxRound.topRight": "\u256e",
-	// pick: ╰ | alt: └ ┗ ╚
-	"boxRound.bottomLeft": "\u2570",
-	// pick: ╯ | alt: ┘ ┛ ╝
-	"boxRound.bottomRight": "\u256f",
-	// pick: ─ | alt: ━ ═ ╌
-	"boxRound.horizontal": "\u2500",
-	// pick: │ | alt: ┃ ║ ▏
-	"boxRound.vertical": "\u2502",
-	// Box Drawing - Sharp (same as unicode)
-	// pick: ┌ | alt: ┏ ╭ ╔
-	"boxSharp.topLeft": "\u250c",
-	// pick: ┐ | alt: ┓ ╮ ╗
-	"boxSharp.topRight": "\u2510",
-	// pick: └ | alt: ┗ ╰ ╚
-	"boxSharp.bottomLeft": "\u2514",
-	// pick: ┘ | alt: ┛ ╯ ╝
-	"boxSharp.bottomRight": "\u2518",
-	// pick: ─ | alt: ━ ═ ╌
-	"boxSharp.horizontal": "\u2500",
-	// pick: │ | alt: ┃ ║ ▏
-	"boxSharp.vertical": "\u2502",
-	// pick: ┼ | alt: ╋ ╬ ┿
-	"boxSharp.cross": "\u253c",
-	// pick: ┬ | alt: ╦ ┯ ┳
-	"boxSharp.teeDown": "\u252c",
-	// pick: ┴ | alt: ╩ ┷ ┻
-	"boxSharp.teeUp": "\u2534",
-	// pick: ├ | alt: ╠ ┝ ┣
-	"boxSharp.teeRight": "\u251c",
-	// pick: ┤ | alt: ╣ ┥ ┫
-	"boxSharp.teeLeft": "\u2524",
-	// Separators - Nerd Font specific
-	// pick:  | alt:   
-	"sep.powerline": "\ue0b0",
-	// pick:  | alt:  
-	"sep.powerlineThin": "\ue0b1",
-	// pick:  | alt:  
-	"sep.powerlineLeft": "\ue0b0",
-	// pick:  | alt:  
-	"sep.powerlineRight": "\ue0b2",
-	// pick:  | alt: 
-	"sep.powerlineThinLeft": "\ue0b1",
-	// pick:  | alt: 
-	"sep.powerlineThinRight": "\ue0b3",
-	// pick: █ | alt: ▓ ▒ ░ ▉ ▌
-	"sep.block": "\u2588",
-	// pick: space | alt: ␠ ·
-	"sep.space": " ",
-	// pick: > | alt: › » ▸
-	"sep.asciiLeft": ">",
-	// pick: < | alt: ‹ « ◂
-	"sep.asciiRight": "<",
-	// pick: · | alt: • ⋅
-	"sep.dot": " \u00b7 ",
-	// pick:  | alt: / ∕ ⁄
-	"sep.slash": "\ue0bb",
-	// pick:  | alt: │ ┃ |
-	"sep.pipe": "\ue0b3",
-	// Icons - Nerd Font specific
-	// pick:  | alt:   ◆
-	"icon.model": "\uec19",
-	// pick:  | alt:  
-	"icon.plan": "\uf2d2",
-	// pick: ↻ | alt: ⟳
-	"icon.loop": "\uf021",
-	// pick:  | alt:  
-	"icon.folder": "\uf115",
-	// pick:  | alt:  
-	"icon.file": "\uf15b",
-	// pick:  | alt:  ⎇
-	"icon.git": "\uf1d3",
-	// pick:  | alt:  ⎇
-	"icon.branch": "\uf126",
-	// pick:  (nf-cod-git_pull_request) | alt:  (nf-oct-git_pull_request)
-	"icon.pr": "\uea64",
-	// pick:  | alt: ⊛ ◍ 
-	"icon.tokens": "\ue26b",
-	// pick:  | alt: ◫ ▦
-	"icon.context": "\ue70f",
-	// pick:  | alt: $ ¢
-	"icon.cost": "\uf155",
-	// pick:  | alt: ◷ ◴
-	"icon.time": "\uf017",
-	// pick:  | alt: π ∏ ∑
-	"icon.pi": "\ue22c",
-	// pick:  | alt: 
-	"icon.agents": "\uf0c0",
-	// pick:  | alt:  
-	"icon.cache": "\uf1c0",
-	// pick:  | alt:  →
-	"icon.input": "\uf090",
-	// pick:  | alt:  →
-	"icon.output": "\uf08b",
-	// pick:  | alt:  
-	"icon.host": "\uf109",
-	// pick:  | alt:  
-	"icon.session": "\uf550",
-	// pick:  | alt: 
-	"icon.package": "\uf487",
-	// pick:  | alt:  
-	"icon.warning": "\uf071",
-	// pick:  | alt:  ↺
-	"icon.rewind": "\uf0e2",
-	// pick: 󰁨 | alt:   
-	"icon.auto": "\u{f0068}",
-	"icon.fast": "\uf0e7",
-	"icon.extensionSkill": "\uf0eb",
-	// pick:  | alt:  
-	"icon.extensionTool": "\uf0ad",
-	// pick:  | alt: 
-	"icon.extensionSlashCommand": "\uf120",
-	// pick:  | alt:  
-	"icon.extensionMcp": "\uf1e6",
-	// pick:  | alt:  
-	"icon.extensionRule": "\uf0e3",
-	// pick:  | alt: 
-	"icon.extensionHook": "\uf0c1",
-	// pick:  | alt:  
-	"icon.extensionPrompt": "\uf075",
-	// pick:  | alt:  
-	"icon.extensionContextFile": "\uf0f6",
-	// pick:  | alt:  
-	"icon.extensionInstruction": "\uf02d",
-	// STT - fa-microphone
-	"icon.mic": "\uf130",
-	// Thinking Levels - emoji labels
-	// pick: 🤨 min | alt:  min  min
-	"thinking.minimal": "\u{F0E7} min",
-	// pick: 🤔 low | alt:  low  low
-	"thinking.low": "\u{F10C} low",
-	// pick: 🤓 med | alt:  med  med
-	"thinking.medium": "\u{F192} med",
-	// pick: 🤯 high | alt:  high  high
-	"thinking.high": "\u{F111} high",
-	// pick: 🧠 xhi | alt:  xhi  xhi
-	"thinking.xhigh": "\u{F06D} xhi",
-	// Checkboxes
-	// pick:  | alt:  
-	"checkbox.checked": "\uf14a",
-	// pick:  | alt: 
-	"checkbox.unchecked": "\uf096",
-	// pick:  | alt:   •
-	"format.bullet": "\uf111",
-	// pick: – | alt: — ― -
-	"format.dash": "\u2013",
-	// pick: ⟨ | alt: [ ⟦
-	"format.bracketLeft": "⟨",
-	// pick: ⟩ | alt: ] ⟧
-	"format.bracketRight": "⟩",
-	// Markdown-specific
-	// pick: │ | alt: ┃ ║
-	"md.quoteBorder": "\u2502",
-	// pick: ─ | alt: ━ ═
-	"md.hrChar": "\u2500",
-	// pick:  | alt:  •
-	"md.bullet": "\uf111",
-	// Language icons (nerd font devicons)
-	"lang.default": "",
-	"lang.typescript": "\u{E628}",
-	"lang.javascript": "\u{E60C}",
-	"lang.python": "\u{E606}",
-	"lang.rust": "\u{E7A8}",
-	"lang.go": "\u{E627}",
-	"lang.java": "\u{E738}",
-	"lang.c": "\u{E61E}",
-	"lang.cpp": "\u{E61D}",
-	"lang.csharp": "\u{E7BC}",
-	"lang.ruby": "\u{E791}",
-	"lang.php": "\u{E608}",
-	"lang.swift": "\u{E755}",
-	"lang.kotlin": "\u{E634}",
-	"lang.shell": "\u{E795}",
-	"lang.html": "\u{E736}",
-	"lang.css": "\u{E749}",
-	"lang.json": "\u{E60B}",
-	"lang.yaml": "\u{E615}",
-	"lang.markdown": "\u{E609}",
-	"lang.sql": "\u{E706}",
-	"lang.docker": "\u{E7B0}",
-	"lang.lua": "\u{E620}",
-	"lang.text": "\u{E612}",
-	"lang.env": "\u{E615}",
-	"lang.toml": "\u{E615}",
-	"lang.xml": "\u{F05C0}",
-	"lang.ini": "\u{E615}",
-	"lang.conf": "\u{E615}",
-	"lang.log": "\u{F0331}",
-	"lang.csv": "\u{F021B}",
-	"lang.tsv": "\u{F021B}",
-	"lang.image": "\u{F021F}",
-	"lang.pdf": "\u{F0226}",
-	"lang.archive": "\u{F187}",
-	"lang.binary": "\u{F019A}",
-	// Settings tab icons
-	"tab.appearance": "󰃣",
-	"tab.model": "󰚩",
-	"tab.interaction": "󰌌",
-	"tab.context": "󰘸",
-	"tab.editing": "",
-	"tab.tools": "󰠭",
-	"tab.tasks": "󰐱",
-	"tab.providers": "󰖟",
-	// Vivid layout (nerd-font glyphs unchanged from Unicode for these — same look)
-	"rail.thin": "│",
-	"rail.thick": "▌",
-	"prompt.sigil": ":::",
-	"badge.sep": "╱╱╱",
-	"tool.statusOk": "",
-	"tool.statusErr": "",
-	"tool.statusRun": "",
-};
-
-const ASCII_SYMBOLS: SymbolMap = {
-	// Status Indicators
-	"status.success": "[ok]",
-	"status.error": "[!!]",
-	"status.warning": "[!]",
-	"status.info": "[i]",
-	"status.pending": "[*]",
-	"status.disabled": "[ ]",
-	"status.enabled": "[x]",
-	"status.running": "[~]",
-	"status.shadowed": "[/]",
-	"status.aborted": "[-]",
-	// Navigation
-	"nav.cursor": ">",
-	"nav.selected": "->",
-	"nav.expand": "+",
-	"nav.collapse": "-",
-	"nav.back": "<-",
-	// Tree Connectors
-	"tree.branch": "|--",
-	"tree.last": "'--",
-	"tree.vertical": "|",
-	"tree.horizontal": "-",
-	"tree.hook": "`-",
-	// Box Drawing - Rounded (ASCII fallback)
-	"boxRound.topLeft": "+",
-	"boxRound.topRight": "+",
-	"boxRound.bottomLeft": "+",
-	"boxRound.bottomRight": "+",
-	"boxRound.horizontal": "-",
-	"boxRound.vertical": "|",
-	// Box Drawing - Sharp (ASCII fallback)
-	"boxSharp.topLeft": "+",
-	"boxSharp.topRight": "+",
-	"boxSharp.bottomLeft": "+",
-	"boxSharp.bottomRight": "+",
-	"boxSharp.horizontal": "-",
-	"boxSharp.vertical": "|",
-	"boxSharp.cross": "+",
-	"boxSharp.teeDown": "+",
-	"boxSharp.teeUp": "+",
-	"boxSharp.teeRight": "+",
-	"boxSharp.teeLeft": "+",
-	// Separators
-	"sep.powerline": ">",
-	"sep.powerlineThin": ">",
-	"sep.powerlineLeft": ">",
-	"sep.powerlineRight": "<",
-	"sep.powerlineThinLeft": ">",
-	"sep.powerlineThinRight": "<",
-	"sep.block": "#",
-	"sep.space": " ",
-	"sep.asciiLeft": ">",
-	"sep.asciiRight": "<",
-	"sep.dot": " - ",
-	"sep.slash": " / ",
-	"sep.pipe": " | ",
-	// Icons
-	"icon.model": "[M]",
-	"icon.plan": "plan",
-	"icon.loop": "loop",
-	"icon.folder": "[D]",
-	"icon.file": "[F]",
-	"icon.git": "git:",
-	"icon.branch": "@",
-	"icon.pr": "PR",
-	"icon.tokens": "tok:",
-	"icon.context": "ctx:",
-	"icon.cost": "$",
-	"icon.time": "t:",
-	"icon.pi": "pi",
-	"icon.agents": "AG",
-	"icon.cache": "cache",
-	"icon.input": "in:",
-	"icon.output": "out:",
-	"icon.host": "host",
-	"icon.session": "id",
-	"icon.package": "[P]",
-	"icon.warning": "[!]",
-	"icon.rewind": "<-",
-	"icon.auto": "[A]",
-	"icon.fast": ">>",
-	"icon.extensionSkill": "SK",
-	"icon.extensionTool": "TL",
-	"icon.extensionSlashCommand": "/",
-	"icon.extensionMcp": "MCP",
-	"icon.extensionRule": "RL",
-	"icon.extensionHook": "HK",
-	"icon.extensionPrompt": "PR",
-	"icon.extensionContextFile": "CF",
-	"icon.extensionInstruction": "IN",
-	// STT
-	"icon.mic": "MIC",
-	// Thinking Levels
-	"thinking.minimal": "[min]",
-	"thinking.low": "[low]",
-	"thinking.medium": "[med]",
-	"thinking.high": "[high]",
-	"thinking.xhigh": "[xhi]",
-	// Checkboxes
-	"checkbox.checked": "[x]",
-	"checkbox.unchecked": "[ ]",
-	"format.bullet": "*",
-	"format.dash": "-",
-	"format.bracketLeft": "[",
-	"format.bracketRight": "]",
-	// Markdown-specific
-	"md.quoteBorder": "|",
-	"md.hrChar": "-",
-	"md.bullet": "*",
-	// Language icons (ASCII uses abbreviations)
-	"lang.default": "code",
-	"lang.typescript": "ts",
-	"lang.javascript": "js",
-	"lang.python": "py",
-	"lang.rust": "rs",
-	"lang.go": "go",
-	"lang.java": "java",
-	"lang.c": "c",
-	"lang.cpp": "cpp",
-	"lang.csharp": "cs",
-	"lang.ruby": "rb",
-	"lang.php": "php",
-	"lang.swift": "swift",
-	"lang.kotlin": "kt",
-	"lang.shell": "sh",
-	"lang.html": "html",
-	"lang.css": "css",
-	"lang.json": "json",
-	"lang.yaml": "yaml",
-	"lang.markdown": "md",
-	"lang.sql": "sql",
-	"lang.docker": "docker",
-	"lang.lua": "lua",
-	"lang.text": "txt",
-	"lang.env": "env",
-	"lang.toml": "toml",
-	"lang.xml": "xml",
-	"lang.ini": "ini",
-	"lang.conf": "conf",
-	"lang.log": "log",
-	"lang.csv": "csv",
-	"lang.tsv": "tsv",
-	"lang.image": "img",
-	"lang.pdf": "pdf",
-	"lang.archive": "zip",
-	"lang.binary": "bin",
-	// Settings tab icons
-	"tab.appearance": "[A]",
-	"tab.model": "[M]",
-	"tab.interaction": "[I]",
-	"tab.context": "[X]",
-	"tab.editing": "[E]",
-	"tab.tools": "[T]",
-	"tab.tasks": "[K]",
-	"tab.providers": "[P]",
-	// Vivid layout (ASCII fallbacks)
-	"rail.thin": "|",
-	"rail.thick": "|",
-	"prompt.sigil": ">>>",
-	"badge.sep": "///",
-	"tool.statusOk": "[ok]",
-	"tool.statusErr": "[x]",
-	"tool.statusRun": "[*]",
-};
-
-const SYMBOL_PRESETS: Record<SymbolPreset, SymbolMap> = {
-	unicode: UNICODE_SYMBOLS,
-	nerd: NERD_SYMBOLS,
-	ascii: ASCII_SYMBOLS,
-};
-
-export type SpinnerType = "status" | "activity";
-
-const SPINNER_FRAMES: Record<SymbolPreset, Record<SpinnerType, string[]>> = {
-	unicode: {
-		status: ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"],
-		activity: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-	},
-	nerd: {
-		status: ["󱑖", "󱑋", "󱑌", "󱑍", "󱑎", "󱑏", "󱑐", "󱑑", "󱑒", "󱑓", "󱑔", "󱑕"],
-		activity: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-	},
-	ascii: {
-		status: ["|", "/", "-", "\\"],
-		activity: ["-", "\\", "|", "/"],
-	},
-};
 
 // ============================================================================
 // Types & Schema
@@ -1145,10 +528,10 @@ function detectColorMode(): ColorMode {
 		return "truecolor";
 	}
 	// Windows Terminal supports truecolor
-	if (Bun.env.WT_SESSION) {
+	if (Bun.env.WT_SESSION !== null && Bun.env.WT_SESSION !== undefined && Bun.env.WT_SESSION !== "") {
 		return "truecolor";
 	}
-	const term = Bun.env.TERM || "";
+	const term = Bun.env.TERM ?? "";
 	// Only fall back to 256color for truly limited terminals
 	if (term === "dumb" || term === "" || term === "linux") {
 		return "256color";
@@ -1172,7 +555,7 @@ function fgAnsi(color: string | number, mode: ColorMode): string {
 	if (typeof color === "string") {
 		return colorToAnsi(color, mode);
 	}
-	throw new Error(`Invalid color value: ${color}`);
+	throw new Error(`Invalid color value: ${String(color)}`);
 }
 
 function bgAnsi(color: string | number, mode: ColorMode): string {
@@ -1323,7 +706,7 @@ export class Theme {
 		private readonly mode: ColorMode,
 		private readonly symbolPreset: SymbolPreset,
 		symbolOverrides: Partial<Record<SymbolKey, string>>,
-		public readonly layout: ThemeLayout = "classic",
+		readonly layout: ThemeLayout = "classic",
 	) {
 		this.#fgColors = {} as Record<ThemeColor, string>;
 		for (const [key, value] of Object.entries(fgColors) as [ThemeColor, string | number][]) {
@@ -1622,7 +1005,7 @@ export class Theme {
 	 * Maps common language names to their corresponding symbol keys.
 	 */
 	getLangIcon(lang: string | undefined): string {
-		if (!lang) return this.#symbols["lang.default"];
+		if (lang === null || lang === undefined || lang === "") return this.#symbols["lang.default"];
 		const normalized = lang.toLowerCase();
 		const key = langMap[normalized];
 		return key ? this.#symbols[key] : this.#symbols["lang.default"];
@@ -1701,15 +1084,15 @@ async function loadThemeJson(name: string): Promise<ThemeJson> {
 	let content: string;
 	try {
 		content = await Bun.file(themePath).text();
-	} catch (err) {
-		if (isEnoent(err)) throw new Error(`Theme not found: ${name}`);
-		throw err;
+	} catch (error) {
+		if (isEnoent(error)) throw new Error(`Theme not found: ${name}`);
+		throw error;
 	}
 	let json: unknown;
 	try {
 		json = JSON.parse(content);
 	} catch (error) {
-		throw new Error(`Failed to parse theme ${name}: ${error}`);
+		throw new Error(`Failed to parse theme ${name}: ${String(error)}`);
 	}
 	if (!validateThemeJson.Check(json)) {
 		const errors = Array.from(validateThemeJson.Errors(json));
@@ -1751,72 +1134,69 @@ interface CreateThemeOptions {
 /** HSV adjustment to shift green toward blue for colorblind mode (red-green colorblindness) */
 const COLORBLIND_ADJUSTMENT = { h: 60, s: 0.71 };
 
-function createTheme(themeJson: ThemeJson, options: CreateThemeOptions = {}): Theme {
-	const { mode, symbolPresetOverride, colorBlindMode } = options;
-	const colorMode = mode ?? detectColorMode();
-	const resolvedColors = resolveThemeColors(themeJson.colors, themeJson.vars);
+const BG_COLOR_KEYS: Set<string> = new Set([
+	"selectedBg",
+	"userMessageBg",
+	"customMessageBg",
+	"toolPendingBg",
+	"toolSuccessBg",
+	"toolErrorBg",
+	"statusLineBg",
+	"badgeOkBg",
+	"badgeErrBg",
+	"badgeWarnBg",
+	"badgeInfoBg",
+	"badgeHeyBg",
+	"diffInsertBg",
+	"diffDeleteBg",
+]);
 
-	if (colorBlindMode) {
-		const added = resolvedColors.toolDiffAdded;
-		if (typeof added === "string" && added.startsWith("#")) {
-			resolvedColors.toolDiffAdded = adjustHsv(added, COLORBLIND_ADJUSTMENT);
-		}
-	}
+const VIVID_FG_FALLBACKS: Record<string, ThemeColor> = {
+	borderRailUser: "customMessageLabel",
+	borderRailAssistant: "accent",
+	borderRailTool: "borderAccent",
+	borderRailFocused: "accent",
+	promptSigil: "success",
+	gradFrom: "accent",
+	gradTo: "borderAccent",
+	badgeOkFg: "success",
+	badgeErrFg: "error",
+	badgeWarnFg: "warning",
+	badgeInfoFg: "accent",
+	badgeHeyFg: "customMessageLabel",
+	diffInsertFg: "toolDiffAdded",
+	diffDeleteFg: "toolDiffRemoved",
+};
+const VIVID_BG_FALLBACKS: Record<string, ThemeBg> = {
+	badgeOkBg: "toolSuccessBg",
+	badgeErrBg: "toolErrorBg",
+	badgeWarnBg: "toolPendingBg",
+	badgeInfoBg: "toolPendingBg",
+	badgeHeyBg: "selectedBg",
+	diffInsertBg: "toolSuccessBg",
+	diffDeleteBg: "toolErrorBg",
+};
 
+function classifyThemeColors(resolvedColors: Record<string, string | number>): {
+	fgColors: Record<ThemeColor, string | number>;
+	bgColors: Record<ThemeBg, string | number>;
+} {
 	const fgColors: Record<ThemeColor, string | number> = {} as Record<ThemeColor, string | number>;
 	const bgColors: Record<ThemeBg, string | number> = {} as Record<ThemeBg, string | number>;
-	const bgColorKeys: Set<string> = new Set([
-		"selectedBg",
-		"userMessageBg",
-		"customMessageBg",
-		"toolPendingBg",
-		"toolSuccessBg",
-		"toolErrorBg",
-		"statusLineBg",
-		"badgeOkBg",
-		"badgeErrBg",
-		"badgeWarnBg",
-		"badgeInfoBg",
-		"badgeHeyBg",
-		"diffInsertBg",
-		"diffDeleteBg",
-	]);
 	for (const [key, value] of Object.entries(resolvedColors)) {
-		if (bgColorKeys.has(key)) {
+		if (BG_COLOR_KEYS.has(key)) {
 			bgColors[key as ThemeBg] = value;
 		} else {
 			fgColors[key as ThemeColor] = value;
 		}
 	}
+	return { fgColors, bgColors };
+}
 
-	// Apply fallbacks for vivid-layout tokens missing from non-vivid themes.
-	// This keeps the system robust: any theme can still be queried for these
-	// keys, and components branching on theme.layout never see undefined.
-	const VIVID_FG_FALLBACKS: Record<string, ThemeColor> = {
-		borderRailUser: "customMessageLabel",
-		borderRailAssistant: "accent",
-		borderRailTool: "borderAccent",
-		borderRailFocused: "accent",
-		promptSigil: "success",
-		gradFrom: "accent",
-		gradTo: "borderAccent",
-		badgeOkFg: "success",
-		badgeErrFg: "error",
-		badgeWarnFg: "warning",
-		badgeInfoFg: "accent",
-		badgeHeyFg: "customMessageLabel",
-		diffInsertFg: "toolDiffAdded",
-		diffDeleteFg: "toolDiffRemoved",
-	};
-	const VIVID_BG_FALLBACKS: Record<string, ThemeBg> = {
-		badgeOkBg: "toolSuccessBg",
-		badgeErrBg: "toolErrorBg",
-		badgeWarnBg: "toolPendingBg",
-		badgeInfoBg: "toolPendingBg",
-		badgeHeyBg: "selectedBg",
-		diffInsertBg: "toolSuccessBg",
-		diffDeleteBg: "toolErrorBg",
-	};
+function applyVividFallbacks(
+	fgColors: Record<ThemeColor, string | number>,
+	bgColors: Record<ThemeBg, string | number>,
+): void {
 	for (const [tokenKey, fallbackKey] of Object.entries(VIVID_FG_FALLBACKS)) {
 		if (fgColors[tokenKey as ThemeColor] === undefined) {
 			fgColors[tokenKey as ThemeColor] = fgColors[fallbackKey];
@@ -1827,6 +1207,26 @@ function createTheme(themeJson: ThemeJson, options: CreateThemeOptions = {}): Th
 			bgColors[tokenKey as ThemeBg] = bgColors[fallbackKey];
 		}
 	}
+}
+
+function createTheme(themeJson: ThemeJson, options: CreateThemeOptions = {}): Theme {
+	const { mode, symbolPresetOverride, colorBlindMode } = options;
+	const colorMode = mode ?? detectColorMode();
+	const resolvedColors = resolveThemeColors(themeJson.colors, themeJson.vars);
+
+	if (colorBlindMode === true) {
+		const added = resolvedColors.toolDiffAdded;
+		if (typeof added === "string" && added.startsWith("#")) {
+			resolvedColors.toolDiffAdded = adjustHsv(added, COLORBLIND_ADJUSTMENT);
+		}
+	}
+
+	const { fgColors, bgColors } = classifyThemeColors(resolvedColors);
+
+	// Apply fallbacks for vivid-layout tokens missing from non-vivid themes.
+	// This keeps the system robust: any theme can still be queried for these
+	// keys, and components branching on theme.layout never see undefined.
+	applyVividFallbacks(fgColors, bgColors);
 
 	// Extract symbol configuration - settings override takes precedence over theme
 	const symbolPreset: SymbolPreset = symbolPresetOverride ?? themeJson.symbols?.preset ?? "unicode";
@@ -1858,7 +1258,10 @@ function shouldUseMacOSAppearanceFallback(): boolean {
 	// Zellij currently breaks OSC 11 passthrough on macOS, so terminal-derived
 	// appearance cannot be trusted there. Fall back to host macOS appearance
 	// without letting it override valid terminal signals elsewhere.
-	return process.platform === "darwin" && !!Bun.env.ZELLIJ;
+	return (
+		process.platform === "darwin" &&
+		!(Bun.env.ZELLIJ === null || Bun.env.ZELLIJ === undefined || Bun.env.ZELLIJ === "")
+	);
 }
 
 function detectTerminalBackground(): "dark" | "light" {
@@ -1868,7 +1271,7 @@ function detectTerminalBackground(): "dark" | "light" {
 	}
 
 	// Tier 2: COLORFGBG env var (static at process start, but still terminal-derived).
-	const colorfgbg = Bun.env.COLORFGBG || "";
+	const colorfgbg = Bun.env.COLORFGBG ?? "";
 	if (colorfgbg) {
 		const parts = colorfgbg.split(";");
 		if (parts.length >= 2) {
@@ -1880,7 +1283,7 @@ function detectTerminalBackground(): "dark" | "light" {
 	// Tier 3: host macOS appearance for known-broken terminal paths only.
 	if (shouldUseMacOSAppearanceFallback()) {
 		const macAppearance = macOSReportedAppearance ?? detectMacOSAppearance();
-		if (macAppearance) return macAppearance;
+		if (macAppearance !== null && macAppearance !== undefined) return macAppearance;
 	}
 
 	return "dark";
@@ -1940,8 +1343,8 @@ export async function initTheme(
 			await startThemeWatcher();
 			startSigwinchListener();
 		}
-	} catch (err) {
-		logger.debug("Theme loading failed, falling back to dark theme", { error: String(err) });
+	} catch (error) {
+		logger.debug("Theme loading failed, falling back to dark theme", { error: String(error) });
 		currentThemeName = "dark";
 		theme = await loadTheme("dark", getCurrentThemeOptions());
 		// Don't start watcher for fallback theme
@@ -2050,7 +1453,7 @@ export function setThemeInstance(themeInstance: Theme): void {
  */
 export async function setSymbolPreset(preset: SymbolPreset): Promise<void> {
 	currentSymbolPresetOverride = preset;
-	if (currentThemeName) {
+	if (currentThemeName !== null && currentThemeName !== undefined && currentThemeName !== "") {
 		try {
 			theme = await loadTheme(currentThemeName, getCurrentThemeOptions());
 		} catch {
@@ -2076,7 +1479,7 @@ export function getSymbolPresetOverride(): SymbolPreset | undefined {
  */
 export async function setColorBlindMode(enabled: boolean): Promise<void> {
 	currentColorBlindMode = enabled;
-	if (currentThemeName) {
+	if (currentThemeName !== null && currentThemeName !== undefined && currentThemeName !== "") {
 		try {
 			theme = await loadTheme(currentThemeName, getCurrentThemeOptions());
 		} catch {
@@ -2118,7 +1521,13 @@ async function startThemeWatcher(): Promise<void> {
 	stopThemeWatcher();
 
 	// Only watch if it's a custom theme (not built-in)
-	if (!currentThemeName || currentThemeName === "dark" || currentThemeName === "light") {
+	if (
+		currentThemeName === null ||
+		currentThemeName === undefined ||
+		currentThemeName === "" ||
+		currentThemeName === "dark" ||
+		currentThemeName === "light"
+	) {
 		return;
 	}
 
@@ -2167,7 +1576,7 @@ async function startThemeWatcher(): Promise<void> {
 			if (currentThemeName !== watchedThemeName) {
 				return;
 			}
-			if (!filename) {
+			if (filename === null || filename === undefined || filename === "") {
 				scheduleReload();
 				return;
 			}
@@ -2198,8 +1607,8 @@ function reevaluateAutoTheme(debugLabel: string): void {
 				onThemeChangeCallback();
 			}
 		})
-		.catch(err => {
-			logger.debug(`Theme switch on ${debugLabel} failed`, { error: String(err) });
+		.catch(error => {
+			logger.debug(`Theme switch on ${debugLabel} failed`, { error: String(error) });
 		});
 }
 
@@ -2220,8 +1629,8 @@ function startMacAppearanceObserver(): void {
 				reevaluateAutoTheme("macOS fallback");
 			}
 		});
-	} catch (err) {
-		logger.warn("Failed to start macOS appearance observer", { err });
+	} catch (error) {
+		logger.warn("Failed to start macOS appearance observer", { error });
 	}
 }
 
@@ -2448,7 +1857,8 @@ function getHighlightColors(t: Theme): NativeHighlightColors {
  * Returns array of highlighted lines.
  */
 export function highlightCode(code: string, lang?: string): string[] {
-	const validLang = lang && nativeSupportsLanguage(lang) ? lang : undefined;
+	const validLang =
+		lang !== null && lang !== undefined && lang !== "" && nativeSupportsLanguage(lang) ? lang : undefined;
 	try {
 		return nativeHighlightCode(code, validLang, getHighlightColors(theme)).split("\n");
 	} catch {
@@ -2496,7 +1906,8 @@ export function getMarkdownTheme(): MarkdownTheme {
 		symbols: getSymbolTheme(),
 		resolveMermaidAscii,
 		highlightCode: (code: string, lang?: string): string[] => {
-			const validLang = lang && nativeSupportsLanguage(lang) ? lang : undefined;
+			const validLang =
+				lang !== null && lang !== undefined && lang !== "" && nativeSupportsLanguage(lang) ? lang : undefined;
 			try {
 				return nativeHighlightCode(code, validLang, getHighlightColors(theme)).split("\n");
 			} catch {
@@ -2529,7 +1940,7 @@ export function getEditorTheme(): EditorTheme {
 	};
 }
 
-export function getSettingsListTheme(): import("@oh-my-pi/pi-tui").SettingsListTheme {
+export function getSettingsListTheme(): SettingsListTheme {
 	return {
 		label: (text: string, selected: boolean) => (selected ? theme.fg("accent", text) : text),
 		value: (text: string, selected: boolean) => (selected ? theme.fg("accent", text) : theme.fg("muted", text)),

@@ -68,7 +68,7 @@ ${truncatedMessage}
 </user-message>`;
 
 	const apiKey = await registry.getApiKey(candidate.model, sessionId);
-	if (!apiKey) {
+	if (apiKey === null || apiKey === undefined || apiKey === "") {
 		logger.debug("title-generator: no API key for smol model", {
 			provider: candidate.model.provider,
 			id: candidate.model.id,
@@ -127,10 +127,10 @@ ${truncatedMessage}
 		}
 
 		return title.replace(/^["']|["']$/g, "").replace(/[.!?]$/, "");
-	} catch (err) {
+	} catch (error) {
 		logger.debug("title-generator: error", {
 			model: request.model,
-			error: err instanceof Error ? err.message : String(err),
+			error: error instanceof Error ? error.message : String(error),
 		});
 		return null;
 	}
@@ -140,13 +140,13 @@ ${truncatedMessage}
  * Remove control characters so model-generated titles cannot inject terminal escapes.
  */
 function sanitizeTerminalTitlePart(value: string | undefined): string | undefined {
-	if (!value) return undefined;
+	if (value === null || value === undefined || value === "") return undefined;
 	const sanitized = value.replace(TERMINAL_TITLE_CONTROL_CHARS, "").trim();
 	return sanitized || undefined;
 }
 
 function getFallbackTerminalTitle(cwd: string | undefined): string | undefined {
-	if (!cwd) return undefined;
+	if (cwd === null || cwd === undefined || cwd === "") return undefined;
 	const resolvedCwd = path.resolve(cwd);
 	const baseName = path.basename(resolvedCwd);
 	if (!baseName || baseName === path.parse(resolvedCwd).root) return undefined;
@@ -156,11 +156,13 @@ function getFallbackTerminalTitle(cwd: string | undefined): string | undefined {
 export function formatSessionTerminalTitle(
 	sessionName: string | undefined,
 	cwd?: string,
-	titleSource?: "auto" | "user" | undefined,
+	titleSource?: "auto" | "user",
 ): string {
 	const label =
 		sanitizeTerminalTitlePart(titleSource === "auto" ? undefined : sessionName) ?? getFallbackTerminalTitle(cwd);
-	return label ? `${DEFAULT_TERMINAL_TITLE}: ${label}` : DEFAULT_TERMINAL_TITLE;
+	return label !== null && label !== undefined && label !== ""
+		? `${DEFAULT_TERMINAL_TITLE}: ${label}`
+		: DEFAULT_TERMINAL_TITLE;
 }
 
 /**
@@ -173,7 +175,7 @@ export function setTerminalTitle(title: string): void {
 export function setSessionTerminalTitle(
 	sessionName: string | undefined,
 	cwd?: string,
-	titleSource?: "auto" | "user" | undefined,
+	titleSource?: "auto" | "user",
 ): void {
 	setTerminalTitle(formatSessionTerminalTitle(sessionName, cwd, titleSource));
 }

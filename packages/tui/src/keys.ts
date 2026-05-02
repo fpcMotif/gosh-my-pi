@@ -31,7 +31,12 @@ import {
 
 function isWindowsTerminalSession(): boolean {
 	return (
-		Boolean(process.env.WT_SESSION) && !process.env.SSH_CONNECTION && !process.env.SSH_CLIENT && !process.env.SSH_TTY
+		Boolean(process.env.WT_SESSION) &&
+		(process.env.SSH_CONNECTION === null ||
+			process.env.SSH_CONNECTION === undefined ||
+			process.env.SSH_CONNECTION === "") &&
+		(process.env.SSH_CLIENT === null || process.env.SSH_CLIENT === undefined || process.env.SSH_CLIENT === "") &&
+		(process.env.SSH_TTY === null || process.env.SSH_TTY === undefined || process.env.SSH_TTY === "")
 	);
 }
 
@@ -366,7 +371,7 @@ function decodeKittyPrintable(data: string): string | undefined {
  */
 export function extractPrintableText(data: string): string | undefined {
 	const kittyText = decodeKittyPrintable(data);
-	if (kittyText) return kittyText;
+	if (kittyText !== null && kittyText !== undefined && kittyText !== "") return kittyText;
 	if (data.length === 0 || hasControlChars(data)) return undefined;
 	return data;
 }

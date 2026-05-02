@@ -26,11 +26,12 @@ export default class Grep extends Command {
 	async run(): Promise<void> {
 		const { args, flags } = await this.parse(Grep);
 
-		const mode: GrepCommandArgs["mode"] = flags.count
-			? GrepOutputMode.Count
-			: flags.files
-				? GrepOutputMode.FilesWithMatches
-				: GrepOutputMode.Content;
+		const mode: GrepCommandArgs["mode"] =
+			flags.count === true
+				? GrepOutputMode.Count
+				: (flags.files === true
+					? GrepOutputMode.FilesWithMatches
+					: GrepOutputMode.Content);
 
 		const cmd: GrepCommandArgs = {
 			pattern: args.pattern ?? "",
@@ -39,7 +40,7 @@ export default class Grep extends Command {
 			limit: flags.limit,
 			context: flags.context,
 			mode,
-			gitignore: !flags["no-gitignore"],
+			gitignore: flags["no-gitignore"] !== true,
 		};
 
 		await initTheme();

@@ -10,9 +10,9 @@ export async function initXdg(): Promise<void> {
 		process.exit(1);
 	}
 
-	const dataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local/share");
-	const stateHome = process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local/state");
-	const cacheHome = process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache");
+	const dataHome = process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local/share");
+	const stateHome = process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local/state");
+	const cacheHome = process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache");
 
 	const dirs = [path.join(dataHome, APP_NAME), path.join(stateHome, APP_NAME), path.join(cacheHome, APP_NAME)];
 

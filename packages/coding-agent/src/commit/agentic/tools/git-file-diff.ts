@@ -101,7 +101,7 @@ function processDiffs(files: string[], diffs: Map<string, string>): { result: st
 
 	for (const file of sortedFiles) {
 		const diff = diffs.get(file);
-		if (!diff) continue;
+		if (diff === null || diff === undefined || diff === "") continue;
 
 		const remaining = MAX_CHARS - totalChars;
 		if (remaining <= 0) {

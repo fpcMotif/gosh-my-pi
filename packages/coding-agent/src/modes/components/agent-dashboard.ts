@@ -105,7 +105,13 @@ function joinPatterns(patterns: string[]): string {
 
 function formatResolution(resolution: ModelResolution): string {
 	const resolved = theme.fg("success", resolution.resolved);
-	if (!resolution.explicitThinkingLevel || !resolution.thinkingLevel) return resolved;
+	if (
+		!resolution.explicitThinkingLevel ||
+		resolution.thinkingLevel === null ||
+		resolution.thinkingLevel === undefined ||
+		resolution.thinkingLevel === ""
+	)
+		return resolved;
 	return `${resolved} ${theme.fg("dim", `(${resolution.thinkingLevel})`)}`;
 }
 
@@ -140,7 +146,7 @@ function extractAssistantText(messages: AgentMessage[]): string | null {
 
 function extractJsonObject(raw: string): string {
 	const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-	if (fenceMatch?.[1]) {
+	if (fenceMatch?.[1] !== undefined && fenceMatch?.[1] !== "") {
 		return fenceMatch[1].trim();
 	}
 	const start = raw.indexOf("{");
@@ -212,7 +218,10 @@ class AgentListPane implements Component {
 				? theme.fg("dim", theme.status.disabled)
 				: theme.fg("success", theme.status.enabled);
 			const source = theme.fg("dim", `[${SOURCE_LABEL[agent.source]}]`);
-			const override = agent.overrideModel ? ` ${theme.fg("warning", "(override)")}` : "";
+			const override =
+				agent.overrideModel !== null && agent.overrideModel !== undefined && agent.overrideModel !== ""
+					? ` ${theme.fg("warning", "(override)")}`
+					: "";
 			let line = ` ${status} ${replaceTabs(agent.name)} ${source}${override}`;
 
 			if (selected) {
@@ -264,14 +273,14 @@ class AgentInspectorPane implements Component {
 			`${theme.fg("muted", "Default resolves:")} ${this.defaultResolution ? this.#formatResolution(this.defaultResolution) : theme.fg("dim", "(unresolved)")}`,
 		);
 		lines.push(
-			`${theme.fg("muted", "Override:")} ${this.agent.overrideModel ? theme.fg("warning", replaceTabs(this.agent.overrideModel)) : theme.fg("dim", "(none)")}`,
+			`${theme.fg("muted", "Override:")} ${this.agent.overrideModel !== null && this.agent.overrideModel !== undefined && this.agent.overrideModel !== "" ? theme.fg("warning", replaceTabs(this.agent.overrideModel)) : theme.fg("dim", "(none)")}`,
 		);
 		lines.push(`${theme.fg("muted", "Effective pattern:")} ${replaceTabs(joinPatterns(this.effectivePatterns))}`);
 		lines.push(
 			`${theme.fg("muted", "Effective:")} ${this.effectiveResolution ? this.#formatResolution(this.effectiveResolution) : theme.fg("dim", "(unresolved)")}`,
 		);
 
-		if (this.agent.filePath) {
+		if (this.agent.filePath !== null && this.agent.filePath !== undefined && this.agent.filePath !== "") {
 			lines.push("");
 			lines.push(theme.fg("muted", "Path:"));
 			lines.push(theme.fg("dim", `  ${replaceTabs(shortenPath(this.agent.filePath))}`));
@@ -410,7 +419,7 @@ export class AgentDashboard extends Container {
 			this.#activeTabIndex = nextTabIndex >= 0 ? nextTabIndex : 0;
 			this.#applyFilters();
 
-			if (selectedName) {
+			if (selectedName !== null && selectedName !== undefined && selectedName !== "") {
 				const idx = this.#filteredAgents.findIndex(agent => agent.name === selectedName);
 				if (idx >= 0) {
 					this.#selectedIndex = idx;
@@ -502,7 +511,7 @@ export class AgentDashboard extends Container {
 		const overrides: Record<string, string> = {};
 		for (const agent of this.#allAgents) {
 			const value = agent.overrideModel?.trim();
-			if (value) {
+			if (value !== null && value !== undefined && value !== "") {
 				overrides[agent.name] = value;
 			}
 		}
@@ -523,7 +532,7 @@ export class AgentDashboard extends Container {
 		this.#createError = null;
 		this.#editingAgentName = selected.name;
 		this.#editInput = new Input();
-		if (selected.overrideModel) {
+		if (selected.overrideModel !== null && selected.overrideModel !== undefined && selected.overrideModel !== "") {
 			this.#editInput.setValue(selected.overrideModel);
 		}
 		this.#editInput.onSubmit = value => {
@@ -533,7 +542,8 @@ export class AgentDashboard extends Container {
 	}
 
 	#saveModelOverride(rawValue: string): void {
-		if (!this.#editingAgentName) return;
+		if (this.#editingAgentName === null || this.#editingAgentName === undefined || this.#editingAgentName === "")
+			return;
 		const selected = this.#allAgents.find(agent => agent.name === this.#editingAgentName);
 		if (!selected) return;
 		const value = rawValue.trim();
@@ -660,7 +670,7 @@ export class AgentDashboard extends Container {
 		try {
 			await session.prompt(userPrompt, { expandPromptTemplates: false });
 			const raw = extractAssistantText(session.state.messages);
-			if (!raw) {
+			if (raw === null || raw === undefined || raw === "") {
 				throw new Error("No response returned by agent creation architect.");
 			}
 			return parseGeneratedAgentSpec(raw);
@@ -822,7 +832,7 @@ export class AgentDashboard extends Container {
 				}
 			}
 		}
-		if (this.#createError) {
+		if (this.#createError !== null && this.#createError !== undefined && this.#createError !== "") {
 			this.addChild(new Text(theme.fg("error", replaceTabs(this.#createError)), 0, 0));
 		}
 		this.addChild(new Spacer(1));
@@ -861,7 +871,7 @@ export class AgentDashboard extends Container {
 				new Text(theme.fg("dim", `  ... ${wrappedPrompt.length - promptPreview.length} more lines`), 0, 0),
 			);
 		}
-		if (this.#createError) {
+		if (this.#createError !== null && this.#createError !== undefined && this.#createError !== "") {
 			this.addChild(new Spacer(1));
 			this.addChild(new Text(theme.fg("error", replaceTabs(this.#createError)), 0, 0));
 		}
@@ -886,7 +896,7 @@ export class AgentDashboard extends Container {
 		this.addChild(new Text(this.#renderTabBar(), 0, 0));
 		this.addChild(new Spacer(1));
 
-		if (this.#notice) {
+		if (this.#notice !== null && this.#notice !== undefined && this.#notice !== "") {
 			this.addChild(new Text(theme.fg("success", replaceTabs(this.#notice)), 0, 0));
 			this.addChild(new Spacer(1));
 		}
@@ -894,7 +904,7 @@ export class AgentDashboard extends Container {
 		if (this.#loading) {
 			this.addChild(new Text(theme.fg("muted", "Loading agents..."), 0, 0));
 			this.addChild(new Spacer(1));
-		} else if (this.#loadError) {
+		} else if (this.#loadError !== null && this.#loadError !== undefined && this.#loadError !== "") {
 			this.addChild(new Text(theme.fg("error", `Failed to load agents: ${replaceTabs(this.#loadError)}`), 0, 0));
 			this.addChild(new Spacer(1));
 		} else if (this.#createSpec) {
@@ -1105,7 +1115,7 @@ export class AgentDashboard extends Container {
 		}
 
 		const printableText = extractPrintableText(data);
-		if (printableText && printableText.length === 1) {
+		if (printableText !== null && printableText !== undefined && printableText !== "" && printableText.length === 1) {
 			const printableCharCode = printableText.charCodeAt(0);
 			if (printableCharCode > 32 && printableCharCode < 127) {
 				if (printableText === "j" || printableText === "k") {

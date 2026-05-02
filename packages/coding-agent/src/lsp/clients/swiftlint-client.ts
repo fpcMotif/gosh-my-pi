@@ -46,8 +46,8 @@ async function runSwiftLint(
 
 		// swiftlint exits non-zero when violations found — that's not a failure
 		return { stdout, stderr, success: stdout.length > 0 };
-	} catch (err) {
-		return { stdout: "", stderr: String(err), success: false };
+	} catch (error) {
+		return { stdout: "", stderr: String(error), success: false };
 	}
 }
 

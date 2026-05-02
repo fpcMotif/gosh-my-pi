@@ -4,5 +4,5 @@ export function sanitizeHostName(name: string): string {
 }
 
 export function buildSshTarget(username: string | undefined, host: string): string {
-	return username ? `${username}@${host}` : host;
+	return username !== null && username !== undefined && username !== "" ? `${username}@${host}` : host;
 }

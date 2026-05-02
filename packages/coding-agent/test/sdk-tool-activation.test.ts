@@ -156,7 +156,7 @@ describe("createAgentSession defaultInactive tool activation", () => {
 
 		const settings = Settings.isolated();
 		vi.spyOn(settings, "getEditVariantForModel").mockImplementation(model =>
-			model?.includes("mini") ? "vim" : "hashline",
+			model?.includes("mini") === true ? "vim" : "hashline",
 		);
 
 		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.db"));

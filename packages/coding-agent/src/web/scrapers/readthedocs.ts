@@ -43,13 +43,13 @@ export const handleReadTheDocs: SpecialHandler = async (
 
 	// Extract main content from common Read the Docs selectors
 	let mainContent =
-		root.querySelector(".document") ||
-		root.querySelector('[role="main"]') ||
-		root.querySelector("main") ||
-		root.querySelector(".rst-content") ||
+		root.querySelector(".document") !== null ||
+		root.querySelector('[role="main"]') !== null ||
+		root.querySelector("main") !== null ||
+		root.querySelector(".rst-content") !== null ||
 		root.querySelector(".body");
 
-	if (!mainContent) {
+	if (mainContent === null || mainContent === undefined) {
 		// Fallback to body if no main content found
 		mainContent = root.querySelector("body");
 		notes.push("Using full body content (no main content div found)");
@@ -86,7 +86,7 @@ export const handleReadTheDocs: SpecialHandler = async (
 	let content = "";
 
 	// Try to fetch raw source if available
-	if (sourceUrl) {
+	if (sourceUrl !== null && sourceUrl !== undefined && sourceUrl !== "") {
 		try {
 			const sourceResult = await loadPage(sourceUrl, { timeout: Math.min(timeout, 10), signal });
 			if (sourceResult.ok && sourceResult.content.length > 0 && sourceResult.content.length < 1_000_000) {
@@ -99,7 +99,7 @@ export const handleReadTheDocs: SpecialHandler = async (
 	}
 
 	// If no raw source, convert HTML to markdown
-	if (!content && mainContent) {
+	if (!content && mainContent !== null && mainContent !== undefined) {
 		const html = mainContent.innerHTML;
 		content = htmlToBasicMarkdown(html);
 	}
@@ -115,6 +115,6 @@ export const handleReadTheDocs: SpecialHandler = async (
 		method: "readthedocs",
 		fetchedAt,
 		notes,
-		contentType: sourceUrl ? "text/plain" : "text/html",
+		contentType: sourceUrl !== null && sourceUrl !== undefined && sourceUrl !== "" ? "text/plain" : "text/html",
 	});
 };

@@ -52,7 +52,7 @@ export function resolveAdapter(adapterName: string, cwd: string): DapResolvedAda
 	const config = DEFAULT_ADAPTERS[adapterName];
 	if (!config) return null;
 	const resolvedCommand = resolveCommand(config.command, cwd);
-	if (!resolvedCommand) return null;
+	if (resolvedCommand === null || resolvedCommand === undefined || resolvedCommand === "") return null;
 	return {
 		name: adapterName,
 		command: config.command,
@@ -125,7 +125,7 @@ function sortAdaptersForLaunch(program: string, cwd: string, adapters: DapResolv
 }
 
 export function selectLaunchAdapter(program: string, cwd: string, adapterName?: string): DapResolvedAdapter | null {
-	if (adapterName) {
+	if (adapterName !== null && adapterName !== undefined && adapterName !== "") {
 		return resolveAdapter(adapterName, cwd);
 	}
 	const matches = getMatchingAdapters(program, cwd);
@@ -134,7 +134,7 @@ export function selectLaunchAdapter(program: string, cwd: string, adapterName?: 
 }
 
 export function selectAttachAdapter(cwd: string, adapterName?: string, port?: number): DapResolvedAdapter | null {
-	if (adapterName) {
+	if (adapterName !== null && adapterName !== undefined && adapterName !== "") {
 		return resolveAdapter(adapterName, cwd);
 	}
 	const available = getAvailableAdapters(cwd);

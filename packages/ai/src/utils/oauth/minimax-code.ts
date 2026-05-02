@@ -49,7 +49,7 @@ async function loginMiniMaxCodeWithBaseUrl(
 		message: "Paste your MiniMax Coding Plan API key",
 		placeholder: "sk-...",
 	});
-	if (options.signal?.aborted) {
+	if (options.signal !== undefined && options.signal.aborted) {
 		throw new Error("Login cancelled");
 	}
 	const trimmed = apiKey.trim();

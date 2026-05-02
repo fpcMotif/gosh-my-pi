@@ -23,7 +23,7 @@ function withIcon(icon: string, text: string): string {
 function stripDisplayRoot(pwd: string): string {
 	for (const root of ["/work", path.join(os.homedir(), "Projects")]) {
 		const relative = relativePathWithinRoot(root, pwd);
-		if (relative) return relative;
+		if (relative !== null && relative !== undefined && relative !== "") return relative;
 	}
 	return pwd;
 }
@@ -88,7 +88,7 @@ const modeSegment: StatusLineSegment = {
 		}
 
 		const loop = ctx.loopMode;
-		if (loop?.enabled) {
+		if (loop?.enabled === true) {
 			const content = withIcon(theme.icon.loop, "Loop");
 			return { content: theme.fg("customMessageLabel", content), visible: true };
 		}
@@ -127,7 +127,7 @@ const gitSegment: StatusLineSegment = {
 	id: "git",
 	render(ctx) {
 		const { branch, status } = ctx.git;
-		if (!branch && !status) return { content: "", visible: false };
+		if ((branch === null || branch === undefined || branch === "") && !status) return { content: "", visible: false };
 
 		const opts = ctx.options.git ?? {};
 		const gitStatus = status;
@@ -135,7 +135,7 @@ const gitSegment: StatusLineSegment = {
 
 		const showBranch = opts.showBranch !== false;
 		let content = "";
-		if (showBranch && branch) {
+		if (showBranch && branch !== null && branch !== undefined && branch !== "") {
 			content = withIcon(theme.icon.branch, branch);
 		}
 
@@ -163,7 +163,7 @@ const gitSegment: StatusLineSegment = {
 
 		if (!content) return { content: "", visible: false };
 
-		const colorName = isDirty ? "statusLineGitDirty" : "statusLineGitClean";
+		const colorName = isDirty === true ? "statusLineGitDirty" : "statusLineGitClean";
 		return { content: theme.fg(colorName, content), visible: true };
 	},
 };
@@ -229,7 +229,8 @@ const tokenRateSegment: StatusLineSegment = {
 	id: "token_rate",
 	render(ctx) {
 		const { tokensPerSecond } = ctx.usageStats;
-		if (!tokensPerSecond) return { content: "", visible: false };
+		if (tokensPerSecond === null || tokensPerSecond === undefined || tokensPerSecond === 0)
+			return { content: "", visible: false };
 
 		const content = withIcon(theme.icon.output, `${tokensPerSecond.toFixed(1)}/s`);
 		return { content: theme.fg("statusLineOutput", content), visible: true };
@@ -310,7 +311,7 @@ const timeSegment: StatusLineSegment = {
 
 		const mins = now.getMinutes().toString().padStart(2, "0");
 		let timeStr = `${hours}:${mins}`;
-		if (opts.showSeconds) {
+		if (opts.showSeconds === true) {
 			timeStr += `:${now.getSeconds().toString().padStart(2, "0")}`;
 		}
 		timeStr += suffix;
@@ -367,7 +368,7 @@ const sessionNameSegment: StatusLineSegment = {
 	render(ctx) {
 		const sessionManager = ctx.session.sessionManager;
 		const name = sessionManager?.titleSource === "auto" ? undefined : sessionManager?.getSessionName();
-		if (!name) return { content: "", visible: false };
+		if (name === null || name === undefined || name === "") return { content: "", visible: false };
 
 		const ansi = getSessionAccentAnsi(getSessionAccentHex(name)) ?? theme.getFgAnsi("accent");
 		return { content: `${ansi}${sanitizeStatusText(name)}\x1b[39m`, visible: true };

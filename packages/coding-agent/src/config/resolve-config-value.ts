@@ -22,7 +22,7 @@ export async function resolveConfigValue(config: string): Promise<string | undef
 		return await executeCommand(config);
 	}
 	const envValue = process.env[config];
-	return envValue || config;
+	return envValue ?? config;
 }
 
 async function executeCommand(commandConfig: string): Promise<string | undefined> {
@@ -80,7 +80,7 @@ export async function resolveHeaders(
 	const resolved: Record<string, string> = {};
 	for (const [key, value] of Object.entries(headers)) {
 		const resolvedValue = await resolveConfigValue(value);
-		if (resolvedValue) {
+		if (resolvedValue !== null && resolvedValue !== undefined && resolvedValue !== "") {
 			resolved[key] = resolvedValue;
 		}
 	}

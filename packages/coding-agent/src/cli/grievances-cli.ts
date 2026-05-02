@@ -43,7 +43,7 @@ export async function listGrievances(options: ListGrievancesOptions): Promise<vo
 
 	try {
 		let rows: GrievanceRow[];
-		if (options.tool) {
+		if (options.tool !== null && options.tool !== undefined && options.tool !== "") {
 			rows = db
 				.prepare("SELECT id, model, version, tool, report FROM grievances WHERE tool = ? ORDER BY id DESC LIMIT ?")
 				.all(options.tool, options.limit) as GrievanceRow[];
@@ -71,7 +71,11 @@ export async function listGrievances(options: ListGrievancesOptions): Promise<vo
 			console.log();
 		}
 
-		console.log(chalk.dim(`Showing ${rows.length} most recent${options.tool ? ` for ${options.tool}` : ""}`));
+		console.log(
+			chalk.dim(
+				`Showing ${rows.length} most recent${options.tool !== null && options.tool !== undefined && options.tool !== "" ? ` for ${options.tool}` : ""}`,
+			),
+		);
 	} finally {
 		db.close();
 	}

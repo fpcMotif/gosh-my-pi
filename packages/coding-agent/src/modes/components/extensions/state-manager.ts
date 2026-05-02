@@ -70,7 +70,7 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 			if (isDisabled) {
 				state = "disabled";
 				disabledReason = "item-disabled";
-			} else if (isShadowed) {
+			} else if (isShadowed === true) {
 				state = "shadowed";
 				disabledReason = "shadowed";
 			} else if (!providerEnabled) {
@@ -97,7 +97,8 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 		}
 	}
 
-	const loadOpts = cwd ? { cwd, includeDisabled: true } : { includeDisabled: true };
+	const loadOpts =
+		cwd !== null && cwd !== undefined && cwd !== "" ? { cwd, includeDisabled: true } : { includeDisabled: true };
 
 	// Load skills
 	try {
@@ -115,7 +116,7 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 		const rules = await loadCapability<Rule>("rules", loadOpts);
 		addItems(rules.all, "rule", {
 			getDescription: r => r.description,
-			getTrigger: r => r.globs?.join(", ") || (r.alwaysApply ? "always" : undefined),
+			getTrigger: r => r.globs?.join(", ") ?? (r.alwaysApply === true ? "always" : undefined),
 		});
 	} catch (error) {
 		logger.warn("Failed to load rules capability", { error: String(error) });
@@ -155,7 +156,7 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 			if (isDisabled) {
 				state = "disabled";
 				disabledReason = "item-disabled";
-			} else if (isShadowed) {
+			} else if (isShadowed === true) {
 				state = "shadowed";
 				disabledReason = "shadowed";
 			} else if (!providerEnabled) {
@@ -170,7 +171,7 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 				kind: "mcp",
 				name: server.name,
 				displayName: server.name,
-				description: server.command || server.url,
+				description: server.command ?? server.url,
 				trigger: server.transport || "stdio",
 				path: server._source.path,
 				source: sourceFromMeta(server._source),
@@ -220,7 +221,7 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 			if (isDisabled) {
 				state = "disabled";
 				disabledReason = "item-disabled";
-			} else if (isShadowed) {
+			} else if (isShadowed === true) {
 				state = "shadowed";
 				disabledReason = "shadowed";
 			} else if (!providerEnabled) {
@@ -265,7 +266,7 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 			if (isDisabled) {
 				state = "disabled";
 				disabledReason = "item-disabled";
-			} else if (isShadowed) {
+			} else if (isShadowed === true) {
 				state = "shadowed";
 				disabledReason = "shadowed";
 			} else if (!providerEnabled) {
@@ -316,7 +317,7 @@ export function buildSidebarTree(extensions: Extension[]): TreeNode[] {
 		if (!byKind.has(ext.kind)) {
 			byKind.set(ext.kind, []);
 		}
-		byKind.get(ext.kind)!.push(ext);
+		byKind.get(ext.kind)?.push(ext);
 	}
 
 	// Build tree nodes for each provider (show ALL providers, even if disabled/empty)
@@ -343,7 +344,7 @@ export function buildSidebarTree(extensions: Extension[]): TreeNode[] {
 			}
 
 			// Sort kind nodes by count (most items first)
-			kindNodes.sort((a, b) => (b.count || 0) - (a.count || 0));
+			kindNodes.sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
 		}
 
 		tree.push({
@@ -400,8 +401,8 @@ export function applyFilter(extensions: Extension[], query: string): Extension[]
 		const searchable = [
 			ext.name,
 			ext.displayName,
-			ext.description || "",
-			ext.trigger || "",
+			ext.description ?? "",
+			ext.trigger ?? "",
 			ext.source.providerName,
 			ext.kind,
 		]
@@ -538,10 +539,9 @@ export function toggleProvider(providerId: string): boolean {
 	if (isProviderEnabled(providerId)) {
 		disableProvider(providerId);
 		return false;
-	} else {
-		enableProvider(providerId);
-		return true;
 	}
+	enableProvider(providerId);
+	return true;
 }
 
 /**
@@ -569,7 +569,10 @@ export async function refreshState(
 
 	// Try to preserve selection
 	const selectedId = state.selected?.id;
-	let selected = selectedId ? searchFiltered.find(e => e.id === selectedId) : null;
+	let selected =
+		selectedId !== null && selectedId !== undefined && selectedId !== ""
+			? searchFiltered.find(e => e.id === selectedId)
+			: null;
 	if (!selected && searchFiltered.length > 0) {
 		selected = searchFiltered[Math.min(state.listIndex, searchFiltered.length - 1)];
 	}
