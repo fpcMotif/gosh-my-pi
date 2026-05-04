@@ -646,8 +646,18 @@ async function ensureGitWorktreePathAvailable(
 	}
 }
 
-function selectPrCloneUrl(originUrl: string | undefined, repo: Pick<GhRepoViewData, "url" | "sshUrl">): string {
-	if (originUrl?.startsWith("http://") ?? originUrl?.startsWith("https://") === true) {
+/**
+ * @internal Exported for regression tests. Selects a PR clone URL based on
+ * the origin remote's protocol: HTTP(S) origins prefer `repo.url` (https),
+ * everything else (ssh, missing, etc.) prefers `repo.sshUrl`.
+ *
+ * Regression-guarded: the original `||` chain was buggily collapsed to `??`
+ * by an earlier codemod (see `scripts/fix-or-defaulting.ts` header). With
+ * `??`, a defined-but-non-http origin would short-circuit before checking
+ * for https. Tests in `test/tools/gh.test.ts` lock this in.
+ */
+export function selectPrCloneUrl(originUrl: string | undefined, repo: Pick<GhRepoViewData, "url" | "sshUrl">): string {
+	if (originUrl?.startsWith("http://") === true || originUrl?.startsWith("https://") === true) {
 		return normalizeOptionalString(repo.url) ?? normalizeOptionalString(repo.sshUrl) ?? "";
 	}
 

@@ -30,6 +30,21 @@ export const BASH_DEFAULT_PREVIEW_LINES = 10;
 const BASH_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_AUTO_BACKGROUND_THRESHOLD_MS = 60_000;
 
+/**
+ * @internal Returns true when a `cwd` value carries an internal protocol URL
+ * (`skill://`, `agent://`, `local:/...`, etc.) that needs `expandInternalUrls`
+ * before being passed to the bash subprocess.
+ *
+ * Regression-guarded: an earlier codemod buggily collapsed the original
+ * `||` chain to `??` (see `scripts/fix-or-defaulting.ts` header). With `??`,
+ * once `cwd?.includes("://")` returned `false` (cwd defined but no scheme),
+ * the `local:/` branch was never reached. Tests in `test/tools/bash.test.ts`
+ * lock this in.
+ */
+export function shouldExpandProtocolCwd(cwd: string | undefined): cwd is string {
+	return cwd?.includes("://") === true || cwd?.includes("local:/") === true;
+}
+
 async function saveBashOriginalArtifact(session: ToolSession, originalText: string): Promise<string | undefined> {
 	try {
 		const alloc = await session.allocateOutputArtifact?.("bash-original");
@@ -555,7 +570,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 			: undefined;
 
 		// Resolve protocol URLs (skill://, agent://, etc.) in extracted cwd.
-		if (cwd?.includes("://") ?? cwd?.includes("local:/") === true) {
+		if (shouldExpandProtocolCwd(cwd)) {
 			cwd = await expandInternalUrls(cwd, { ...internalUrlOptions, noEscape: true });
 		}
 

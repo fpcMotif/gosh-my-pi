@@ -6,7 +6,7 @@ import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { GithubTool } from "@oh-my-pi/pi-coding-agent/tools/gh";
+import { GithubTool, selectPrCloneUrl } from "@oh-my-pi/pi-coding-agent/tools/gh";
 import { wrapToolWithMetaNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
 import * as git from "@oh-my-pi/pi-coding-agent/utils/git";
 import { getAgentDir, setAgentDir } from "@oh-my-pi/pi-utils";
@@ -152,6 +152,35 @@ async function expectedWorktreePath(home: string, primaryRoot: string, localBran
 		.replace(/[/\\:]/g, "-");
 	return fs.realpath(path.join(home, ".omp", "wt", encoded, localBranch));
 }
+
+describe("selectPrCloneUrl (regression: codemod-induced || -> ?? bug)", () => {
+	const repo = { url: "https://github.com/foo/bar.git", sshUrl: "git@github.com:foo/bar.git" };
+
+	it("returns the https url when origin is http://", () => {
+		expect(selectPrCloneUrl("http://github.com/foo/bar.git", repo)).toBe(repo.url);
+	});
+
+	it("returns the https url when origin is https://", () => {
+		expect(selectPrCloneUrl("https://github.com/foo/bar.git", repo)).toBe(repo.url);
+	});
+
+	it("returns the ssh url when origin is ssh-style (the buggy ?? short-circuited here)", () => {
+		// Bug signature: with `??`, originUrl?.startsWith("http://") returned `false`,
+		// which `??` does NOT default through, so the https branch was never checked
+		// and selectPrCloneUrl wrongly returned the https URL for ssh origins too.
+		expect(selectPrCloneUrl("git@github.com:foo/bar.git", repo)).toBe(repo.sshUrl);
+	});
+
+	it("returns the ssh url when origin is undefined", () => {
+		expect(selectPrCloneUrl(undefined, repo)).toBe(repo.sshUrl);
+	});
+
+	it("falls back to ssh url when only ssh url is present and origin is http", () => {
+		expect(selectPrCloneUrl("http://x", { url: undefined as unknown as string, sshUrl: repo.sshUrl })).toBe(
+			repo.sshUrl,
+		);
+	});
+});
 
 describe("github tool", () => {
 	afterEach(() => {
