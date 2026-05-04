@@ -339,7 +339,7 @@ function renderFlagsSection(lines: string[], flagDefs: Record<string, FlagDescri
 	const formatted: [string, string][] = flagEntries.map(([name, desc]) => {
 		const charPart = desc.char !== undefined && desc.char !== "" ? `-${desc.char}, ` : "    ";
 		const namePart = `--${name}`;
-		const typePart = desc.kind === "boolean" ? "" : (desc.kind === "integer" ? "=<int>" : "=<value>");
+		const typePart = desc.kind === "boolean" ? "" : desc.kind === "integer" ? "=<int>" : "=<value>";
 		return [`  ${charPart}${namePart}${typePart}`, desc.description ?? ""];
 	});
 	const maxLeft = Math.max(...formatted.map(([l]) => l.length));

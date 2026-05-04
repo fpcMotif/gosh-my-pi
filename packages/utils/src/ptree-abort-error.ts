@@ -6,7 +6,7 @@ export class AbortError extends Exception {
 		readonly reason: unknown,
 		stderr: string,
 	) {
-		const msg = reason instanceof Error ? reason.message : (typeof reason === "string" ? reason : "aborted");
+		const msg = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "aborted";
 		super(`Operation cancelled: ${msg}`, -1, stderr);
 	}
 	get aborted(): true {

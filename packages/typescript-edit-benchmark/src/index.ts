@@ -627,7 +627,7 @@ class LiveProgress {
 			for (const [i, failure] of result.editFailures.entries()) {
 				const args = (failure.args ?? {}) as Record<string, unknown>;
 				const target =
-					typeof args.path === "string" ? args.path : (typeof args.file === "string" ? args.file : undefined);
+					typeof args.path === "string" ? args.path : typeof args.file === "string" ? args.file : undefined;
 				const op = typeof args.operation === "string" ? args.operation : undefined;
 				const oneLine = failure.error.replace(/\s+/g, " ").trim();
 				const clipped = oneLine.length > 240 ? `${oneLine.slice(0, 237)}...` : oneLine;

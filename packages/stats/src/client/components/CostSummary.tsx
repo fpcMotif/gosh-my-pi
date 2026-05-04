@@ -77,9 +77,9 @@ export function CostSummary({ costSeries }: CostSummaryProps) {
 						className={`text-lg font-semibold ${
 							card.positive === true
 								? "text-[var(--accent-green,#4ade80)]"
-								: (card.positive === false
+								: card.positive === false
 									? "text-[var(--accent-pink)]"
-									: "text-[var(--text-primary)]")
+									: "text-[var(--text-primary)]"
 						}`}
 					>
 						{card.value}

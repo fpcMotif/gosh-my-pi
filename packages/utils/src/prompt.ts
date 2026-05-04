@@ -341,9 +341,9 @@ handlebars.registerHelper("escapeXml", (value: unknown): string => {
 	const str =
 		typeof value === "string"
 			? value
-			: (typeof value === "number" || typeof value === "boolean"
+			: typeof value === "number" || typeof value === "boolean"
 				? String(value)
-				: JSON.stringify(value));
+				: JSON.stringify(value);
 	return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 });
 

@@ -42,7 +42,7 @@ type ConversationDumpSessionState = {
 /** Common interface for both RPC and in-process clients */
 interface BenchmarkClient {
 	start(): Promise<void>;
-	setThinkingLevel(level: import("@oh-my-pi/pi-agent-core").ResolvedThinkingLevel): Promise<void>;
+	setThinkingLevel(level: ResolvedThinkingLevel): Promise<void>;
 	onEvent(listener: (event: { type: string; [key: string]: unknown }) => void): () => void;
 	prompt(text: string): Promise<void>;
 	followUp(text: string): Promise<void>;
@@ -194,7 +194,7 @@ async function persistConversationDump(params: {
 }
 
 function splitLines(value: string): string[] {
-	return value.split("\n").filter((line, idx, arr) => idx < arr.length - 1 || line);
+	return value.split("\n").filter((line, idx, arr) => idx < arr.length - 1 || line.length > 0);
 }
 
 function getEditPathFromArgs(args: unknown): string | null {
@@ -1010,7 +1010,7 @@ async function runSingleTask(
 
 		if (config.editVariant !== undefined) process.env.PI_EDIT_VARIANT = config.editVariant;
 		if (config.editFuzzy !== undefined)
-			process.env.PI_EDIT_FUZZY = config.editFuzzy === "auto" ? "auto" : (config.editFuzzy ? "1" : "0");
+			process.env.PI_EDIT_FUZZY = config.editFuzzy === "auto" ? "auto" : config.editFuzzy ? "1" : "0";
 		if (config.editFuzzyThreshold !== undefined)
 			process.env.PI_EDIT_FUZZY_THRESHOLD =
 				config.editFuzzyThreshold === "auto" ? "auto" : String(config.editFuzzyThreshold);
@@ -1851,7 +1851,7 @@ async function collectPromptEvents(
 		timer = setTimeout(fireTimeout, connectionTimeout);
 
 		unsubscribe = client.onEvent(event => {
-			if (!event || settled) {
+			if (event === undefined || settled) {
 				return;
 			}
 			const typedEvent = event as { type: string; [key: string]: unknown };
@@ -1879,7 +1879,7 @@ async function collectPromptEvents(
 			}
 			if (
 				typedEvent.type === "tool_execution_end" &&
-				!(typedEvent as { isError?: boolean }).isError &&
+				(typedEvent as { isError?: boolean }).isError !== true &&
 				isMutationTool((typedEvent as { toolName?: unknown }).toolName)
 			) {
 				triggerEarlyStop();
@@ -2194,7 +2194,7 @@ export function buildBenchmarkResult(params: {
 	const editAutocorrectRate =
 		totalToolCalls.editSuccesses > 0 ? totalToolCalls.editAutocorrects / totalToolCalls.editSuccesses : 0;
 	const timeoutRuns = nonGhostRuns.filter(
-		r => r.error?.includes("Timeout") ?? r.error?.includes("Timeout exhausted"),
+		r => r.error?.includes("Timeout") === true || r.error?.includes("Timeout exhausted") === true,
 	).length;
 	const totalTimeoutRetries = nonGhostRuns.reduce((sum, r) => sum + (r.retryStats?.timeoutRetries ?? 0), 0);
 	const totalZeroToolRetries = nonGhostRuns.reduce((sum, r) => sum + (r.retryStats?.zeroToolRetries ?? 0), 0);

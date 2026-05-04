@@ -795,7 +795,7 @@ function createKernelDisposalResultPromise(session: KernelSession, timeoutMs?: n
 		.then(() => session.kernel.shutdown(timeoutMs === undefined ? undefined : { timeoutMs }))
 		.then(
 			result => (result.confirmed ? { status: "confirmed" as const } : { status: "unconfirmed" as const }),
-			(error: unknown) => ({ status: "failed" as const, error }),
+			(error: unknown) => ({ status: "failed" as const, err: error }),
 		);
 }
 
@@ -1083,9 +1083,9 @@ async function executeWithKernel(
 				...(await sink.dump(timedOut ? formatTimeoutAnnotation(executionTimeoutMs) : undefined)),
 			};
 		}
-		const error = error instanceof Error ? error : new Error(String(error));
-		logger.error("Python execution failed", { error: error.message });
-		throw error;
+		const err = error instanceof Error ? error : new Error(String(error));
+		logger.error("Python execution failed", { error: err.message });
+		throw err;
 	}
 }
 
