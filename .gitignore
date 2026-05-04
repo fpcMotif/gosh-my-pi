@@ -54,6 +54,9 @@ out.jsonl
 out.html
 pi-*.html
 
+# Lint sweep tracking (regenerated per run; not for commit)
+.lint-history.jsonl
+
 # Generated files
 packages/coding-agent/src/internal-urls/docs-index.generated.ts
 /runs/
