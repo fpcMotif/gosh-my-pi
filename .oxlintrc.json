@@ -97,7 +97,8 @@
 				"packages/agent/src/**",
 				"packages/swarm-extension/**",
 				"packages/stats/**",
-				"packages/utils/**"
+				"packages/utils/**",
+				"packages/natives/**"
 			],
 			"rules": {
 				"complexity": "off",
@@ -145,7 +146,9 @@
 				"no-unused-vars": "off",
 				"no-unused-private-class-members": "off",
 				"no-unused-expressions": "off",
-				"no-useless-escape": "off"
+				"no-useless-escape": "off",
+				"no-floating-promises": "off",
+				"no-implied-eval": "off"
 			}
 		},
 		{
@@ -214,7 +217,10 @@
 				"consistent-type-imports": "off",
 				"no-misused-spread": "off",
 				"oxc/branches-sharing-code": "off",
-				"unicorn/no-nested-ternary": "off"
+				"unicorn/no-nested-ternary": "off",
+				"prefer-const": "off",
+				"no-implied-eval": "off",
+				"no-floating-promises": "off"
 			}
 		}
 	],

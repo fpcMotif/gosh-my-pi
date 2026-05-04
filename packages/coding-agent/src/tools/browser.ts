@@ -1471,8 +1471,10 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const value = (await untilAborted(signal, () =>
 						page.evaluate(async (source: string) => {
 							try {
+								// oxlint-disable-next-line no-implied-eval -- intentional: executing user JS in browser context via page.evaluate
 								return await new Function(`return (async () => (${source}))();`)();
 							} catch {
+								// oxlint-disable-next-line no-implied-eval -- intentional: executing user JS in browser context via page.evaluate
 								return await new Function(`return (async () => { ${source} })();`)();
 							}
 						}, script),

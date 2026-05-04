@@ -333,11 +333,9 @@ export class TUI extends Container {
 						const topVisible = this.#getTopmostVisibleOverlay();
 						this.setFocus(topVisible?.component ?? entry.preFocus);
 					}
-				} else {
+				} else if (this.#isOverlayVisible(entry)) {
 					// Restore focus to this overlay when showing (if it's actually visible)
-					if (this.#isOverlayVisible(entry)) {
-						this.setFocus(component);
-					}
+					this.setFocus(component);
 				}
 				this.requestRender();
 			},

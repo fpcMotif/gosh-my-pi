@@ -1282,7 +1282,7 @@ export class Editor implements Component, Focusable {
 
 				for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
 					const chunk = chunks[chunkIndex];
-					if (!chunk) continue;
+					if (chunk === undefined) continue;
 
 					const cursorPos = this.#state.cursorCol;
 					const isLastChunk = chunkIndex === chunks.length - 1;
@@ -1647,7 +1647,7 @@ export class Editor implements Component, Focusable {
 			// Find the last grapheme in the text before cursor
 			const graphemes = [...segmenter.segment(beforeCursor)];
 			const lastGrapheme = graphemes[graphemes.length - 1];
-			const graphemeLength = lastGrapheme ? lastGrapheme.segment.length : 1;
+			const graphemeLength = lastGrapheme !== undefined ? lastGrapheme.segment.length : 1;
 
 			const before = line.slice(0, this.#state.cursorCol - graphemeLength);
 			const after = line.slice(this.#state.cursorCol);
@@ -1713,7 +1713,7 @@ export class Editor implements Component, Focusable {
 		const currentVL = visualLines[currentVisualLine];
 		const targetVL = visualLines[targetVisualLine];
 
-		if (currentVL && targetVL) {
+		if (currentVL !== undefined && targetVL !== undefined) {
 			const currentVisualCol = this.#state.cursorCol - currentVL.startCol;
 
 			// For non-last segments, clamp to length-1 to stay within the segment
@@ -2125,7 +2125,7 @@ export class Editor implements Component, Focusable {
 			// Find the first grapheme at cursor
 			const graphemes = [...segmenter.segment(afterCursor)];
 			const firstGrapheme = graphemes[0];
-			const graphemeLength = firstGrapheme ? firstGrapheme.segment.length : 1;
+			const graphemeLength = firstGrapheme !== undefined ? firstGrapheme.segment.length : 1;
 
 			const before = currentLine.slice(0, this.#state.cursorCol);
 			const after = currentLine.slice(this.#state.cursorCol + graphemeLength);
@@ -2202,7 +2202,7 @@ export class Editor implements Component, Focusable {
 	#findCurrentVisualLine(visualLines: Array<{ logicalLine: number; startCol: number; length: number }>): number {
 		for (let i = 0; i < visualLines.length; i++) {
 			const vl = visualLines[i];
-			if (!vl) continue;
+			if (vl === undefined) continue;
 			if (vl.logicalLine === this.#state.cursorLine) {
 				const colInSegment = this.#state.cursorCol - vl.startCol;
 				// Cursor is in this segment if it's within range
@@ -2240,7 +2240,9 @@ export class Editor implements Component, Focusable {
 					const afterCursor = currentLine.slice(this.#state.cursorCol);
 					const graphemes = [...segmenter.segment(afterCursor)];
 					const firstGrapheme = graphemes[0];
-					this.#setCursorCol(this.#state.cursorCol + (firstGrapheme ? firstGrapheme.segment.length : 1));
+					this.#setCursorCol(
+						this.#state.cursorCol + (firstGrapheme !== undefined ? firstGrapheme.segment.length : 1),
+					);
 				} else if (this.#state.cursorLine < this.#state.lines.length - 1) {
 					// Wrap to start of next logical line
 					this.#state.cursorLine++;
@@ -2248,23 +2250,21 @@ export class Editor implements Component, Focusable {
 				} else {
 					// At end of last line - can't move, but set preferredVisualCol for up/down navigation
 					const currentVL = visualLines[currentVisualLine];
-					if (currentVL) {
+					if (currentVL !== undefined) {
 						this.#preferredVisualCol = this.#state.cursorCol - currentVL.startCol;
 					}
 				}
-			} else {
+			} else if (this.#state.cursorCol > 0) {
 				// Moving left - move by one grapheme (handles emojis, combining characters, etc.)
-				if (this.#state.cursorCol > 0) {
-					const beforeCursor = currentLine.slice(0, this.#state.cursorCol);
-					const graphemes = [...segmenter.segment(beforeCursor)];
-					const lastGrapheme = graphemes[graphemes.length - 1];
-					this.#setCursorCol(this.#state.cursorCol - (lastGrapheme ? lastGrapheme.segment.length : 1));
-				} else if (this.#state.cursorLine > 0) {
-					// Wrap to end of previous logical line
-					this.#state.cursorLine--;
-					const prevLine = this.#state.lines[this.#state.cursorLine] || "";
-					this.#setCursorCol(prevLine.length);
-				}
+				const beforeCursor = currentLine.slice(0, this.#state.cursorCol);
+				const graphemes = [...segmenter.segment(beforeCursor)];
+				const lastGrapheme = graphemes[graphemes.length - 1];
+				this.#setCursorCol(this.#state.cursorCol - (lastGrapheme !== undefined ? lastGrapheme.segment.length : 1));
+			} else if (this.#state.cursorLine > 0) {
+				// Wrap to end of previous logical line
+				this.#state.cursorLine--;
+				const prevLine = this.#state.lines[this.#state.cursorLine] || "";
+				this.#setCursorCol(prevLine.length);
 			}
 		}
 	}
@@ -2380,7 +2380,7 @@ export class Editor implements Component, Focusable {
 		if (explicitTab) {
 			const provider = this.#autocompleteProvider as CombinedAutocompleteProvider;
 			const shouldTrigger =
-				!provider.shouldTriggerFileCompletion ||
+				provider.shouldTriggerFileCompletion === undefined ||
 				provider.shouldTriggerFileCompletion(this.#state.lines, this.#state.cursorLine, this.#state.cursorCol);
 			if (!shouldTrigger) {
 				return;

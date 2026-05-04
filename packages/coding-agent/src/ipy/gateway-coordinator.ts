@@ -138,15 +138,15 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 				}
 			}
 		} catch (error) {
-			const error = error as NodeJS.ErrnoException;
-			if (error.code === "EEXIST") {
+			const err = error as NodeJS.ErrnoException;
+			if (err.code === "EEXIST") {
 				let removedStale = false;
 				try {
 					const lockStat = await fs.promises.stat(lockPath);
 					const lockInfo = await readLockInfo(lockPath);
 					const lockPid = lockInfo?.pid;
 					const lockAgeMs =
-						lockInfo?.startedAt !== null && lockInfo?.startedAt !== undefined && lockInfo?.startedAt !== 0
+						lockInfo !== null && lockInfo.startedAt > 0
 							? Date.now() - lockInfo.startedAt
 							: Date.now() - lockStat.mtimeMs;
 					const staleByTime = lockAgeMs > GATEWAY_LOCK_STALE_MS;
@@ -168,7 +168,7 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 				}
 				continue;
 			}
-			throw error;
+			throw err;
 		}
 	}
 }

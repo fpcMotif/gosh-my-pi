@@ -205,12 +205,10 @@ export class FileSessionStorage implements SessionStorage {
 		try {
 			await fsp.rm(artifactsDir, { recursive: true, force: true });
 		} catch (error) {
-			const error = toError(error);
+			const cause = toError(error);
 			throw new Error(
-				`Session file deleted but failed to remove artifacts directory ${artifactsDir}: ${error.message}`,
-				{
-					cause: error,
-				},
+				`Session file deleted but failed to remove artifacts directory ${artifactsDir}: ${cause.message}`,
+				{ cause },
 			);
 		}
 	}
