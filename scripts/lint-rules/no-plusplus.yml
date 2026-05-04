@@ -1,0 +1,39 @@
+id: no-plusplus-postfix-inc
+language: ts
+rule:
+   pattern: $X++
+   inside:
+      any:
+         - kind: expression_statement
+         - kind: for_statement
+fix: $X += 1
+---
+id: no-plusplus-postfix-dec
+language: ts
+rule:
+   pattern: $X--
+   inside:
+      any:
+         - kind: expression_statement
+         - kind: for_statement
+fix: $X -= 1
+---
+id: no-plusplus-prefix-inc
+language: ts
+rule:
+   pattern: ++$X
+   inside:
+      any:
+         - kind: expression_statement
+         - kind: for_statement
+fix: $X += 1
+---
+id: no-plusplus-prefix-dec
+language: ts
+rule:
+   pattern: --$X
+   inside:
+      any:
+         - kind: expression_statement
+         - kind: for_statement
+fix: $X -= 1
