@@ -9,10 +9,19 @@ import { execSync } from "node:child_process";
 
 const SKIP_FILES = new Set(["packages/coding-agent/src/export/html/template.generated.ts"]);
 
-const files = execSync(`rg -l '\\.aborted === true' packages --type ts -0`, { encoding: "buffer" })
-	.toString("utf8")
-	.split("\0")
-	.filter(Boolean);
+function rgListFiles(pattern: string): string[] {
+	try {
+		return execSync(`rg -l ${pattern} packages --type ts -0`, { encoding: "buffer" })
+			.toString("utf8")
+			.split("\0")
+			.filter(Boolean);
+	} catch {
+		// rg exits 1 when no matches — treat as empty result.
+		return [];
+	}
+}
+
+const files = rgListFiles(`'\\.aborted === true'`);
 
 let modified = 0;
 for (const f of files) {
@@ -26,14 +35,8 @@ for (const f of files) {
 
 	// Match `(EXPR?.aborted === true)` and `EXPR?.aborted === true`
 	let newText = text;
-	newText = newText.replace(
-		/\(([\w.?$#]+)\?\.aborted === true\)/g,
-		"($1 !== undefined && $1.aborted)",
-	);
-	newText = newText.replace(
-		/([\w.?$#]+)\?\.aborted === true/g,
-		"$1 !== undefined && $1.aborted",
-	);
+	newText = newText.replace(/\(([\w.?$#]+)\?\.aborted === true\)/g, "($1 !== undefined && $1.aborted)");
+	newText = newText.replace(/([\w.?$#]+)\?\.aborted === true/g, "$1 !== undefined && $1.aborted");
 
 	if (newText !== text) {
 		writeFileSync(f, newText);

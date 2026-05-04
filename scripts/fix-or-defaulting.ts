@@ -1,20 +1,35 @@
 #!/usr/bin/env bun
 /**
- * Fix wrongly-applied transformations of `x || N` defaulting patterns.
- * The script earlier wrapped `x` in a boolean check for strict-boolean-expressions,
- * but `x` was actually in `||` defaulting position (RHS of assignment, function arg, etc.)
- * The fix is to use `?? N` instead.
+ * Collapse defensive `(x !== null && x !== undefined) || N` patterns to `x ?? N`.
+ *
+ * IMPORTANT: only the (null && undefined) → ?? collapse is semantically equivalent.
+ * The earlier version of this script also collapsed `(x !== "" || x !== 0)` and
+ * `(x === true)` patterns, which silently flipped behavior:
+ *   - `(x !== "" ...) || N` returns N when x is `""`; `x ?? N` returns `""`.
+ *   - `(x !== 0 ...) || N` returns N when x is `0`; `x ?? N` returns `0`.
+ *   - `(x === true) || N` returns N when x is `false`; `x ?? N` returns `false`.
+ * Those rules have been removed. Do not re-add without per-call-site review —
+ * see `packages/coding-agent/src/tools/{gh,bash}.ts` for the bugs they caused.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const SKIP_FILES = new Set(["packages/coding-agent/src/export/html/template.generated.ts"]);
 
-const files = execSync(`rg -l '\\(.+\\) \\|\\|' packages --type ts -0`, { encoding: "buffer" })
-	.toString("utf8")
-	.split("\0")
-	.filter(Boolean);
+function rgListFiles(pattern: string): string[] {
+	try {
+		return execSync(`rg -l ${pattern} packages --type ts -0`, { encoding: "buffer" })
+			.toString("utf8")
+			.split("\0")
+			.filter(Boolean);
+	} catch {
+		// rg exits 1 when no matches — treat as empty result.
+		return [];
+	}
+}
+
+const files = rgListFiles(`'\\(.+\\) \\|\\|'`);
 
 let modified = 0;
 for (const f of files) {
@@ -26,35 +41,8 @@ for (const f of files) {
 		continue;
 	}
 
-	let newText = text;
-
-	// Long form: (x !== null && x !== undefined && x !== "") || N → x ?? N
-	newText = newText.replace(
-		/\(([A-Za-z_$#][\w$]*(?:(?:\?\.|\.)[#\w$]+|\[[^[\]]+\])*) !== null && \1 !== undefined && \1 !== ""\) \|\| /g,
-		"$1 ?? ",
-	);
-	// Long form: (x !== null && x !== undefined && x !== 0) || N → x ?? N
-	newText = newText.replace(
-		/\(([A-Za-z_$#][\w$]*(?:(?:\?\.|\.)[#\w$]+|\[[^[\]]+\])*) !== null && \1 !== undefined && \1 !== 0\) \|\| /g,
-		"$1 ?? ",
-	);
-	// Short form (legacy): (x !== undefined && x !== "") || N → x ?? N
-	newText = newText.replace(
-		/\(([A-Za-z_$#][\w$]*(?:(?:\?\.|\.)[#\w$]+|\[[^[\]]+\])*) !== undefined && \1 !== ""\) \|\| /g,
-		"$1 ?? ",
-	);
-	// Short form: (x !== undefined && x !== 0) || N → x ?? N
-	newText = newText.replace(
-		/\(([A-Za-z_$#][\w$]*(?:(?:\?\.|\.)[#\w$]+|\[[^[\]]+\])*) !== undefined && \1 !== 0\) \|\| /g,
-		"$1 ?? ",
-	);
-	// (x === true) || N → x ?? N (was x || N for nullable boolean)
-	newText = newText.replace(
-		/\(([A-Za-z_$#][\w$]*(?:(?:\?\.|\.)[#\w$]+|\[[^[\]]+\])*) === true\) \|\| /g,
-		"$1 ?? ",
-	);
-	// (x !== null && x !== undefined) || N — any-typed default
-	newText = newText.replace(
+	// Only safe rule: (x !== null && x !== undefined) || N → x ?? N
+	const newText = text.replace(
 		/\(([A-Za-z_$#][\w$]*(?:(?:\?\.|\.)[#\w$]+|\[[^[\]]+\])*) !== null && \1 !== undefined\) \|\| /g,
 		"$1 ?? ",
 	);

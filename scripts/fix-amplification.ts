@@ -15,13 +15,19 @@ import { execSync } from "node:child_process";
 
 const SKIP_FILES = new Set(["packages/coding-agent/src/export/html/template.generated.ts"]);
 
-const files = execSync(
-	`rg -l ' === true\\) === true\\)| !== "" \\) !== ""\\)| !== 0\\) !== 0\\)' packages --type ts -0`,
-	{ encoding: "buffer" },
-)
-	.toString("utf8")
-	.split("\0")
-	.filter(Boolean);
+function rgListFiles(pattern: string): string[] {
+	try {
+		return execSync(`rg -l ${pattern} packages --type ts -0`, { encoding: "buffer" })
+			.toString("utf8")
+			.split("\0")
+			.filter(Boolean);
+	} catch {
+		// rg exits 1 when no matches — treat as empty result.
+		return [];
+	}
+}
+
+const files = rgListFiles(`' === true\\) === true\\)| !== "" \\) !== ""\\)| !== 0\\) !== 0\\)'`);
 
 function collapseAmplified(text: string): string {
 	let out = text;

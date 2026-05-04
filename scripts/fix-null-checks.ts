@@ -10,13 +10,19 @@ import { execSync } from "node:child_process";
 
 const SKIP_FILES = new Set(["packages/coding-agent/src/export/html/template.generated.ts"]);
 
-const files = execSync(
-	`rg -l ' != null| == null' packages --type ts -0`,
-	{ encoding: "buffer" },
-)
-	.toString("utf8")
-	.split("\0")
-	.filter(Boolean);
+function rgListFiles(pattern: string): string[] {
+	try {
+		return execSync(`rg -l ${pattern} packages --type ts -0`, { encoding: "buffer" })
+			.toString("utf8")
+			.split("\0")
+			.filter(Boolean);
+	} catch {
+		// rg exits 1 when no matches — treat as empty result.
+		return [];
+	}
+}
+
+const files = rgListFiles(`' != null| == null'`);
 
 let modified = 0;
 for (const f of files) {
