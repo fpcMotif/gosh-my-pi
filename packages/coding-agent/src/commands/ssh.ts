@@ -37,7 +37,7 @@ export default class SSH extends Command {
 	async run(): Promise<void> {
 		const { args, flags } = await this.parse(SSH);
 		const action = (args.action ?? "list") as SSHAction;
-		const targets = Array.isArray(args.targets) ? args.targets : (args.targets ? [args.targets] : []);
+		const targets = Array.isArray(args.targets) ? args.targets : args.targets ? [args.targets] : [];
 
 		const cmd: SSHCommandArgs = {
 			action,

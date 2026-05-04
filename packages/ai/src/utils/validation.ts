@@ -92,7 +92,7 @@ function tryParseNumberString(value: string, expectedTypes: string[]): { value: 
 
 function tryParseLeadingJsonContainer(value: string): unknown | undefined {
 	const firstChar = value[0];
-	const closingChar = firstChar === "{" ? "}" : (firstChar === "[" ? "]" : undefined);
+	const closingChar = firstChar === "{" ? "}" : firstChar === "[" ? "]" : undefined;
 	if (!closingChar) return undefined;
 
 	let depth = 0;

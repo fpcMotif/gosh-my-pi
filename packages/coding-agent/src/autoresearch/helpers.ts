@@ -411,9 +411,9 @@ function parsePendingRunSummary(
 	const checksPass =
 		typeof candidate.checks?.passed === "boolean"
 			? candidate.checks.passed
-			: (typeof candidate.checks?.timedOut === "boolean" && candidate.checks.timedOut
+			: typeof candidate.checks?.timedOut === "boolean" && candidate.checks.timedOut
 				? false
-				: null);
+				: null;
 	const exitCode =
 		typeof candidate.exitCode === "number" && Number.isFinite(candidate.exitCode) ? candidate.exitCode : null;
 	const timedOut = candidate.timedOut === true;

@@ -116,9 +116,9 @@ export function renderSearchResult(
 	const queryPreview =
 		args?.query !== null && args?.query !== undefined && args?.query !== ""
 			? truncateToWidth(args.query, 80)
-			: (searchQueries[0]
+			: searchQueries[0]
 				? truncateToWidth(searchQueries[0], 80)
-				: undefined);
+				: undefined;
 	const header = renderStatusLine(
 		{
 			icon: sourceCount > 0 ? "success" : "warning",
@@ -133,7 +133,7 @@ export function renderSearchResult(
 	metaLines.push(`${theme.fg("muted", "Provider:")} ${theme.fg("text", providerLabel)}`);
 	if (response.authMode !== null && response.authMode !== undefined && response.authMode !== "")
 		metaLines.push(
-			`${theme.fg("muted", "Auth:")} ${theme.fg("text", response.authMode === "oauth" ? "OAuth" : (response.authMode === "api_key" ? "API key" : response.authMode))}`,
+			`${theme.fg("muted", "Auth:")} ${theme.fg("text", response.authMode === "oauth" ? "OAuth" : response.authMode === "api_key" ? "API key" : response.authMode)}`,
 		);
 	if (response.model !== null && response.model !== undefined && response.model !== "")
 		metaLines.push(`${theme.fg("muted", "Model:")} ${theme.fg("text", response.model)}`);
@@ -171,9 +171,9 @@ export function renderSearchResult(
 			// Expanded-dependent computations
 			const answerLimit = expanded ? MAX_EXPANDED_ANSWER_LINES : MAX_COLLAPSED_ANSWER_LINES;
 			const answerPreview = contentText
-				? (args?.allowLongAnswer === true
+				? args?.allowLongAnswer === true
 					? answerLines.slice(0, args.maxAnswerLines ?? answerLines.length)
-					: getPreviewLines(contentText, answerLimit, MAX_ANSWER_LINE_LEN))
+					: getPreviewLines(contentText, answerLimit, MAX_ANSWER_LINE_LEN)
 				: [];
 			const remainingAnswer = totalAnswerLines - answerPreview.length;
 
@@ -187,9 +187,9 @@ export function renderSearchResult(
 						const titleText =
 							typeof src.title === "string" && src.title.trim()
 								? src.title
-								: (typeof src.url === "string" && src.url.trim()
+								: typeof src.url === "string" && src.url.trim()
 									? src.url
-									: "Untitled");
+									: "Untitled";
 						const title = truncateToWidth(titleText, MAX_SNIPPET_LINE_LEN);
 						const url = typeof src.url === "string" ? src.url : "";
 						const domain = url ? getDomain(url) : "";

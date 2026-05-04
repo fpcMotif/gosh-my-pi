@@ -176,7 +176,7 @@ export function renderResult(
 				label = "Diagnostics";
 				const errorCount = errorMatch ? Number.parseInt(errorMatch[1], 10) : 0;
 				const warnCount = warningMatch ? Number.parseInt(warningMatch[1], 10) : 0;
-				state = errorCount > 0 ? "error" : (warnCount > 0 ? "warning" : "success");
+				state = errorCount > 0 ? "error" : warnCount > 0 ? "warning" : "success";
 				bodyLines = renderDiagnostics(errorMatch, warningMatch, lines, expanded, theme);
 			} else if (refMatch) {
 				label = "References";
@@ -190,7 +190,7 @@ export function renderResult(
 			}
 
 			const actionLabel = (request?.action ?? result.details?.action ?? label.toLowerCase()).replace(/_/g, " ");
-			const status = isPartial ? "running" : (result.isError === true ? "error" : "success");
+			const status = isPartial ? "running" : result.isError === true ? "error" : "success";
 			const icon = formatStatusIcon(status, theme, spinnerFrame);
 			const header = `${icon} LSP ${actionLabel}`;
 
@@ -340,9 +340,9 @@ function renderDiagnostics(
 	const icon =
 		errorCount > 0
 			? theme.styledSymbol("status.error", "error")
-			: (warnCount > 0
+			: warnCount > 0
 				? theme.styledSymbol("status.warning", "warning")
-				: theme.styledSymbol("status.success", "success"));
+				: theme.styledSymbol("status.success", "success");
 
 	const meta: string[] = [];
 	if (errorCount > 0) meta.push(`${errorCount} error${errorCount !== 1 ? "s" : ""}`);
@@ -614,9 +614,9 @@ function renderGeneric(text: string, lines: string[], expanded: boolean, theme: 
 	const icon =
 		hasError && !hasSuccess
 			? theme.styledSymbol("status.error", "error")
-			: (hasSuccess && !hasError
+			: hasSuccess && !hasError
 				? theme.styledSymbol("status.success", "success")
-				: theme.styledSymbol("status.info", "accent"));
+				: theme.styledSymbol("status.info", "accent");
 
 	if (expanded) {
 		let output = `${icon} ${theme.fg("dim", "Output")}`;

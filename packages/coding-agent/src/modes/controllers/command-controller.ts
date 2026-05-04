@@ -338,7 +338,7 @@ export class CommandController {
 			const authMode = resolveProviderAuthMode(this.ctx.session.modelRegistry.authStorage, model.provider);
 			const openaiWebsocketSetting = this.ctx.settings.get("providers.openaiWebsockets") ?? "auto";
 			const preferOpenAICodexWebsockets =
-				openaiWebsocketSetting === "on" ? true : (openaiWebsocketSetting === "off" ? false : undefined);
+				openaiWebsocketSetting === "on" ? true : openaiWebsocketSetting === "off" ? false : undefined;
 			const providerDetails = getProviderDetails({
 				model,
 				sessionId: stats.sessionId,
@@ -402,7 +402,7 @@ export class CommandController {
 			info += `\n${theme.bold("LSP Servers")}\n`;
 			for (const server of this.ctx.lspServers) {
 				const statusColor =
-					server.status === "ready" ? "success" : (server.status === "connecting" ? "warning" : "error");
+					server.status === "ready" ? "success" : server.status === "connecting" ? "warning" : "error";
 				const statusText =
 					server.status === "error" && server.error !== null && server.error !== undefined && server.error !== ""
 						? `${server.status}: ${server.error}`

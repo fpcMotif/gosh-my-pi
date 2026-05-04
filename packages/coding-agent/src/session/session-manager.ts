@@ -412,9 +412,9 @@ function getDefaultSessionDirName(cwd: string): { encodedDirName: string; resolv
 	const tempRoot = resolveEquivalentPath(os.tmpdir());
 	const encodedDirName = pathIsWithin(home, canonicalCwd)
 		? encodeRelativeSessionDirName("-", home, canonicalCwd)
-		: (pathIsWithin(tempRoot, canonicalCwd)
+		: pathIsWithin(tempRoot, canonicalCwd)
 			? encodeRelativeSessionDirName("-tmp", tempRoot, canonicalCwd)
-			: encodeLegacyAbsoluteSessionDirName(canonicalCwd));
+			: encodeLegacyAbsoluteSessionDirName(canonicalCwd);
 	return { encodedDirName, resolvedCwd };
 }
 

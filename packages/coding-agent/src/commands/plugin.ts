@@ -55,7 +55,7 @@ export default class Plugin extends Command {
 		const { args, flags } = await this.parse(Plugin);
 		const action = (args.action ?? "list") as PluginAction;
 
-		const targets = Array.isArray(args.targets) ? args.targets : (args.targets ? [args.targets] : []);
+		const targets = Array.isArray(args.targets) ? args.targets : args.targets ? [args.targets] : [];
 		const cmd: PluginCommandArgs = {
 			action,
 			args: targets,

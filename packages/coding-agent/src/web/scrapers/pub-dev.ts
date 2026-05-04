@@ -108,7 +108,7 @@ export const handlePubDev: SpecialHandler = async (url: string, timeout: number,
 				for (const dep of deps.slice(0, 20)) {
 					const constraint = pubspec.dependencies[dep];
 					const constraintStr =
-						typeof constraint === "string" ? constraint : (typeof constraint === "object" ? "complex" : "");
+						typeof constraint === "string" ? constraint : typeof constraint === "object" ? "complex" : "";
 					md += `- ${dep}`;
 					if (constraintStr) md += `: ${constraintStr}`;
 					md += "\n";

@@ -379,9 +379,9 @@ export class TaskTool implements AgentTool<TSchema, TaskToolDetails, Theme> {
 								progress.status =
 									singleResult !== undefined && singleResult.aborted
 										? "aborted"
-										: ((singleResult?.exitCode ?? 0) === 0
+										: (singleResult?.exitCode ?? 0) === 0
 											? "completed"
-											: "failed");
+											: "failed";
 								progress.durationMs = singleResult?.durationMs ?? Math.max(0, Date.now() - startedAt);
 								progress.tokens = singleResult?.tokens ?? 0;
 								progress.extractedToolData = singleResult?.extractedToolData;

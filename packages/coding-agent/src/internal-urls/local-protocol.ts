@@ -82,12 +82,12 @@ function extractRelativePath(url: InternalUrl): string {
 	const pathname = url.rawPathname ?? url.pathname;
 
 	const combined = host
-		? (pathname && pathname !== "/"
+		? pathname && pathname !== "/"
 			? `${host}${pathname}`
-			: host)
-		: (pathname && pathname !== "/"
+			: host
+		: pathname && pathname !== "/"
 			? pathname.slice(1)
-			: "");
+			: "";
 
 	if (!combined) {
 		return "";

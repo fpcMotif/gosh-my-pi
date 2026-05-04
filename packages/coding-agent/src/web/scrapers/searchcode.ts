@@ -139,9 +139,9 @@ export const handleSearchcode: SpecialHandler = async (
 		const total =
 			typeof data.total === "number"
 				? data.total
-				: (typeof data.total_results === "number"
+				: typeof data.total_results === "number"
 					? data.total_results
-					: null);
+					: null;
 
 		let md = `# Searchcode Results\n\n`;
 		md += `## Description\n\n`;

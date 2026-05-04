@@ -139,9 +139,9 @@ async function executeSearch(
 ): Promise<{ content: Array<{ type: "text"; text: string }>; details: SearchRenderDetails }> {
 	const providers =
 		params.provider && params.provider !== "auto"
-			? ((await getSearchProvider(params.provider).isAvailable())
+			? (await getSearchProvider(params.provider).isAvailable())
 				? [getSearchProvider(params.provider)]
-				: await resolveProviderChain("auto"))
+				: await resolveProviderChain("auto")
 			: await resolveProviderChain();
 	if (providers.length === 0) {
 		const message = "No web search provider configured.";

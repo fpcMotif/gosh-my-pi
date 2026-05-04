@@ -94,11 +94,11 @@ export const handleSpdx: SpecialHandler = async (
 		const licenseText =
 			license.licenseText !== null && license.licenseText !== undefined && license.licenseText !== ""
 				? license.licenseText
-				: (license.licenseTextHtml !== null &&
+				: license.licenseTextHtml !== null &&
 					  license.licenseTextHtml !== undefined &&
 					  license.licenseTextHtml !== ""
 					? htmlToBasicMarkdown(license.licenseTextHtml)
-					: null);
+					: null;
 
 		if (licenseText !== null && licenseText !== undefined && licenseText !== "") {
 			md += `\n## License Text\n\n\`\`\`\n${licenseText}\n\`\`\`\n`;

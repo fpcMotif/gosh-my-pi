@@ -87,9 +87,9 @@ export function runCli(argv: string[]): Promise<void> {
 	const runArgv =
 		first === "--help" || first === "-h" || first === "--version" || first === "-v" || first === "help"
 			? argv
-			: (isSubcommand(first)
+			: isSubcommand(first)
 				? argv
-				: ["launch", ...argv]);
+				: ["launch", ...argv];
 	return run({ bin: APP_NAME, version: VERSION, argv: runArgv, commands, help: showHelp });
 }
 

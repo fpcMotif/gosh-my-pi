@@ -29,9 +29,9 @@ export default class Grep extends Command {
 		const mode: GrepCommandArgs["mode"] =
 			flags.count === true
 				? GrepOutputMode.Count
-				: (flags.files === true
+				: flags.files === true
 					? GrepOutputMode.FilesWithMatches
-					: GrepOutputMode.Content);
+					: GrepOutputMode.Content;
 
 		const cmd: GrepCommandArgs = {
 			pattern: args.pattern ?? "",

@@ -237,7 +237,7 @@ export const notebookToolRenderer = {
 		const cellSource = details?.cellSource ?? [];
 		const lineCount = cellSource.length;
 
-		const actionLabel = action === "insert" ? "Inserted" : (action === "delete" ? "Deleted" : "Edited");
+		const actionLabel = action === "insert" ? "Inserted" : action === "delete" ? "Deleted" : "Edited";
 		const cellLabel = cellType ?? "cell";
 		const summaryParts = [`${actionLabel} ${cellLabel} ${cellIndex ?? "?"}`];
 		if (lineCount > 0) summaryParts.push(formatCount("line", lineCount));

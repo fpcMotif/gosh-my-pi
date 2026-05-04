@@ -92,7 +92,7 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 		} else {
 			entry.correctedFrom = undefined;
 		}
-		entry.status = result.isError === true ? "error" : (suffixResolution ? "warning" : "success");
+		entry.status = result.isError === true ? "error" : suffixResolution ? "warning" : "success";
 		// Store the text content for preview/expanded display
 		const textContent = result.content?.find(c => c.type === "text")?.text;
 		if (textContent !== undefined) {

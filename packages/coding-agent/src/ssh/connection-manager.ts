@@ -151,9 +151,9 @@ function applyCompatOverride(host: SSHConnectionTarget, info: SSHHostInfo): SSHH
 		info.compatShell ??
 		(info.os === "windows" && info.shell === "bash"
 			? "bash"
-			: (info.os === "windows" && info.shell === "sh"
+			: info.os === "windows" && info.shell === "sh"
 				? "sh"
-				: undefined));
+				: undefined);
 	const compatEnabled = host.compat === false ? false : info.os === "windows" && compatShell !== undefined;
 	if (host.compat === true && !compatShell) {
 		logger.warn("SSH compat requested but no compatible shell detected", {

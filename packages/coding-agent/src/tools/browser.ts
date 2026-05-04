@@ -1140,9 +1140,9 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 			const key =
 				method === "Runtime.evaluate"
 					? "expression"
-					: (method === "Runtime.callFunctionOn"
+					: method === "Runtime.callFunctionOn"
 						? "functionDeclaration"
-						: null);
+						: null;
 			if (!key) {
 				return next(params);
 			}

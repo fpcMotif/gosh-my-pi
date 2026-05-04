@@ -698,7 +698,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const providerSessionId = options.providerSessionId ?? sessionManager.getSessionId();
 	const modelApiKeyAvailability = new Map<string, boolean>();
 	const getModelAvailabilityKey = (candidate: Model): string =>
-		`${candidate.provider}\u0000${(candidate.baseUrl !== undefined && candidate.baseUrl !== null) ? candidate.baseUrl : ""}`;
+		`${candidate.provider}\u0000${candidate.baseUrl !== undefined && candidate.baseUrl !== null ? candidate.baseUrl : ""}`;
 	const hasModelApiKey = async (candidate: Model): Promise<boolean> => {
 		const availabilityKey = getModelAvailabilityKey(candidate);
 		const cached = modelApiKeyAvailability.get(availabilityKey);
@@ -891,12 +891,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		? new AsyncJobManager({
 				maxRunningJobs: asyncMaxJobs,
 				onJobComplete: async (jobId, result, job) => {
-					if (session === null || session === undefined || asyncJobManager?.isDeliverySuppressed(jobId) === true) return;
+					if (session === null || session === undefined || asyncJobManager?.isDeliverySuppressed(jobId) === true)
+						return;
 					const formattedResult = await formatAsyncResultForFollowUp(result);
 					if (asyncJobManager?.isDeliverySuppressed(jobId) === true) return;
 
 					const message = prompt.render(asyncResultTemplate, { jobId, result: formattedResult });
-					const durationMs = job !== null && job !== undefined ? Math.max(0, Date.now() - job.startTime) : undefined;
+					const durationMs =
+						job !== null && job !== undefined ? Math.max(0, Date.now() - job.startTime) : undefined;
 					await session.sendCustomMessage(
 						{
 							customType: "async-result",
@@ -955,7 +957,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			getPythonKernelOwnerId: () => pythonKernelOwnerId,
 			assertPythonExecutionAllowed: () => session?.assertPythonExecutionAllowed(),
 			trackPythonExecution: (execution, abortController) =>
-				(session !== null && session !== undefined) ? session.trackPythonExecution(execution, abortController) : execution,
+				session !== null && session !== undefined
+					? session.trackPythonExecution(execution, abortController)
+					: execution,
 			getSessionId: () => sessionManager.getSessionId?.() ?? null,
 			getAgentId: () => resolvedAgentId,
 			agentRegistry,
@@ -1277,7 +1281,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				model: agent?.state.model,
 				isIdle: () => session === null || session === undefined || session.isStreaming === false,
 				hasQueuedMessages: () => (session?.queuedMessageCount ?? 0) > 0,
-				abort: () => { void session?.abort(); },
+				abort: () => {
+					void session?.abort();
+				},
 				settings,
 			});
 			wrappedExtensionTools = (options.customTools ?? [])
@@ -1526,14 +1532,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 		const openaiWebsocketSetting = settings.get("providers.openaiWebsockets") ?? "off";
 		const preferOpenAICodexWebsockets =
-			openaiWebsocketSetting === "on" ? true : (openaiWebsocketSetting === "off" ? false : undefined);
+			openaiWebsocketSetting === "on" ? true : openaiWebsocketSetting === "off" ? false : undefined;
 		const serviceTierSetting = settings.get("serviceTier");
 
 		const initialServiceTier = hasServiceTierEntry
 			? existingSession.serviceTier
-			: (serviceTierSetting === "none"
+			: serviceTierSetting === "none"
 				? undefined
-				: serviceTierSetting);
+				: serviceTierSetting;
 
 		agent = new Agent({
 			initialState: {

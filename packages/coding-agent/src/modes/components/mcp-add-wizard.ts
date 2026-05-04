@@ -703,7 +703,7 @@ export class MCPAddWizard extends Container {
 			case "command":
 			case "url":
 				this.#currentStep = "transport";
-				this.#selectedIndex = this.#state.transport === "stdio" ? 0 : (this.#state.transport === "http" ? 1 : 2);
+				this.#selectedIndex = this.#state.transport === "stdio" ? 0 : this.#state.transport === "http" ? 1 : 2;
 				break;
 			case "args":
 				this.#currentStep = "command";

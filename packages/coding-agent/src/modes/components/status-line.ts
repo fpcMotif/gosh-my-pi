@@ -497,9 +497,9 @@ export class StatusLineComponent implements Component {
 			if (parts.length === 0) return "";
 			const sep = direction === "left" ? separatorDef.left : separatorDef.right;
 			const cap = separatorDef.endCaps
-				? (direction === "left"
+				? direction === "left"
 					? separatorDef.endCaps.right
-					: separatorDef.endCaps.left)
+					: separatorDef.endCaps.left
 				: "";
 			const capPrefix =
 				separatorDef.endCaps?.useBgAsFg === true ? bgAnsi.replace("\x1b[48;", "\x1b[38;") : bgAnsi + sepAnsi;

@@ -105,7 +105,7 @@ export class FooterComponent implements Component {
 
 		const headState = git.head.resolveSync(getProjectDir());
 		this.#cachedBranch =
-			headState === null ? null : (headState.kind === "ref" ? (headState.branchName ?? headState.ref) : "detached");
+			headState === null ? null : headState.kind === "ref" ? (headState.branchName ?? headState.ref) : "detached";
 		return this.#cachedBranch;
 	}
 

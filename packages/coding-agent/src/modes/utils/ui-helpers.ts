@@ -202,9 +202,9 @@ export class UiHelpers {
 					} else {
 						suffix = file.image
 							? "(image)"
-							: (file.lineCount === undefined
+							: file.lineCount === undefined
 								? "(unknown lines)"
-								: `(${file.lineCount} lines)`);
+								: `(${file.lineCount} lines)`;
 					}
 					const text = `${theme.fg("dim", `${theme.tree.last} `)}${theme.fg("muted", "Read")} ${theme.fg(
 						"accent",
@@ -284,14 +284,14 @@ export class UiHelpers {
 				readGroup = null;
 				const hasErrorStop = message.stopReason === "aborted" || message.stopReason === "error";
 				const errorMessage = hasErrorStop
-					? (message.stopReason === "aborted"
+					? message.stopReason === "aborted"
 						? (() => {
 								const retryAttempt = this.ctx.session.retryAttempt;
 								return retryAttempt > 0
 									? `Aborted after ${retryAttempt} retry attempt${retryAttempt > 1 ? "s" : ""}`
 									: "Operation aborted";
 							})()
-						: (message.errorMessage ?? "Error"))
+						: (message.errorMessage ?? "Error")
 					: null;
 
 				// Render tool call components

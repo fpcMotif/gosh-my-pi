@@ -367,7 +367,7 @@ export function createLogExperimentTool(
 			};
 		},
 		renderCall(args, _options, theme): Text {
-			const color = args.status === "keep" ? "success" : (args.status === "discard" ? "warning" : "error");
+			const color = args.status === "keep" ? "success" : args.status === "discard" ? "warning" : "error";
 			const description = truncateToWidth(replaceTabs(args.description), 100);
 			return new Text(
 				`${theme.fg("toolTitle", theme.bold("log_experiment"))} ${theme.fg(color, args.status)} ${theme.fg("muted", description)}`,
@@ -731,7 +731,7 @@ function buildLogText(
 		lines.push(`ASI: ${asiSummary}`);
 	}
 	if (state.confidence !== null) {
-		const status = state.confidence >= 2 ? "likely real" : (state.confidence >= 1 ? "marginal" : "within noise");
+		const status = state.confidence >= 2 ? "likely real" : state.confidence >= 1 ? "marginal" : "within noise";
 		lines.push(`Confidence: ${state.confidence.toFixed(1)}x noise floor (${status})`);
 	}
 	if (gitNote !== null && gitNote !== undefined && gitNote !== "") {
@@ -762,7 +762,7 @@ function truncateAsiValue(value: ASIData[string]): string {
 
 function renderSummary(details: LogDetails, theme: Theme): string {
 	const { experiment, state } = details;
-	const color = experiment.status === "keep" ? "success" : (experiment.status === "discard" ? "warning" : "error");
+	const color = experiment.status === "keep" ? "success" : experiment.status === "discard" ? "warning" : "error";
 	let summary = `${theme.fg(color, experiment.status.toUpperCase())} ${theme.fg("muted", truncateToWidth(replaceTabs(experiment.description), 100))}`;
 	summary += ` ${theme.fg("accent", `${state.metricName}=${formatNum(experiment.metric, state.metricUnit)}`)}`;
 	if (state.bestMetric !== null) {

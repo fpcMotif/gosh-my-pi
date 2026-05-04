@@ -80,7 +80,7 @@ function parseBuiltinSlashCommand(text: string): ParsedBuiltinSlashCommand | nul
 	const firstWhitespace = body.search(/\s/);
 	const firstColon = body.indexOf(":");
 	const firstSeparator =
-		firstWhitespace === -1 ? firstColon : (firstColon === -1 ? firstWhitespace : Math.min(firstWhitespace, firstColon));
+		firstWhitespace === -1 ? firstColon : firstColon === -1 ? firstWhitespace : Math.min(firstWhitespace, firstColon);
 
 	if (firstSeparator === -1) {
 		return {

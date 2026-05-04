@@ -95,9 +95,9 @@ function combineAbortSignal(
 	const timeoutMs =
 		remainingMs === undefined
 			? timeoutCapMs
-			: (timeoutCapMs === undefined
+			: timeoutCapMs === undefined
 				? remainingMs
-				: Math.min(remainingMs, timeoutCapMs));
+				: Math.min(remainingMs, timeoutCapMs);
 
 	if (timeoutMs !== undefined) {
 		if (timeoutMs <= 0) {

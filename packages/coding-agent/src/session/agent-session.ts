@@ -6249,9 +6249,9 @@ export class AgentSession {
 			this.agent.setThinkingLevel(toReasoningEffort(nextThinkingLevel));
 			this.agent.serviceTier = hasServiceTierEntry
 				? sessionContext.serviceTier
-				: (configuredServiceTier === "none"
+				: configuredServiceTier === "none"
 					? undefined
-					: configuredServiceTier);
+					: configuredServiceTier;
 
 			this.#reconnectToAgent();
 			return true;

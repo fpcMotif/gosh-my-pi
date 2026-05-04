@@ -756,7 +756,7 @@ export class DebugLogViewerComponent implements Component {
 			const cursorLogIndex = this.#model.cursorLogIndex;
 			const active = cursorLogIndex !== undefined && cursorLogIndex === logIndex;
 			const expanded = this.#model.isExpanded(logIndex);
-			const marker = active ? theme.fg("accent", "❯") : (selected ? theme.fg("accent", "•") : " ");
+			const marker = active ? theme.fg("accent", "❯") : selected ? theme.fg("accent", "•") : " ";
 			const fold = expanded ? theme.fg("accent", "▾") : theme.fg("muted", "▸");
 			const prefix = `${marker}${fold} `;
 			const contentWidth = Math.max(1, innerWidth - visibleWidth(prefix));

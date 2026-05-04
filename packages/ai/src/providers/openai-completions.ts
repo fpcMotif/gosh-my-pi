@@ -1065,9 +1065,9 @@ export function convertMessages(
 
 		lastRole =
 			msg.role === "developer"
-				? (model.reasoning && compat.supportsDeveloperRole
+				? model.reasoning && compat.supportsDeveloperRole
 					? "developer"
-					: "system")
+					: "system"
 				: msg.role;
 	}
 

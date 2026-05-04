@@ -809,9 +809,9 @@ export class VimEngine {
 					const transformed =
 						next.value === "u"
 							? original.toLowerCase()
-							: (next.value === "U"
+							: next.value === "U"
 								? original.toUpperCase()
-								: toggleCase(original));
+								: toggleCase(original);
 					this.buffer.replaceOffsets(visual.start, visual.end, transformed, visual.start);
 				});
 				this.#clearSelection();
@@ -849,9 +849,9 @@ export class VimEngine {
 				const operatorValue =
 					opToken.value === "x" || opToken.value === "X" || opToken.value === "D"
 						? "d"
-						: (opToken.value === "s" || opToken.value === "S" || opToken.value === "C"
+						: opToken.value === "s" || opToken.value === "S" || opToken.value === "C"
 							? "c"
-							: opToken.value);
+							: opToken.value;
 				const visualTokens = consumeExtraIndent ? [opToken.value, opToken.value] : [opToken.value];
 				await this.#applyVisualOperator(operatorValue, visual, count, visualTokens);
 				return nextIndex + visualTokens.length;
@@ -2278,7 +2278,7 @@ export class VimEngine {
 					slice.sort((a, b) => {
 						const left = ignoreCase ? a.toLowerCase() : a;
 						const right = ignoreCase ? b.toLowerCase() : b;
-						return left < right ? -1 : (left > right ? 1 : 0);
+						return left < right ? -1 : left > right ? 1 : 0;
 					});
 					if (reverse) slice.reverse();
 					for (let i = 0; i < slice.length; i++) {

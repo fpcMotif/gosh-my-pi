@@ -157,9 +157,9 @@ export class OutputMetaBuilder {
 		const truncatedBy: "lines" | "bytes" =
 			summary.outputBytes < summary.totalBytes
 				? "bytes"
-				: (summary.outputLines < summary.totalLines
+				: summary.outputLines < summary.totalLines
 					? "lines"
-					: "bytes");
+					: "bytes";
 
 		let shownStart: number;
 		let shownEnd: number;

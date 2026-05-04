@@ -75,9 +75,9 @@ export function extractScopeCandidates(numstat: NumstatEntry[]): ScopeCandidates
 	for (const candidate of candidates.slice(0, 5)) {
 		if (candidate.percentage < 10) continue;
 		const confidenceLabel = candidate.path.includes("/")
-			? (candidate.percentage > 60
+			? candidate.percentage > 60
 				? "high confidence"
-				: "moderate confidence")
+				: "moderate confidence"
 			: "high confidence";
 		suggestionParts.push(`${candidate.path} (${candidate.percentage.toFixed(0)}%, ${confidenceLabel})`);
 	}

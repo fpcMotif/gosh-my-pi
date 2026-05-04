@@ -992,9 +992,9 @@ export class MCPCommandController {
 						const status =
 							state === "connected"
 								? theme.fg("success", " ● connected")
-								: (state === "connecting"
+								: state === "connecting"
 									? theme.fg("muted", " ◌ connecting")
-									: theme.fg("muted", " ○ not connected"));
+									: theme.fg("muted", " ○ not connected");
 						lines.push(`  ${theme.fg("accent", name)}${status}`);
 					}
 					lines.push("");
@@ -1227,9 +1227,9 @@ export class MCPCommandController {
 					const status =
 						state === "connected"
 							? theme.fg("success", "Connected")
-							: (state === "connecting"
+							: state === "connecting"
 								? theme.fg("muted", "Connecting")
-								: theme.fg("warning", "Not connected yet"));
+								: theme.fg("warning", "Not connected yet");
 					this.#showMessage(
 						["", theme.fg("success", `\u2713 Enabled "${name}"`), "", `  Status: ${status}`, ""].join("\n"),
 					);
@@ -1260,9 +1260,9 @@ export class MCPCommandController {
 				status =
 					state === "connected"
 						? theme.fg("success", "Connected")
-						: (state === "connecting"
+						: state === "connecting"
 							? theme.fg("muted", "Connecting")
-							: theme.fg("warning", "Not connected yet"));
+							: theme.fg("warning", "Not connected yet");
 			}
 
 			const lines = [
@@ -1373,9 +1373,9 @@ export class MCPCommandController {
 				`  Status: ${
 					state === "connected"
 						? theme.fg("success", "connected")
-						: (state === "connecting"
+						: state === "connecting"
 							? theme.fg("muted", "connecting")
-							: theme.fg("warning", "not connected"))
+							: theme.fg("warning", "not connected")
 				}`,
 				"",
 			];
@@ -1609,9 +1609,9 @@ export class MCPCommandController {
 				const subStatus =
 					enabled && subCount > 0
 						? theme.fg("success", `subscribed (${subCount} URI${subCount !== 1 ? "s" : ""})`)
-						: (enabled
+						: enabled
 							? theme.fg("muted", "no active subscriptions")
-							: theme.fg("dim", "inactive (notifications disabled)"));
+							: theme.fg("dim", "inactive (notifications disabled)");
 				lines.push(`  ${check} resources/subscribe  ${subStatus}`);
 				if (enabled && subscribedUris && subscribedUris.size > 0) {
 					for (const uri of subscribedUris) {

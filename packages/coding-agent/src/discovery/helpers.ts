@@ -257,9 +257,9 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	const rawThinkingLevel =
 		typeof frontmatter.thinkingLevel === "string"
 			? frontmatter.thinkingLevel
-			: (typeof frontmatter.thinking === "string"
+			: typeof frontmatter.thinking === "string"
 				? frontmatter.thinking
-				: undefined);
+				: undefined;
 
 	const thinkingLevel = parseThinkingLevel(rawThinkingLevel);
 	const model = parseModelList(frontmatter.model);
@@ -290,7 +290,7 @@ export interface ScanSkillsFromDirOptions {
 
 // Stable ordering used for skill lists in prompts: name (case-insensitive), then name, then path.
 export function compareSkillOrder(aName: string, aPath: string, bName: string, bPath: string): number {
-	const cmp = (a: string, b: string): number => (a < b ? -1 : (a > b ? 1 : 0));
+	const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 	const lowerCompare = cmp(aName.toLowerCase(), bName.toLowerCase());
 	if (lowerCompare !== 0) return lowerCompare;
 	const nameCompare = cmp(aName, bName);

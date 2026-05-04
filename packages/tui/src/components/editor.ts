@@ -748,7 +748,7 @@ export class Editor implements Component, Focusable {
 			let cursorInPadding = false;
 			const showPromptGutter = promptGutter !== undefined && visibleIndex === 0;
 			const gutterText =
-				promptGutter === undefined ? "" : (showPromptGutter ? promptGutter.firstLine : promptGutter.continuation);
+				promptGutter === undefined ? "" : showPromptGutter ? promptGutter.firstLine : promptGutter.continuation;
 
 			// Add cursor if this line has it
 			const hasCursor = layoutLine.hasCursor && layoutLine.cursorPos !== undefined;
@@ -2313,9 +2313,9 @@ export class Editor implements Component, Focusable {
 
 			// Current line: start after/before cursor; other lines: search full line
 			const searchFrom = isCurrentLine
-				? (isForward
+				? isForward
 					? this.#state.cursorCol + 1
-					: this.#state.cursorCol - 1)
+					: this.#state.cursorCol - 1
 				: undefined;
 
 			const idx = isForward ? line.indexOf(char, searchFrom) : line.lastIndexOf(char, searchFrom);

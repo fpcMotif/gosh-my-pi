@@ -433,9 +433,9 @@ async function callCodexSearch(
 	const answer =
 		finalAnswer.length > 0 && !isImagePlaceholderAnswer(finalAnswer)
 			? finalAnswer
-			: (streamedAnswer.length > 0
+			: streamedAnswer.length > 0
 				? streamedAnswer
-				: finalAnswer);
+				: finalAnswer;
 
 	// Fallback: when Codex omits url_citation annotations, scrape markdown links
 	// and bare URLs from the synthesized answer so callers still receive sources.

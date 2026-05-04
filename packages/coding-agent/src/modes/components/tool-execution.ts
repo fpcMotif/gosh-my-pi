@@ -396,9 +396,9 @@ export class ToolExecutionComponent extends Container {
 		// Set background based on state
 		const bgFn = this.#isPartial
 			? (text: string) => theme.bg("toolPendingBg", text)
-			: (this.#result?.isError === true
+			: this.#result?.isError === true
 				? (text: string) => theme.bg("toolErrorBg", text)
-				: (text: string) => theme.bg("toolSuccessBg", text));
+				: (text: string) => theme.bg("toolSuccessBg", text);
 
 		// Sync shared mutable render state for component closures
 		this.#renderState.expanded = this.#expanded;
@@ -747,7 +747,7 @@ export class ToolExecutionComponent extends Container {
 	 */
 	#formatToolExecution(): string {
 		const lines: string[] = [];
-		const icon = this.#isPartial ? "pending" : (this.#result?.isError === true ? "error" : "success");
+		const icon = this.#isPartial ? "pending" : this.#result?.isError === true ? "error" : "success";
 		lines.push(renderStatusLine({ icon, title: this.#toolLabel }, theme));
 
 		const argsObject =

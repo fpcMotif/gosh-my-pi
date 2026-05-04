@@ -412,9 +412,9 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 						const outputText =
 							cells.length > 1
 								? `${combinedOutput}\n\nCell ${i + 1} failed (exit code ${result.exitCode}). Earlier cells succeeded—their state persists. Fix only cell ${i + 1}.`
-								: (combinedOutput
+								: combinedOutput
 									? `${combinedOutput}\n\nCommand exited with code ${result.exitCode}`
-									: `Command exited with code ${result.exitCode}`);
+									: `Command exited with code ${result.exitCode}`;
 
 						const rawSummary = (await finalizeOutput()) ?? {
 							output: "",

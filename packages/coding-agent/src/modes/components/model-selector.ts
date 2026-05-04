@@ -322,7 +322,7 @@ export class ModelSelectorComponent extends Container {
 			if (aDate && bDate) return bDate.localeCompare(aDate);
 
 			// One has date, other is latest — latest first
-			return aIsLatest ? -1 : (bIsLatest ? 1 : a.id.localeCompare(b.id));
+			return aIsLatest ? -1 : bIsLatest ? 1 : a.id.localeCompare(b.id);
 		});
 	}
 
@@ -526,9 +526,9 @@ export class ModelSelectorComponent extends Container {
 				const fuzzySource =
 					substringFiltered.length > 0
 						? substringFiltered
-						: (alphaFiltered.length > 0
+						: alphaFiltered.length > 0
 							? alphaFiltered
-							: baseCanonicalModels);
+							: baseCanonicalModels;
 				const fuzzyMatches = fuzzyFilter(fuzzySource, query, ({ searchText }) => searchText);
 				this.#sortCanonicalModels(fuzzyMatches);
 				this.#filteredCanonicalModels = fuzzyMatches;

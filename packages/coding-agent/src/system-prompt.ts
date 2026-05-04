@@ -489,9 +489,9 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		const skillsPromise: Promise<Skill[]> =
 			providedSkills !== undefined
 				? Promise.resolve(providedSkills)
-				: (skillsSettings?.enabled !== false
+				: skillsSettings?.enabled !== false
 					? loadSkills({ ...skillsSettings, cwd: resolvedCwd }).then(result => result.skills)
-					: Promise.resolve([]));
+					: Promise.resolve([]);
 
 		return Promise.all([
 			resolvePromptInput(customPrompt, "system prompt"),

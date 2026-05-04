@@ -346,23 +346,23 @@ export function formatDiagnostics(
 			// Check if this is the last visible item in the entire tree
 			const isVeryLast = isTreeEnd(fi, di, null);
 			const diagBranch = isLastFileNode
-				? (isLastVisibleInFile || isVeryLast
+				? isLastVisibleInFile || isVeryLast
 					? `  ${theme.tree.last}`
-					: `  ${theme.tree.branch}`)
-				: (isLastVisibleInFile || isVeryLast
+					: `  ${theme.tree.branch}`
+				: isLastVisibleInFile || isVeryLast
 					? `${theme.tree.vertical} ${theme.tree.last}`
-					: `${theme.tree.vertical} ${theme.tree.branch}`);
+					: `${theme.tree.vertical} ${theme.tree.branch}`;
 
 			const sevIcon =
 				d.severity === "error"
 					? theme.styledSymbol("status.error", "error")
-					: (d.severity === "warning"
+					: d.severity === "warning"
 						? theme.styledSymbol("status.warning", "warning")
-						: theme.styledSymbol("status.info", "muted"));
+						: theme.styledSymbol("status.info", "muted");
 			const location = theme.fg("dim", `:${d.line}:${d.col}`);
 			const codeTag =
 				d.code !== null && d.code !== undefined && d.code !== "" ? theme.fg("dim", ` (${d.code})`) : "";
-			const msgColor = d.severity === "error" ? "error" : (d.severity === "warning" ? "warning" : "toolOutput");
+			const msgColor = d.severity === "error" ? "error" : d.severity === "warning" ? "warning" : "toolOutput";
 
 			output += `\n ${theme.fg("dim", diagBranch)} ${sevIcon}${location} ${theme.fg(msgColor, d.message)}${codeTag}`;
 			diagsShown++;
@@ -373,7 +373,7 @@ export function formatDiagnostics(
 		const msg = unparsed[ui];
 		const isVeryLast = isTreeEnd(-1, null, ui);
 		const branch = isVeryLast ? theme.tree.last : theme.tree.branch;
-		const color = msg.includes("[error]") ? "error" : (msg.includes("[warning]") ? "warning" : "dim");
+		const color = msg.includes("[error]") ? "error" : msg.includes("[warning]") ? "warning" : "dim";
 		output += `\n ${theme.fg("dim", branch)} ${theme.fg(color, msg)}`;
 		diagsShown++;
 	}

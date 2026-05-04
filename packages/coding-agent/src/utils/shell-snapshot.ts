@@ -144,7 +144,7 @@ export async function getOrCreateSnapshot(
 	fs.mkdirSync(snapshotDir, { recursive: true });
 
 	// Generate unique snapshot path
-	const shellName = shell.includes("zsh") ? "zsh" : (shell.includes("bash") ? "bash" : "sh");
+	const shellName = shell.includes("zsh") ? "zsh" : shell.includes("bash") ? "bash" : "sh";
 	const snapshotPath = path.join(snapshotDir, `snapshot-${shellName}-${crypto.randomUUID()}.sh`);
 
 	// Generate and execute snapshot script

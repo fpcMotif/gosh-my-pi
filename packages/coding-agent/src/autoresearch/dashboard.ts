@@ -210,7 +210,7 @@ function renderCollapsedLine(runtime: AutoresearchRuntime, state: ExperimentStat
 		parts.push(theme.fg("warning", `no kept runs yet`));
 	}
 	if (state.confidence !== null) {
-		const confidenceColor = state.confidence >= 2 ? "success" : (state.confidence >= 1 ? "warning" : "error");
+		const confidenceColor = state.confidence >= 2 ? "success" : state.confidence >= 1 ? "warning" : "error";
 		parts.push(theme.fg("dim", " | "));
 		parts.push(theme.fg(confidenceColor, `conf ${state.confidence.toFixed(1)}x`));
 	}
@@ -356,7 +356,7 @@ function renderResultRow(
 			).padEnd(11),
 		)
 		.join("");
-	const statusColor = result.status === "keep" ? "success" : (result.status === "discard" ? "warning" : "error");
+	const statusColor = result.status === "keep" ? "success" : result.status === "discard" ? "warning" : "error";
 	const line =
 		`${theme.fg("dim", String(runNumber).padEnd(4))}` +
 		`${theme.fg("accent", (result.commit || "-").padEnd(10))}` +

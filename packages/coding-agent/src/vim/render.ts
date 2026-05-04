@@ -168,7 +168,7 @@ function formatPendingInput(pending: VimPendingInput | undefined): string | unde
 	if (pending.kind === "insert") {
 		return "Pending: INSERT mode";
 	}
-	const prefix = pending.kind === "command" ? ":" : (pending.kind === "search-forward" ? "/" : "?");
+	const prefix = pending.kind === "command" ? ":" : pending.kind === "search-forward" ? "/" : "?";
 	return `Pending: ${prefix}${truncateToWidth(renderVisibleText(pending.text), 80)}`;
 }
 
@@ -222,7 +222,7 @@ export function renderVimDetails(details: VimToolDetails): string {
 		const padWidth = String(details.viewport.end).length;
 		lines.push("Viewport:");
 		for (const line of details.viewportLines) {
-			const marker = line.isCursor ? ">" : (line.isSelected ? "*" : " ");
+			const marker = line.isCursor ? ">" : line.isSelected ? "*" : " ";
 			lines.push(formatCodeFrameLine(marker, line.line, renderPlainViewportCursor(line), padWidth));
 		}
 	}

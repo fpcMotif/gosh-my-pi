@@ -507,9 +507,9 @@ function renderAgentProgress(
 	const iconColor =
 		progress.status === "completed"
 			? "success"
-			: (progress.status === "failed" || progress.status === "aborted"
+			: progress.status === "failed" || progress.status === "aborted"
 				? "error"
-				: "accent");
+				: "accent";
 
 	// Main status line: id: description [status] · stats · ⟨agent⟩
 	const description = progress.description?.trim();

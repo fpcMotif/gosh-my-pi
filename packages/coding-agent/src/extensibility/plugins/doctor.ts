@@ -53,9 +53,9 @@ export function formatDoctorResults(checks: DoctorCheck[]): string {
 		const icon =
 			check.status === "ok"
 				? theme.status.success
-				: (check.status === "warning"
+				: check.status === "warning"
 					? theme.status.warning
-					: theme.status.error);
+					: theme.status.error;
 		lines.push(`${icon} ${check.name}: ${check.message}`);
 	}
 

@@ -33,9 +33,9 @@ export function renderFileList(options: FileListOptions, theme: Theme): string[]
 				const lang = isDirectory ? undefined : getLanguageFromPath(displayPath);
 				const icon = !showIcons
 					? ""
-					: (isDirectory
+					: isDirectory
 						? theme.fg("accent", theme.icon.folder)
-						: theme.fg("muted", theme.getLangIcon(lang)));
+						: theme.fg("muted", theme.getLangIcon(lang));
 				const labelColor = isDirectory ? "accent" : "toolOutput";
 				const meta =
 					entry.meta !== null && entry.meta !== undefined && entry.meta !== ""

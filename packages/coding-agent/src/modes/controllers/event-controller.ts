@@ -515,7 +515,7 @@ export class EventController {
 		};
 		this.ctx.statusContainer.clear();
 		const reasonText =
-			event.reason === "overflow" ? "Context overflow detected, " : (event.reason === "idle" ? "Idle " : "");
+			event.reason === "overflow" ? "Context overflow detected, " : event.reason === "idle" ? "Idle " : "";
 		const actionLabel = event.action === "handoff" ? "Auto-handoff" : "Auto context-full maintenance";
 		this.ctx.autoCompactionLoader = new Loader(
 			this.ctx.ui,

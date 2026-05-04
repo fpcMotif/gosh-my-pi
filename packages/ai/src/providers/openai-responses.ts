@@ -19,10 +19,7 @@ import {
 	type Tool,
 	type ToolChoice,
 } from "../types";
-import {
-	createOpenAIResponsesHistoryPayload,
-	sanitizeOpenAIResponsesHistoryItemsForReplay,
-} from "../utils";
+import { createOpenAIResponsesHistoryPayload, sanitizeOpenAIResponsesHistoryItemsForReplay } from "../utils";
 import { createAbortSourceTracker } from "../utils/abort";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
@@ -36,10 +33,7 @@ import { notifyProviderResponse } from "../utils/provider-response";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAIResponsesToolChoice, type OpenAIResponsesToolChoice } from "../utils/tool-choice";
 import { compactGrammarDefinition } from "./grammar";
-import {
-	convertMessages,
-	processResponsesStream,
-} from "./openai-responses-shared";
+import { convertMessages, processResponsesStream } from "./openai-responses-shared";
 
 // OpenAI Responses-specific options
 export interface OpenAIResponsesOptions extends StreamOptions {

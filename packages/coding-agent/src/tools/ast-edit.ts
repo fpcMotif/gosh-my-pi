@@ -320,9 +320,9 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 							const text =
 								applyResult.totalReplacements === 0
 									? `Preview is stale / no longer matches; no replacements were applied. Preview expected ${result.totalReplacements} replacement${previewReplacementPlural} in ${result.filesTouched} file${previewFilePlural}.`
-									: (applyResult.totalReplacements < result.totalReplacements
+									: applyResult.totalReplacements < result.totalReplacements
 										? `Preview is stale / no longer matches; only ${applyResult.totalReplacements} of ${result.totalReplacements} replacements were applied in ${applyResult.filesTouched} of ${result.filesTouched} files.`
-										: `Preview is stale / no longer matches; applied ${applyResult.totalReplacements} replacements but preview expected ${result.totalReplacements}.`);
+										: `Preview is stale / no longer matches; applied ${applyResult.totalReplacements} replacements but preview expected ${result.totalReplacements}.`;
 							return { ...toolResult(appliedDetails).text(text).done(), isError: true };
 						}
 						const appliedReplacementPlural = applyResult.totalReplacements !== 1 ? "s" : "";
@@ -362,7 +362,7 @@ export const astEditToolRenderer = {
 		const rewriteCount = args.ops?.length ?? 0;
 		if (rewriteCount > 1) meta.push(`${rewriteCount} rewrites`);
 
-		const description = rewriteCount === 1 ? args.ops?.[0]?.pat : (rewriteCount ? `${rewriteCount} rewrites` : "?");
+		const description = rewriteCount === 1 ? args.ops?.[0]?.pat : rewriteCount ? `${rewriteCount} rewrites` : "?";
 		const text = renderStatusLine({ icon: "pending", title: "AST Edit", description, meta }, uiTheme);
 		return new Text(text, 0, 0);
 	},

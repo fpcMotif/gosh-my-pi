@@ -75,9 +75,9 @@ function getHashlineHelperState(context: unknown, options: prompt.HelperOptions 
 	const holderTarget =
 		data !== null && data !== undefined && typeof data === "object"
 			? data
-			: (root !== null && root !== undefined && typeof root === "object"
+			: root !== null && root !== undefined && typeof root === "object"
 				? root
-				: context);
+				: context;
 	if (holderTarget === null || holderTarget === undefined || typeof holderTarget !== "object") {
 		throw new Error("hashline prompt helpers require an object render context");
 	}

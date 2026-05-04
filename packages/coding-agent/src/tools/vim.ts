@@ -127,13 +127,13 @@ function renderViewportCursor(line: VimViewportLine, styledText: string, uiTheme
 }
 
 function renderViewportLine(line: VimViewportLine, styledText: string, padWidth: number, uiTheme: Theme): string {
-	const marker = line.isCursor ? ">" : (line.isSelected ? "*" : "");
+	const marker = line.isCursor ? ">" : line.isSelected ? "*" : "";
 	const gutterText = `${marker}${line.line}`.padStart(padWidth + 1, " ");
 	const gutterStyled = line.isCursor
 		? uiTheme.fg("accent", gutterText)
-		: (line.isSelected
+		: line.isSelected
 			? uiTheme.fg("warning", gutterText)
-			: uiTheme.fg("dim", gutterText));
+			: uiTheme.fg("dim", gutterText);
 	const separator = uiTheme.fg("dim", "│");
 	return `${gutterStyled}${separator}${renderViewportCursor(line, styledText, uiTheme)}`;
 }
@@ -921,7 +921,7 @@ export const vimToolRenderer = {
 					return cached.result;
 				}
 
-				const icon = options.isPartial ? "pending" : (isError ? "error" : "success");
+				const icon = options.isPartial ? "pending" : isError ? "error" : "success";
 
 				// Mode badge
 				const modeBadge =
@@ -932,9 +932,9 @@ export const vimToolRenderer = {
 								color:
 									details.mode === "INSERT"
 										? ("success" as const)
-										: (details.mode === "VISUAL" || details.mode === "VISUAL-LINE"
+										: details.mode === "VISUAL" || details.mode === "VISUAL-LINE"
 											? ("warning" as const)
-											: ("accent" as const)),
+											: ("accent" as const),
 							};
 
 				const header = renderStatusLine(
@@ -952,7 +952,7 @@ export const vimToolRenderer = {
 				const lines = outputBlock.render(
 					{
 						header,
-						state: options.isPartial ? "pending" : (isError ? "error" : "success"),
+						state: options.isPartial ? "pending" : isError ? "error" : "success",
 						sections,
 						width,
 					},

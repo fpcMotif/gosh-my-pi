@@ -171,7 +171,7 @@ function parseLidStmt(body: string, lineNum: number): ParsedStmt[] | null {
 
 			const stmts: ParsedStmt[] = [];
 			for (let l = ln; l <= endLn; l++) {
-				const h = l === ln ? hash : (l === endLn ? endHash : RANGE_INTERIOR_HASH);
+				const h = l === ln ? hash : l === endLn ? endHash : RANGE_INTERIOR_HASH;
 				stmts.push({
 					kind: "anchor_op",
 					anchor: { line: l, hash: h },
@@ -247,7 +247,7 @@ function parseDeleteStmt(body: string, lineNum: number): ParsedStmt[] | null {
 		}
 		const stmts: ParsedStmt[] = [];
 		for (let ln = startLine; ln <= endLine; ln++) {
-			const hash = ln === startLine ? startHash : (ln === endLine ? endHash : RANGE_INTERIOR_HASH);
+			const hash = ln === startLine ? startHash : ln === endLine ? endHash : RANGE_INTERIOR_HASH;
 			stmts.push({
 				kind: "anchor_op",
 				anchor: { line: ln, hash },
@@ -1712,7 +1712,7 @@ async function executeAtomSection(
 	const allWarnings = [...parseWarnings, ...(result.warnings ?? [])];
 	const warningsBlock = allWarnings.length > 0 ? `\n\nWarnings:\n${allWarnings.join("\n")}` : "";
 	const previewBlock = preview.preview ? `\n${preview.preview}` : "";
-	const resultText = preview.preview ? `${path}:` : (source.exists ? `Updated ${path}` : `Created ${path}`);
+	const resultText = preview.preview ? `${path}:` : source.exists ? `Updated ${path}` : `Created ${path}`;
 
 	return {
 		content: [

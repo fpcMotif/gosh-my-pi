@@ -44,9 +44,9 @@ function refreshToolChoiceForActiveTools(
 	const toolName =
 		toolChoice.type === "tool"
 			? toolChoice.name
-			: ("function" in toolChoice
+			: "function" in toolChoice
 				? toolChoice.function.name
-				: (toolChoice as { name: string }).name);
+				: (toolChoice as { name: string }).name;
 
 	return tools.some(tool => tool.name === toolName) ? toolChoice : undefined;
 }

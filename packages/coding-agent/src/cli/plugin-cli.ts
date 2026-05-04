@@ -556,9 +556,9 @@ async function handleDoctor(manager: PluginManager, flags: { json?: boolean; fix
 		const icon =
 			check.status === "ok"
 				? chalk.green(theme.status.success)
-				: (check.status === "warning"
+				: check.status === "warning"
 					? chalk.yellow(theme.status.warning)
-					: chalk.red(theme.status.error));
+					: chalk.red(theme.status.error);
 		console.log(`${icon} ${check.name}: ${check.message}`);
 		if (check.fixed === true) {
 			console.log(chalk.dim(`  ${theme.nav.cursor} Fixed`));

@@ -552,9 +552,9 @@ export async function processResponsesStream<TApi extends Api>(
 				const thinking =
 					item.summary?.length > 0
 						? item.summary.map(part => part.text).join("\n\n")
-						: (item.content?.[0]?.type === "reasoning_text"
+						: item.content?.[0]?.type === "reasoning_text"
 							? (item.content[0].text ?? "")
-							: "");
+							: "";
 				const reasoningBlock = output.content.find(
 					b => b.type === "thinking" && (b as ThinkingContent).itemId === item.id,
 				) as ThinkingContent | undefined;
@@ -640,9 +640,9 @@ export async function processResponsesStream<TApi extends Api>(
 			const details = event.response?.incomplete_details;
 			const message = error
 				? `${error.code || "unknown"}: ${error.message || "no message"}`
-				: (details?.reason
+				: details?.reason
 					? `incomplete: ${details.reason}`
-					: "Unknown error (no error details in response)");
+					: "Unknown error (no error details in response)";
 			throw new Error(message);
 		}
 	}

@@ -1324,7 +1324,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			const status = this.mcpManager.getConnectionStatus(name);
 			servers.push({
 				name,
-				status: status === "connected" ? "ready" : (status === "connecting" ? "connecting" : "error"),
+				status: status === "connected" ? "ready" : status === "connecting" ? "connecting" : "error",
 			});
 		}
 		return servers;

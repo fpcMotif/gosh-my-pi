@@ -512,7 +512,7 @@ export class PluginManager {
 		const hasNodeModules = fs.existsSync(nodeModulesPath);
 		checks.push({
 			name: "node_modules",
-			status: hasNodeModules ? "ok" : (hasPkgJson ? "error" : "warning"),
+			status: hasNodeModules ? "ok" : hasPkgJson ? "error" : "warning",
 			message: hasNodeModules ? "Found" : "Missing (run npm install in plugins dir)",
 		});
 

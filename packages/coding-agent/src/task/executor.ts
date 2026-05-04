@@ -1257,12 +1257,12 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	// Update final progress
 	const wasAborted = abortedViaYield || (!hasYield && (done.aborted ?? signal?.aborted ?? false));
 	const finalAbortReason = wasAborted
-		? (abortedViaYield
+		? abortedViaYield
 			? yieldAbortReason
 			: (done.abortReason ??
-				(signal !== undefined && signal.aborted ? resolveSignalAbortReason() : "Subagent aborted task")))
+				(signal !== undefined && signal.aborted ? resolveSignalAbortReason() : "Subagent aborted task"))
 		: undefined;
-	progress.status = wasAborted ? "aborted" : (exitCode === 0 ? "completed" : "failed");
+	progress.status = wasAborted ? "aborted" : exitCode === 0 ? "completed" : "failed";
 	scheduleProgress(true);
 
 	// Emit lifecycle end event after finalization so yield status is reflected

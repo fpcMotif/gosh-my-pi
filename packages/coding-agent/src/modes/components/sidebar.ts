@@ -120,9 +120,9 @@ export class Sidebar implements Component {
 		const icon =
 			server.status === "ready"
 				? theme.styledSymbol("status.success", "success")
-				: (server.status === "connecting"
+				: server.status === "connecting"
 					? theme.styledSymbol("status.pending", "muted")
-					: theme.styledSymbol("status.error", "error"));
+					: theme.styledSymbol("status.error", "error");
 		const name = theme.fg("muted", server.name);
 		const tools = server.toolCount !== undefined ? theme.fg("dim", ` (${server.toolCount})`) : "";
 		return truncateToWidth(`${icon} ${name}${tools}`, width);

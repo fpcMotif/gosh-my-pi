@@ -53,9 +53,9 @@ export function calculateTokensPerSecond(
 	const resolvedDurationMs =
 		typeof assistant.duration === "number" && Number.isFinite(assistant.duration) && assistant.duration > 0
 			? assistant.duration
-			: (isStreaming
+			: isStreaming
 				? nowMs - assistant.timestamp
-				: null);
+				: null;
 
 	if (resolvedDurationMs === null || resolvedDurationMs < MIN_DURATION_MS) return null;
 

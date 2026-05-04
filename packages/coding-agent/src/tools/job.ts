@@ -405,7 +405,7 @@ export const jobToolRenderer = {
 		if (counts.cancelled > 0) meta.push(uiTheme.fg("warning", `${counts.cancelled} cancelled`));
 		if (counts.running > 0) meta.push(uiTheme.fg("accent", `${counts.running} running`));
 
-		const headerIcon: ToolUIStatus = counts.failed > 0 ? "warning" : (counts.running > 0 ? "info" : "success");
+		const headerIcon: ToolUIStatus = counts.failed > 0 ? "warning" : counts.running > 0 ? "info" : "success";
 		const description =
 			counts.running > 0
 				? `waiting on ${counts.running} of ${jobs.length}`

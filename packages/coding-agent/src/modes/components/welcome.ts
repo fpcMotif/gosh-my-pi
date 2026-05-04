@@ -151,9 +151,9 @@ export class WelcomeComponent implements Component {
 				const icon =
 					server.status === "ready"
 						? theme.styledSymbol("status.success", "success")
-						: (server.status === "connecting"
+						: server.status === "connecting"
 							? theme.styledSymbol("status.pending", "muted")
-							: theme.styledSymbol("status.error", "error"));
+							: theme.styledSymbol("status.error", "error");
 				const exts = server.fileTypes.slice(0, 3).join(" ");
 				lspLines.push(` ${icon} ${theme.fg("muted", server.name)} ${theme.fg("dim", exts)}`);
 			}

@@ -534,9 +534,9 @@ export async function mergeTaskBranches(
 				const stderr =
 					error instanceof git.GitCommandError
 						? error.result.stderr.trim()
-						: (error instanceof Error
+						: error instanceof Error
 							? error.message
-							: String(error));
+							: String(error);
 				failed.push(branchName);
 				conflictResult = {
 					merged,

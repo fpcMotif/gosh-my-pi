@@ -184,9 +184,9 @@ export const handleDiscourse: SpecialHandler = async (
 		const description =
 			topic.excerpt !== null && topic.excerpt !== undefined && topic.excerpt !== ""
 				? htmlToBasicMarkdown(topic.excerpt)
-				: (posts.length
+				: posts.length
 					? formatPostBody(posts[0])
-					: "");
+					: "";
 		if (description) {
 			md += `## Description\n\n${description}\n\n`;
 		}

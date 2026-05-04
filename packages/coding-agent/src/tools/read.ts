@@ -1044,9 +1044,9 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					metadata?.channels !== undefined ? `- Channels: ${metadata.channels}` : "- Channels: unknown",
 					metadata?.hasAlpha === true
 						? "- Alpha: yes"
-						: (metadata?.hasAlpha === false
+						: metadata?.hasAlpha === false
 							? "- Alpha: no"
-							: "- Alpha: unknown"),
+							: "- Alpha: unknown",
 					"",
 					`If you want to analyze the image, call inspect_image with path="${formatPathRelativeToCwd(
 						absolutePath,
@@ -1159,7 +1159,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const truncation: TruncationResult = {
 				content: selectedContent,
 				truncated: wasTruncated,
-				truncatedBy: stoppedByByteLimit ? "bytes" : (wasTruncated ? "lines" : undefined),
+				truncatedBy: stoppedByByteLimit ? "bytes" : wasTruncated ? "lines" : undefined,
 				totalLines: totalSelectedLines,
 				totalBytes: totalSelectedBytes,
 				outputLines: collectedLines.length,
@@ -1170,7 +1170,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 			const isRawMode = parsed.kind === "raw";
 			const shouldAddHashLines = !isRawMode && displayMode.hashLines;
-			const shouldAddLineNumbers = isRawMode ? false : (shouldAddHashLines ? false : displayMode.lineNumbers);
+			const shouldAddLineNumbers = isRawMode ? false : shouldAddHashLines ? false : displayMode.lineNumbers;
 			let capturedDisplayContent: { text: string; startLine: number } | undefined;
 			const formatText = (text: string, startNum: number): string => {
 				capturedDisplayContent = { text, startLine: startNum };

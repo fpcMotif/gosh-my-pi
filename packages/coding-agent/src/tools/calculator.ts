@@ -127,7 +127,7 @@ function tokenizeExpression(expression: string): Token[] {
 				while (i < expression.length) {
 					const digit = expression[i];
 					const valid =
-						prefix === "x" ? isHexDigit(digit) : (prefix === "b" ? isBinaryDigit(digit) : isOctalDigit(digit));
+						prefix === "x" ? isHexDigit(digit) : prefix === "b" ? isBinaryDigit(digit) : isOctalDigit(digit);
 					if (!valid) break;
 					hasDigit = true;
 					i += 1;

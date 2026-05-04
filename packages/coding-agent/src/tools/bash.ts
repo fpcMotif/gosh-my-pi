@@ -795,7 +795,7 @@ export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
 			const renderArgs = toBashRenderArgs(args, config);
 			const cmdText = args !== null && args !== undefined ? formatBashCommand(renderArgs) : undefined;
 			const isError = result.isError === true;
-			const icon = options.isPartial ? "pending" : (isError ? "error" : "success");
+			const icon = options.isPartial ? "pending" : isError ? "error" : "success";
 			const title = config.resolveTitle(args, options);
 			const header = renderStatusLine({ icon, title }, uiTheme);
 			const details = result.details;
@@ -818,9 +818,9 @@ export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
 					const requestedTimeoutSeconds = details?.requestedTimeoutSeconds;
 					const timeoutLabel =
 						typeof timeoutSeconds === "number"
-							? (requestedTimeoutSeconds !== undefined && requestedTimeoutSeconds !== timeoutSeconds
+							? requestedTimeoutSeconds !== undefined && requestedTimeoutSeconds !== timeoutSeconds
 								? `Timeout: ${timeoutSeconds}s (requested ${requestedTimeoutSeconds}s clamped)`
-								: `Timeout: ${timeoutSeconds}s`)
+								: `Timeout: ${timeoutSeconds}s`
 							: undefined;
 					const timeoutLine =
 						timeoutLabel !== undefined
@@ -871,7 +871,7 @@ export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
 					return outputBlock.render(
 						{
 							header,
-							state: options.isPartial ? "pending" : (isError ? "error" : "success"),
+							state: options.isPartial ? "pending" : isError ? "error" : "success",
 							sections: [
 								{
 									lines:

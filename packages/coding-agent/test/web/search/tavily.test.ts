@@ -57,7 +57,7 @@ describe("Tavily searchTavily request shape (integration)", () => {
 
 		let capturedBody: Record<string, unknown> | undefined;
 		using _hook = hookFetch(async (input, init) => {
-			const url = typeof input === "string" ? input : (input instanceof URL ? input.toString() : input.url);
+			const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 			if (url === "https://api.tavily.com/search") {
 				capturedBody = JSON.parse(init?.body as string);
 				return new Response(
@@ -104,7 +104,7 @@ describe("Tavily searchTavily request shape (integration)", () => {
 
 		let capturedBody: Record<string, unknown> | undefined;
 		using _hook = hookFetch(async (input, init) => {
-			const url = typeof input === "string" ? input : (input instanceof URL ? input.toString() : input.url);
+			const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
 			if (url === "https://api.tavily.com/search") {
 				capturedBody = JSON.parse(init?.body as string);
 				return new Response(JSON.stringify({ answer: "", results: [], request_id: "req-0" }), {

@@ -101,12 +101,12 @@ export class EditMatchError extends Error {
 		const thresholdPercent = Math.round(options.threshold * 100);
 
 		const hint = options.allowFuzzy
-			? (options.fuzzyMatches !== null &&
+			? options.fuzzyMatches !== null &&
 				options.fuzzyMatches !== undefined &&
 				options.fuzzyMatches !== 0 &&
 				options.fuzzyMatches > 1
 				? `Found ${options.fuzzyMatches} high-confidence matches. Provide more context to make it unique.`
-				: `Closest match was below the ${thresholdPercent}% similarity threshold.`)
+				: `Closest match was below the ${thresholdPercent}% similarity threshold.`
 			: "Fuzzy matching is disabled. Enable 'Edit fuzzy match' in settings to accept high-confidence matches.";
 
 		return [

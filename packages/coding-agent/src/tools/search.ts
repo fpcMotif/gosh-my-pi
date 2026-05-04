@@ -101,7 +101,7 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 				throw new ToolError("Pattern must not be empty");
 			}
 
-			const normalizedSkip = skip === undefined ? 0 : (Number.isFinite(skip) ? Math.floor(skip) : Number.NaN);
+			const normalizedSkip = skip === undefined ? 0 : Number.isFinite(skip) ? Math.floor(skip) : Number.NaN;
 			if (normalizedSkip < 0 || !Number.isFinite(normalizedSkip)) {
 				throw new ToolError("Skip must be a non-negative number");
 			}

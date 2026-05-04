@@ -41,9 +41,9 @@ function convertToLegacyConfig(server: MCPServer): MCPServerConfig {
 		server.transport ??
 		(server.command !== null && server.command !== undefined && server.command !== ""
 			? "stdio"
-			: (server.url !== null && server.url !== undefined && server.url !== ""
+			: server.url !== null && server.url !== undefined && server.url !== ""
 				? "http"
-				: "stdio"));
+				: "stdio");
 	const shared = {
 		enabled: server.enabled,
 		timeout: server.timeout,

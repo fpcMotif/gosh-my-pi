@@ -132,9 +132,9 @@ export class BashExecutionComponent extends Container {
 		this.#exitCode = exitCode;
 		this.#status = cancelled
 			? "cancelled"
-			: (exitCode !== 0 && exitCode !== undefined && exitCode !== null
+			: exitCode !== 0 && exitCode !== undefined && exitCode !== null
 				? "error"
-				: "complete");
+				: "complete";
 		this.#truncation = options?.truncation;
 		if (options?.output !== undefined) {
 			this.#setOutput(options.output);

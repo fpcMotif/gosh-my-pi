@@ -1267,9 +1267,9 @@ export class ModelRegistry {
 		const result = await manager.refresh(strategy);
 		const status =
 			discoveryError !== null && discoveryError !== undefined && discoveryError !== ""
-				? (result.models.length > 0
+				? result.models.length > 0
 					? "cached"
-					: "unavailable")
+					: "unavailable"
 				: result.models.length > 0 && strategy !== "offline"
 					? "ok"
 					: cached

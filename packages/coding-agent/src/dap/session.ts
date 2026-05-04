@@ -1119,7 +1119,7 @@ export class DapSessionManager {
 				await this.#fetchTopFrame(session, signal, Math.min(timeoutMs, 5_000));
 			}
 			const state =
-				session.status === "stopped" ? "stopped" : (session.status === "terminated" ? "terminated" : "running");
+				session.status === "stopped" ? "stopped" : session.status === "terminated" ? "terminated" : "running";
 			return { snapshot: buildSummary(session), state, timedOut: false };
 		} catch (error) {
 			if (signal !== undefined && signal.aborted) {

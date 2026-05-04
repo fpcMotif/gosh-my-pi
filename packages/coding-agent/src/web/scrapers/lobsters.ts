@@ -142,9 +142,9 @@ export const handleLobsters: SpecialHandler = async (url: string, timeout: numbe
 			const title =
 				parsed.pathname === "/"
 					? "Lobste.rs Front Page"
-					: (parsed.pathname === "/newest"
+					: parsed.pathname === "/newest"
 						? "Lobste.rs Newest"
-						: `Lobste.rs Tag: ${parsed.pathname.split("/")[2]}`);
+						: `Lobste.rs Tag: ${parsed.pathname.split("/")[2]}`;
 
 			md = `# ${title}\n\n`;
 

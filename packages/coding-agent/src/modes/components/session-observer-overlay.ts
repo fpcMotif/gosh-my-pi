@@ -158,7 +158,7 @@ export class SessionObserverOverlayComponent extends Container {
 		const breadcrumb = this.#buildBreadcrumb(session);
 		this.#viewerHeaderLines.push(theme.fg("accent", breadcrumb));
 		if (session) {
-			const statusColor = session.status === "active" ? "success" : (session.status === "failed" ? "error" : "dim");
+			const statusColor = session.status === "active" ? "success" : session.status === "failed" ? "error" : "dim";
 			const statusText = theme.fg(statusColor, `[${session.status}]`);
 			const agentTag =
 				session.agent !== null && session.agent !== undefined && session.agent !== ""
