@@ -4,9 +4,7 @@
 	"categories": {
 		"correctness": "error"
 	},
-	"options": {
-		"typeAware": true
-	},
+	"options": {},
 	"rules": {
 		"no-control-regex": "off",
 		"no-unreachable": "off",
