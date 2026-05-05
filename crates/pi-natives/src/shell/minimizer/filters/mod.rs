@@ -62,8 +62,11 @@ pub fn supports(program: &str, subcommand: Option<&str>) -> bool {
 			matches!(
 				subcommand,
 				Some(
-					"tsc" | "tsgo" | "eslint" | "biome" | "oxlint" | "oxfmt" | "jest" | "vitest"
-						| "playwright",
+					"tsc"
+						| "tsgo" | "eslint"
+						| "biome" | "oxlint"
+						| "oxfmt" | "jest"
+						| "vitest" | "playwright",
 				),
 			) || js_tools::supports(program, subcommand)
 		},
