@@ -3,10 +3,10 @@ package model
 import (
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/skills"
-	"github.com/charmbracelet/crush/internal/ui/common"
-	uistyles "github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/skills"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	uistyles "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 	"github.com/stretchr/testify/require"
 )
 

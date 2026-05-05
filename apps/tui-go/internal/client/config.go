@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/oauth"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth"
 )
 
 // SetConfigField sets a config key/value pair on the server.

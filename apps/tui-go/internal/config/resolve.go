@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/env"
-	"github.com/charmbracelet/crush/internal/shell"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/env"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/shell"
 )
 
 type VariableResolver interface {

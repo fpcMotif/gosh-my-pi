@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/shell"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/shell"
 )
 
 const (

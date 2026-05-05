@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/version"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/version"
 	"github.com/posthog/posthog-go"
 )
 

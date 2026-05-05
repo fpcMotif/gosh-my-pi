@@ -1,0 +1,50 @@
+apps/tui-go/ — fork attribution
+================================
+
+This directory is a hard fork of github.com/charmbracelet/crush at
+release v0.65.3 (commit 3aa26d99627b3faa6a2535f19ad8b1e7bcdff545).
+
+Original copyright (c) Charmbracelet, Inc.
+Licensed under the Functional Source License, Version 1.1, MIT Future
+License (FSL-1.1-MIT). See ./LICENSE.md for the full text.
+
+Under FSL-1.1-MIT, this code converts to the MIT License two years after
+each version's release date. Until conversion, the FSL field-of-use
+limitations apply (no Competing Use as defined therein).
+
+Fork modifications
+------------------
+
+Modifications in this fork are licensed under the same terms (FSL-1.1-MIT,
+with the same auto-conversion clause).
+
+Substantive additions:
+
+  - internal/ompclient/        — Go client for the omp coding-agent RPC
+                                 mode (`omp --mode rpc`). Spawn/Call/Send/
+                                 Close + event fan-out channels.
+  - internal/workspace/omp_workspace.go(_test.go)
+                               — implementation of Crush's
+                                 workspace.Workspace interface backed by
+                                 the omp RPC client.
+  - internal/cmd/root.go       — modified to spawn `omp --mode rpc` by
+                                 default; honours OMP_TUI_BACKEND for
+                                 local backend overrides.
+
+Module path
+-----------
+
+The Go module path was rewritten from `github.com/charmbracelet/crush`
+to `github.com/fpcMotif/gosh-my-pi/apps/tui-go` so that:
+
+  - `go install` does not collide with upstream Crush.
+  - `go version -m` correctly attributes the binary.
+  - Stack traces and pprof output cite the fork, not upstream.
+
+When pulling upstream Crush updates via `git subtree pull --prefix=apps/tui-go`,
+expect import-line conflicts. Resolve by replacing
+`github.com/charmbracelet/crush` with `github.com/fpcMotif/gosh-my-pi/apps/tui-go`
+in conflicting hunks.
+
+Modifications copyright (c) Sebastian Fan / fpcMotif <fpcmotif@gmail.com>.
+Same license as upstream (FSL-1.1-MIT).

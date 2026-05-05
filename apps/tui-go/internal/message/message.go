@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/db"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
 	"github.com/google/uuid"
 )
 

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 )
 
 func TestHumanizedToolName(t *testing.T) {

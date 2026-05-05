@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/event"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/db"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/event"
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 )

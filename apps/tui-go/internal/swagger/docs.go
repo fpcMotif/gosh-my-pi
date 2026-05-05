@@ -15,7 +15,7 @@ const docTemplate = `{
         },
         "license": {
             "name": "MIT",
-            "url": "https://github.com/charmbracelet/crush/blob/main/LICENSE"
+            "url": "https://github.com/fpcMotif/gosh-my-pi/apps/tui-go/blob/main/LICENSE"
         },
         "version": "{{.Version}}"
     },

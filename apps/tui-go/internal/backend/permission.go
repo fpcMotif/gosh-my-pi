@@ -1,8 +1,8 @@
 package backend
 
 import (
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/proto"
 )
 
 // GrantPermission grants, denies, or persistently grants a permission

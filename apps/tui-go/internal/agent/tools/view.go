@@ -14,11 +14,11 @@ import (
 	"unicode/utf8"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/filepathext"
-	"github.com/charmbracelet/crush/internal/filetracker"
-	"github.com/charmbracelet/crush/internal/lsp"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/skills"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/filepathext"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/filetracker"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/lsp"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/skills"
 )
 
 //go:embed view.md

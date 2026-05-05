@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/stretchr/testify/require"
 )
 

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/diffdetect"
-	"github.com/charmbracelet/crush/internal/stringext"
-	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/diffdetect"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/stringext"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 )
 
 type toolResultContentWidths struct {

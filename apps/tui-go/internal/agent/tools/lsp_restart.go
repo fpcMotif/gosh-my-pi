@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/lsp"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/lsp"
 )
 
 const LSPRestartToolName = "lsp_restart"

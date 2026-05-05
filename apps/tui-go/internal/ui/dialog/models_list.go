@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/ui/list"
-	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 	"github.com/sahilm/fuzzy"
 )
 

@@ -12,10 +12,10 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/home"
-	"github.com/charmbracelet/crush/internal/shell"
-	"github.com/charmbracelet/crush/internal/skills"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/home"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/shell"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/skills"
 )
 
 // Prompt represents a template-based prompt generator.

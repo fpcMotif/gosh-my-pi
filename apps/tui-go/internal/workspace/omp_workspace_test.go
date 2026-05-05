@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/ompclient"
-	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
 )
 
 func newTestOmpWorkspace() *OmpWorkspace {

@@ -9,10 +9,10 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/ui/common"
-	"github.com/charmbracelet/crush/internal/ui/list"
-	"github.com/charmbracelet/crush/internal/ui/util"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 

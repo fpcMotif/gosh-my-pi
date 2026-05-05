@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/charmbracelet/crush/internal/log"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/log"
 )
 
 var getRg = sync.OnceValue(func() string {

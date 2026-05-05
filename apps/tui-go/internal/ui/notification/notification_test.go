@@ -3,7 +3,7 @@ package notification_test
 import (
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/ui/notification"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/notification"
 	"github.com/stretchr/testify/require"
 )
 

@@ -11,11 +11,11 @@ import (
 	"slices"
 
 	"charm.land/catwalk/pkg/catwalk"
-	hyperp "github.com/charmbracelet/crush/internal/agent/hyper"
-	"github.com/charmbracelet/crush/internal/env"
-	"github.com/charmbracelet/crush/internal/oauth"
-	"github.com/charmbracelet/crush/internal/oauth/copilot"
-	"github.com/charmbracelet/crush/internal/oauth/hyper"
+	hyperp "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/hyper"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/env"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth/copilot"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth/hyper"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )

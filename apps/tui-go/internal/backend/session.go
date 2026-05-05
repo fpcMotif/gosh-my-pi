@@ -3,9 +3,9 @@ package backend
 import (
 	"context"
 
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/proto"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 )
 
 // CreateSession creates a new session in the given workspace.

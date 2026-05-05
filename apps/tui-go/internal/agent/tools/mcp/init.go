@@ -16,12 +16,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/home"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/version"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/csync"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/home"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/version"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

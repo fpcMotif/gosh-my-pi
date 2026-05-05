@@ -17,9 +17,9 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/catwalk/pkg/embedded"
-	"github.com/charmbracelet/crush/internal/agent/hyper"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/home"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/hyper"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/csync"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/home"
 	"github.com/charmbracelet/x/etag"
 )
 

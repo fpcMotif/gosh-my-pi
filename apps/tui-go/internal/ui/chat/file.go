@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/internal/fsext"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/fsext"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 )
 
 // -----------------------------------------------------------------------------

@@ -14,9 +14,9 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/home"
-	"github.com/charmbracelet/crush/internal/ui/common"
-	fimage "github.com/charmbracelet/crush/internal/ui/image"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/home"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	fimage "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/image"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 

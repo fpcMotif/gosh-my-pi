@@ -6,8 +6,8 @@ import (
 
 	"charm.land/glamour/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
-	"github.com/charmbracelet/crush/internal/ui/styles"
-	"github.com/charmbracelet/crush/internal/ui/xchroma"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/xchroma"
 )
 
 const formatterName = "crush"

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/oauth"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth"
 )
 
 const (

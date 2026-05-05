@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -22,21 +23,21 @@ import (
 	fang "charm.land/fang/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
-	"github.com/charmbracelet/crush/internal/app"
-	"github.com/charmbracelet/crush/internal/client"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/event"
-	crushlog "github.com/charmbracelet/crush/internal/log"
-	"github.com/charmbracelet/crush/internal/ompclient"
-	"github.com/charmbracelet/crush/internal/projects"
-	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/server"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/ui/common"
-	ui "github.com/charmbracelet/crush/internal/ui/model"
-	"github.com/charmbracelet/crush/internal/version"
-	"github.com/charmbracelet/crush/internal/workspace"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/app"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/client"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/db"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/event"
+	crushlog "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/log"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/projects"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/proto"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/server"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	ui "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/model"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/version"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/charmtone"
@@ -51,6 +52,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
 	rootCmd.PersistentFlags().StringP("data-dir", "D", "", "Custom crush data directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
+	rootCmd.PersistentFlags().StringP("agent-cmd", "a", "", "Path to omp binary or full command line (overrides sibling-binary lookup, PATH, and OMP_TUI_BACKEND)")
 	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific crush server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
@@ -72,27 +74,27 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "omp-tui-go",
+	Use:   "gmp-tui-go",
 	Short: "Bubble Tea frontend for omp",
 	Long:  "A Crush-derived Bubble Tea frontend for the omp coding-agent backend",
 	Example: `
 # Run in interactive mode
-omp-tui-go
+gmp-tui-go
 
 # Run in a specific directory
-omp-tui-go --cwd /path/to/project
+gmp-tui-go --cwd /path/to/project
 
 # Run in yolo mode (auto-accept all permissions; use with care)
-omp-tui-go --yolo
+gmp-tui-go --yolo
 
 # Use a local backend command
-OMP_TUI_BACKEND="bun packages/coding-agent/src/cli.ts" omp-tui-go
+OMP_TUI_BACKEND="bun packages/coding-agent/src/cli.ts" gmp-tui-go
 
 # Continue a previous session
-omp-tui-go --session {session-id}
+gmp-tui-go --session {session-id}
 
 # Continue the most recent session
-omp-tui-go --continue
+gmp-tui-go --continue
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessionID, _ := cmd.Flags().GetString("session")
@@ -129,7 +131,7 @@ omp-tui-go --continue
 		if _, err := program.Run(); err != nil {
 			event.Error(err)
 			slog.Error("TUI run error", "error", err)
-			return errors.New("Crush crashed. If metrics are enabled, we were notified about it. If you'd like to report it, please copy the stacktrace above and open an issue at https://github.com/charmbracelet/crush/issues/new?template=bug.yml") //nolint:staticcheck
+			return errors.New("gmp-tui-go crashed. If you'd like to report it, please copy the stacktrace above and open an issue at https://github.com/fpcMotif/gosh-my-pi/issues/new") //nolint:staticcheck
 		}
 		return nil
 	},
@@ -228,17 +230,93 @@ func setupWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
 	return setupOmpWorkspace(cmd)
 }
 
+// resolveOmpBackend picks the omp binary (and any prefix args) according to
+// the documented priority:
+//
+//  1. --agent-cmd flag, when explicitly set.
+//  2. OMP_TUI_BACKEND env var, for local development overrides
+//     (e.g. "bun packages/coding-agent/src/cli.ts").
+//  3. Sibling-binary lookup: filepath.Dir(os.Executable())/omp[.exe].
+//     This is the default for bundled archives where gmp-tui-go and omp
+//     ship side-by-side.
+//  4. Bare "omp" on PATH — exec.CommandContext does PATH resolution.
+//
+// The first non-empty candidate wins. Returns at least one element.
+func resolveOmpBackend(cmd *cobra.Command) []string {
+	if agentCmd, _ := cmd.Flags().GetString("agent-cmd"); agentCmd != "" {
+		if fields := strings.Fields(agentCmd); len(fields) > 0 {
+			return fields
+		}
+	}
+	if env := os.Getenv("OMP_TUI_BACKEND"); env != "" {
+		if fields := strings.Fields(env); len(fields) > 0 {
+			return fields
+		}
+	}
+	if sibling := siblingOmpPath(); sibling != "" {
+		return []string{sibling}
+	}
+	return []string{"omp"}
+}
+
+// setupOmpLogging configures slog to write to ~/.gmp/tui.log via the
+// shared crushlog rotator. When debug is true, log level is DEBUG and a
+// secondary text handler mirrors output to stderr — safe because Bubble
+// Tea owns stdout, leaving stderr free. The shared rotator uses sync.Once
+// internally so calling this twice is a no-op.
+//
+// Falls back to no-op (caller still has slog.DiscardHandler from
+// Execute) when ~ can't be resolved.
+func setupOmpLogging(debug bool) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home dir: %w", err)
+	}
+	logDir := filepath.Join(home, ".gmp")
+	if err := os.MkdirAll(logDir, 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", logDir, err)
+	}
+	logFile := filepath.Join(logDir, "tui.log")
+	if debug {
+		crushlog.Setup(logFile, true, os.Stderr)
+	} else {
+		crushlog.Setup(logFile, false)
+	}
+	return nil
+}
+
+// siblingOmpPath returns the absolute path of an `omp` binary sitting next
+// to the running executable, or "" if it doesn't exist or os.Executable
+// can't be resolved. Honours .exe on Windows.
+func siblingOmpPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	candidate := filepath.Join(filepath.Dir(exe), "omp")
+	if runtime.GOOS == "windows" {
+		candidate += ".exe"
+	}
+	if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+		return candidate
+	}
+	return ""
+}
+
 func setupOmpWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
 	cwd, err := ResolveCwd(cmd)
 	if err != nil {
 		return nil, nil, err
 	}
+	debug, _ := cmd.Flags().GetBool("debug")
+	if err := setupOmpLogging(debug); err != nil {
+		// Non-fatal: log setup failures fall back to slog default. Surface
+		// to stderr so the operator sees it, but don't block the TUI.
+		fmt.Fprintf(os.Stderr, "gmp-tui-go: warning: log setup failed: %v\n", err)
+	}
 	sessionID, _ := cmd.Flags().GetString("session")
 	continueLast, _ := cmd.Flags().GetBool("continue")
-	backend := strings.Fields(os.Getenv("OMP_TUI_BACKEND"))
-	if len(backend) == 0 {
-		backend = []string{"omp"}
-	}
+	backend := resolveOmpBackend(cmd)
 	args := []string{}
 	if sessionID != "" {
 		args = append(args, "--resume", sessionID)

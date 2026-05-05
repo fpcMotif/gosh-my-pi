@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/stretchr/testify/require"
 )
 

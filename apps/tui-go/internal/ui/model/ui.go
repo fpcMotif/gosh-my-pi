@@ -25,34 +25,34 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/agent/hyper"
-	"github.com/charmbracelet/crush/internal/agent/notify"
-	agenttools "github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/internal/app"
-	"github.com/charmbracelet/crush/internal/commands"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/fsext"
-	"github.com/charmbracelet/crush/internal/history"
-	"github.com/charmbracelet/crush/internal/home"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/crush/internal/skills"
-	"github.com/charmbracelet/crush/internal/ui/anim"
-	"github.com/charmbracelet/crush/internal/ui/attachments"
-	"github.com/charmbracelet/crush/internal/ui/chat"
-	"github.com/charmbracelet/crush/internal/ui/common"
-	"github.com/charmbracelet/crush/internal/ui/completions"
-	"github.com/charmbracelet/crush/internal/ui/dialog"
-	fimage "github.com/charmbracelet/crush/internal/ui/image"
-	"github.com/charmbracelet/crush/internal/ui/logo"
-	"github.com/charmbracelet/crush/internal/ui/notification"
-	"github.com/charmbracelet/crush/internal/ui/styles"
-	"github.com/charmbracelet/crush/internal/ui/util"
-	"github.com/charmbracelet/crush/internal/version"
-	"github.com/charmbracelet/crush/internal/workspace"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/hyper"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/notify"
+	agenttools "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools/mcp"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/app"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/commands"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/fsext"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/history"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/home"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/skills"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/anim"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/attachments"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/chat"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/completions"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/dialog"
+	fimage "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/image"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/logo"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/notification"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/util"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/version"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/layout"
 	"github.com/charmbracelet/ultraviolet/screen"
@@ -68,6 +68,14 @@ const MouseScrollThreshold = 5
 const (
 	compactModeWidthBreakpoint  = 120
 	compactModeHeightBreakpoint = 30
+)
+
+// Minimum terminal size below which the TUI refuses to render and shows a
+// centred "too small" banner. Tracks Q8 in
+// /Users/martinfan/.claude/plans/dd-an-apps-tui-go-2-wondrous-cookie.md.
+const (
+	minViewportWidth  = 60
+	minViewportHeight = 10
 )
 
 // If pasted text has more than 10 newlines, treat it as a file attachment.
@@ -2244,7 +2252,12 @@ func (m *UI) View() tea.View {
 	}
 	v.MouseMode = tea.MouseModeCellMotion
 	v.ReportFocus = m.caps.ReportFocusEvents
-	v.WindowTitle = "crush " + home.Short(m.com.Workspace.WorkingDir())
+	v.WindowTitle = "gmp-tui-go " + home.Short(m.com.Workspace.WorkingDir())
+
+	if m.width < minViewportWidth || m.height < minViewportHeight {
+		v.Content = renderTooSmallBanner(m.width, m.height)
+		return v
+	}
 
 	canvas := uv.NewScreenBuffer(m.width, m.height)
 	v.Cursor = m.Draw(canvas, canvas.Bounds())
@@ -2266,6 +2279,77 @@ func (m *UI) View() tea.View {
 	}
 
 	return v
+}
+
+// trapLocalSlash intercepts a small set of slash commands that gmp-tui-go
+// owns rather than forwarding to the omp agent. Returns (cmd, true) when
+// the input was handled locally; (nil, false) when it should pass through
+// to AgentRun as ordinary prompt text.
+//
+// Trapped commands (Q5 in the plan):
+//
+//	/quit, /exit  → quit the TUI cleanly
+//	/help         → print a one-shot info banner; full palette is "/" or Ctrl+P
+//	/clear        → clear the prompt textarea (transcript state is owned by
+//	                the agent and is intentionally not reset from here)
+//	/debug        → placeholder until the Ctrl+L debug overlay lands; for
+//	                now points the operator at ~/.gmp/tui.log
+//
+// Anything else starting with "/" passes through unchanged. omp's
+// slash-command-builtin-registry handles /compact, /session, /usage,
+// /model, etc.
+func (m *UI) trapLocalSlash(content string) (tea.Cmd, bool) {
+	raw := strings.TrimSpace(content)
+	if !strings.HasPrefix(raw, "/") {
+		return nil, false
+	}
+	head := raw
+	if i := strings.IndexAny(raw, " \t\n"); i >= 0 {
+		head = raw[:i]
+	}
+	switch head {
+	case "/quit", "/exit":
+		return tea.Quit, true
+	case "/help":
+		help := "Local commands: /quit /exit /help /clear /debug. Press / or Ctrl+P for the full palette. Anything else starting with / is sent to the omp agent."
+		return util.ReportInfo(help), true
+	case "/clear":
+		m.textarea.Reset()
+		return nil, true
+	case "/debug":
+		return util.ReportInfo("debug overlay deferred — tail ~/.gmp/tui.log or run with --debug to mirror to stderr"), true
+	}
+	return nil, false
+}
+
+// renderTooSmallBanner produces a centred "terminal too small" message that
+// fits inside any width/height >= 1. Used when the viewport drops below
+// minViewportWidth x minViewportHeight; full layout would be unusable
+// below that threshold.
+func renderTooSmallBanner(width, height int) string {
+	if width <= 0 || height <= 0 {
+		return ""
+	}
+	heading := "Terminal too small"
+	detail := fmt.Sprintf("gmp-tui-go needs at least %dx%d (current: %dx%d)", minViewportWidth, minViewportHeight, width, height)
+	hint := "Resize the window and try again."
+	lines := []string{heading, "", detail, "", hint}
+	// Build content sized to viewport so tea places it consistently.
+	var b strings.Builder
+	verticalPad := (height - len(lines)) / 2
+	for range verticalPad {
+		b.WriteByte('\n')
+	}
+	for i, line := range lines {
+		if width > 0 {
+			line = lipgloss.PlaceHorizontal(width, lipgloss.Center, line)
+		}
+		b.WriteString(line)
+		if i < len(lines)-1 {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
 }
 
 // ShortHelp implements [help.KeyMap].
@@ -3123,6 +3207,9 @@ func (m *UI) refreshStyles() {
 
 // sendMessage sends a message with the given content and attachments.
 func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.Cmd {
+	if cmd, trapped := m.trapLocalSlash(content); trapped {
+		return cmd
+	}
 	if !m.com.Workspace.AgentIsReady() {
 		return util.ReportError(fmt.Errorf("coder agent is not initialized"))
 	}

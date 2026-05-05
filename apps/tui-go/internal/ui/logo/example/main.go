@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/ui/logo"
-	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/logo"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 	"github.com/charmbracelet/x/term"
 )
 

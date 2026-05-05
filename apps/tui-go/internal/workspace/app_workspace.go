@@ -7,17 +7,17 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/crush/internal/agent"
-	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/internal/app"
-	"github.com/charmbracelet/crush/internal/commands"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/history"
-	"github.com/charmbracelet/crush/internal/lsp"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/oauth"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent"
+	mcptools "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools/mcp"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/app"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/commands"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/history"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/lsp"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 )
 
 // AppWorkspace implements the Workspace interface by delegating

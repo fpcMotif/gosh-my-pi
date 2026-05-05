@@ -11,9 +11,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/backend"
-	"github.com/charmbracelet/crush/internal/config"
-	_ "github.com/charmbracelet/crush/internal/swagger"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/backend"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	_ "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/swagger"
 	httpswagger "github.com/swaggo/http-swagger/v2"
 )
 

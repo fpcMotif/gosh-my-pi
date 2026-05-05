@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/crush/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	xstrings "github.com/charmbracelet/x/exp/strings"
 )
 

@@ -11,14 +11,14 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/diff"
-	"github.com/charmbracelet/crush/internal/filepathext"
-	"github.com/charmbracelet/crush/internal/filetracker"
-	"github.com/charmbracelet/crush/internal/fsext"
-	"github.com/charmbracelet/crush/internal/history"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/diff"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/filepathext"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/filetracker"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/fsext"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/history"
 
-	"github.com/charmbracelet/crush/internal/lsp"
-	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/lsp"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
 )
 
 type EditParams struct {

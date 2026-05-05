@@ -9,7 +9,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2/tree"
-	"github.com/charmbracelet/crush/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )

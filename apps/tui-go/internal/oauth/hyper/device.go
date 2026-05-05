@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/agent/hyper"
-	"github.com/charmbracelet/crush/internal/event"
-	"github.com/charmbracelet/crush/internal/oauth"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/hyper"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/event"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth"
 )
 
 // DeviceAuthResponse contains the response from the device authorization endpoint.

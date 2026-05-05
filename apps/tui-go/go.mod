@@ -1,4 +1,4 @@
-module github.com/charmbracelet/crush
+module github.com/fpcMotif/gosh-my-pi/apps/tui-go
 
 go 1.26.2
 

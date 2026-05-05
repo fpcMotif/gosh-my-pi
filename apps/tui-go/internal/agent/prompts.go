@@ -4,8 +4,8 @@ import (
 	"context"
 	_ "embed"
 
-	"github.com/charmbracelet/crush/internal/agent/prompt"
-	"github.com/charmbracelet/crush/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/prompt"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 )
 
 //go:embed templates/coder.md.tpl

@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/fsext"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/fsext"
 )
 
 const GlobToolName = "glob"

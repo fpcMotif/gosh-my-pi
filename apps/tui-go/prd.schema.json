@@ -1,0 +1,109 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://github.com/fpcMotif/gosh-my-pi/apps/tui-go/prd.schema.json",
+	"title": "gmp-tui-go PRD progress board",
+	"description": "Schema for apps/tui-go/prd.json. Tracks phases, tasks, risks, and the most recent verification run for the gmp-tui-go (Crush hard-fork) implementation. The file is a committed, human-readable, machine-updatable progress board. Helper: apps/tui-go/scripts/prd.go.",
+	"type": "object",
+	"required": ["meta", "phases", "tasks", "risks", "verification_run"],
+	"additionalProperties": false,
+	"properties": {
+		"$schema": { "type": "string" },
+		"meta": {
+			"type": "object",
+			"required": ["project", "version", "owner"],
+			"additionalProperties": true,
+			"properties": {
+				"project": { "type": "string" },
+				"version": { "type": "string" },
+				"generated": { "type": "string", "format": "date-time" },
+				"owner": { "type": "string" },
+				"fork_of": { "type": "string" },
+				"tui_fork_of": { "type": "string" },
+				"tui_fork_release": { "type": "string" },
+				"tui_fork_sha": { "type": "string" },
+				"tui_fork_commit_in_repo": { "type": "string" },
+				"bridge_commit": { "type": "string" },
+				"bridge_branch": { "type": "string" },
+				"bridge_worktree": { "type": "string" },
+				"agent_protocol": { "type": "string" },
+				"binary_current": { "type": "string" },
+				"binary_target": { "type": "string" },
+				"module_path_current": { "type": "string" },
+				"module_path_target": { "type": "string" },
+				"module_path_rewrite": { "type": "string" },
+				"license_boundary": { "type": "object", "additionalProperties": { "type": "string" } },
+				"plan_doc": { "type": "string" }
+			}
+		},
+		"phases": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["id", "name", "state"],
+				"additionalProperties": false,
+				"properties": {
+					"id": { "type": "string", "pattern": "^P[0-9]+$" },
+					"name": { "type": "string" },
+					"state": { "enum": ["pending", "in_progress", "done", "blocked", "deferred"] },
+					"acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+					"evidence": { "type": "string" },
+					"notes": { "type": "string" }
+				}
+			}
+		},
+		"tasks": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["id", "phase_id", "title", "state"],
+				"additionalProperties": false,
+				"properties": {
+					"id": { "type": "string", "pattern": "^T-P[0-9]+-[A-Za-z0-9_-]+$" },
+					"phase_id": { "type": "string", "pattern": "^P[0-9]+$" },
+					"title": { "type": "string" },
+					"state": { "enum": ["pending", "in_progress", "done", "blocked", "deferred"] },
+					"files_touched": { "type": "array", "items": { "type": "string" } },
+					"verification": { "type": "array", "items": { "type": "string" } },
+					"depends_on": {
+						"type": "array",
+						"items": { "type": "string", "pattern": "^T-P[0-9]+-[A-Za-z0-9_-]+$" }
+					},
+					"started_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+					"completed_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+					"notes": { "type": "string" }
+				}
+			}
+		},
+		"risks": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["id", "title", "severity"],
+				"additionalProperties": false,
+				"properties": {
+					"id": { "type": "string", "pattern": "^R[0-9]+$" },
+					"title": { "type": "string" },
+					"severity": { "enum": ["low", "med", "high"] },
+					"owner": { "type": "string" },
+					"mitigation": { "type": "string" },
+					"notes": { "type": "string" }
+				}
+			}
+		},
+		"verification_run": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"timestamp": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+				"go_test_scoped": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+				"go_test_full": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+				"go_build": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+				"go_run_help": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+				"rpc_handshake": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+				"bun_check_ts": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+				"smoke_test": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+				"release_dry_run": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+			}
+		}
+	}
+}

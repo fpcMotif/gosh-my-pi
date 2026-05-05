@@ -6,7 +6,7 @@
 //	@contact.name	Charm
 //	@contact.url	https://charm.sh
 //	@license.name	MIT
-//	@license.url	https://github.com/charmbracelet/crush/blob/main/LICENSE
+//	@license.url	https://github.com/fpcMotif/gosh-my-pi/apps/tui-go/blob/main/LICENSE
 //	@BasePath		/v1
 package main
 
@@ -16,7 +16,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"github.com/charmbracelet/crush/internal/cmd"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/cmd"
 	_ "github.com/joho/godotenv/autoload"
 )
 

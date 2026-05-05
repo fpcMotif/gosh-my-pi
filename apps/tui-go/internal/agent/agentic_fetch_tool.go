@@ -11,9 +11,9 @@ import (
 
 	"charm.land/fantasy"
 
-	"github.com/charmbracelet/crush/internal/agent/prompt"
-	"github.com/charmbracelet/crush/internal/agent/tools"
-	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/prompt"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
 )
 
 //go:embed templates/agentic_fetch.md

@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/charmbracelet/crush/internal/agent/notify"
-	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
-	"github.com/charmbracelet/crush/internal/app"
-	"github.com/charmbracelet/crush/internal/history"
-	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
-	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/notify"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools/mcp"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/app"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/history"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/proto"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 )
 
 // wrapEvent converts a raw tea.Msg (a pubsub.Event[T] from the app

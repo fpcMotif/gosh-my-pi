@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/csync"
 )
 
 const (

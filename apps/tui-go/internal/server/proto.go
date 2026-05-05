@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/charmbracelet/crush/internal/backend"
-	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/backend"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/proto"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 )
 
 type controllerV1 struct {

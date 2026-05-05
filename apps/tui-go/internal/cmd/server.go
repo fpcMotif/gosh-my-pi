@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/config"
-	crushlog "github.com/charmbracelet/crush/internal/log"
-	"github.com/charmbracelet/crush/internal/server"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	crushlog "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/log"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/server"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
