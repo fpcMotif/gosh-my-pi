@@ -4,7 +4,7 @@ import type {
 	Tool as OpenAITool,
 	ResponseCreateParamsStreaming,
 	ResponseInput,
-} from "openai/resources/chat/completions";
+} from "openai/resources/responses/responses";
 import { getEnvApiKey } from "../stream";
 import {
 	type Api,

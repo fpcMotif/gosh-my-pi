@@ -339,12 +339,12 @@ export function formatTruncationMetaNotice(truncation: TruncationMeta): string {
 		notice += ` (${formatBytes(maxBytes)} limit)`;
 	}
 
-	if (truncation.nextOffset !== null) {
+	if (truncation.nextOffset !== null && truncation.nextOffset !== undefined) {
 		notice += `. Use sel=${truncation.nextOffset} to continue`;
 	}
 
-	if (truncation.artifactId !== null) {
-		notice += `. ${formatFullOutputReference(truncation.artifactId!)}`;
+	if (truncation.artifactId !== null && truncation.artifactId !== undefined && truncation.artifactId !== "") {
+		notice += `. ${formatFullOutputReference(truncation.artifactId)}`;
 	}
 
 	return notice;

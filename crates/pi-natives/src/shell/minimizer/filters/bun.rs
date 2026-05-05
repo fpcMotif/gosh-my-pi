@@ -10,8 +10,18 @@ const BUN_PACKAGE_SUBCOMMANDS: &[&str] = &[
 const BUN_TEST_SUBCOMMANDS: &[&str] = &["test"];
 const BUN_BUILD_SUBCOMMANDS: &[&str] = &["build"];
 const BUN_TOOL_SUBCOMMANDS: &[&str] = &[
-	"tsc", "tsgo", "eslint", "biome", "oxlint", "oxfmt", "next", "prettier", "prisma", "jest",
-	"vitest", "playwright",
+	"tsc",
+	"tsgo",
+	"eslint",
+	"biome",
+	"oxlint",
+	"oxfmt",
+	"next",
+	"prettier",
+	"prisma",
+	"jest",
+	"vitest",
+	"playwright",
 ];
 const BUN_CPP_TOOL_SUBCOMMANDS: &[&str] = &["cmake", "ctest", "ninja", "gtest", "gtest-parallel"];
 

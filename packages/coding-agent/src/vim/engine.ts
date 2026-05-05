@@ -2145,6 +2145,7 @@ export class VimEngine {
 			case "update":
 				if (!this.buffer.modified) {
 					this.statusMessage = `${this.buffer.displayPath} unchanged`;
+					return;
 				}
 				await this.#executeEx(command.force ? "w!" : "w");
 				return;

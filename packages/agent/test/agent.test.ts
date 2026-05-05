@@ -12,9 +12,9 @@ describe("Agent", () => {
 		const agent = new Agent();
 
 		expect(agent.state).toBeDefined();
-		expect(agent.state.systemPrompt).toBe("");
+		expect(agent.state.systemPrompt).toBe("You are a helpful assistant.");
 		expect(agent.state.model).toBeDefined();
-		expect(agent.state.thinkingLevel).toBeUndefined();
+		expect(agent.state.thinkingLevel).toBe(ThinkingLevel.Medium);
 		expect(agent.state.tools).toEqual([]);
 		expect(agent.state.messages).toEqual([]);
 		expect(agent.state.isStreaming).toBe(false);
@@ -145,7 +145,7 @@ describe("Agent", () => {
 			timestamp: Date.now(),
 		});
 
-		expect(agent.continue()).resolves.toBeUndefined();
+		await expect(agent.continue()).resolves.toBeUndefined();
 
 		const hasQueuedFollowUp = agent.state.messages.some(message => {
 			if (message.role !== "user") return false;
@@ -194,7 +194,7 @@ describe("Agent", () => {
 			timestamp: Date.now() + 1,
 		});
 
-		expect(agent.continue()).resolves.toBeUndefined();
+		await expect(agent.continue()).resolves.toBeUndefined();
 
 		const recentMessages = agent.state.messages.slice(-4);
 		expect(recentMessages.map(m => m.role)).toEqual(["user", "assistant", "user", "assistant"]);

@@ -44,16 +44,15 @@ The lint+fmt sweep landed in commits `555616195..ae2ff9698`. Working state:
 - **`bun scripts/run-fix-sweep.ts [--dry-run|--no-validate|--abort-on-grow=false]`** — orchestrator. Pipeline order: `fix-or-defaulting` → `fix-null-checks` → `fix-await-loop-stop-close` → `fix-signal-aborted` → `fix-amplification`. Captures before/after counts and refuses to land any step that grows the total. Codemod scripts have been consolidated to this set; do not add new regex-based fixers without going through `scripts/lib/codemod-runner.ts`.
 - **`.oxlintrc.json`** — heavy override blocks for hotspot directories (coding-agent/src, ai/src, agent/src, swarm-extension, stats, utils, natives, tui, typescript-edit-benchmark) disable the rules that the codebase can't satisfy without major refactors (`complexity`, `max-lines`, `max-lines-per-function`, `max-depth`, `no-await-in-loop`, `strict-boolean-expressions`, `no-non-null-assertion`, `no-explicit-any`, `no-misused-promises`, `unbound-method`, etc.). Each new override block needs a `// why:` comment + TODO link in the commit message because the JSON file itself can't carry them.
 
-**Pre-commit hook**: `lint-staged` runs `oxfmt --write` + `oxlint --fix --no-error-on-unmatched-pattern` on staged `*.{js,jsx,ts,tsx}` files. The `oxlint --fix` step exits 1 on any remaining errors, so commits during the sweep used `--no-verify`. Future commits should *not* need `--no-verify` because the post-sweep error count is 0.
+**Pre-commit hook**: `lint-staged` runs `oxfmt --write` + `oxlint --fix --no-error-on-unmatched-pattern` on staged `*.{js,jsx,ts,tsx}` files. The `oxlint --fix` step exits 1 on any remaining errors, so commits during the sweep used `--no-verify`. Future commits should _not_ need `--no-verify` because the post-sweep error count is 0.
 
 ## Known CI failures (follow-up — out of scope of the lint sweep)
 
-The CI `check` job is green. The other CI jobs are knowingly red and need follow-up work:
+CI status drifts between commits — verify with `gh run list --branch main` before treating any entry as authoritative. The `check` and `install_methods` jobs are currently green; `native` and `test` are tracked below.
 
-- **`check` workspace step (tsgo)** — ~849 type errors across `packages/{coding-agent,ai,stats,swarm-extension,agent,typescript-edit-benchmark,utils,tui,natives}`. To unblock CI, every workspace package's `check:types` script ends with `|| true` so tsgo errors are still printed during local check but don't fail the build. Top hotspots: `stats/src/db.ts` (~120, all `bun:sqlite` returning `unknown`), `coding-agent/src/session/agent-session.ts` (~69), `ai/src/auth-storage.ts` (~36), `ai/src/auth-resolver.ts` (~24), `ai/src/providers/openai-responses.ts` (~24). Refactor or `@ts-nocheck` per-file, then drop the trailing `|| true`.
-- **`install_methods`** — dangling `./providers/{anthropic,brave,exa,gemini,jina,kagi,parallel,perplexity,searxng,synthetic,tavily}` imports + `const error = error as NodeJS.ErrnoException` shadow-var bug. The shadow-var pattern is the same one Stage 1 of the sweep reverted in `packages/coding-agent/src/tools/{gh,bash}.ts`; check `session-storage.ts` style fixes for the template.
-- **`native`** — Rust build failure. Run `bun check:rs` locally to triage.
-- **`test`** — depends on `native` succeeding (needs the addon).
+- **`check` workspace step (tsgo)** — ~456 raw type errors across `packages/{coding-agent,ai,stats,swarm-extension,agent,typescript-edit-benchmark,utils,tui,natives}`. To unblock CI, every workspace package's `check:types` script ends with `|| true` so tsgo errors are still printed during local check but don't fail the build. Top hotspots (own-package counts): `stats/src/db.ts` (30, all `bun:sqlite Statement<T=unknown>` — fix with typed `prepare<T>`), `coding-agent/src/session/agent-session.ts` (23, sixteen of which call methods that don't exist anywhere on the `Agent` class — restore the missing public surface in `packages/agent/src/agent.ts`), `ai/src/cli.ts` (9), `coding-agent/src/web/scrapers/types.ts` (7), `coding-agent/src/session/auth-storage.ts` (7, mostly cleared once `packages/ai/src/index.ts` re-exports `./auth-types`). Refactor or `@ts-nocheck` per-file, then drop the trailing `|| true`.
+- **`native`** — `cargo fmt --check` (Step 10 "Rust checks" of the matrix native job) rejects three constant-array layouts in `crates/pi-natives/src/shell/minimizer/filters/{bun.rs, js_tools.rs, mod.rs}`. `cargo build` and `cargo clippy` are clean. Fix: `cargo fmt --all`.
+- **`test`** — cascades from `native`: when native skips its build step, `packages/natives/native/pi_natives.<platform>-<arch>.node` is missing and the test job's `bun build:native` has nothing to wire up. Auto-recovers when native passes.
 
 ## History footguns
 
@@ -65,18 +64,18 @@ The CI `check` job is green. The other CI jobs are knowingly red and need follow
 
 ## Commands worth pinning
 
-| Command                                         | Use                                                                        |
-| ----------------------------------------------- | -------------------------------------------------------------------------- |
-| `bun check`                                     | TS + Rust check in parallel                                                |
-| `bun check:ts`                                  | oxfmt + oxlint + tsgo (workspace)                                          |
-| `bun fix:ts`                                    | oxfmt --write + oxlint --fix-dangerously + per-package fixes               |
-| `bun --cwd=packages/<x> test`                   | Scoped tests for one package                                               |
-| `bun --cwd=packages/ai run generate-models`     | Regenerate `models.json`                                                   |
-| `bun build:native`                              | Build the N-API addon (only when touching `crates/` or `packages/natives`) |
-| `bun stats:run` / `stats:edits` / `stats:tools` | Session-stats analyses                                                     |
+| Command                                         | Use                                                                                                         |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `bun check`                                     | TS + Rust check in parallel                                                                                 |
+| `bun check:ts`                                  | oxfmt + oxlint + tsgo (workspace)                                                                           |
+| `bun fix:ts`                                    | oxfmt --write + oxlint --fix-dangerously + per-package fixes                                                |
+| `bun --cwd=packages/<x> test`                   | Scoped tests for one package                                                                                |
+| `bun --cwd=packages/ai run generate-models`     | Regenerate `models.json`                                                                                    |
+| `bun build:native`                              | Build the N-API addon (only when touching `crates/` or `packages/natives`)                                  |
+| `bun stats:run` / `stats:edits` / `stats:tools` | Session-stats analyses                                                                                      |
 | `bun fix:ts:strict`                             | Like `bun fix:ts` but the codemod orchestrator aborts if any step grows the lint count (sweep verification) |
-| `bun scripts/lint-snapshot.ts --diff`           | Show per-rule lint deltas vs the previous run (gitignored `.lint-history.jsonl`) |
-| `bun scripts/run-fix-sweep.ts --dry-run`        | List the orchestrator's codemod pipeline without running it                 |
+| `bun scripts/lint-snapshot.ts --diff`           | Show per-rule lint deltas vs the previous run (gitignored `.lint-history.jsonl`)                            |
+| `bun scripts/run-fix-sweep.ts --dry-run`        | List the orchestrator's codemod pipeline without running it                                                 |
 
 ## Project skills
 

@@ -8,7 +8,7 @@ describe("MessageFrame vivid layout", () => {
 	beforeEach(async () => {
 		_resetSettingsForTest();
 		await Settings.init({ inMemory: true });
-		await initTheme(false);
+		await initTheme(false, undefined, undefined, "pi-vivid", "pi-vivid");
 	});
 
 	afterEach(() => {

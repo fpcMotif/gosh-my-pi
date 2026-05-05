@@ -144,23 +144,22 @@ describe("AgentSession local e2e", () => {
 		const harness = await createLocalAgentSessionHarness({
 			streamFn: (model, _context, options) => {
 				callCount += 1;
+				const currentCall = callCount;
 				const stream = new MockAssistantStream();
+				if (currentCall === 1) {
+					const emitAbort = () => {
+						stream.push({
+							type: "error",
+							reason: "aborted",
+							error: createAssistantMessage("aborted", { model, stopReason: "aborted" }),
+						});
+					};
+					options?.signal?.addEventListener("abort", emitAbort, { once: true });
+					if (options?.signal?.aborted === true) emitAbort();
+				}
 				queueMicrotask(() => {
 					stream.push({ type: "start", partial: createAssistantMessage("", { model }) });
-					if (callCount === 1) {
-						options?.signal?.addEventListener(
-							"abort",
-							() => {
-								stream.push({
-									type: "error",
-									reason: "aborted",
-									error: createAssistantMessage("aborted", { model, stopReason: "aborted" }),
-								});
-							},
-							{ once: true },
-						);
-						return;
-					}
+					if (currentCall === 1) return;
 					stream.push({
 						type: "done",
 						reason: "stop",
@@ -173,7 +172,7 @@ describe("AgentSession local e2e", () => {
 		harnesses.push(harness);
 
 		const inFlight = harness.session.prompt("will abort").catch(() => undefined);
-		await waitFor(() => harness.session.isStreaming);
+		await waitFor(() => callCount === 1 && harness.agent.state.isStreaming);
 		await harness.session.abort();
 		await inFlight;
 

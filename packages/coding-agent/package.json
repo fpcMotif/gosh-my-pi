@@ -25,7 +25,7 @@
 		"directory": "packages/coding-agent"
 	},
 	"bin": {
-		"omp": "src/cli.ts"
+		"gmp": "src/cli.ts"
 	},
 	"files": [
 		"src",

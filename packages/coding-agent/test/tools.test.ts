@@ -1615,8 +1615,7 @@ describe("edit tool CRLF handling", () => {
 		).rejects.toThrow(/Found 2 occurrences/);
 	});
 
-	// TODO: CRLF preservation broken by LSP formatting - fix later
-	it.skip("should preserve UTF-8 BOM after edit", async () => {
+	it("should preserve UTF-8 BOM after edit", async () => {
 		const testFile = path.join(testDir, "bom-test.txt");
 		fs.writeFileSync(testFile, "\uFEFFfirst\r\nsecond\r\nthird\r\n");
 
@@ -1625,7 +1624,7 @@ describe("edit tool CRLF handling", () => {
 			edits: [{ old_text: "second\n", new_text: "REPLACED\n" }],
 		});
 
-		const content = await Bun.file(testFile).text();
+		const content = await fs.promises.readFile(testFile, "utf8");
 		expect(content).toBe("\uFEFFfirst\r\nREPLACED\r\nthird\r\n");
 	});
 });

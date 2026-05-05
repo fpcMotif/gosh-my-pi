@@ -5,6 +5,7 @@ import {
 	type AssistantMessage,
 	type AssistantMessageEvent,
 	Effort,
+	getBundledModel,
 	type ImageContent,
 	type Message,
 	type Model,
@@ -15,6 +16,7 @@ import {
 } from "@oh-my-pi/pi-ai";
 import { agentLoop, agentLoopContinue } from "./agent-loop";
 import {
+	AgentBusyError,
 	type AgentContext,
 	type AgentEvent,
 	type AgentLoopConfig,
@@ -76,7 +78,10 @@ export class Agent {
 			messages: options.initialState?.messages ?? [],
 			systemPrompt: options.initialState?.systemPrompt ?? "You are a helpful assistant.",
 			tools: options.initialState?.tools ?? [],
-			model: options.initialState?.model as unknown as Model,
+			// Default to a known-bundled model so `state.model` is always defined; production callers
+			// (packages/coding-agent/src/sdk.ts) always pass an explicit model so this default is
+			// inert in real use, but tests rely on it.
+			model: options.initialState?.model ?? getBundledModel("google", "gemini-2.5-flash-lite-preview-06-17"),
 			thinkingLevel: options.initialState?.thinkingLevel ?? Effort.Medium,
 			isStreaming: false,
 			streamMessage: null,
@@ -256,7 +261,6 @@ export class Agent {
 		options?: AgentPromptOptions,
 	) {
 		if (this.#state.isStreaming) {
-			const { AgentBusyError } = await import("./types");
 			throw new AgentBusyError();
 		}
 
@@ -273,7 +277,6 @@ export class Agent {
 	 */
 	async continue() {
 		if (this.#state.isStreaming) {
-			const { AgentBusyError } = await import("./types");
 			throw new AgentBusyError();
 		}
 
@@ -283,7 +286,11 @@ export class Agent {
 		if (messages[messages.length - 1].role === "assistant") {
 			const queuedSteering = this.#dequeueSteeringMessages();
 			if (queuedSteering.length > 0) {
-				await this.#runLoop(queuedSteering, { skipInitialSteeringPoll: true });
+				// In "all" mode the dequeue drained every queued message, so further polls would
+				// be wasted. In "one-at-a-time" (the default), only one was dequeued, so let the
+				// loop keep polling so the next steering message gets its own assistant response.
+				const skipInitialSteeringPoll = (this.#opts.steeringMode ?? "one-at-a-time") === "all";
+				await this.#runLoop(queuedSteering, { skipInitialSteeringPoll });
 				return;
 			}
 
@@ -509,20 +516,24 @@ export class Agent {
 	}
 
 	/**
-	 * Drain a message queue: take all when mode is "all" (default), otherwise
-	 * one at a time. Returns `[]` when the queue is empty.
+	 * Drain a message queue: take all when mode is "all", otherwise one at a time.
+	 * Returns `[]` when the queue is empty.
 	 */
 	#drainQueue(queue: AgentMessage[], mode: "all" | "one-at-a-time" | undefined): AgentMessage[] {
-		if ((mode ?? "all") === "all") return queue.splice(0);
+		if (mode === "all") return queue.splice(0);
+		// Default and "one-at-a-time" both pop a single message, keeping caller invariants tight
+		// (one assistant response per dequeued user message).
 		const msg = queue.shift();
 		return msg !== undefined ? [msg] : [];
 	}
 
 	#dequeueSteeringMessages(): AgentMessage[] {
+		// Steering defaults to one-at-a-time so each interruption gets its own assistant response.
 		return this.#drainQueue(this.#steeringQueue, this.#opts.steeringMode);
 	}
 
 	#dequeueFollowUpMessages(): AgentMessage[] {
-		return this.#drainQueue(this.#followUpQueue, this.#opts.followUpMode);
+		// Follow-up defaults to "all" so a batch of queued messages is processed in a single turn.
+		return this.#drainQueue(this.#followUpQueue, this.#opts.followUpMode ?? "all");
 	}
 }

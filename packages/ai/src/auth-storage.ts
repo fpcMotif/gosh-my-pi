@@ -8,10 +8,13 @@ import type { Provider } from "./types";
 import type { CredentialRankingStrategy, UsageLogger, UsageProvider, UsageReport } from "./usage";
 import { codexRankingStrategy } from "./usage/openai-codex";
 import { getOAuthProvider } from "./utils/oauth";
+import { loginKagi } from "./utils/oauth/kagi";
 import { loginKimi } from "./utils/oauth/kimi";
 import { loginMiniMaxCode } from "./utils/oauth/minimax-code";
 import { loginMoonshot } from "./utils/oauth/moonshot";
 import { loginOpenAICodex } from "./utils/oauth/openai-codex";
+import { loginParallel } from "./utils/oauth/parallel";
+import { loginTavily } from "./utils/oauth/tavily";
 import type { OAuthController, OAuthCredentials, OAuthProviderId } from "./utils/oauth/types";
 import { loginZai } from "./utils/oauth/zai";
 
@@ -175,6 +178,10 @@ export class AuthStorage {
 		return this.#getCredentialsForProvider(p).length > 0;
 	}
 
+	hasOAuth(p: string): boolean {
+		return this.#getCredentialsForProvider(p).some(c => c.type === "oauth");
+	}
+
 	hasAuth(p: string): boolean {
 		if (this.#runtimeOverrides.has(p)) return true;
 		if (this.has(p)) return true;
@@ -219,6 +226,15 @@ export class AuthStorage {
 				break;
 			case "zai":
 				await this.set(p, { type: "api_key", key: await loginZai(ctrl) });
+				return;
+			case "kagi":
+				await this.set(p, { type: "api_key", key: await loginKagi(ctrl) });
+				return;
+			case "parallel":
+				await this.set(p, { type: "api_key", key: await loginParallel(ctrl) });
+				return;
+			case "tavily":
+				await this.set(p, { type: "api_key", key: await loginTavily(ctrl) });
 				return;
 			case "minimax-code":
 				await this.set(p, { type: "api_key", key: await loginMiniMaxCode(ctrl) });
@@ -333,7 +349,7 @@ export class AuthStorage {
 
 	async #resolveOAuthApiKey(p: string, s?: string, o?: unknown): Promise<string | undefined> {
 		const cs = this.#getStoredCredentials(p)
-			.map((c, i) => ({ credential: c as OAuthCredential, index: i }))
+			.map((entry, i) => ({ credential: entry.credential as OAuthCredential, index: i }))
 			.filter(e => e.credential.type === "oauth");
 		if (cs.length === 0) return undefined;
 		const pk = `${p}:oauth`;
@@ -357,25 +373,64 @@ export class AuthStorage {
 					})
 				: order.map(idx => ({ selection: cs[idx], usage: null, usageChecked: false }));
 
-		const res = await tryOAuthCredential({
+		for (const candidate of candidates) {
+			const res = await tryOAuthCredential({
+				provider: p,
+				selection: candidate.selection,
+				providerKey: pk,
+				sessionId: s,
+				options: o,
+				usageOptions: {
+					checkUsage: true,
+					allowBlocked: false,
+					prefetchedUsage: candidate.usage,
+					usagePrechecked: candidate.usageChecked,
+				},
+				ctx: this.#getResolverCtx(),
+			});
+			if (typeof res === "string" && res.startsWith("ERROR:DEFINITIVE_FAILURE:")) {
+				this.#disableCredentialAt(p, candidate.selection.index, res);
+				return this.getApiKey(p, s, o);
+			}
+			if (res !== undefined) return res;
+		}
+
+		const fallback = candidates[0];
+		if (fallback === undefined) return undefined;
+		const fallbackRes = await tryOAuthCredential({
 			provider: p,
-			selection: candidates[0].selection,
+			selection: fallback.selection,
 			providerKey: pk,
 			sessionId: s,
 			options: o,
 			usageOptions: {
 				checkUsage: true,
-				allowBlocked: false,
-				prefetchedUsage: candidates[0].usage,
-				usagePrechecked: candidates[0].usageChecked,
+				allowBlocked: true,
+				prefetchedUsage: fallback.usage,
+				usagePrechecked: fallback.usageChecked,
 			},
 			ctx: this.#getResolverCtx(),
 		});
-		if (typeof res === "string" && res.startsWith("ERROR:DEFINITIVE_FAILURE:")) {
-			this.#disableCredentialAt(p, candidates[0].selection.index, res);
+		if (typeof fallbackRes === "string" && fallbackRes.startsWith("ERROR:DEFINITIVE_FAILURE:")) {
+			this.#disableCredentialAt(p, fallback.selection.index, fallbackRes);
 			return this.getApiKey(p, s, o);
 		}
-		return res;
+		return fallbackRes;
+	}
+
+	async peekApiKey(p: string, s?: string): Promise<string | undefined> {
+		const override = this.#runtimeOverrides.get(p);
+		if (override !== undefined) return override;
+		const ak = this.#selectCredentialByType(p, "api_key", s);
+		if (ak) return this.#configValueResolver(ak.credential.key);
+		const ok = this.#selectCredentialByType(p, "oauth", s);
+		if (ok && ok.credential.expires > Date.now() + 60_000) {
+			const oauthProvider = getOAuthProvider(p);
+			return oauthProvider?.getApiKey?.(ok.credential) ?? ok.credential.access;
+		}
+		const env = getEnvApiKey(p);
+		if (env !== undefined && env !== "") return env;
+		return this.#fallbackResolver?.(p);
 	}
 
 	#getCredentialOrder(pk: string, s: string | undefined, total: number): number[] {
@@ -402,7 +457,7 @@ export class AuthStorage {
 
 	#selectCredentialByType<T extends "api_key" | "oauth">(p: string, t: T, s?: string) {
 		const cs = this.#getStoredCredentials(p)
-			.map((c, i) => ({ credential: c as Extract<AuthCredential, { type: T }>, index: i }))
+			.map((entry, i) => ({ credential: entry.credential as Extract<AuthCredential, { type: T }>, index: i }))
 			.filter(e => e.credential.type === t);
 		if (cs.length === 0) return undefined;
 		const pk = `${p}:${t}`;

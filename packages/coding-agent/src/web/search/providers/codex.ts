@@ -8,7 +8,7 @@
 import * as os from "node:os";
 import { getBundledModels } from "@oh-my-pi/pi-ai";
 import { decodeJwt } from "@oh-my-pi/pi-ai/utils/oauth/openai-codex";
-import { $env, getAgentDbPath, readSseJson } from "@oh-my-pi/pi-utils";
+import { $env, APP_NAME, getAgentDbPath, readSseJson } from "@oh-my-pi/pi-utils";
 import packageJson from "../../../../package.json" with { type: "json" };
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
@@ -465,7 +465,7 @@ export async function searchCodex(params: CodexSearchParams): Promise<SearchResp
 	const auth = await findCodexAuth();
 	if (!auth) {
 		throw new Error(
-			"No Codex OAuth credentials found. Login with 'omp /login openai-codex' to enable Codex web search.",
+			`No Codex OAuth credentials found. Login with '${APP_NAME} /login openai-codex' to enable Codex web search.`,
 		);
 	}
 

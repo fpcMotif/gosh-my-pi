@@ -3,6 +3,7 @@ export { Type } from "@sinclair/typebox";
 export * from "./api-registry";
 export * from "./auth-credential-store";
 export * from "./auth-storage";
+export * from "./auth-types";
 export * from "./model-cache";
 export * from "./model-manager";
 export * from "./model-thinking";

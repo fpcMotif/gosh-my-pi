@@ -6,9 +6,8 @@
 use crate::shell::minimizer::{MinimizerCtx, MinimizerOutput, primitives};
 
 const SUPPORTED_TOOLS: &[&str] = &["next", "prettier", "prisma"];
-const NPX_ROUTABLE_TOOLS: &[&str] = &[
-	"tsc", "tsgo", "eslint", "oxlint", "oxfmt", "prisma", "prettier", "next",
-];
+const NPX_ROUTABLE_TOOLS: &[&str] =
+	&["tsc", "tsgo", "eslint", "oxlint", "oxfmt", "prisma", "prettier", "next"];
 
 pub fn supports(program: &str, subcommand: Option<&str>) -> bool {
 	effective_tool(program, subcommand).is_some()

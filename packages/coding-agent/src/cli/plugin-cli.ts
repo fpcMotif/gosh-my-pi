@@ -1,7 +1,7 @@
 /**
  * Plugin CLI command handlers.
  *
- * Handles `omp plugin <command>` subcommands for plugin lifecycle management.
+ * Handles plugin lifecycle management.
  */
 
 import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils";
@@ -325,7 +325,7 @@ async function handleUpgrade(args: string[], flags: PluginCommandArgs["flags"]):
 			if (flags.scope) {
 				console.error(
 					chalk.yellow(
-						`Warning: --scope is ignored when upgrading all plugins. Use 'omp plugin upgrade <id> --scope ${flags.scope}' to target a specific plugin and scope.`,
+						`Warning: --scope is ignored when upgrading all plugins. Use '${APP_NAME} plugin upgrade <id> --scope ${flags.scope}' to target a specific plugin and scope.`,
 					),
 				);
 			}
