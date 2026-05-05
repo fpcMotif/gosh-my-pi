@@ -174,7 +174,8 @@ describe("agent loop — tool error correction", () => {
 		expect(endEvent?.isError).toBe(true);
 		// Sync throws must be wrapped exactly like async ones — no leaked Error
 		// object reaches the consumer event stream.
-		expect((endEvent?.result as ToolResultMessage).isError).toBe(true);
+		const result = endEvent?.result as ToolResultMessage | undefined;
+		expect(result?.isError).toBe(true);
 	});
 });
 

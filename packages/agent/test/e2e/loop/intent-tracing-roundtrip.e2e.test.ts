@@ -2,7 +2,15 @@ import { describe, expect, it } from "bun:test";
 import { agentLoop, INTENT_FIELD } from "@oh-my-pi/pi-agent-core/agent-loop";
 import type { AgentEvent, AgentTool } from "@oh-my-pi/pi-agent-core/types";
 import { Type } from "@sinclair/typebox";
-import { basicConfig, emptyContext, drainEvents, makeToolCall, scriptedStream, userMessage } from "./test-utils";
+import {
+	basicConfig,
+	emptyContext,
+	drainEvents,
+	makeToolCall,
+	textTurn,
+	turnSequencedStream,
+	userMessage,
+} from "./test-utils";
 
 /**
  * Contract: when `intentTracing: true`, the agent loop normalises tools so
@@ -50,12 +58,13 @@ describe("agent loop — intent tracing roundtrip", () => {
 			context,
 			config,
 			undefined,
-			scriptedStream([
-				{ kind: "toolDelta", partialJson: JSON.stringify({ value: "hello" }) },
-				{ kind: "toolDone", toolCall },
-				{ kind: "done", reason: "toolUse" },
-				{ kind: "text", delta: "ok" },
-				{ kind: "done" },
+			turnSequencedStream([
+				[
+					{ kind: "toolDelta", partialJson: JSON.stringify({ value: "hello" }) },
+					{ kind: "toolDone", toolCall },
+					{ kind: "done", reason: "toolUse" },
+				],
+				textTurn("ok"),
 			]),
 		);
 		await drainEvents(stream);
@@ -78,12 +87,13 @@ describe("agent loop — intent tracing roundtrip", () => {
 			context,
 			config,
 			undefined,
-			scriptedStream([
-				{ kind: "toolDelta", partialJson: JSON.stringify({ value: "v" }) },
-				{ kind: "toolDone", toolCall },
-				{ kind: "done", reason: "toolUse" },
-				{ kind: "text", delta: "ok" },
-				{ kind: "done" },
+			turnSequencedStream([
+				[
+					{ kind: "toolDelta", partialJson: JSON.stringify({ value: "v" }) },
+					{ kind: "toolDone", toolCall },
+					{ kind: "done", reason: "toolUse" },
+				],
+				textTurn("ok"),
 			]),
 		);
 		const events = await drainEvents(stream);
@@ -122,12 +132,13 @@ describe("agent loop — intent tracing roundtrip", () => {
 			context,
 			config,
 			undefined,
-			scriptedStream([
-				{ kind: "toolDelta", partialJson: JSON.stringify({ value: "v" }) },
-				{ kind: "toolDone", toolCall },
-				{ kind: "done", reason: "toolUse" },
-				{ kind: "text", delta: "ok" },
-				{ kind: "done" },
+			turnSequencedStream([
+				[
+					{ kind: "toolDelta", partialJson: JSON.stringify({ value: "v" }) },
+					{ kind: "toolDone", toolCall },
+					{ kind: "done", reason: "toolUse" },
+				],
+				textTurn("ok"),
 			]),
 		);
 		const events = await drainEvents(stream);

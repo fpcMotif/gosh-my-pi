@@ -89,6 +89,14 @@ export async function drainWithTimeout(
 	const timeout = Promise.withResolvers<"timeout">();
 	const handle = setTimeout(() => timeout.resolve("timeout"), timeoutMs);
 
+	// Attach the result() handler synchronously so a fast rejection (e.g.
+	// transformContext throwing during the first turn) is captured before the
+	// microtask queue can flag it as unhandled.
+	let resultErr: unknown;
+	const resultPromise = stream.result().catch(error => {
+		resultErr = error;
+	});
+
 	let iterErr: unknown;
 	const consume = (async () => {
 		try {
@@ -103,10 +111,7 @@ export async function drainWithTimeout(
 	clearTimeout(handle);
 	if (winner === "timeout") return { events, iterErr, timedOut: true };
 
-	let resultErr: unknown;
-	await stream.result().catch(error => {
-		resultErr = error;
-	});
+	await resultPromise;
 	return { events, iterErr, resultErr, timedOut: false };
 }
 

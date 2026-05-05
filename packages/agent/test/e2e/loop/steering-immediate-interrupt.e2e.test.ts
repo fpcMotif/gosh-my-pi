@@ -93,9 +93,14 @@ describe("agent loop — steering interrupt (immediate)", () => {
 			makeTool("gamma", () => calls.push("gamma")),
 		];
 
+		let steeringEmitted = false;
 		const config = basicConfig({
 			interruptMode: "wait",
-			getSteeringMessages: async () => [userMessage("steer")],
+			getSteeringMessages: async () => {
+				if (steeringEmitted) return [];
+				steeringEmitted = true;
+				return [userMessage("steer")];
+			},
 		});
 
 		const stream = agentLoop(
