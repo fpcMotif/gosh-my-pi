@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message } from "@oh-my-pi/pi-ai";
-import { Spacer, Text, TruncatedText } from "@oh-my-pi/pi-tui";
+import { sanitizeText } from "@oh-my-pi/pi-natives";
+import { replaceTabs, Spacer, Text, TruncatedText } from "@oh-my-pi/pi-tui";
 import { APP_NAME } from "@oh-my-pi/pi-utils";
 import { settings } from "../../config/settings";
 import { AssistantMessageComponent } from "../../modes/components/assistant-message";
@@ -459,23 +460,34 @@ export class UiHelpers {
 	}
 
 	showError(errorMessage: string): void {
+		const sanitised = this.#sanitiseInline(errorMessage);
 		if (this.ctx.isBackgrounded) {
-			process.stderr.write(`Error: ${errorMessage}\n`);
+			process.stderr.write(`Error: ${sanitised}\n`);
 			return;
 		}
 		this.ctx.chatContainer.addChild(new Spacer(1));
-		this.ctx.chatContainer.addChild(new Text(theme.fg("error", `Error: ${errorMessage}`), 1, 0));
+		this.ctx.chatContainer.addChild(new Text(theme.fg("error", `Error: ${sanitised}`), 1, 0));
 		this.ctx.ui.requestRender();
 	}
 
 	showWarning(warningMessage: string): void {
+		const sanitised = this.#sanitiseInline(warningMessage);
 		if (this.ctx.isBackgrounded) {
-			process.stderr.write(`Warning: ${warningMessage}\n`);
+			process.stderr.write(`Warning: ${sanitised}\n`);
 			return;
 		}
 		this.ctx.chatContainer.addChild(new Spacer(1));
-		this.ctx.chatContainer.addChild(new Text(theme.fg("warning", `Warning: ${warningMessage}`), 1, 0));
+		this.ctx.chatContainer.addChild(new Text(theme.fg("warning", `Warning: ${sanitised}`), 1, 0));
 		this.ctx.ui.requestRender();
+	}
+
+	/**
+	 * Strip control bytes (BEL, raw ANSI escapes embedded by callers, etc.)
+	 * and normalise tabs so error/warning text rendered inline cannot corrupt
+	 * surrounding theme styling or ring the terminal.
+	 */
+	#sanitiseInline(text: string): string {
+		return replaceTabs(sanitizeText(text));
 	}
 
 	showNewVersionNotification(newVersion: string): void {
