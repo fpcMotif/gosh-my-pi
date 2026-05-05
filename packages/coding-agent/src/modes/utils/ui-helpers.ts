@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message } from "@oh-my-pi/pi-ai";
 import { Spacer, Text, TruncatedText } from "@oh-my-pi/pi-tui";
+import { APP_NAME } from "@oh-my-pi/pi-utils";
 import { settings } from "../../config/settings";
 import { AssistantMessageComponent } from "../../modes/components/assistant-message";
 import { BashExecutionComponent } from "../../modes/components/bash-execution";
@@ -485,7 +486,7 @@ export class UiHelpers {
 				`${theme.bold(theme.fg("warning", "Update Available"))}\n${theme.fg(
 					"muted",
 					`New version ${newVersion} is available. Run: `,
-				)}${theme.fg("accent", "omp update")}`,
+				)}${theme.fg("accent", `${APP_NAME} update`)}`,
 				1,
 				0,
 			),

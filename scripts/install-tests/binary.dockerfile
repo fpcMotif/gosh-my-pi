@@ -22,8 +22,8 @@ RUN cd packages/coding-agent && bun run build
 
 # Install binary to PATH
 RUN mkdir -p /root/.local/bin && \
-    cp packages/coding-agent/dist/omp /root/.local/bin/
+    cp packages/coding-agent/dist/gmp /root/.local/bin/
 ENV PATH="/root/.local/bin:$PATH"
 
 # Verify
-RUN HOME=/tmp/omp-home XDG_DATA_HOME=/tmp/omp-xdg omp --version
+RUN HOME=/tmp/gmp-home XDG_DATA_HOME=/tmp/gmp-xdg gmp --version

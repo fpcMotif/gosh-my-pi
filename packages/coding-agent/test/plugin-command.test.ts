@@ -3,7 +3,7 @@ import type { CliConfig } from "@oh-my-pi/pi-utils/cli";
 import Plugin from "../src/commands/plugin";
 
 const TEST_CONFIG: CliConfig = {
-	bin: "omp",
+	bin: "gmp",
 	version: "0.0.0-test",
 	commands: new Map(),
 };

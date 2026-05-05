@@ -1,6 +1,7 @@
 import type { SearchProvider } from "./providers/base";
 import { CodexProvider } from "./providers/codex";
 import { KimiProvider } from "./providers/kimi";
+import { TavilyProvider } from "./providers/tavily";
 import { ZaiProvider } from "./providers/zai";
 import type { SearchProviderId } from "./types";
 
@@ -11,6 +12,7 @@ const SEARCH_PROVIDERS: Record<SearchProviderId, SearchProvider> = {
 	kimi: new KimiProvider(),
 	zai: new ZaiProvider(),
 	codex: new CodexProvider(),
+	tavily: new TavilyProvider(),
 } as const;
 
 export const SEARCH_PROVIDER_ORDER: SearchProviderId[] = ["kimi", "codex", "zai"];

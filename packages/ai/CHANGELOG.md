@@ -6,6 +6,10 @@
 
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
 
+### Fixed
+
+- Restored `AuthStorage.hasOAuth()` and `AuthStorage.peekApiKey()` so downstream model discovery and status rendering can probe credentials without refreshing OAuth tokens.
+
 ## [14.5.10] - 2026-04-30
 
 ### Added

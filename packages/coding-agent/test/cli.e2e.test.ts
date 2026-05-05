@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import packageJson from "../package.json" with { type: "json" };
 
 interface CliResult {
 	exitCode: number;
@@ -114,9 +115,10 @@ function parseJson<T>(result: CliResult): T {
 describe("CLI e2e", () => {
 	test("--version prints the package version without starting a session", async () => {
 		const result = await runCli(["--version"]);
+		const binaryName = Object.keys(packageJson.bin)[0] ?? "gmp";
 
 		expect(result.exitCode).toBe(0);
-		expect(result.stdout.trim()).toMatch(/^omp\/\d+\.\d+\.\d+(?:[-+].*)?$/);
+		expect(result.stdout.trim()).toBe(`${binaryName}/${packageJson.version}`);
 		expect(result.stderr).toBe("");
 	});
 });

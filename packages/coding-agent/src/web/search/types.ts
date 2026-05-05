@@ -5,10 +5,10 @@
  */
 
 /** Supported web search providers */
-export type SearchProviderId = "kimi" | "zai" | "codex";
+export type SearchProviderId = "kimi" | "zai" | "codex" | "tavily";
 
 export function isSearchProviderId(value: string): value is SearchProviderId {
-	return ["kimi", "zai", "codex"].includes(value);
+	return ["kimi", "zai", "codex", "tavily"].includes(value);
 }
 
 export function isSearchProviderPreference(value: string): value is SearchProviderId | "auto" {

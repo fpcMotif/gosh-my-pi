@@ -1,4 +1,5 @@
 import { getEnvApiKey } from "@oh-my-pi/pi-ai";
+import { APP_NAME } from "@oh-my-pi/pi-utils";
 import { findCredential } from "./search/providers/utils";
 
 const KAGI_SEARCH_URL = "https://kagi.com/api/v0/search";
@@ -129,7 +130,7 @@ function getAuthHeaders(apiKey: string): Record<string, string> {
 export async function searchWithKagi(query: string, options: KagiSearchOptions = {}): Promise<KagiSearchResult> {
 	const apiKey = await findKagiApiKey();
 	if (apiKey === null || apiKey === undefined || apiKey === "") {
-		throw new KagiApiError("Kagi credentials not found. Set KAGI_API_KEY or login with 'omp /login kagi'.");
+		throw new KagiApiError(`Kagi credentials not found. Set KAGI_API_KEY or login with '${APP_NAME} /login kagi'.`);
 	}
 
 	const requestUrl = new URL(KAGI_SEARCH_URL);

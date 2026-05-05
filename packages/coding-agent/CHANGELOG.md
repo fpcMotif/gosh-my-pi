@@ -6,6 +6,7 @@
 
 - Refreshed the default coding-agent TUI with the pi-vivid theme, compact status/tool chrome, conversation rails, and a lower-noise welcome surface.
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt and updated TypeScript project diagnostics to use tsgo.
+- Renamed the installed CLI command and prebuilt binary artifacts from `omp` to `gmp` to avoid collisions with an existing `omp` command.
 
 ### Fixed
 

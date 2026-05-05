@@ -19,37 +19,37 @@ const archivesDir = path.join(binariesDir, ".archives");
 const targets: ArchiveTarget[] = [
 	{
 		id: "darwin-arm64",
-		binaryName: "omp-darwin-arm64",
-		archiveName: "omp-darwin-arm64.tar.gz",
-		executableName: "omp",
+		binaryName: "gmp-darwin-arm64",
+		archiveName: "gmp-darwin-arm64.tar.gz",
+		executableName: "gmp",
 		nativeAddons: ["pi_natives.darwin-arm64.node"],
 	},
 	{
 		id: "darwin-x64",
-		binaryName: "omp-darwin-x64",
-		archiveName: "omp-darwin-x64.tar.gz",
-		executableName: "omp",
+		binaryName: "gmp-darwin-x64",
+		archiveName: "gmp-darwin-x64.tar.gz",
+		executableName: "gmp",
 		nativeAddons: ["pi_natives.darwin-x64-modern.node", "pi_natives.darwin-x64-baseline.node"],
 	},
 	{
 		id: "linux-x64",
-		binaryName: "omp-linux-x64",
-		archiveName: "omp-linux-x64.tar.gz",
-		executableName: "omp",
+		binaryName: "gmp-linux-x64",
+		archiveName: "gmp-linux-x64.tar.gz",
+		executableName: "gmp",
 		nativeAddons: ["pi_natives.linux-x64-modern.node", "pi_natives.linux-x64-baseline.node"],
 	},
 	{
 		id: "linux-arm64",
-		binaryName: "omp-linux-arm64",
-		archiveName: "omp-linux-arm64.tar.gz",
-		executableName: "omp",
+		binaryName: "gmp-linux-arm64",
+		archiveName: "gmp-linux-arm64.tar.gz",
+		executableName: "gmp",
 		nativeAddons: ["pi_natives.linux-arm64.node"],
 	},
 	{
 		id: "win32-x64",
-		binaryName: "omp-windows-x64.exe",
-		archiveName: "omp-windows-x64.tar.gz",
-		executableName: "omp.exe",
+		binaryName: "gmp-windows-x64.exe",
+		archiveName: "gmp-windows-x64.tar.gz",
+		executableName: "gmp.exe",
 		nativeAddons: ["pi_natives.win32-x64-modern.node", "pi_natives.win32-x64-baseline.node"],
 	},
 ];
@@ -72,7 +72,7 @@ async function createArchive(target: ArchiveTarget): Promise<void> {
 		await copyRequiredFile(path.join(binariesDir, addonName), path.join(stagingDir, addonName));
 	}
 
-	if (target.executableName === "omp") {
+	if (target.executableName === "gmp") {
 		await fs.chmod(path.join(stagingDir, target.executableName), 0o755);
 	}
 

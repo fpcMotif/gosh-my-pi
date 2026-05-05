@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
 
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
 const packageDir = path.join(import.meta.dir, "..");
-const outputPath = path.join(packageDir, "dist", "omp");
+const outputPath = path.join(packageDir, "dist", "gmp");
+const legacyOutputPath = path.join(packageDir, "dist", "omp");
 
 function shouldAdhocSignDarwinBinary(): boolean {
 	return process.platform === "darwin";
@@ -27,6 +29,7 @@ async function main(): Promise<void> {
 	try {
 		await runCommand(["bun", "--cwd=../natives", "run", "embed:native"]);
 		try {
+			await fs.rm(legacyOutputPath, { force: true });
 			const buildEnv = shouldAdhocSignDarwinBinary() ? { ...Bun.env, BUN_NO_CODESIGN_MACHO_BINARY: "1" } : Bun.env;
 			await runCommand(
 				[
@@ -41,7 +44,7 @@ async function main(): Promise<void> {
 					"../..",
 					"./src/cli.ts",
 					"--outfile",
-					"dist/omp",
+					"dist/gmp",
 				],
 				buildEnv,
 			);

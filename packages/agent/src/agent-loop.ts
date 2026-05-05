@@ -19,9 +19,10 @@ async function runLoop(
 	streamFn?: StreamFn,
 	initialMessages: AgentMessage[] = [],
 ): Promise<void> {
+	stream.push({ type: "agent_start" });
 	let firstTurn = true;
 	// When the caller already supplied initialMessages (e.g. an explicit prompt or a single
-	// dequeued steering message in one-at-a-time mode), don't drain the steering queue here —
+	// dequeued steering message in one-at-a-time mode), don't drain the steering queue here.
 	// the inner loop polls on subsequent iterations so each queued message gets its own turn.
 	const steeringMessages = initialMessages.length > 0 ? [] : ((await config.getSteeringMessages?.()) ?? []);
 	let pendingMessages: AgentMessage[] = [...initialMessages, ...steeringMessages];
@@ -37,7 +38,11 @@ async function runLoop(
 			firstTurn,
 			pendingMessages,
 		);
-		if (result.terminated) return;
+		if (result.terminated) {
+			stream.push({ type: "agent_end", messages: newMessages });
+			stream.end(newMessages);
+			return;
+		}
 
 		firstTurn = false;
 		pendingMessages = result.nextPendingMessages;
@@ -71,9 +76,8 @@ async function processLoopTurn(
 	while (hasMoreToolCalls || pendingMessages.length > 0) {
 		if (firstTurn) {
 			firstTurn = false;
-		} else {
-			stream.push({ type: "turn_start" });
 		}
+		stream.push({ type: "turn_start" });
 
 		if (pendingMessages.length > 0) {
 			handlePendingMessages(pendingMessages, currentContext, newMessages, stream);
@@ -131,6 +135,8 @@ async function handleToolCallsStep(
 
 	if (executionResult) {
 		for (const result of executionResult.toolResults) {
+			stream.push({ type: "message_start", message: result });
+			stream.push({ type: "message_end", message: result });
 			currentContext.messages.push(result);
 			newMessages.push(result);
 		}
@@ -181,6 +187,8 @@ function handleTerminalAssistantResponse(
 	);
 	const toolResults = toolCalls.map(toolCall => {
 		const result = createAbortedToolResult(toolCall, stream, message.stopReason, message.errorMessage);
+		stream.push({ type: "message_start", message: result });
+		stream.push({ type: "message_end", message: result });
 		currentContext.messages.push(result);
 		newMessages.push(result);
 		return result;
@@ -202,7 +210,7 @@ export function agentLoop(
 	const newMessages: AgentMessage[] = [];
 
 	// Pass `messages` as initialMessages so the prompt actually reaches the loop. Without this
-	// the loop sees only context.messages and silently drops the new user prompt — the bug that
+	// the loop sees only context.messages and silently drops the new user prompt, the bug that
 	// caused the local-e2e tests' user message to disappear from the persisted branch.
 	void runLoop(context, newMessages, config, signal, stream, streamFn, messages);
 

@@ -172,7 +172,7 @@ describe("AgentSession local e2e", () => {
 		harnesses.push(harness);
 
 		const inFlight = harness.session.prompt("will abort").catch(() => undefined);
-		await waitFor(() => harness.session.isStreaming);
+		await waitFor(() => callCount === 1 && harness.agent.state.isStreaming);
 		await harness.session.abort();
 		await inFlight;
 

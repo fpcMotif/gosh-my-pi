@@ -72,6 +72,8 @@ export interface BuiltinSlashCommandRuntime {
 	handleBackgroundCommand: () => void;
 }
 
+const BUILTIN_OAUTH_PROVIDER_IDS = new Set(["kagi", "parallel", "tavily"]);
+
 function parseBuiltinSlashCommand(text: string): ParsedBuiltinSlashCommand | null {
 	if (!text.startsWith("/")) return null;
 	const body = text.slice(1);
@@ -418,7 +420,8 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 			const args = command.args.trim();
 			if (args.length > 0) {
 				const matchedProvider = getOAuthProviders().find(provider => provider.id === args);
-				if (matchedProvider) {
+				const providerId = matchedProvider?.id ?? (BUILTIN_OAUTH_PROVIDER_IDS.has(args) ? args : undefined);
+				if (providerId !== undefined) {
 					if (manualInput.hasPending()) {
 						const pendingProvider = manualInput.pendingProviderId;
 						const message =
@@ -429,7 +432,7 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 						runtime.ctx.editor.setText("");
 						return;
 					}
-					void runtime.ctx.showOAuthSelector("login", matchedProvider.id);
+					void runtime.ctx.showOAuthSelector("login", providerId);
 					runtime.ctx.editor.setText("");
 					return;
 				}

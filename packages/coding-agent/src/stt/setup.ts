@@ -1,3 +1,4 @@
+import { APP_NAME } from "@oh-my-pi/pi-utils";
 import { detectRecordingTools } from "./recorder";
 import { resolvePython } from "./transcriber";
 
@@ -26,7 +27,7 @@ export async function checkDependencies(): Promise<STTDependencyStatus> {
 		});
 		whisperAvailable = check.exitCode === 0;
 	}
-	const whisperHint = "Run 'omp setup stt' to auto-install, or: pip install openai-whisper";
+	const whisperHint = `Run '${APP_NAME} setup stt' to auto-install, or: pip install openai-whisper`;
 
 	return {
 		recorder: { available: recorderTools.length > 0, tool: recorderTools[0] ?? null, installHint: recorderHint },

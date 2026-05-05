@@ -5,7 +5,7 @@
  * Endpoint: POST https://api.kimi.com/coding/v1/search
  */
 import { getEnvApiKey } from "@oh-my-pi/pi-ai";
-import { $env } from "@oh-my-pi/pi-utils";
+import { $env, APP_NAME } from "@oh-my-pi/pi-utils";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
 import { clampNumResults, dateToAgeSeconds } from "../utils";
@@ -96,7 +96,7 @@ export async function searchKimi(params: KimiSearchParams): Promise<SearchRespon
 	const apiKey = await findApiKey();
 	if (apiKey === null || apiKey === undefined || apiKey === "") {
 		throw new Error(
-			"Kimi search credentials not found. Set KIMI_SEARCH_API_KEY, KIMI_API_KEY, or login with 'omp /login kimi-code'.",
+			`Kimi search credentials not found. Set KIMI_SEARCH_API_KEY, KIMI_API_KEY, or login with '${APP_NAME} /login kimi-code'.`,
 		);
 	}
 

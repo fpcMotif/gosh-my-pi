@@ -11,12 +11,40 @@ export function createAbortedToolResult(
 ): ToolResultMessage {
 	const stopReasonText =
 		errorMessage !== undefined && errorMessage !== null && errorMessage !== "" ? `: ${errorMessage}` : ".";
-	const errorText = `Tool execution was skipped because the request was ${stopReason}${stopReasonText}`;
+	const baseText =
+		stopReason === "aborted"
+			? "Tool execution was aborted"
+			: `Tool execution was skipped because the request was ${stopReason}`;
+	const errorText = `${baseText}${stopReasonText}`;
 	const result: ToolResultMessage = {
 		role: "toolResult",
 		toolCallId: toolCall.id,
 		toolName: toolCall.name,
 		content: [{ type: "text", text: errorText }],
+		isError: true,
+		timestamp: Date.now(),
+	};
+
+	stream.push({
+		type: "tool_execution_start",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		args: toolCall.arguments,
+	});
+	stream.push({ type: "tool_execution_end", toolCallId: toolCall.id, toolName: toolCall.name, result, isError: true });
+
+	return result;
+}
+
+function createSkippedToolResult(
+	toolCall: ToolCall,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+): ToolResultMessage {
+	const result: ToolResultMessage = {
+		role: "toolResult",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		content: [{ type: "text", text: "Skipped due to queued user message." }],
 		isError: true,
 		timestamp: Date.now(),
 	};
@@ -51,18 +79,35 @@ export async function executeToolCalls(
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	config: AgentLoopConfig,
 ): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
-	const toolResults: ToolResultMessage[] = [];
 	const toolCalls = message.content.filter((c): c is ToolCall => c.type === "toolCall");
+	if (config.interruptMode === "immediate") {
+		return executeToolCallsWithImmediateSteering(tools, toolCalls, signal, stream, config);
+	}
+
+	return executeToolCallsWithConcurrency(tools, toolCalls, signal, stream, config);
+}
+
+async function executeToolCallsWithImmediateSteering(
+	tools: AnyAgentTool[],
+	toolCalls: ToolCall[],
+	signal: AbortSignal | undefined,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	config: AgentLoopConfig,
+): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
+	const toolResults: ToolResultMessage[] = [];
 	const batchId = crypto.randomUUID();
 	const batchToolCalls = toolCalls.map(tc => ({ id: tc.id, name: tc.name }));
 
 	for (let i = 0; i < toolCalls.length; i++) {
 		const toolCall = toolCalls[i];
-		if (config.interruptMode === "immediate") {
-			const steeringMessages = (await config.getSteeringMessages?.()) ?? [];
-			if (steeringMessages.length > 0) {
-				return { toolResults, steeringMessages };
+		const steeringMessages = (await config.getSteeringMessages?.()) ?? [];
+		if (steeringMessages.length > 0) {
+			if (toolResults.length > 0) {
+				for (const skippedToolCall of toolCalls.slice(i)) {
+					toolResults.push(createSkippedToolResult(skippedToolCall, stream));
+				}
 			}
+			return { toolResults, steeringMessages };
 		}
 
 		if (signal !== undefined && signal.aborted) {
@@ -75,6 +120,56 @@ export async function executeToolCalls(
 		toolResults.push(result);
 	}
 
+	return { toolResults };
+}
+
+async function executeToolCallsWithConcurrency(
+	tools: AnyAgentTool[],
+	toolCalls: ToolCall[],
+	signal: AbortSignal | undefined,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	config: AgentLoopConfig,
+): Promise<{ toolResults: ToolResultMessage[] }> {
+	const toolResults: ToolResultMessage[] = [];
+	const batchId = crypto.randomUUID();
+	const batchToolCalls = toolCalls.map(tc => ({ id: tc.id, name: tc.name }));
+	let sharedCalls: Array<{ toolCall: ToolCall; index: number }> = [];
+
+	const flushSharedCalls = async () => {
+		if (sharedCalls.length === 0) return;
+		const completedResults: ToolResultMessage[] = [];
+		const pending = sharedCalls.map(({ toolCall, index }) => {
+			const batch: BatchInfo = { batchId, index, total: toolCalls.length, toolCalls: batchToolCalls };
+			if (signal !== undefined && signal.aborted) {
+				completedResults.push(createAbortedToolResult(toolCall, stream, "aborted"));
+				return Promise.resolve();
+			}
+			return executeSingleToolCall(tools, toolCall, signal, stream, config, batch).then(result => {
+				completedResults.push(result);
+			});
+		});
+		await Promise.all(pending);
+		toolResults.push(...completedResults);
+		sharedCalls = [];
+	};
+
+	for (let i = 0; i < toolCalls.length; i++) {
+		const toolCall = toolCalls[i];
+		const tool = tools.find(t => t.name === toolCall.name);
+		if (tool?.concurrency === "exclusive") {
+			await flushSharedCalls();
+			if (signal !== undefined && signal.aborted) {
+				toolResults.push(createAbortedToolResult(toolCall, stream, "aborted"));
+				continue;
+			}
+			const batch: BatchInfo = { batchId, index: i, total: toolCalls.length, toolCalls: batchToolCalls };
+			toolResults.push(await executeSingleToolCall(tools, toolCall, signal, stream, config, batch));
+			continue;
+		}
+		sharedCalls.push({ toolCall, index: i });
+	}
+
+	await flushSharedCalls();
 	return { toolResults };
 }
 
@@ -110,6 +205,12 @@ function prepareToolArgs(toolCall: ToolCall, config: AgentLoopConfig) {
 		const extracted = extractIntent(args);
 		args = extracted.strippedArgs;
 		intent = extracted.intent;
+		toolCall.arguments = args;
+		if (intent !== undefined) {
+			toolCall.intent = intent;
+		} else {
+			delete toolCall.intent;
+		}
 	}
 
 	if (config.transformToolCallArguments) {
@@ -132,9 +233,9 @@ function handleToolNotFound(
 	tools: AnyAgentTool[],
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 ): ToolResultMessage {
-	// Surface the available tool names so the LLM can self-correct on the
-	// next turn. Without this list the model has no signal for what to try
-	// instead and tends to loop calling the wrong name.
+	// Surface the available tool names so the LLM can self-correct on the next
+	// turn. Without this list the model has no signal for what to try instead
+	// and tends to loop calling the wrong name.
 	const availableNames = tools.map(t => t.name).sort((a, b) => a.localeCompare(b));
 	const availableText =
 		availableNames.length > 0 ? `Available tools: ${availableNames.join(", ")}.` : "No tools are available.";

@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { APP_NAME } from "@oh-my-pi/pi-utils";
 import type { CommitCommandArgs } from "./types";
 
 const FLAG_ALIASES = new Map<string, string>([
@@ -70,7 +71,7 @@ export function parseCommitArgs(args: string[]): CommitCommandArgs | undefined {
 export function printCommitHelp(): void {
 	const lines = [
 		"Usage:",
-		"  omp commit [options]",
+		`  ${APP_NAME} commit [options]`,
 		"",
 		"Options:",
 		"  --push           Push after committing",
