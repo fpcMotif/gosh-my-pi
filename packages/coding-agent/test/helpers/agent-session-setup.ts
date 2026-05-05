@@ -1,10 +1,17 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
 import { Agent } from "@oh-my-pi/pi-agent-core";
-import { getBundledModel, type AssistantMessage, type Model, AuthStorage } from "@oh-my-pi/pi-ai";
+import {
+	getBundledModel,
+	type AssistantMessage,
+	type Context,
+	type Model,
+	AuthStorage,
+	type SimpleStreamOptions,
+} from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
+import { TempDir } from "@oh-my-pi/pi-utils";
 import { AgentSession, type AgentSessionEvent } from "../../src/session/agent-session";
+import type { BranchSummaryCompleter } from "../../src/session/compaction";
 import { SessionManager } from "../../src/session/session-manager";
 import { Settings } from "../../src/config/settings";
 import { ModelRegistry } from "../../src/config/model-registry";
@@ -45,23 +52,34 @@ export function instantTextStreamFn(text: string, options: { stopReason?: Assist
 	};
 }
 
+const localBranchSummaryCompleter: BranchSummaryCompleter = async (model, _context, options) => {
+	await Bun.sleep(200);
+	if (options?.signal?.aborted === true) {
+		return createAssistantMessage("", { model, stopReason: "aborted" });
+	}
+	return createAssistantMessage("Mock branch summary", { model });
+};
+
 export interface LocalAgentSessionHarness {
 	session: AgentSession;
+	sessionManager: SessionManager;
 	agent: Agent;
 	model: Model;
-	tempDir: string;
+	tempDir: TempDir;
 	cleanup: () => Promise<void>;
 }
 
 export async function createLocalAgentSessionHarness(
 	options: {
-		streamFn?: (model: Model) => MockAssistantStream;
+		streamFn?: (model: Model, context: Context, options?: SimpleStreamOptions) => MockAssistantStream;
 		systemPrompt?: string;
+		sessionManager?: SessionManager;
+		branchSummaryCompleter?: BranchSummaryCompleter;
 	} = {},
 ): Promise<LocalAgentSessionHarness> {
-	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-test-"));
-	const sessionFile = path.join(tempDir, "session.jsonl");
-	const dbPath = path.join(tempDir, "agent.db");
+	const tempDir = TempDir.createSync("@omp-test-");
+	const sessionFile = path.join(tempDir.path(), "session.jsonl");
+	const dbPath = path.join(tempDir.path(), "agent.db");
 
 	const model = getBundledModel("openai", "gpt-4o-mini");
 	const agent = new Agent({
@@ -72,7 +90,7 @@ export async function createLocalAgentSessionHarness(
 		streamFn: options.streamFn ?? instantTextStreamFn("ok"),
 	});
 
-	const sessionManager = await SessionManager.open(sessionFile);
+	const sessionManager = options.sessionManager ?? (await SessionManager.open(sessionFile));
 	const settings = new Settings();
 	const authStorage = await AuthStorage.create(dbPath);
 	authStorage.setRuntimeApiKey(model.provider, "mock-key");
@@ -83,10 +101,12 @@ export async function createLocalAgentSessionHarness(
 		sessionManager,
 		settings,
 		modelRegistry,
+		branchSummaryCompleter: options.branchSummaryCompleter ?? localBranchSummaryCompleter,
 	});
 
 	return {
 		session,
+		sessionManager,
 		agent,
 		model,
 		tempDir,
@@ -94,7 +114,7 @@ export async function createLocalAgentSessionHarness(
 			await session.dispose();
 			authStorage.close();
 			try {
-				fs.rmSync(tempDir, { recursive: true, force: true });
+				tempDir.removeSync();
 			} catch {
 				// Ignore cleanup errors
 			}

@@ -1,13 +1,18 @@
-import { createLocalAgentSessionHarness, type LocalAgentSessionHarness } from "./helpers/agent-session-setup";
+import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import {
+	createAssistantMessage,
+	createLocalAgentSessionHarness,
+	type LocalAgentSessionHarness,
+} from "./helpers/agent-session-setup";
 
 export type TestSessionContext = LocalAgentSessionHarness & {
-	sessionManager: LocalAgentSessionHarness["session"]["sessionManager"];
+	sessionManager: LocalAgentSessionHarness["sessionManager"];
 };
 
 export async function createTestSession(
 	options: {
 		systemPrompt?: string;
-		settingsOverrides?: any;
+		settingsOverrides?: Record<string, unknown>;
 	} = {},
 ): Promise<TestSessionContext> {
 	const harness = await createLocalAgentSessionHarness({
@@ -16,13 +21,13 @@ export async function createTestSession(
 
 	// Apply settings overrides if any
 	if (options.settingsOverrides) {
-		const flatten = (obj: any, prefix = "") => {
+		const flatten = (obj: Record<string, unknown>, prefix = "") => {
 			for (const [key, value] of Object.entries(obj)) {
 				const path = prefix ? `${prefix}.${key}` : key;
 				if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-					flatten(value, path);
+					flatten(value as Record<string, unknown>, path);
 				} else {
-					(harness.session.settings as any).set(path, value);
+					harness.session.settings.set(path as never, value as never);
 				}
 			}
 		};
@@ -43,4 +48,12 @@ export function e2eApiKey(name: string): string | undefined {
 		return process.env.OPENAI_API_KEY || "mock-key";
 	}
 	return process.env[name];
+}
+
+export function userMsg(text: string): AgentMessage {
+	return { role: "user", content: text, timestamp: Date.now() };
+}
+
+export function assistantMsg(text: string): AgentMessage {
+	return createAssistantMessage(text);
 }

@@ -150,6 +150,7 @@ import {
 	type CompactionResult,
 	calculateContextTokens,
 	calculatePromptTokens,
+	type BranchSummaryCompleter,
 	collectEntriesForBranchSummary,
 	compact,
 	estimateTokens,
@@ -279,6 +280,8 @@ export interface AgentSessionConfig {
 	agentId?: string;
 	/** Shared agent registry (for forwarding IRC observations to the main session UI). */
 	agentRegistry?: AgentRegistry;
+	/** Completion override for branch summaries, mainly used by local tests. */
+	branchSummaryCompleter?: BranchSummaryCompleter;
 }
 
 /** Options for AgentSession.prompt() */
@@ -416,6 +419,7 @@ export class AgentSession {
 
 	// Branch summarization state
 	#branchSummaryAbortController: AbortController | undefined = undefined;
+	#branchSummaryCompleter: BranchSummaryCompleter | undefined = undefined;
 
 	// Handoff state
 	#handoffAbortController: AbortController | undefined = undefined;
@@ -595,6 +599,7 @@ export class AgentSession {
 		this.#obfuscator = config.obfuscator;
 		this.#agentId = config.agentId;
 		this.#agentRegistry = config.agentRegistry;
+		this.#branchSummaryCompleter = config.branchSummaryCompleter;
 		this.agent.setAssistantMessageEventInterceptor((message, assistantMessageEvent) => {
 			const event: AgentEvent = {
 				type: "message_update",
@@ -6463,6 +6468,7 @@ export class AgentSession {
 				signal: this.#branchSummaryAbortController.signal,
 				customInstructions: options.customInstructions,
 				reserveTokens: branchSummarySettings.reserveTokens,
+				completer: this.#branchSummaryCompleter,
 			});
 			this.#branchSummaryAbortController = undefined;
 			if (result.aborted === true) {

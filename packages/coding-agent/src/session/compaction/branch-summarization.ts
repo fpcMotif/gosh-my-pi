@@ -5,7 +5,7 @@
  * a summary of the branch being left so context isn't lost.
  */
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import type { Model } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, Context, Model, SimpleStreamOptions } from "@oh-my-pi/pi-ai";
 import { completeSimple } from "@oh-my-pi/pi-ai";
 import { prompt } from "@oh-my-pi/pi-utils";
 import branchSummaryPrompt from "../../prompts/compaction/branch-summary.md" with { type: "text" };
@@ -46,6 +46,12 @@ export interface BranchSummaryDetails {
 	modifiedFiles: string[];
 }
 
+export type BranchSummaryCompleter = (
+	model: Model,
+	context: Context,
+	options?: SimpleStreamOptions,
+) => Promise<AssistantMessage>;
+
 export type { FileOperations } from "./utils";
 
 export interface BranchPreparation {
@@ -75,6 +81,8 @@ export interface GenerateBranchSummaryOptions {
 	customInstructions?: string;
 	/** Tokens reserved for prompt + LLM response (default 16384) */
 	reserveTokens?: number;
+	/** Completion function override for tests and local harnesses */
+	completer?: BranchSummaryCompleter;
 }
 
 // ============================================================================
@@ -264,7 +272,7 @@ export async function generateBranchSummary(
 	entries: SessionEntry[],
 	options: GenerateBranchSummaryOptions,
 ): Promise<BranchSummaryResult> {
-	const { model, apiKey, signal, customInstructions, reserveTokens = 16384 } = options;
+	const { model, apiKey, signal, customInstructions, reserveTokens = 16384, completer = completeSimple } = options;
 
 	// Token budget = context window minus reserved space for prompt + response
 	const contextWindow = model.contextWindow || 128000;
@@ -294,7 +302,7 @@ export async function generateBranchSummary(
 	];
 
 	// Call LLM for summarization
-	const response = await completeSimple(
+	const response = await completer(
 		model,
 		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
 		{ apiKey, signal, maxTokens: 2048 },
