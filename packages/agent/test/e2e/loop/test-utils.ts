@@ -158,6 +158,9 @@ async function runScript(
 				stream.push({ type: "toolcall_delta", contentIndex: 0, delta: event.partialJson, partial });
 				break;
 			case "toolDone":
+				if (!partial.content.some(content => content.type === "toolCall" && content.id === event.toolCall.id)) {
+					partial.content.push(event.toolCall);
+				}
 				stream.push({ type: "toolcall_end", contentIndex: 0, toolCall: event.toolCall, partial });
 				break;
 			case "done": {
