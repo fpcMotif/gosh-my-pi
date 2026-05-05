@@ -74,17 +74,51 @@
 			]
 		},
 		{
-			"id": "P6",
-			"name": "TS-side removal (deprecate TS TUI)",
-			"state": "pending",
+			"id": "P6a",
+			"name": "TS interactive TUI dispatch removal (safe surface)",
+			"state": "done",
+			"branch": "feat/p6a-ts-tui-interactive-removal",
+			"commit": "3c77360d8",
+			"evidence": "main.ts dispatch errors with --mode guidance; runInteractiveMode/submitInteractiveInput/InteractiveModeNotify deleted; modes/index.ts cleaned; 4 files deleted (interactive-mode.ts + 3 TUI tests). Net -2385 LOC.",
 			"acceptance_criteria": [
-				"packages/tui/ deleted",
-				"packages/coding-agent/src/modes/{interactive-mode.ts,components/,controllers/,theme/} deleted",
-				"@oh-my-pi/pi-tui removed from package.json catalog + bun.lock regenerated",
-				"bare `omp` errors with --mode {print|rpc|acp} guidance",
+				"bare `omp` errors with --mode {print|rpc|acp} guidance + gmp-tui-go pointer (DONE; main.ts dispatch)",
+				"InteractiveMode no longer imported anywhere (DONE; verified via rg)",
+				"oxfmt --check clean on touched files (DONE)",
+				"oxlint --quiet on workspace: 0 errors (DONE; 29 pre-existing warnings unchanged)",
+				"bun --cwd=packages/coding-agent test: P6a doesn't add failures (DONE; 2 pre-existing failures stem from removed marketplace module, in-flight cleanup in plugin-cli.ts WIP)"
+			]
+		},
+		{
+			"id": "P6b",
+			"name": "TS-side wholesale TUI removal (production-coupled refactor)",
+			"state": "pending",
+			"notes": "Each production file below imports modes/{components,controllers,theme,utils}/ or @oh-my-pi/pi-tui and needs a per-file disposition (delete / strip / move-utility) before the wholesale dir deletion.",
+			"production_couplings": {
+				"src/index.ts": "barrel re-exports modes/components/* — public API change",
+				"src/debug/index.ts": "InteractiveModeContext + DynamicBorder — likely whole-file delete",
+				"src/cli/session-picker.ts": "SessionSelectorComponent — likely whole-file delete or stub",
+				"src/tools/bash.ts": "truncateToVisualLines — move helper out of modes/components/visual-truncate",
+				"src/tools/python.ts": "truncateToVisualLines — same as bash.ts",
+				"src/edit/renderer-helpers.ts": "renderDiff from modes/components/diff — move or delete",
+				"src/tui/status-line.ts": "statusBadge from modes/components/status-badge — likely whole-file delete (/dir delete)",
+				"src/mcp/render.ts": "imports modes/components — likely whole-file delete",
+				"src/session/agent-session.ts": "imports modes/theme/theme — strip Theme type usage",
+				"src/task/index.ts": "imports modes/theme — strip",
+				"src/task/subprocess-tool-registry.ts": "imports modes/theme — strip",
+				"src/modes/oauth-manual-input.ts": "interactive-only TUI prompt — whole-file delete",
+				"src/modes/prompt-action-autocomplete.ts": "interactive-only — whole-file delete",
+				"src/slash-commands/builtin-registry.ts": "InteractiveModeContext type — refactor (user has WIP here)",
+				"packages/utils/src/format.ts": "imports @oh-my-pi/pi-tui — strip TUI use",
+				"packages/typescript-edit-benchmark/src/index.ts": "imports @oh-my-pi/pi-tui — strip or delete benchmark"
+			},
+			"acceptance_criteria": [
+				"packages/tui/ deleted entirely",
+				"packages/coding-agent/src/modes/{components,controllers,theme,utils,oauth-manual-input.ts,prompt-action-autocomplete.ts}/* deleted",
+				"@oh-my-pi/pi-tui removed from root package.json catalog + bun.lock regenerated; coding-agent/package.json updated",
+				"src/index.ts barrel re-exports of modes/components/* removed",
 				"AGENTS.md / CLAUDE.md / packages/coding-agent/README.md purged of TS-TUI mentions",
-				"bun check:ts clean",
-				"bun --cwd=packages/coding-agent test clean"
+				"bun check:ts clean (oxfmt + oxlint, tsgo per the existing || true gate)",
+				"bun --cwd=packages/coding-agent test: failures only the pre-existing marketplace ones (which P6b will likely also clean up)"
 			]
 		},
 		{
