@@ -24,18 +24,13 @@ import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { getDefault, type SettingPath, Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
-import {
-	clearClaudePluginRootsCache,
-	injectPluginDirRoots,
-	preloadPluginRoots,
-} from "./discovery/helpers";
+import { clearClaudePluginRootsCache, injectPluginDirRoots, preloadPluginRoots } from "./discovery/helpers";
 import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
 
 import type { MCPManager } from "./mcp";
-import { InteractiveMode, runAcpMode, runPrintMode, runRpcMode } from "./modes";
+import { runAcpMode, runPrintMode, runRpcMode } from "./modes";
 import { initTheme, stopThemeWatcher } from "./modes/theme/theme";
-import type { SubmittedUserInput } from "./modes/types";
 import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage } from "./sdk";
 import type { AgentSession } from "./session/agent-session";
 import { resolveResumableSession, type SessionInfo, SessionManager } from "./session/session-manager";
@@ -107,109 +102,9 @@ async function readPipedInput(): Promise<string | undefined> {
 	}
 }
 
-export interface InteractiveModeNotify {
-	kind: "warn" | "error" | "info";
-	message: string;
-}
-
-export async function submitInteractiveInput(
-	mode: Pick<InteractiveMode, "markPendingSubmissionStarted" | "finishPendingSubmission" | "showError">,
-	session: Pick<AgentSession, "prompt">,
-	input: SubmittedUserInput,
-): Promise<void> {
-	if (input.cancelled) {
-		return;
-	}
-
-	try {
-		// Continue shortcuts submit an already-started empty prompt with no optimistic user message.
-		if (!input.started && !mode.markPendingSubmissionStarted(input)) {
-			return;
-		}
-		await session.prompt(input.text, { images: input.images });
-	} catch (error: unknown) {
-		const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-		mode.showError(errorMessage);
-	} finally {
-		mode.finishPendingSubmission(input);
-	}
-}
-
-async function runInteractiveMode(
-	session: AgentSession,
-	version: string,
-	changelogMarkdown: string | undefined,
-	notifs: (InteractiveModeNotify | null)[],
-	versionCheckPromise: Promise<string | undefined>,
-	initialMessages: string[],
-	setExtensionUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void,
-	lspServers: LspStartupServerInfo[] | undefined,
-	mcpManager: MCPManager | undefined,
-	eventBus?: EventBus,
-	initialMessage?: string,
-	initialImages?: ImageContent[],
-): Promise<void> {
-	const mode = new InteractiveMode(
-		session,
-		version,
-		changelogMarkdown,
-		setExtensionUIContext,
-		lspServers,
-		mcpManager,
-		eventBus,
-	);
-
-	await mode.init();
-
-	versionCheckPromise
-		.then(newVersion => {
-			if (!settings.get("startup.checkUpdate")) {
-				return;
-			}
-			if (newVersion !== null && newVersion !== undefined && newVersion !== "") {
-				mode.showNewVersionNotification(newVersion);
-			}
-		})
-		.catch(() => {});
-
-	mode.renderInitialMessages();
-
-	for (const notify of notifs) {
-		if (!notify) {
-			continue;
-		}
-		if (notify.kind === "warn") {
-			mode.showWarning(notify.message);
-		} else if (notify.kind === "error") {
-			mode.showError(notify.message);
-		} else if (notify.kind === "info") {
-			mode.showStatus(notify.message);
-		}
-	}
-
-	if (initialMessage !== undefined) {
-		try {
-			await session.prompt(initialMessage, { images: initialImages });
-		} catch (error: unknown) {
-			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-			mode.showError(errorMessage);
-		}
-	}
-
-	for (const message of initialMessages) {
-		try {
-			await session.prompt(message);
-		} catch (error: unknown) {
-			const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-			mode.showError(errorMessage);
-		}
-	}
-
-	while (true) {
-		const input = await mode.getUserInput();
-		await submitInteractiveInput(mode, session, input);
-	}
-}
+// Interactive TUI was removed in P6a — see /Users/martinfan/.claude/plans/dd-an-apps-tui-go-2-wondrous-cookie.md.
+// gmp-tui-go (apps/tui-go/) is now the sole interactive front-end; it spawns this binary
+// in `--mode rpc` over stdio. The TS process is headless: rpc / acp / print modes only.
 
 function normalizePathForComparison(value: string): string {
 	const resolved = path.resolve(value);
@@ -590,8 +485,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	const parsedArgs = parsed;
 	await logger.time("maybeAutoChdir", maybeAutoChdir, parsedArgs);
 
-	const notifs: (InteractiveModeNotify | null)[] = [];
-
 	// Create AuthStorage and ModelRegistry upfront
 	const authStorage = await logger.time("discoverModels", discoverAuthStorage);
 	const modelRegistry = new ModelRegistry(authStorage);
@@ -730,8 +623,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		await logger.time("preloadPluginRoots", preloadPluginRoots, home, getProjectDir());
 	}
 
-
-
 	const { options: sessionOptions } = await logger.time(
 		"buildSessionOptions",
 		buildSessionOptions,
@@ -779,12 +670,12 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	}
 
 	if (modelFallbackMessage !== null && modelFallbackMessage !== undefined && modelFallbackMessage !== "") {
-		notifs.push({ kind: "warn", message: modelFallbackMessage });
+		process.stderr.write(`${chalk.yellow(modelFallbackMessage)}\n`);
 	}
 
 	const modelRegistryError = modelRegistry.getError();
 	if (modelRegistryError) {
-		notifs.push({ kind: "error", message: modelRegistryError.message });
+		process.stderr.write(`${chalk.red(modelRegistryError.message)}\n`);
 	}
 
 	// Re-parse CLI args with extension flags and apply values
@@ -851,43 +742,25 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	} else if (mode === "acp") {
 		await runAcpMode(session, createAcpSession);
 	} else if (isInteractive) {
-		const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
-		logger.time("main:getChangelogForDisplay");
-		const changelogMarkdown = await getChangelogForDisplay(parsedArgs);
-
-		const scopedModelsForDisplay = sessionOptions.scopedModels ?? scopedModels;
-		if (scopedModelsForDisplay.length > 0) {
-			const modelList = scopedModelsForDisplay
-				.map(scopedModel => {
-					const thinkingStr = scopedModel.thinkingLevel === undefined ? `:${scopedModel.thinkingLevel}` : "";
-					return `${scopedModel.model.id}${thinkingStr}`;
-				})
-				.join(", ");
-			process.stdout.write(`${chalk.dim(`Model scope: ${modelList} ${chalk.gray("(Ctrl+P to cycle)")}`)}\n`);
-		}
-
-		if ($env.PI_TIMING) {
-			logger.printTimings();
-			if ($env.PI_TIMING === "x") {
-				process.exit(0);
-			}
-		}
-
-		logger.endTiming();
-		await runInteractiveMode(
-			session,
-			VERSION,
-			changelogMarkdown,
-			notifs,
-			versionCheckPromise,
-			parsedArgs.messages,
-			setToolUIContext,
-			lspServers,
-			mcpManager,
-			eventBus,
-			initialMessage,
-			initialImages,
+		// P6a: TS interactive TUI was removed. The Go-based gmp-tui-go front-end
+		// (apps/tui-go/) is now the only interactive UX; it spawns this binary
+		// in `--mode rpc` over stdio. See
+		// /Users/martinfan/.claude/plans/dd-an-apps-tui-go-2-wondrous-cookie.md.
+		await session.dispose();
+		stopThemeWatcher();
+		process.stderr.write(
+			`${chalk.red("error: interactive TUI has been removed.")}\n` +
+				"\n" +
+				"Use one of the headless modes:\n" +
+				"  --mode rpc          JSONL agent protocol (used by gmp-tui-go)\n" +
+				"  --mode acp          Agent Client Protocol (Zed et al.)\n" +
+				"  --mode text         Single-shot text output\n" +
+				"  --mode json         Single-shot JSON event stream\n" +
+				"  -p '<prompt>'       Print mode shortcut\n" +
+				"\n" +
+				`Or run the Go front-end: ${chalk.cyan("gmp-tui-go")}\n`,
 		);
+		await postmortem.quit(2);
 	} else {
 		await runPrintMode(session, {
 			mode,

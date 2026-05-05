@@ -1,11 +1,11 @@
-import { emergencyTerminalRestore } from "@oh-my-pi/pi-tui";
-import { postmortem } from "@oh-my-pi/pi-utils";
-
 /**
  * Run modes for the coding agent.
+ *
+ * The TS interactive TUI was removed in P6a; gmp-tui-go (apps/tui-go/)
+ * is now the only interactive front-end and consumes this binary via
+ * `--mode rpc`. Headless modes only here.
  */
 export { runAcpMode } from "./acp";
-export { InteractiveMode, type InteractiveModeOptions } from "./interactive-mode";
 export { type PrintModeOptions, runPrintMode } from "./print-mode";
 export {
 	defineRpcClientTool,
@@ -28,7 +28,3 @@ export type {
 	RpcResponse,
 	RpcSessionState,
 } from "./rpc/rpc-types";
-
-postmortem.register("terminal-restore", () => {
-	emergencyTerminalRestore();
-});
