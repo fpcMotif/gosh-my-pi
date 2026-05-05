@@ -6,15 +6,7 @@
 
 import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
-import { resolveOrDefaultProjectRegistryPath } from "../discovery/helpers";
 import { PluginManager, parseSettingValue, validateSetting } from "../extensibility/plugins";
-import {
-	getInstalledPluginsRegistryPath,
-	getMarketplacesCacheDir,
-	getMarketplacesRegistryPath,
-	getPluginsCacheDir,
-	MarketplaceManager,
-} from "../extensibility/plugins/marketplace/index.js";
 import { theme } from "../modes/theme/theme";
 
 // =============================================================================
@@ -30,10 +22,7 @@ export type PluginAction =
 	| "features"
 	| "config"
 	| "enable"
-	| "disable"
-	| "marketplace"
-	| "discover"
-	| "upgrade";
+	| "disable";
 
 export interface PluginCommandArgs {
 	action: PluginAction;
@@ -65,9 +54,6 @@ const VALID_ACTIONS: PluginAction[] = [
 	"config",
 	"enable",
 	"disable",
-	"marketplace",
-	"discover",
-	"upgrade",
 ];
 
 /**
@@ -135,10 +121,6 @@ export function parsePluginArgs(args: string[]): PluginCommandArgs | undefined {
 	return result;
 }
 
-import { classifyInstallTarget } from "./classify-install-target";
-
-export { classifyInstallTarget } from "./classify-install-target";
-
 // =============================================================================
 // Command Handlers
 // =============================================================================
@@ -177,15 +159,7 @@ export async function runPluginCommand(cmd: PluginCommandArgs): Promise<void> {
 		case "disable":
 			await handleDisable(manager, cmd.args, cmd.flags);
 			break;
-		case "marketplace":
-			await handleMarketplace(cmd.args, cmd.flags);
-			break;
-		case "discover":
-			await handleDiscover(cmd.args, cmd.flags);
-			break;
-		case "upgrade":
-			await handleUpgrade(cmd.args, cmd.flags);
-			break;
+
 	}
 }
 
