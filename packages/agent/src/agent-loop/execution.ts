@@ -92,7 +92,7 @@ async function executeSingleToolCall(
 	stream.push({ type: "tool_execution_start", toolCallId: toolCall.id, toolName: toolCall.name, args, intent });
 
 	if (!tool) {
-		return handleToolNotFound(toolCall, stream);
+		return handleToolNotFound(toolCall, tools, stream);
 	}
 
 	try {
@@ -127,12 +127,22 @@ function extractIntent(args: Record<string, unknown>): { intent?: string; stripp
 	return { intent: trimmed.length > 0 ? trimmed : undefined, strippedArgs };
 }
 
-function handleToolNotFound(toolCall: ToolCall, stream: EventStream<AgentEvent, AgentMessage[]>): ToolResultMessage {
+function handleToolNotFound(
+	toolCall: ToolCall,
+	tools: AnyAgentTool[],
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+): ToolResultMessage {
+	// Surface the available tool names so the LLM can self-correct on the
+	// next turn. Without this list the model has no signal for what to try
+	// instead and tends to loop calling the wrong name.
+	const availableNames = tools.map(t => t.name).sort((a, b) => a.localeCompare(b));
+	const availableText =
+		availableNames.length > 0 ? `Available tools: ${availableNames.join(", ")}.` : "No tools are available.";
 	const result: ToolResultMessage = {
 		role: "toolResult",
 		toolCallId: toolCall.id,
 		toolName: toolCall.name,
-		content: [{ type: "text", text: `Error: Tool "${toolCall.name}" not found.` }],
+		content: [{ type: "text", text: `Error: Tool "${toolCall.name}" not found. ${availableText}` }],
 		isError: true,
 		timestamp: Date.now(),
 	};
