@@ -2,7 +2,7 @@ import { logger } from "@oh-my-pi/pi-utils";
 import type { Provider } from "./types";
 import type { AuthCredential, OAuthCredential } from "./auth-types";
 import type { CredentialRankingStrategy, UsageReport } from "./usage";
-import { getOAuthApiKey, getOAuthProvider } from "./utils/oauth";
+import * as oauthRegistry from "./utils/oauth";
 import type { OAuthProvider, OAuthCredentials } from "./utils/oauth/types";
 import { isUsageLimitReached, getUsageResetAtMs } from "./auth-usage-utils";
 
@@ -347,14 +347,18 @@ async function getRefreshedResult(
 	provider: string,
 	cred: OAuthCredential,
 ): Promise<{ newCredentials: OAuthCredentials; apiKey: string } | null> {
-	const cp = getOAuthProvider(provider);
+	const cp = oauthRegistry.getOAuthProvider(provider);
 	if (cp !== null && cp !== undefined) {
-		if (typeof cp.refreshToken !== "function") throw new Error(`Provider ${provider} does not support token refresh`);
-		const refreshed = await cp.refreshToken.call(cp, cred);
-		return {
-			newCredentials: refreshed,
-			apiKey: cp.getApiKey !== undefined && cp.getApiKey !== null ? cp.getApiKey(refreshed) : refreshed.access,
-		};
+		if (typeof cp.refreshToken === "function") {
+			const refreshed = await cp.refreshToken.call(cp, cred);
+			return {
+				newCredentials: refreshed,
+				apiKey: cp.getApiKey !== undefined && cp.getApiKey !== null ? cp.getApiKey(refreshed) : refreshed.access,
+			};
+		}
+		if (cp.getApiKey !== undefined && cp.getApiKey !== null) {
+			return { newCredentials: cred, apiKey: cp.getApiKey(cred) };
+		}
 	}
-	return getOAuthApiKey(provider as OAuthProvider, { [provider]: cred });
+	return oauthRegistry.getOAuthApiKey(provider as OAuthProvider, { [provider]: cred });
 }

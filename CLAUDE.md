@@ -44,7 +44,7 @@ The lint+fmt sweep landed in commits `555616195..ae2ff9698`. Working state:
 - **`bun scripts/run-fix-sweep.ts [--dry-run|--no-validate|--abort-on-grow=false]`** — orchestrator. Pipeline order: `fix-or-defaulting` → `fix-null-checks` → `fix-await-loop-stop-close` → `fix-signal-aborted` → `fix-amplification`. Captures before/after counts and refuses to land any step that grows the total. Codemod scripts have been consolidated to this set; do not add new regex-based fixers without going through `scripts/lib/codemod-runner.ts`.
 - **`.oxlintrc.json`** — heavy override blocks for hotspot directories (coding-agent/src, ai/src, agent/src, swarm-extension, stats, utils, natives, tui, typescript-edit-benchmark) disable the rules that the codebase can't satisfy without major refactors (`complexity`, `max-lines`, `max-lines-per-function`, `max-depth`, `no-await-in-loop`, `strict-boolean-expressions`, `no-non-null-assertion`, `no-explicit-any`, `no-misused-promises`, `unbound-method`, etc.). Each new override block needs a `// why:` comment + TODO link in the commit message because the JSON file itself can't carry them.
 
-**Pre-commit hook**: `lint-staged` runs `oxfmt --write` + `oxlint --fix --no-error-on-unmatched-pattern` on staged `*.{js,jsx,ts,tsx}` files. The `oxlint --fix` step exits 1 on any remaining errors, so commits during the sweep used `--no-verify`. Future commits should *not* need `--no-verify` because the post-sweep error count is 0.
+**Pre-commit hook**: `lint-staged` runs `oxfmt --write` + `oxlint --fix --no-error-on-unmatched-pattern` on staged `*.{js,jsx,ts,tsx}` files. The `oxlint --fix` step exits 1 on any remaining errors, so commits during the sweep used `--no-verify`. Future commits should _not_ need `--no-verify` because the post-sweep error count is 0.
 
 ## Known CI failures (follow-up — out of scope of the lint sweep)
 
@@ -64,18 +64,18 @@ CI status drifts between commits — verify with `gh run list --branch main` bef
 
 ## Commands worth pinning
 
-| Command                                         | Use                                                                        |
-| ----------------------------------------------- | -------------------------------------------------------------------------- |
-| `bun check`                                     | TS + Rust check in parallel                                                |
-| `bun check:ts`                                  | oxfmt + oxlint + tsgo (workspace)                                          |
-| `bun fix:ts`                                    | oxfmt --write + oxlint --fix-dangerously + per-package fixes               |
-| `bun --cwd=packages/<x> test`                   | Scoped tests for one package                                               |
-| `bun --cwd=packages/ai run generate-models`     | Regenerate `models.json`                                                   |
-| `bun build:native`                              | Build the N-API addon (only when touching `crates/` or `packages/natives`) |
-| `bun stats:run` / `stats:edits` / `stats:tools` | Session-stats analyses                                                     |
+| Command                                         | Use                                                                                                         |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `bun check`                                     | TS + Rust check in parallel                                                                                 |
+| `bun check:ts`                                  | oxfmt + oxlint + tsgo (workspace)                                                                           |
+| `bun fix:ts`                                    | oxfmt --write + oxlint --fix-dangerously + per-package fixes                                                |
+| `bun --cwd=packages/<x> test`                   | Scoped tests for one package                                                                                |
+| `bun --cwd=packages/ai run generate-models`     | Regenerate `models.json`                                                                                    |
+| `bun build:native`                              | Build the N-API addon (only when touching `crates/` or `packages/natives`)                                  |
+| `bun stats:run` / `stats:edits` / `stats:tools` | Session-stats analyses                                                                                      |
 | `bun fix:ts:strict`                             | Like `bun fix:ts` but the codemod orchestrator aborts if any step grows the lint count (sweep verification) |
-| `bun scripts/lint-snapshot.ts --diff`           | Show per-rule lint deltas vs the previous run (gitignored `.lint-history.jsonl`) |
-| `bun scripts/run-fix-sweep.ts --dry-run`        | List the orchestrator's codemod pipeline without running it                 |
+| `bun scripts/lint-snapshot.ts --diff`           | Show per-rule lint deltas vs the previous run (gitignored `.lint-history.jsonl`)                            |
+| `bun scripts/run-fix-sweep.ts --dry-run`        | List the orchestrator's codemod pipeline without running it                                                 |
 
 ## Project skills
 

@@ -333,7 +333,7 @@ export class AuthStorage {
 
 	async #resolveOAuthApiKey(p: string, s?: string, o?: unknown): Promise<string | undefined> {
 		const cs = this.#getStoredCredentials(p)
-			.map((c, i) => ({ credential: c as OAuthCredential, index: i }))
+			.map((entry, i) => ({ credential: entry.credential as OAuthCredential, index: i }))
 			.filter(e => e.credential.type === "oauth");
 		if (cs.length === 0) return undefined;
 		const pk = `${p}:oauth`;
@@ -357,25 +357,49 @@ export class AuthStorage {
 					})
 				: order.map(idx => ({ selection: cs[idx], usage: null, usageChecked: false }));
 
-		const res = await tryOAuthCredential({
+		for (const candidate of candidates) {
+			const res = await tryOAuthCredential({
+				provider: p,
+				selection: candidate.selection,
+				providerKey: pk,
+				sessionId: s,
+				options: o,
+				usageOptions: {
+					checkUsage: true,
+					allowBlocked: false,
+					prefetchedUsage: candidate.usage,
+					usagePrechecked: candidate.usageChecked,
+				},
+				ctx: this.#getResolverCtx(),
+			});
+			if (typeof res === "string" && res.startsWith("ERROR:DEFINITIVE_FAILURE:")) {
+				this.#disableCredentialAt(p, candidate.selection.index, res);
+				return this.getApiKey(p, s, o);
+			}
+			if (res !== undefined) return res;
+		}
+
+		const fallback = candidates[0];
+		if (fallback === undefined) return undefined;
+		const fallbackRes = await tryOAuthCredential({
 			provider: p,
-			selection: candidates[0].selection,
+			selection: fallback.selection,
 			providerKey: pk,
 			sessionId: s,
 			options: o,
 			usageOptions: {
 				checkUsage: true,
-				allowBlocked: false,
-				prefetchedUsage: candidates[0].usage,
-				usagePrechecked: candidates[0].usageChecked,
+				allowBlocked: true,
+				prefetchedUsage: fallback.usage,
+				usagePrechecked: fallback.usageChecked,
 			},
 			ctx: this.#getResolverCtx(),
 		});
-		if (typeof res === "string" && res.startsWith("ERROR:DEFINITIVE_FAILURE:")) {
-			this.#disableCredentialAt(p, candidates[0].selection.index, res);
+		if (typeof fallbackRes === "string" && fallbackRes.startsWith("ERROR:DEFINITIVE_FAILURE:")) {
+			this.#disableCredentialAt(p, fallback.selection.index, fallbackRes);
 			return this.getApiKey(p, s, o);
 		}
-		return res;
+		return fallbackRes;
 	}
 
 	#getCredentialOrder(pk: string, s: string | undefined, total: number): number[] {
@@ -402,7 +426,7 @@ export class AuthStorage {
 
 	#selectCredentialByType<T extends "api_key" | "oauth">(p: string, t: T, s?: string) {
 		const cs = this.#getStoredCredentials(p)
-			.map((c, i) => ({ credential: c as Extract<AuthCredential, { type: T }>, index: i }))
+			.map((entry, i) => ({ credential: entry.credential as Extract<AuthCredential, { type: T }>, index: i }))
 			.filter(e => e.credential.type === t);
 		if (cs.length === 0) return undefined;
 		const pk = `${p}:${t}`;

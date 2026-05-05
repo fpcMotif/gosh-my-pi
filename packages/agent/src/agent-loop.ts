@@ -17,9 +17,14 @@ async function runLoop(
 	signal: AbortSignal | undefined,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	streamFn?: StreamFn,
+	initialMessages: AgentMessage[] = [],
 ): Promise<void> {
 	let firstTurn = true;
-	let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) ?? [];
+	// When the caller already supplied initialMessages (e.g. an explicit prompt or a single
+	// dequeued steering message in one-at-a-time mode), don't drain the steering queue here —
+	// the inner loop polls on subsequent iterations so each queued message gets its own turn.
+	const steeringMessages = initialMessages.length > 0 ? [] : ((await config.getSteeringMessages?.()) ?? []);
+	let pendingMessages: AgentMessage[] = [...initialMessages, ...steeringMessages];
 
 	while (true) {
 		const result = await processLoopTurn(
@@ -196,7 +201,10 @@ export function agentLoop(
 	const stream = new EventStream<AgentEvent, AgentMessage[]>();
 	const newMessages: AgentMessage[] = [];
 
-	void runLoop(context, newMessages, config, signal, stream, streamFn);
+	// Pass `messages` as initialMessages so the prompt actually reaches the loop. Without this
+	// the loop sees only context.messages and silently drops the new user prompt — the bug that
+	// caused the local-e2e tests' user message to disappear from the persisted branch.
+	void runLoop(context, newMessages, config, signal, stream, streamFn, messages);
 
 	return stream;
 }
@@ -210,6 +218,9 @@ export function agentLoopContinue(
 	signal?: AbortSignal,
 	streamFn?: StreamFn,
 ): EventStream<AgentEvent, AgentMessage[]> {
+	if (context.messages.length === 0) {
+		throw new Error("Cannot continue: no messages in context");
+	}
 	const stream = new EventStream<AgentEvent, AgentMessage[]>();
 	const newMessages: AgentMessage[] = [];
 

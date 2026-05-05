@@ -27,12 +27,20 @@ jobs:
          issues: write
          id-token: write
          actions: read
+      env:
+         HAS_FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY != '' }}
       steps:
+         - name: Skip notice (FACTORY_API_KEY not configured)
+           if: env.HAS_FACTORY_API_KEY != 'true'
+           run: |
+              echo "::notice::FACTORY_API_KEY secret is not configured; skipping Droid tag handler. Job will report success."
          - name: Checkout repository
+           if: env.HAS_FACTORY_API_KEY == 'true'
            uses: actions/checkout@v5
            with:
               fetch-depth: 1
          - name: Run Droid Exec
+           if: env.HAS_FACTORY_API_KEY == 'true'
            uses: Factory-AI/droid-action@main
            with:
               factory_api_key: ${{ secrets.FACTORY_API_KEY }}

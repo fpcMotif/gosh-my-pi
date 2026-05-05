@@ -1,3 +1,5 @@
+import { CCA_UNSUPPORTED_SCHEMA_FIELDS, UNSUPPORTED_SCHEMA_FIELDS } from "./fields";
+
 export interface SanitizeSchemaOptions {
 	seen: WeakSet<object>;
 	unsupportedFields: Set<string>;
@@ -13,7 +15,7 @@ export interface SanitizeSchemaOptions {
 export function sanitizeSchemaForGoogle(schema: unknown, options: Partial<SanitizeSchemaOptions> = {}): unknown {
 	const fullOptions: SanitizeSchemaOptions = {
 		seen: new WeakSet(),
-		unsupportedFields: new Set(["$schema", "$id", "additionalProperties", "definitions", "dependencies"]),
+		unsupportedFields: new Set(UNSUPPORTED_SCHEMA_FIELDS),
 		stripNullableKeyword: false,
 		normalizeTypeArrayToNullable: true,
 		insideProperties: false,
@@ -28,7 +30,7 @@ export function sanitizeSchemaForGoogle(schema: unknown, options: Partial<Saniti
 export function sanitizeSchemaForCCA(schema: unknown, options: Partial<SanitizeSchemaOptions> = {}): unknown {
 	return sanitizeSchemaImpl(schema, {
 		seen: new WeakSet(),
-		unsupportedFields: new Set(["$schema", "$id", "additionalProperties", "definitions", "dependencies"]),
+		unsupportedFields: new Set(CCA_UNSUPPORTED_SCHEMA_FIELDS),
 		stripNullableKeyword: true,
 		normalizeTypeArrayToNullable: true,
 		insideProperties: false,

@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { OAuthCredentials, UsageProvider } from "@oh-my-pi/pi-ai";
-import * as ai from "@oh-my-pi/pi-ai";
+import type { UsageProvider } from "@oh-my-pi/pi-ai";
+import { registerOAuthProvider, unregisterOAuthProviders } from "@oh-my-pi/pi-ai/utils/oauth";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { Snowflake } from "@oh-my-pi/pi-utils";
 
@@ -33,26 +33,32 @@ describe("AuthStorage account rotation", () => {
 	};
 
 	beforeEach(async () => {
+		unregisterOAuthProviders();
 		tempDir = path.join(os.tmpdir(), `pi-test-auth-rotation-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 		usageExhausted = false;
 
-		authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"), {
-			usageProviderResolver: provider => (provider === "openai-codex" ? usageProvider : undefined),
+		registerOAuthProvider({
+			id: "openai-codex",
+			name: "Test OpenAI Codex",
+			async login() {
+				throw new Error("not used");
+			},
+			async refreshToken(credentials) {
+				return credentials;
+			},
+			getApiKey(credentials) {
+				return `api-${credentials.accountId ?? "unknown"}`;
+			},
 		});
 
-		vi.spyOn(ai, "getOAuthApiKey").mockImplementation(async (_provider, credentials) => {
-			const credential = credentials["openai-codex"] as OAuthCredentials | undefined;
-			if (!credential) return null;
-			return {
-				apiKey: `api-${credential.accountId ?? "unknown"}`,
-				newCredentials: credential,
-			};
+		authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"), {
+			usageProviderResolver: provider => (provider === "openai-codex" ? usageProvider : undefined),
 		});
 	});
 
 	afterEach(() => {
-		vi.restoreAllMocks();
+		unregisterOAuthProviders();
 		authStorage.close();
 		if (tempDir && fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true });
