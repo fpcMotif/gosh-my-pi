@@ -28,6 +28,7 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/event"
 	crushlog "github.com/charmbracelet/crush/internal/log"
+	"github.com/charmbracelet/crush/internal/ompclient"
 	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/server"
@@ -71,33 +72,27 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "crush",
-	Short: "A terminal-first AI assistant for software development",
-	Long:  "A glamorous, terminal-first AI assistant for software development and adjacent tasks",
+	Use:   "omp-tui-go",
+	Short: "Bubble Tea frontend for omp",
+	Long:  "A Crush-derived Bubble Tea frontend for the omp coding-agent backend",
 	Example: `
 # Run in interactive mode
-crush
+omp-tui-go
 
-# Run non-interactively
-crush run "Guess my 5 favorite Pokémon"
-
-# Run a non-interactively with pipes and redirection
-cat README.md | crush run "make this more glamorous" > GLAMOROUS_README.md
-
-# Run with debug logging in a specific directory
-crush --debug --cwd /path/to/project
+# Run in a specific directory
+omp-tui-go --cwd /path/to/project
 
 # Run in yolo mode (auto-accept all permissions; use with care)
-crush --yolo
+omp-tui-go --yolo
 
-# Run with custom data directory
-crush --data-dir /path/to/custom/.crush
+# Use a local backend command
+OMP_TUI_BACKEND="bun packages/coding-agent/src/cli.ts" omp-tui-go
 
 # Continue a previous session
-crush --session {session-id}
+omp-tui-go --session {session-id}
 
 # Continue the most recent session
-crush --continue
+omp-tui-go --continue
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessionID, _ := cmd.Flags().GetString("session")
@@ -228,15 +223,41 @@ func setupWorkspaceWithProgressBar(cmd *cobra.Command) (workspace.Workspace, fun
 	return ws, cleanup, err
 }
 
-// setupWorkspace returns a Workspace and cleanup function. When
-// CRUSH_CLIENT_SERVER=1, it connects to a server process and returns a
-// ClientWorkspace. Otherwise it creates an in-process app.App and
-// returns an AppWorkspace.
+// setupWorkspace returns a Workspace backed by the existing omp RPC backend.
 func setupWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
-	if useClientServer() {
-		return setupClientServerWorkspace(cmd)
+	return setupOmpWorkspace(cmd)
+}
+
+func setupOmpWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
+	cwd, err := ResolveCwd(cmd)
+	if err != nil {
+		return nil, nil, err
 	}
-	return setupLocalWorkspace(cmd)
+	sessionID, _ := cmd.Flags().GetString("session")
+	continueLast, _ := cmd.Flags().GetBool("continue")
+	backend := strings.Fields(os.Getenv("OMP_TUI_BACKEND"))
+	if len(backend) == 0 {
+		backend = []string{"omp"}
+	}
+	args := []string{}
+	if sessionID != "" {
+		args = append(args, "--resume", sessionID)
+	} else if continueLast {
+		args = append(args, "--continue")
+	}
+	client, err := ompclient.Spawn(cmd.Context(), ompclient.Options{
+		Bin:        backend[0],
+		PrefixArgs: backend[1:],
+		Args:       args,
+		Cwd:        cwd,
+		Env:        os.Environ(),
+		Stderr:     io.Discard,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	ws := workspace.NewOmpWorkspace(client, cwd)
+	return ws, ws.Shutdown, nil
 }
 
 // setupLocalWorkspace creates an in-process app.App and wraps it in an
