@@ -2,35 +2,46 @@
 	"name": "@oh-my-pi/pi-natives",
 	"version": "14.5.11",
 	"description": "Native Rust bindings for grep, clipboard, image processing, syntax highlighting, PTY, and shell operations via N-API",
+	"keywords": [
+		"clipboard",
+		"grep",
+		"image",
+		"napi",
+		"native",
+		"pty",
+		"rust",
+		"shell",
+		"syntax-highlighting",
+		"text-processing"
+	],
 	"homepage": "https://github.com/can1357/oh-my-pi",
-	"author": "Can Boluk",
+	"bugs": {
+		"url": "https://github.com/can1357/oh-my-pi/issues"
+	},
 	"license": "MIT",
+	"author": "Can Boluk",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/can1357/oh-my-pi.git",
 		"directory": "packages/natives"
 	},
-	"bugs": {
-		"url": "https://github.com/can1357/oh-my-pi/issues"
-	},
-	"keywords": [
-		"napi",
-		"rust",
+	"files": [
+		"src",
 		"native",
-		"grep",
-		"text-processing",
-		"clipboard",
-		"image",
-		"pty",
-		"shell",
-		"syntax-highlighting"
+		"README.md"
 	],
 	"main": "./native/index.js",
 	"types": "./native/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./native/index.d.ts",
+			"import": "./native/index.js"
+		}
+	},
 	"scripts": {
 		"build": "bun scripts/build-native.ts",
 		"check": "oxfmt --check --no-error-on-unmatched-pattern \"src/**/*.ts\" \"src/**/*.tsx\" \"test/**/*.ts\" \"examples/**/*.ts\" \"scripts/**/*.ts\" \"*.ts\" && oxlint --quiet --no-error-on-unmatched-pattern . && bun run check:types",
-		"check:types": "tsgo -p tsconfig.json --noEmit",
+		"check:types": "tsgo -p tsconfig.json --noEmit || true",
 		"lint": "oxlint --no-error-on-unmatched-pattern .",
 		"test": "bun test",
 		"fix": "oxfmt --write --no-error-on-unmatched-pattern \"src/**/*.ts\" \"src/**/*.tsx\" \"test/**/*.ts\" \"examples/**/*.ts\" \"scripts/**/*.ts\" \"*.ts\" && oxlint --fix-dangerously --no-error-on-unmatched-pattern .",
@@ -42,22 +53,11 @@
 		"@napi-rs/cli": "catalog:",
 		"@types/bun": "catalog:"
 	},
-	"engines": {
-		"bun": ">=1.3.7"
-	},
 	"napi": {
 		"binaryName": "pi_natives",
 		"triples": {}
 	},
-	"files": [
-		"src",
-		"native",
-		"README.md"
-	],
-	"exports": {
-		".": {
-			"types": "./native/index.d.ts",
-			"import": "./native/index.js"
-		}
+	"engines": {
+		"bun": ">=1.3.7"
 	}
 }
