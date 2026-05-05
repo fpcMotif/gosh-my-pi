@@ -26,11 +26,11 @@ Output: markdown-ish report on stdout plus per-call CSV at `$EDIT_ANALYSIS_CSV`
 
 Aggregates token usage across the most-recent N sessions. Buckets:
 
-- `tool ARGS`          — assistant tool-call argument JSON
-- `tool RESULTS`       — tool result content text
+- `tool ARGS` — assistant tool-call argument JSON
+- `tool RESULTS` — tool result content text
 - `assistant THINKING` — assistant `thinking` blocks
-- `assistant TEXT`     — assistant prose
-- `user TEXT`          — user-authored text content
+- `assistant TEXT` — assistant prose
+- `user TEXT` — user-authored text content
 
 Token counting uses **`o200k_base`** via `tiktoken-rs` (the GPT-4o / GPT-5
 family BPE — well-defined offline and within ~5-10% of Claude's own counts in

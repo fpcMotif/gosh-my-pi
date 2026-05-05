@@ -6,19 +6,20 @@ Input corpus (rollout summaries):
 {{rollout_summaries}}
 Produce strict JSON only with this schema — you **MUST NOT** include any other output:
 {
-  "memory_md": "string",
-  "memory_summary": "string",
-  "skills": [
-    {
-      "name": "string",
-      "content": "string",
-      "scripts": [{ "path": "string", "content": "string" }],
-      "templates": [{ "path": "string", "content": "string" }],
-      "examples": [{ "path": "string", "content": "string" }]
-    }
-  ]
+"memory_md": "string",
+"memory_summary": "string",
+"skills": [
+{
+"name": "string",
+"content": "string",
+"scripts": [{ "path": "string", "content": "string" }],
+"templates": [{ "path": "string", "content": "string" }],
+"examples": [{ "path": "string", "content": "string" }]
+}
+]
 }
 Requirements:
+
 - memory_md: full long-term memory document, curated and readable.
 - memory_summary: compact prompt-time memory guidance.
 - skills: reusable procedural playbooks. Empty array allowed.

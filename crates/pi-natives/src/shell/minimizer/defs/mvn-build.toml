@@ -7,15 +7,15 @@ match_command = "^(mvn|mvnw)$"
 match_subcommand = "^(compile|package|clean|install)$"
 strip_ansi = true
 strip_lines_matching = [
-  "^\\[INFO\\] ---",
-  "^\\[INFO\\] Building\\s",
-  "^\\[INFO\\] Downloading\\s",
-  "^\\[INFO\\] Downloaded\\s",
-  "^\\[INFO\\]\\s*$",
-  "^\\s*$",
-  "^Downloading:",
-  "^Downloaded:",
-  "^Progress",
+	"^\\[INFO\\] ---",
+	"^\\[INFO\\] Building\\s",
+	"^\\[INFO\\] Downloading\\s",
+	"^\\[INFO\\] Downloaded\\s",
+	"^\\[INFO\\]\\s*$",
+	"^\\s*$",
+	"^Downloading:",
+	"^Downloaded:",
+	"^Progress",
 ]
 max_lines = 50
 on_empty = "mvn: ok"

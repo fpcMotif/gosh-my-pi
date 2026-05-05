@@ -5,6 +5,8 @@
  * Unlike markdown commands which expand to prompts, custom commands can execute
  * arbitrary logic with full access to the hook context.
  */
+import type * as piCodingAgent from "../..";
+import type * as TypeboxNs from "@sinclair/typebox";
 import type { ExecOptions, ExecResult, HookCommandContext } from "../../extensibility/hooks/types";
 
 // Re-export for custom commands to use
@@ -20,9 +22,9 @@ export interface CustomCommandAPI {
 	/** Execute a shell command */
 	exec(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
 	/** Injected @sinclair/typebox module */
-	typebox: typeof import("@sinclair/typebox");
+	typebox: typeof TypeboxNs;
 	/** Injected pi-coding-agent exports */
-	pi: typeof import("../..");
+	pi: typeof piCodingAgent;
 }
 
 /**

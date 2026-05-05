@@ -188,31 +188,8 @@ function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
  */
 export function prepareBranchEntries(entries: SessionEntry[], tokenBudget: number = 0): BranchPreparation {
 	const messages: AgentMessage[] = [];
-	const fileOps = createFileOps();
+	const fileOps = collectCumulativeFileOps(entries);
 	let totalTokens = 0;
-
-	// First pass: collect file ops from ALL entries (even if they don't fit in token budget)
-	// This ensures we capture cumulative file tracking from nested branch summaries
-	// Only extract from pi-generated summaries (fromExtension !== true), not extension-generated ones
-	for (const entry of entries) {
-		if (
-			entry.type === "branch_summary" &&
-			entry.fromExtension !== true &&
-			entry.details !== null &&
-			entry.details !== undefined
-		) {
-			const details = entry.details as BranchSummaryDetails;
-			if (Array.isArray(details.readFiles)) {
-				for (const f of details.readFiles) fileOps.read.add(f);
-			}
-			if (Array.isArray(details.modifiedFiles)) {
-				// Modified files go into both edited and written for proper deduplication
-				for (const f of details.modifiedFiles) {
-					fileOps.edited.add(f);
-				}
-			}
-		}
-	}
 
 	// Second pass: walk from newest to oldest, adding messages until token budget
 	for (let i = entries.length - 1; i >= 0; i--) {
@@ -243,6 +220,30 @@ export function prepareBranchEntries(entries: SessionEntry[], tokenBudget: numbe
 	}
 
 	return { messages, fileOps, totalTokens };
+}
+
+function collectCumulativeFileOps(entries: SessionEntry[]): FileOperations {
+	const fileOps = createFileOps();
+	for (const entry of entries) {
+		if (
+			entry.type === "branch_summary" &&
+			entry.fromExtension !== true &&
+			entry.details !== null &&
+			entry.details !== undefined
+		) {
+			const details = entry.details as BranchSummaryDetails;
+			if (Array.isArray(details.readFiles)) {
+				for (const f of details.readFiles) fileOps.read.add(f);
+			}
+			if (Array.isArray(details.modifiedFiles)) {
+				// Modified files go into both edited and written for proper deduplication
+				for (const f of details.modifiedFiles) {
+					fileOps.edited.add(f);
+				}
+			}
+		}
+	}
+	return fileOps;
 }
 
 // ============================================================================

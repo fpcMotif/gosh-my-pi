@@ -1,5 +1,57 @@
 import { type Api, type Model, type ThinkingConfig } from "./types";
-import { parseKnownModel, semverGte, type ParsedModel, type OpenAIModel } from "./utils/model-parser";
+import { parseKnownModel, semverEqual, semverGte, type ParsedModel, type OpenAIModel } from "./utils/model-parser";
+
+const CLOUDFLARE_AI_GATEWAY_BASE_URL = "https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/anthropic";
+
+/**
+ * Static fallback model injected when Cloudflare AI Gateway discovery
+ * returns no results.
+ */
+export const CLOUDFLARE_FALLBACK_MODEL: Model<"anthropic-messages"> = {
+	id: "claude-sonnet-4-5",
+	name: "Claude Sonnet 4.5",
+	api: "anthropic-messages",
+	provider: "cloudflare-ai-gateway",
+	baseUrl: CLOUDFLARE_AI_GATEWAY_BASE_URL,
+	reasoning: true,
+	input: ["text", "image"],
+	cost: {
+		input: 3,
+		output: 15,
+		cacheRead: 0.3,
+		cacheWrite: 3.75,
+	},
+	contextWindow: 200000,
+	maxTokens: 64000,
+};
+
+/**
+ * Link OpenAI model variants to their context promotion targets.
+ *
+ * When a model's context is exhausted, the agent can promote to a sibling
+ * model with a larger context window on the same provider:
+ * - `codex-spark` variants promote to `gpt-5.5`.
+ * - `gpt-5.5` (270K input) promotes to `gpt-5.4` (1M input).
+ */
+export function linkOpenAIPromotionTargets(models: Model<Api>[]): void {
+	for (const candidate of models) {
+		const parsedCandidate = parseKnownModel(candidate.id);
+		if (parsedCandidate.family !== "openai") continue;
+		let targetId: string | undefined;
+		if (parsedCandidate.variant === "codex-spark") {
+			targetId = "gpt-5.5";
+		} else if (parsedCandidate.variant === "base" && semverEqual(parsedCandidate.version, "5.5")) {
+			targetId = "gpt-5.4";
+		} else {
+			continue;
+		}
+		const fallback = models.find(
+			m => m.provider === candidate.provider && m.api === candidate.api && m.id === targetId,
+		);
+		if (!fallback) continue;
+		candidate.contextPromotionTarget = `${fallback.provider}/${fallback.id}`;
+	}
+}
 
 /** User-facing thinking levels, ordered least to most intensive. */
 export const enum Effort {
@@ -237,7 +289,7 @@ export class AbortTracker {
 
 	constructor(signal?: AbortSignal) {
 		this.#signal = signal;
-		if ((signal?.aborted === true) === true) {
+		if (signal !== undefined && signal.aborted) {
 			this.#aborted = true;
 		} else {
 			signal?.addEventListener(
@@ -255,6 +307,6 @@ export class AbortTracker {
 	}
 
 	wasCallerAbort(): boolean {
-		return this.#aborted && (this.#signal?.aborted === true) === true;
+		return this.#aborted && this.#signal !== undefined && this.#signal.aborted;
 	}
 }

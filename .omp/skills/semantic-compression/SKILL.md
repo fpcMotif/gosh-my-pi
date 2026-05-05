@@ -16,6 +16,7 @@ LLMs reconstruct grammar from content words. Remove predictable glue; keep seman
 ## Deletion Tiers
 
 **Tier 1 — Always delete (even if fragments):**
+
 - Articles: a, an, the
 - Copulas: is, are, was, were, am, be, been, being
 - Expletive subjects: "There is/are...", "It is..."
@@ -26,6 +27,7 @@ LLMs reconstruct grammar from content words. Remove predictable glue; keep seman
 - Conjunctions when list/contrast obvious: and, or, but
 
 **Tier 2 — Delete unless meaning changes:**
+
 - Auxiliary verbs: have/has/had, do/does/did, will/would (keep if tense/aspect matters)
 - Modal verbs: can/could/may/might/should (keep when obligation/permission/possibility is critical; always keep must/must not)
 - Pronouns: it/this/that/these/those/he/she/they (drop when referent obvious; replace with noun if ambiguous)
@@ -33,6 +35,7 @@ LLMs reconstruct grammar from content words. Remove predictable glue; keep seman
 - Prepositions: of, for, to, in, on, at, by (keep for material, direction, agency, or disambiguation)
 
 **Tier 3 — Delete only if relation still clear:**
+
 - Remaining prepositions: with/without, between/among, within, after/before, over/under, through (drop only if relation obvious)
 - Redundant adverbs: "shout loudly" → "shout"
 
@@ -58,9 +61,9 @@ LLMs reconstruct grammar from content words. Remove predictable glue; keep seman
 
 ## Examples
 
-| Original | Compressed |
-|----------|------------|
+| Original                                                                           | Compressed                                                       |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | The system was designed to efficiently process incoming data from multiple sources | System design: efficient process incoming data, multiple sources |
-| There were at least 20 people who appeared to be waiting | At least 20 people apparent waiting |
-| It is important to note that the medication should not be taken without food | Medication: should not take without food |
-| The researcher made a decision to investigate the anomaly that was reported | Researcher decided: investigate reported anomaly |
+| There were at least 20 people who appeared to be waiting                           | At least 20 people apparent waiting                              |
+| It is important to note that the medication should not be taken without food       | Medication: should not take without food                         |
+| The researcher made a decision to investigate the anomaly that was reported        | Researcher decided: investigate reported anomaly                 |

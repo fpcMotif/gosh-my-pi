@@ -30,7 +30,7 @@ omp plugin <action> ...
 
 - `src/commands/plugin.ts` defines command/flags and forwards to `runPluginCommand`.
 - `src/cli/plugin-cli.ts` maps subcommands to `PluginManager` methods:
-  - `install`, `uninstall`, `list`, `link`, `doctor`, `features`, `config`, `enable`, `disable`
+   - `install`, `uninstall`, `list`, `link`, `doctor`, `features`, `config`, `enable`, `disable`
 - No explicit `update` action exists; update is done by re-running `install` with a new package/version spec.
 
 ## On-disk model
@@ -40,9 +40,9 @@ Global plugin state lives under `~/.omp/plugins`:
 - `package.json` — dependency manifest used by `bun install`/`bun uninstall`
 - `node_modules/` — installed plugin packages or symlinks
 - `omp-plugins.lock.json` — runtime state:
-  - enabled/disabled per plugin
-  - selected feature set per plugin
-  - persisted plugin settings
+   - enabled/disabled per plugin
+   - selected feature set per plugin
+   - persisted plugin settings
 
 Project-local overrides live at:
 
@@ -121,9 +121,9 @@ If uninstall command fails, runtime state is not changed.
 4. For each dependency with a resolvable package.json:
    - build `InstalledPlugin` record
    - merge feature/enable state:
-     - base from lockfile (or defaults)
-     - project overrides can replace feature selection
-     - project `disabled` list masks plugin as disabled
+      - base from lockfile (or defaults)
+      - project overrides can replace feature selection
+      - project `disabled` list masks plugin as disabled
 
 This is the effective state used by CLI status output and settings/features operations.
 
@@ -241,8 +241,8 @@ Operationally, `doctor --fix` can repair some drift (`bun install`, orphaned con
 ## Malformed/missing manifest behavior summary
 
 - Missing `omp`/`pi` field:
-  - install/list: tolerated (minimal manifest)
-  - runtime enabled-plugin discovery: skipped as non-plugin
+   - install/list: tolerated (minimal manifest)
+   - runtime enabled-plugin discovery: skipped as non-plugin
 - Missing feature referenced by install spec or `features --set/--enable`: hard error with available feature list
 - Invalid `plugin-overrides.json`: ignored with fallback to `{}` in both manager and loader paths
 - Missing tool/hook/command file paths referenced by manifest: silently ignored during resolver expansion; flagged as errors only by `doctor`

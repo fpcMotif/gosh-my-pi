@@ -43,8 +43,8 @@ This document covers the media/system/conversion exports in `@oh-my-pi/pi-native
 - **Rust decode boundary**: bytes are copied/read, format is guessed with `ImageReader::with_guessed_format()`, then decoded to `DynamicImage`.
 - **In-memory state**: `PhotonImage` stores `Arc<DynamicImage>`.
 - **Output boundary**:
-  - `PhotonImage#encode(format, quality)` returns a promise for encoded bytes (`Vec<u8>` in Rust; generated TS currently declares `Promise<Array<number>>`).
-  - `encodeSixel(...)` returns a SIXEL escape string synchronously.
+   - `PhotonImage#encode(format, quality)` returns a promise for encoded bytes (`Vec<u8>` in Rust; generated TS currently declares `Promise<Array<number>>`).
+   - `encodeSixel(...)` returns a SIXEL escape string synchronously.
 
 Format IDs:
 
@@ -108,10 +108,10 @@ These helpers are platform-specific; availability must be checked before relying
 - **Collection boundary**: profiling samples are produced by `profile_region(tag)` guards in `task::blocking` and `task::future`.
 - **Storage format**: fixed-size circular buffer (`MAX_SAMPLES = 10_000`) storing stack path, duration, and timestamp.
 - **Output boundary**: `getWorkProfile(lastSeconds)` returns:
-  - `folded`: folded-stack text (flamegraph input)
-  - `summary`: markdown table summary
-  - `svg`: optional flamegraph SVG
-  - `totalMs`, `sampleCount`
+   - `folded`: folded-stack text (flamegraph input)
+   - `summary`: markdown table summary
+   - `svg`: optional flamegraph SVG
+   - `totalMs`, `sampleCount`
 
 ## Lifecycle and state transitions
 

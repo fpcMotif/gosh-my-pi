@@ -8,14 +8,36 @@
  *   4. API key credentials in ~/.omp/agent/agent.db
  *   5. Generic Anthropic fallback (ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL)
  */
-import { $env, getAgentDbPath } from "@oh-my-pi/pi-utils";
-import { type AuthCredential, AuthCredentialStore } from "../auth-storage";
-import {
-	buildAnthropicHeaders as buildProviderAnthropicHeaders,
-	normalizeAnthropicBaseUrl,
-} from "../providers/anthropic";
+import { $env } from "@oh-my-pi/pi-utils";
+import type { AuthCredential } from "../auth-types";
+import { AuthCredentialStore } from "../auth-credential-store";
 import { getEnvApiKey } from "../stream";
 import { isFoundryEnabled } from "./foundry";
+
+function normalizeAnthropicBaseUrl(url: string): string {
+	return url.replace(/\/+$/, "").replace(/\/v1$/, "");
+}
+
+function buildProviderAnthropicHeaders(opts: {
+	apiKey: string;
+	baseUrl: string;
+	isOAuth: boolean;
+	extraBetas?: string[];
+	stream: boolean;
+}): Record<string, string> {
+	const betas = ["interleaved-thinking-2025-05-14", ...(opts.extraBetas ?? [])];
+	const headers: Record<string, string> = {
+		"content-type": "application/json",
+		"anthropic-version": "2023-06-01",
+		"anthropic-beta": betas.join(","),
+	};
+	if (opts.isOAuth) {
+		headers["authorization"] = `Bearer ${opts.apiKey}`;
+	} else {
+		headers["x-api-key"] = opts.apiKey;
+	}
+	return headers;
+}
 
 /** Auth configuration for Anthropic */
 export interface AnthropicAuthConfig {
@@ -80,9 +102,9 @@ function toAnthropicOAuthCredential(credential: AuthCredential): AnthropicOAuthC
  */
 async function readAnthropicOAuthCredentials(store?: AuthCredentialStore): Promise<AnthropicOAuthCredential[]> {
 	const ownsStore = !store;
-	const effectiveStore = store ?? (await AuthCredentialStore.open(getAgentDbPath()));
+	const effectiveStore = store ?? (await AuthCredentialStore.open());
 	try {
-		const records = effectiveStore.listAuthCredentials("anthropic");
+		const records = effectiveStore.getAuthCredentialsForProvider("anthropic");
 		const credentials: AnthropicOAuthCredential[] = [];
 		for (const record of records) {
 			const mapped = toAnthropicOAuthCredential(record.credential);
@@ -133,7 +155,7 @@ export async function findAnthropicAuth(store?: AuthCredentialStore): Promise<An
 
 	// Tiers 3-4 use the credential store; manage lifecycle once
 	const ownsStore = !store;
-	const effectiveStore = store ?? (await AuthCredentialStore.open(getAgentDbPath()));
+	const effectiveStore = store ?? (await AuthCredentialStore.open());
 	try {
 		// 3. OAuth credentials in agent.db (with 5-minute expiry buffer)
 		const expiryBuffer = 5 * 60 * 1000; // 5 minutes

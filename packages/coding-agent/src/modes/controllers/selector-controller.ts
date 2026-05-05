@@ -943,12 +943,12 @@ export class SelectorController {
 		}
 
 		this.showSelector(done => {
-			let selector: OAuthSelectorComponent;
-			selector = new OAuthSelectorComponent(
+			const selectorRef: { component: OAuthSelectorComponent | undefined } = { component: undefined };
+			const selector = new OAuthSelectorComponent(
 				mode,
 				this.ctx.session.modelRegistry.authStorage,
 				async (selectedProviderId: string) => {
-					selector.stopValidation();
+					selectorRef.component?.stopValidation();
 					done();
 					if (mode === "login") {
 						await this.#handleOAuthLogin(selectedProviderId);
@@ -957,7 +957,7 @@ export class SelectorController {
 					}
 				},
 				() => {
-					selector.stopValidation();
+					selectorRef.component?.stopValidation();
 					done();
 					this.ctx.ui.requestRender();
 				},
@@ -974,6 +974,7 @@ export class SelectorController {
 					},
 				},
 			);
+			selectorRef.component = selector;
 			return { component: selector, focus: selector };
 		});
 	}
@@ -987,23 +988,25 @@ export class SelectorController {
 
 	showSessionObserver(registry: SessionObserverRegistry): void {
 		const observeKeys = this.ctx.keybindings.getKeys("app.session.observe");
-		let cleanup: (() => void) | undefined;
-		let overlayHandle: OverlayHandle | undefined;
+		const refs: { cleanup: (() => void) | undefined; overlayHandle: OverlayHandle | undefined } = {
+			cleanup: undefined,
+			overlayHandle: undefined,
+		};
 
 		const done = () => {
-			cleanup?.();
-			overlayHandle?.hide();
+			refs.cleanup?.();
+			refs.overlayHandle?.hide();
 			this.ctx.ui.requestRender();
 		};
 
 		const selector = new SessionObserverOverlayComponent(registry, done, observeKeys);
 
-		cleanup = registry.onChange(() => {
+		refs.cleanup = registry.onChange(() => {
 			selector.refreshFromRegistry();
 			this.ctx.ui.requestRender();
 		});
 
-		overlayHandle = this.ctx.ui.showOverlay(selector, {
+		refs.overlayHandle = this.ctx.ui.showOverlay(selector, {
 			anchor: "bottom-center",
 			width: "100%",
 			maxHeight: "100%",

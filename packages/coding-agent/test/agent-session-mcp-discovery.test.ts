@@ -108,6 +108,8 @@ describe("AgentSession MCP discovery", () => {
 				messages: [],
 			},
 		});
+		console.log("AGENT TOOLS TYPE:", typeof agent.setTools);
+		console.log("AGENT PROTOTYPE METHODS:", Object.getOwnPropertyNames(Object.getPrototypeOf(agent)));
 		const session = new AgentSession({
 			agent,
 			sessionManager: SessionManager.inMemory(),

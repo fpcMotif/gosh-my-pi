@@ -57,76 +57,88 @@ Lid=       blank the anchored line's content but KEEP the line (results in an em
 {{hrefr 5}}=	return clean.trim().toUpperCase();
 
 # Rewrite multiple adjacent lines (delete each, then insert new content)
----a.ts
--{{hrefr 3}}
--{{hrefr 4}}
--{{hrefr 5}}
--{{hrefr 6}}
+
+---a.ts -{{hrefr 3}} -{{hrefr 4}} -{{hrefr 5}} -{{hrefr 6}}
 +export function label(name: string): string {
-+	return (name || DEF).trim().toUpperCase();
-+}
+
+- return (name || DEF).trim().toUpperCase();
+  +}
 
 # Same rewrite using a range (equivalent to four `-Lid` lines)
----a.ts
--{{hrefr 3}}..{{hrefr 6}}
+
+---a.ts -{{hrefr 3}}..{{hrefr 6}}
 +export function label(name: string): string {
-+	return (name || DEF).trim().toUpperCase();
-+}
+
+- return (name || DEF).trim().toUpperCase();
+  +}
 
 # Replace a contiguous range with one line (range-replace shorthand)
+
 ---a.ts
 {{hrefr 3}}..{{hrefr 6}}=export const label = (name: string) => (name || DEF).trim().toUpperCase();
 
 # Replace a contiguous range with multiple lines (continuation form)
+
 ---a.ts
 {{hrefr 3}}..{{hrefr 6}}=export function label(name: string): string {
-\	return (name || DEF).trim().toUpperCase();
+\ return (name || DEF).trim().toUpperCase();
 \}
 
 # Replace a block with a longer multi-line block, including blank lines (canonical form for refactors)
+
 ---a.ts
-{{hrefr 3}}..{{hrefr 6}}=/** Format a display label, falling back to DEF when empty. */
+{{hrefr 3}}..{{hrefr 6}}=/\*_ Format a display label, falling back to DEF when empty. _/
 \export function label(name: string): string {
-\	const clean = (name || DEF).trim();
+\ const clean = (name || DEF).trim();
 \
-\	if (clean.length === 0) return DEF;
-\	return clean.toUpperCase();
+\ if (clean.length === 0) return DEF;
+\ return clean.toUpperCase();
 \}
 
 # Insert ABOVE a line
+
 ---a.ts
 ^{{hrefr 5}}
-+	const debug = false;
+
+- const debug = false;
 
 # Insert BELOW a line
+
 ---a.ts
 @{{hrefr 4}}
-+	const debug = false;
+
+- const debug = false;
 
 # Insert above the first line (use BOF)
+
 ---a.ts
 ^
 +// Copyright (c) 2026
-+
+
+-
 
 # Append at end of file
+
 ---a.ts
 $
 +export { DEF };
 
 # Delete a single line
----a.ts
--{{hrefr 2}}
+
+---a.ts -{{hrefr 2}}
 
 # Delete the file (no other ops in the section)
+
 ---a.ts
 !rm
 
 # Rename a file
+
 ---a.ts
 !mv b.ts
 
 # Multi-file edit in one input
+
 ---a.ts
 {{hrefr 1}}=const DEF = "user";
 ---other.ts

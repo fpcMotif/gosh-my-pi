@@ -93,7 +93,7 @@ export class SettingsList implements Component {
 		// Render visible items
 		for (let i = startIndex; i < endIndex; i++) {
 			const item = this.#items[i];
-			if (!item) continue;
+			if (item === undefined) continue;
 
 			const isSelected = i === this.#selectedIndex;
 			const prefix = isSelected ? this.#theme.cursor : "  ";
@@ -166,7 +166,7 @@ export class SettingsList implements Component {
 
 	#activateItem(): void {
 		const item = this.#items[this.#selectedIndex];
-		if (!item) return;
+		if (item === undefined) return;
 
 		if (item.submenu) {
 			// Open submenu, passing current value so it can pre-select correctly

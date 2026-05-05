@@ -52,12 +52,12 @@ Prompt is sent as an agent-authored developer message via:
 
 ```ts
 await this.#promptAgentWithIdleRetry([
-  {
-    role: "developer",
-    content: [{ type: "text", text: handoffPrompt }],
-    attribution: "agent",
-    timestamp: Date.now(),
-  },
+	{
+		role: "developer",
+		content: [{ type: "text", text: handoffPrompt }],
+		attribution: "agent",
+		timestamp: Date.now(),
+	},
 ]);
 ```
 
@@ -154,13 +154,13 @@ After session reset, handoff is persisted as `custom_message` with `customType: 
 - Calls `await session.handoff(customInstructions)`
 - If result is `undefined`: `showError("Handoff cancelled")`
 - On success:
-  - `rebuildChatFromMessages()` (loads new session context, including injected handoff)
-  - invalidates status line and editor top border
-  - reloads todos
-  - appends success chat line: `New session started with handoff context`
+   - `rebuildChatFromMessages()` (loads new session context, including injected handoff)
+   - invalidates status line and editor top border
+   - reloads todos
+   - appends success chat line: `New session started with handoff context`
 - On exception:
-  - if message is `"Handoff cancelled"` or error name is `AbortError`: `showError("Handoff cancelled")`
-  - otherwise: `showError("Handoff failed: <message>")`
+   - if message is `"Handoff cancelled"` or error name is `AbortError`: `showError("Handoff cancelled")`
+   - otherwise: `showError("Handoff failed: <message>")`
 - Requests render at end
 
 ## Cancellation semantics (current behavior)
@@ -188,13 +188,13 @@ Practical impact:
 Current UI classification:
 
 - **Aborted/cancelled**
-  - `abortHandoff()` path triggers `"Handoff cancelled"`, or
-  - thrown `AbortError`
-  - UI shows `Handoff cancelled`
+   - `abortHandoff()` path triggers `"Handoff cancelled"`, or
+   - thrown `AbortError`
+   - UI shows `Handoff cancelled`
 
 - **Failed**
-  - any other thrown error from `handoff()` / prompt pipeline (model/API validation errors, runtime exceptions, etc.)
-  - UI shows `Handoff failed: ...`
+   - any other thrown error from `handoff()` / prompt pipeline (model/API validation errors, runtime exceptions, etc.)
+   - UI shows `Handoff failed: ...`
 
 Additional nuance: if generation completes but no text is extracted, `handoff()` returns `undefined` and controller currently reports **cancelled**, not **failed**.
 

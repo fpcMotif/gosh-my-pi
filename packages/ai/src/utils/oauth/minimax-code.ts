@@ -14,7 +14,7 @@
  */
 
 import { validateOpenAICompatibleApiKey } from "./api-key-validation";
-import type { OAuthController } from "./types";
+import type { OAuthController, OAuthCredentials } from "./types";
 
 const AUTH_URL = "https://platform.minimax.io/subscribe/coding-plan";
 const API_BASE_URL_INTL = "https://api.minimax.io/v1";
@@ -75,4 +75,9 @@ async function loginMiniMaxCodeWithBaseUrl(
  */
 export async function loginMiniMaxCodeCn(options: OAuthController): Promise<string> {
 	return loginMiniMaxCodeWithBaseUrl(options, API_BASE_URL_CN, "MiniMax Coding Plan (China)");
+}
+
+/** MiniMax Code uses API keys — token refresh is not supported. */
+export function refreshMinimaxCodeToken(_refreshToken: string): Promise<OAuthCredentials> {
+	return Promise.reject(new Error("MiniMax Code does not support token refresh"));
 }

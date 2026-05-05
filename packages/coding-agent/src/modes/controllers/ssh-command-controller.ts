@@ -64,7 +64,6 @@ export class SSHCommandController {
 			"  /ssh help             Show this help message",
 			"",
 		].join("\n");
-
 		this.#showMessage(helpText);
 	}
 
@@ -72,166 +71,123 @@ export class SSHCommandController {
 	 * Handle /ssh add - parse flags and add host to config
 	 */
 	async #handleAdd(text: string): Promise<void> {
-		const prefixMatch = text.match(/^\/ssh\s+add\b\s*(.*)$/i);
-		const rest = prefixMatch?.[1]?.trim() ?? "";
-		if (!rest) {
-			this.ctx.showError(
-				"Usage: /ssh add <name> --host <host> [--user <user>] [--port <port>] [--key <keyPath>] [--desc <description>] [--compat] [--scope project|user]",
-			);
-			return;
-		}
+		const parsed = this.#parseAddArgs(text);
+		if (!parsed) return;
 
+		const { name, host, username, port, keyPath, description, compat, scope } = parsed;
+		try {
+			const cwd = getProjectDir();
+			const filePath = getSSHConfigPath(scope, cwd);
+
+			const config: SSHHostConfig = { host };
+			if (username) config.username = username;
+			if (port) config.port = port;
+			if (keyPath) config.keyPath = keyPath;
+			if (description) config.description = description;
+			if (compat) config.compat = true;
+
+			await addSSHHost(filePath, name, config);
+
+			const lines = [
+				"",
+				theme.fg("success", `✓ Added SSH host "${name}" to ${scope} config`),
+				"",
+				`  Host: ${host}`,
+			];
+			if (username) lines.push(`  User: ${username}`);
+			if (port) lines.push(`  Port: ${port}`);
+			if (keyPath) lines.push(`  Key:  ${keyPath}`);
+			if (description) lines.push(`  Desc: ${description}`);
+			if (compat) lines.push(`  Compat: true`);
+			lines.push("", theme.fg("muted", `Run ${theme.fg("accent", "/ssh list")} to see all configured hosts.`), "");
+
+			this.#showMessage(lines.join("\n"));
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			const help = errorMsg.includes("already exists")
+				? `\n\nTip: Use ${theme.fg("accent", "/ssh remove")} first.`
+				: "";
+			this.ctx.showError(`Failed to add host: ${errorMsg}${help}`);
+		}
+	}
+
+	#parseAddArgs(text: string): {
+		name: string;
+		host: string;
+		username?: string;
+		port?: number;
+		keyPath?: string;
+		description?: string;
+		compat: boolean;
+		scope: SSHAddScope;
+	} | null {
+		const match = text.match(/^\/ssh\s+add\b\s*(.*)$/i);
+		const rest = match?.[1]?.trim() ?? "";
 		const tokens = parseCommandArgs(rest);
-		if (tokens.length === 0) {
+		if (!rest || tokens.length === 0) {
 			this.ctx.showError(
 				"Usage: /ssh add <name> --host <host> [--user <user>] [--port <port>] [--key <keyPath>] [--desc <description>] [--compat] [--scope project|user]",
 			);
-			return;
+			return null;
 		}
 
 		let name: string | undefined;
-		let scope: SSHAddScope = "project";
 		let host: string | undefined;
 		let username: string | undefined;
 		let port: number | undefined;
 		let keyPath: string | undefined;
 		let description: string | undefined;
 		let compat = false;
+		let scope: SSHAddScope = "project";
 
 		let i = 0;
 		if (!tokens[0].startsWith("-")) {
 			name = tokens[0];
 			i = 1;
 		}
-
 		while (i < tokens.length) {
-			const argToken = tokens[i];
-			if (argToken === "--host") {
-				const value = tokens[i + 1];
-				if (!value) {
-					this.ctx.showError("Missing value for --host.");
-					return;
-				}
-				host = value;
+			const tok = tokens[i];
+			if (tok === "--host") {
+				host = tokens[i + 1];
 				i += 2;
-				continue;
-			}
-			if (argToken === "--user") {
-				const value = tokens[i + 1];
-				if (!value) {
-					this.ctx.showError("Missing value for --user.");
-					return;
-				}
-				username = value;
+			} else if (tok === "--user") {
+				username = tokens[i + 1];
 				i += 2;
-				continue;
-			}
-			if (argToken === "--port") {
-				const value = tokens[i + 1];
-				if (!value) {
-					this.ctx.showError("Missing value for --port.");
-					return;
-				}
-				const parsed = Number.parseInt(value, 10);
-				if (Number.isNaN(parsed) || parsed < 1 || parsed > 65535) {
-					this.ctx.showError("Invalid --port value. Must be an integer between 1 and 65535.");
-					return;
-				}
-				port = parsed;
+			} else if (tok === "--port") {
+				port = Number.parseInt(tokens[i + 1] ?? "", 10);
 				i += 2;
-				continue;
-			}
-			if (argToken === "--key") {
-				const value = tokens[i + 1];
-				if (!value) {
-					this.ctx.showError("Missing value for --key.");
-					return;
-				}
-				keyPath = value;
+			} else if (tok === "--key") {
+				keyPath = tokens[i + 1];
 				i += 2;
-				continue;
-			}
-			if (argToken === "--desc") {
-				const value = tokens[i + 1];
-				if (!value) {
-					this.ctx.showError("Missing value for --desc.");
-					return;
-				}
-				description = value;
+			} else if (tok === "--desc") {
+				description = tokens[i + 1];
 				i += 2;
-				continue;
-			}
-			if (argToken === "--compat") {
+			} else if (tok === "--compat") {
 				compat = true;
 				i += 1;
-				continue;
-			}
-			if (argToken === "--scope") {
-				const value = tokens[i + 1];
-				if (!value || (value !== "project" && value !== "user")) {
-					this.ctx.showError("Invalid --scope value. Use project or user.");
-					return;
+			} else if (tok === "--scope") {
+				const val = tokens[i + 1];
+				if (val !== "project" && val !== "user") {
+					this.ctx.showError("Invalid --scope. Use project or user.");
+					return null;
 				}
-				scope = value;
+				scope = val;
 				i += 2;
-				continue;
+			} else {
+				this.ctx.showError(`Unknown option: ${tok}`);
+				return null;
 			}
-			this.ctx.showError(`Unknown option: ${argToken}`);
-			return;
 		}
 
-		if (name === null || name === undefined || name === "") {
-			this.ctx.showError("Host name required. Usage: /ssh add <name> --host <host> ...");
-			return;
+		if (!name) {
+			this.ctx.showError("Host name required.");
+			return null;
 		}
-
-		if (host === null || host === undefined || host === "") {
-			this.ctx.showError("--host is required. Usage: /ssh add <name> --host <host> ...");
-			return;
+		if (!host) {
+			this.ctx.showError("--host is required.");
+			return null;
 		}
-
-		try {
-			const cwd = getProjectDir();
-			const filePath = getSSHConfigPath(scope, cwd);
-
-			const hostConfig: SSHHostConfig = { host };
-			if (username !== null && username !== undefined && username !== "") hostConfig.username = username;
-			if (port !== null && port !== undefined && port !== 0) hostConfig.port = port;
-			if (keyPath !== null && keyPath !== undefined && keyPath !== "") hostConfig.keyPath = keyPath;
-			if (description !== null && description !== undefined && description !== "")
-				hostConfig.description = description;
-			if (compat) hostConfig.compat = true;
-
-			await addSSHHost(filePath, name, hostConfig);
-
-			const scopeLabel = scope === "user" ? "user" : "project";
-			const lines = [
-				"",
-				theme.fg("success", `✓ Added SSH host "${name}" to ${scopeLabel} config`),
-				"",
-				`  Host: ${host}`,
-			];
-			if (username !== null && username !== undefined && username !== "") lines.push(`  User: ${username}`);
-			if (port !== null && port !== undefined && port !== 0) lines.push(`  Port: ${port}`);
-			if (keyPath !== null && keyPath !== undefined && keyPath !== "") lines.push(`  Key:  ${keyPath}`);
-			if (description !== null && description !== undefined && description !== "")
-				lines.push(`  Desc: ${description}`);
-			if (compat) lines.push(`  Compat: true`);
-			lines.push("");
-			lines.push(theme.fg("muted", `Run ${theme.fg("accent", "/ssh list")} to see all configured hosts.`));
-			lines.push("");
-
-			this.#showMessage(lines.join("\n"));
-		} catch (error) {
-			const errorMsg = error instanceof Error ? error.message : String(error);
-
-			let helpText = "";
-			if (errorMsg.includes("already exists")) {
-				helpText = `\n\nTip: Use ${theme.fg("accent", "/ssh remove")} first, or choose a different name.`;
-			}
-
-			this.ctx.showError(`Failed to add host: ${errorMsg}${helpText}`);
-		}
+		return { name, host, username, port, keyPath, description, compat, scope };
 	}
 
 	/**
@@ -240,30 +196,22 @@ export class SSHCommandController {
 	async #handleList(): Promise<void> {
 		try {
 			const cwd = getProjectDir();
-
-			// Load from both user and project configs
-			const userPath = getSSHConfigPath("user", cwd);
-			const projectPath = getSSHConfigPath("project", cwd);
-
-			const [userConfig, projectConfig] = await Promise.all([
-				readSSHConfigFile(userPath),
-				readSSHConfigFile(projectPath),
+			const [userCfg, projectCfg] = await Promise.all([
+				readSSHConfigFile(getSSHConfigPath("user", cwd)),
+				readSSHConfigFile(getSSHConfigPath("project", cwd)),
 			]);
 
-			const userHosts = Object.keys(userConfig.hosts ?? {});
-			const projectHosts = Object.keys(projectConfig.hosts ?? {});
+			const userHosts = Object.keys(userCfg.hosts ?? {});
+			const projectHosts = Object.keys(projectCfg.hosts ?? {});
+			const configNames = new Set([...userHosts, ...projectHosts]);
 
-			// Load discovered hosts via capability system
-			const configHostNames = new Set([...userHosts, ...projectHosts]);
-			let discoveredHosts: SSHHost[] = [];
+			let discHosts: SSHHost[] = [];
 			try {
-				const result = await loadCapability<SSHHost>(sshCapability.id, { cwd });
-				discoveredHosts = result.items.filter(h => !configHostNames.has(h.name));
-			} catch {
-				// Ignore discovery errors
-			}
+				const res = await loadCapability<SSHHost>(sshCapability.id, { cwd });
+				discHosts = res.items.filter(h => !configNames.has(h.name));
+			} catch {}
 
-			if (userHosts.length === 0 && projectHosts.length === 0 && discoveredHosts.length === 0) {
+			if (!userHosts.length && !projectHosts.length && !discHosts.length) {
 				this.#showMessage(
 					[
 						"",
@@ -277,68 +225,45 @@ export class SSHCommandController {
 			}
 
 			const lines: string[] = ["", theme.bold("Configured SSH Hosts"), ""];
-
-			// Show user-level hosts
-			if (userHosts.length > 0) {
-				lines.push(theme.fg("accent", "User level") + theme.fg("muted", ` (~/.omp/agent/ssh.json):`));
-				for (const name of userHosts) {
-					const config = userConfig.hosts![name];
-					const details = this.#formatHostDetails(config);
-					lines.push(`  ${theme.fg("accent", name)} ${details}`);
-				}
-				lines.push("");
-			}
-
-			// Show project-level hosts
-			if (projectHosts.length > 0) {
-				lines.push(theme.fg("accent", "Project level") + theme.fg("muted", ` (.omp/ssh.json):`));
-				for (const name of projectHosts) {
-					const config = projectConfig.hosts![name];
-					const details = this.#formatHostDetails(config);
-					lines.push(`  ${theme.fg("accent", name)} ${details}`);
-				}
-				lines.push("");
-			}
-
-			// Show discovered hosts (from ssh.json, .ssh.json in project root, etc.)
-			if (discoveredHosts.length > 0) {
-				// Group by source
-				const bySource = new Map<string, SSHHost[]>();
-				for (const host of discoveredHosts) {
-					const key = `${host._source.providerName}|${host._source.path}`;
-					let group = bySource.get(key);
-					if (!group) {
-						group = [];
-						bySource.set(key, group);
-					}
-					group.push(host);
-				}
-
-				for (const [key, hosts] of bySource) {
-					const sepIdx = key.indexOf("|");
-					const providerName = key.slice(0, sepIdx);
-					const sourcePath = key.slice(sepIdx + 1);
-					const shortPath = shortenPath(sourcePath);
-					lines.push(
-						theme.fg("accent", "Discovered") +
-							theme.fg("muted", ` (${providerName}: ${shortPath}):`) +
-							theme.fg("dim", " read-only"),
-					);
-					for (const host of hosts) {
-						const details = this.#formatHostDetails({
-							host: host.host,
-							username: host.username,
-							port: host.port,
-						});
-						lines.push(`  ${theme.fg("accent", host.name)} ${details}`);
-					}
-					lines.push("");
-				}
-			}
+			this.#appendHostLines(lines, "User level", "(~/.omp/agent/ssh.json)", userCfg.hosts ?? {});
+			this.#appendHostLines(lines, "Project level", "(.omp/ssh.json)", projectCfg.hosts ?? {});
+			this.#appendDiscoveredHostLines(lines, discHosts);
 
 			this.#showMessage(lines.join("\n"));
 		} catch (error) {
 			this.ctx.showError(`Failed to list hosts: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	#appendHostLines(lines: string[], label: string, path: string, hosts: Record<string, SSHHostConfig>): void {
+		const names = Object.keys(hosts);
+		if (!names.length) return;
+		lines.push(theme.fg("accent", label) + theme.fg("muted", ` ${path}:`));
+		for (const name of names) lines.push(`  ${theme.fg("accent", name)} ${this.#formatHostDetails(hosts[name])}`);
+		lines.push("");
+	}
+
+	#appendDiscoveredHostLines(lines: string[], discovered: SSHHost[]): void {
+		if (!discovered.length) return;
+		const bySrc = new Map<string, SSHHost[]>();
+		for (const h of discovered) {
+			const key = `${h._source.providerName}|${h._source.path}`;
+			let g = bySrc.get(key);
+			if (!g) {
+				g = [];
+				bySrc.set(key, g);
+			}
+			g.push(h);
+		}
+		for (const [key, hosts] of bySrc) {
+			const [prov, p] = key.split("|");
+			lines.push(
+				theme.fg("accent", "Discovered") +
+					theme.fg("muted", ` (${prov}: ${shortenPath(p)}):`) +
+					theme.fg("dim", " read-only"),
+			);
+			for (const h of hosts) lines.push(`  ${theme.fg("accent", h.name)} ${this.#formatHostDetails(h)}`);
+			lines.push("");
 		}
 	}
 
@@ -347,11 +272,9 @@ export class SSHCommandController {
 	 */
 	#formatHostDetails(config: { host?: string; username?: string; port?: number }): string {
 		const parts: string[] = [];
-		if (config.host !== null && config.host !== undefined && config.host !== "") parts.push(config.host);
-		if (config.username !== null && config.username !== undefined && config.username !== "")
-			parts.push(`user=${config.username}`);
-		if (config.port !== null && config.port !== undefined && config.port !== 0 && config.port !== 22)
-			parts.push(`port=${config.port}`);
+		if (config.host) parts.push(config.host);
+		if (config.username) parts.push(`user=${config.username}`);
+		if (config.port && config.port !== 22) parts.push(`port=${config.port}`);
 		return theme.fg("dim", parts.length > 0 ? `[${parts.join(", ")}]` : "");
 	}
 
@@ -359,51 +282,42 @@ export class SSHCommandController {
 	 * Handle /ssh remove <name> - remove a host from config
 	 */
 	async #handleRemove(text: string): Promise<void> {
-		const match = text.match(/^\/ssh\s+(?:remove|rm)\b\s*(.*)$/i);
-		const rest = match?.[1]?.trim() ?? "";
-		const tokens = parseCommandArgs(rest);
-
+		const tokens = parseCommandArgs(text.match(/^\/ssh\s+(?:remove|rm)\b\s*(.*)$/i)?.[1]?.trim() ?? "");
 		let name: string | undefined;
 		let scope: "project" | "user" = "project";
 		let i = 0;
-
 		if (tokens.length > 0 && !tokens[0].startsWith("-")) {
 			name = tokens[0];
 			i = 1;
 		}
-
 		while (i < tokens.length) {
-			const token = tokens[i];
-			if (token === "--scope") {
-				const value = tokens[i + 1];
-				if (!value || (value !== "project" && value !== "user")) {
-					this.ctx.showError("Invalid --scope value. Use project or user.");
+			if (tokens[i] === "--scope") {
+				const val = tokens[i + 1];
+				if (val !== "project" && val !== "user") {
+					this.ctx.showError("Invalid --scope.");
 					return;
 				}
-				scope = value;
+				scope = val;
 				i += 2;
-				continue;
+			} else {
+				this.ctx.showError(`Unknown option: ${tokens[i]}`);
+				return;
 			}
-			this.ctx.showError(`Unknown option: ${token}`);
-			return;
 		}
 
-		if (name === null || name === undefined || name === "") {
-			this.ctx.showError("Host name required. Usage: /ssh remove <name> [--scope project|user]");
+		if (!name) {
+			this.ctx.showError("Host name required.");
 			return;
 		}
 
 		try {
-			const cwd = getProjectDir();
-			const filePath = getSSHConfigPath(scope, cwd);
+			const filePath = getSSHConfigPath(scope, getProjectDir());
 			const config = await readSSHConfigFile(filePath);
 			if (!config.hosts?.[name]) {
 				this.ctx.showError(`Host "${name}" not found in ${scope} config.`);
 				return;
 			}
-
 			await removeSSHHost(filePath, name);
-
 			this.#showMessage(
 				["", theme.fg("success", `✓ Removed SSH host "${name}" from ${scope} config`), ""].join("\n"),
 			);

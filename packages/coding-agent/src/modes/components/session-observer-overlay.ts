@@ -14,6 +14,7 @@
  *   - Esc from picker -> close overlay
  *   - Enter on main session -> close overlay (jump back)
  */
+import * as fs from "node:fs";
 import type { ToolResultMessage } from "@oh-my-pi/pi-ai";
 import { Container, Markdown, type MarkdownTheme, matchesKey } from "@oh-my-pi/pi-tui";
 import { formatDuration, formatNumber, logger } from "@oh-my-pi/pi-utils";
@@ -153,10 +154,21 @@ export class SessionObserverOverlayComponent extends Container {
 			messageEntries = this.#loadTranscript(session.sessionFile);
 		}
 
-		// Header
+		this.#buildHeaderLines(session);
+		this.#buildContentLines(session, messageEntries);
+		this.#buildFooterLines(session);
+
+		// Auto-scroll to bottom if we were at bottom
+		if (this.#wasAtBottom) {
+			this.#scrollOffset = Math.max(0, this.#renderedLines.length - this.#viewportHeight);
+		}
+	}
+
+	#buildHeaderLines(session: ObservableSession | undefined): void {
 		this.#viewerHeaderLines = [];
 		const breadcrumb = this.#buildBreadcrumb(session);
 		this.#viewerHeaderLines.push(theme.fg("accent", breadcrumb));
+
 		if (session) {
 			const statusColor = session.status === "active" ? "success" : session.status === "failed" ? "error" : "dim";
 			const statusText = theme.fg(statusColor, `[${session.status}]`);
@@ -175,8 +187,9 @@ export class SessionObserverOverlayComponent extends Container {
 					: "";
 			this.#viewerHeaderLines.push(`${theme.bold(session.label)} ${statusText}${agentTag}${posLabel}${modelLabel}`);
 		}
+	}
 
-		// Content
+	#buildContentLines(session: ObservableSession | undefined, messageEntries: SessionMessageEntry[] | null): void {
 		const contentLines: string[] = [];
 		this.#viewerEntries = [];
 
@@ -192,19 +205,15 @@ export class SessionObserverOverlayComponent extends Container {
 			this.#buildTranscriptLines(messageEntries, contentLines);
 		}
 		this.#renderedLines = contentLines;
+	}
 
-		// Footer
+	#buildFooterLines(session: ObservableSession | undefined): void {
 		this.#viewerFooterLines = [];
 		const statsLine = this.#buildStatsLine(session);
 		if (statsLine) this.#viewerFooterLines.push(statsLine);
 		this.#viewerFooterLines.push(
 			theme.fg("dim", "j/k:scroll  Enter:expand  [/]/\u2190\u2192:cycle agents  Esc/Ctrl+S:close  g/G:top/bottom"),
 		);
-
-		// Auto-scroll to bottom if we were at bottom
-		if (this.#wasAtBottom) {
-			this.#scrollOffset = Math.max(0, contentLines.length - this.#viewportHeight);
-		}
 	}
 
 	/** Produce the final viewer output for the overlay system */
@@ -277,111 +286,140 @@ export class SessionObserverOverlayComponent extends Container {
 	}
 
 	#buildTranscriptLines(messageEntries: SessionMessageEntry[], lines: string[]): void {
-		// Build a tool call ID -> tool result map
+		const toolResults = this.#getToolResultsMap(messageEntries);
+		let entryIndex = 0;
+
+		for (const entry of messageEntries) {
+			const msg = entry.message;
+			if (msg.role === "assistant") {
+				entryIndex = this.#renderAssistantEntry(msg, toolResults, entryIndex, lines);
+			} else if (msg.role === "user" || msg.role === "developer") {
+				entryIndex = this.#renderUserEntry(msg, entryIndex, lines);
+			}
+		}
+	}
+
+	#getToolResultsMap(messageEntries: SessionMessageEntry[]): Map<string, ToolResultMessage> {
 		const toolResults = new Map<string, ToolResultMessage>();
 		for (const entry of messageEntries) {
 			if (entry.message.role === "toolResult") {
 				toolResults.set(entry.message.toolCallId, entry.message);
 			}
 		}
+		return toolResults;
+	}
 
-		let entryIndex = 0;
-		for (const entry of messageEntries) {
-			const msg = entry.message;
-
-			if (msg.role === "assistant") {
-				// Handle error messages with empty content
-				if (
-					msg.content.length === 0 &&
-					msg.errorMessage !== null &&
-					msg.errorMessage !== undefined &&
-					msg.errorMessage !== ""
-				) {
+	#renderAssistantEntry(
+		msg: Extract<SessionMessageEntry["message"], { role: "assistant" }>,
+		toolResults: Map<string, ToolResultMessage>,
+		entryIndex: number,
+		lines: string[],
+	): number {
+		let currentIdx = entryIndex;
+		if (
+			msg.content.length === 0 &&
+			msg.errorMessage !== null &&
+			msg.errorMessage !== undefined &&
+			msg.errorMessage !== ""
+		) {
+			const startLine = lines.length;
+			const isSelected = currentIdx === this.#selectedEntryIndex;
+			const cursor = isSelected ? theme.fg("accent", "▶") : " ";
+			lines.push("");
+			const errorLines = msg.errorMessage.split("\n");
+			const maxWidth = contentWidth();
+			lines.push(`${cursor} ${theme.fg("error", `✗ Error: ${sanitizeLine(errorLines[0], maxWidth)}`)}`);
+			for (let i = 1; i < errorLines.length; i++) {
+				lines.push(`${INDENT}${theme.fg("error", sanitizeLine(errorLines[i], maxWidth))}`);
+			}
+			this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "text" });
+			currentIdx++;
+		} else {
+			for (const content of msg.content) {
+				if (content.type === "thinking" && content.thinking.trim()) {
 					const startLine = lines.length;
-					const isSelected = entryIndex === this.#selectedEntryIndex;
-					const cursor = isSelected ? theme.fg("accent", "▶") : " ";
-					lines.push("");
-					const errorLines = msg.errorMessage.split("\n");
-					const maxWidth = contentWidth();
-					lines.push(`${cursor} ${theme.fg("error", `✗ Error: ${sanitizeLine(errorLines[0], maxWidth)}`)}`);
-					for (let i = 1; i < errorLines.length; i++) {
-						lines.push(`${INDENT}${theme.fg("error", sanitizeLine(errorLines[i], maxWidth))}`);
-					}
-					this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "text" });
-					entryIndex++;
-				} else {
-					for (const content of msg.content) {
-						if (content.type === "thinking" && content.thinking.trim()) {
-							const startLine = lines.length;
-							const isExpanded = this.#expandedEntries.has(entryIndex);
-							const isSelected = entryIndex === this.#selectedEntryIndex;
-							this.#renderThinkingLines(lines, content.thinking.trim(), isExpanded, isSelected);
-							this.#viewerEntries.push({
-								lineStart: startLine,
-								lineCount: lines.length - startLine,
-								kind: "thinking",
-							});
-							entryIndex++;
-						} else if (content.type === "text" && content.text.trim()) {
-							const startLine = lines.length;
-							const isExpanded = this.#expandedEntries.has(entryIndex);
-							const isSelected = entryIndex === this.#selectedEntryIndex;
-							this.#renderTextLines(lines, content.text.trim(), isExpanded, isSelected);
-							this.#viewerEntries.push({
-								lineStart: startLine,
-								lineCount: lines.length - startLine,
-								kind: "text",
-							});
-							entryIndex++;
-						} else if (content.type === "toolCall") {
-							const startLine = lines.length;
-							const isExpanded = this.#expandedEntries.has(entryIndex);
-							const isSelected = entryIndex === this.#selectedEntryIndex;
-							const result = toolResults.get(content.id);
-							this.#renderToolCallLines(lines, content, result, isExpanded, isSelected);
-							this.#viewerEntries.push({
-								lineStart: startLine,
-								lineCount: lines.length - startLine,
-								kind: "toolCall",
-							});
-							entryIndex++;
-						}
-					}
-				}
-			} else if (msg.role === "user" || msg.role === "developer") {
-				const text =
-					typeof msg.content === "string"
-						? msg.content
-						: msg.content
-								.filter((b): b is { type: "text"; text: string } => b.type === "text")
-								.map(b => b.text)
-								.join("\n");
-				if (text.trim()) {
+					this.#renderThinkingLines(
+						lines,
+						content.thinking.trim(),
+						this.#expandedEntries.has(currentIdx),
+						currentIdx === this.#selectedEntryIndex,
+					);
+					this.#viewerEntries.push({
+						lineStart: startLine,
+						lineCount: lines.length - startLine,
+						kind: "thinking",
+					});
+					currentIdx++;
+				} else if (content.type === "text" && content.text.trim()) {
 					const startLine = lines.length;
-					const isSelected = entryIndex === this.#selectedEntryIndex;
-					const isExpanded = this.#expandedEntries.has(entryIndex);
-					const label = msg.role === "developer" ? "System" : "User";
-					const cursor = isSelected ? theme.fg("accent", "▶") : " ";
-					lines.push("");
-					if (isExpanded) {
-						lines.push(`${cursor} ${theme.fg("dim", `[${label}]`)}`);
-						const mdLines = this.#renderMarkdownToLines(text.trim());
-						for (const ml of mdLines) {
-							lines.push(ml);
-						}
-					} else {
-						const firstLine = text.trim().split("\n")[0];
-						const totalLines = text.trim().split("\n").length;
-						const hint = totalLines > 1 ? theme.fg("dim", ` (${totalLines} lines)`) : "";
-						lines.push(
-							`${cursor} ${theme.fg("dim", `[${label}]`)} ${theme.fg("muted", sanitizeLine(firstLine, TRUNCATE_LENGTHS.TITLE))}${hint}`,
-						);
-					}
-					this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "user" });
-					entryIndex++;
+					this.#renderTextLines(
+						lines,
+						content.text.trim(),
+						this.#expandedEntries.has(currentIdx),
+						currentIdx === this.#selectedEntryIndex,
+					);
+					this.#viewerEntries.push({
+						lineStart: startLine,
+						lineCount: lines.length - startLine,
+						kind: "text",
+					});
+					currentIdx++;
+				} else if (content.type === "toolCall") {
+					const startLine = lines.length;
+					this.#renderToolCallLines(
+						lines,
+						content,
+						toolResults.get(content.id),
+						this.#expandedEntries.has(currentIdx),
+						currentIdx === this.#selectedEntryIndex,
+					);
+					this.#viewerEntries.push({
+						lineStart: startLine,
+						lineCount: lines.length - startLine,
+						kind: "toolCall",
+					});
+					currentIdx++;
 				}
 			}
 		}
+		return currentIdx;
+	}
+
+	#renderUserEntry(
+		msg: Extract<SessionMessageEntry["message"], { role: "user" | "developer" }>,
+		entryIndex: number,
+		lines: string[],
+	): number {
+		const text =
+			typeof msg.content === "string"
+				? msg.content
+				: msg.content
+						.filter((b): b is { type: "text"; text: string } => b.type === "text")
+						.map(b => b.text)
+						.join("\n");
+		if (!text.trim()) return entryIndex;
+
+		const startLine = lines.length;
+		const isSelected = entryIndex === this.#selectedEntryIndex;
+		const isExpanded = this.#expandedEntries.has(entryIndex);
+		const label = msg.role === "developer" ? "System" : "User";
+		const cursor = isSelected ? theme.fg("accent", "▶") : " ";
+		lines.push("");
+
+		if (isExpanded) {
+			lines.push(`${cursor} ${theme.fg("dim", `[${label}]`)}`);
+			const mdLines = this.#renderMarkdownToLines(text.trim());
+			for (const ml of mdLines) lines.push(ml);
+		} else {
+			const firstLine = text.trim().split("\n")[0];
+			const totalLines = text.trim().split("\n").length;
+			const hint = totalLines > 1 ? theme.fg("dim", ` (${totalLines} lines)`) : "";
+			lines.push(
+				`${cursor} ${theme.fg("dim", `[${label}]`)} ${theme.fg("muted", sanitizeLine(firstLine, TRUNCATE_LENGTHS.TITLE))}${hint}`,
+			);
+		}
+		this.#viewerEntries.push({ lineStart: startLine, lineCount: lines.length - startLine, kind: "user" });
+		return entryIndex + 1;
 	}
 
 	/** Render markdown text into indented lines using the theme's markdown renderer */
@@ -531,66 +569,64 @@ export class SessionObserverOverlayComponent extends Container {
 			case "read":
 			case "write":
 			case "edit":
-				return args.path !== null && args.path !== undefined ? `path: ${String(args.path)}` : "";
-			case "search":
-				return [
-					args.pattern !== null && args.pattern !== undefined ? `pattern: ${String(args.pattern)}` : "",
-					args.path !== null && args.path !== undefined ? `path: ${String(args.path)}` : "",
-				]
-					.filter(Boolean)
-					.join(", ");
-			case "find":
-				return args.pattern !== null && args.pattern !== undefined ? `pattern: ${String(args.pattern)}` : "";
-			case "bash": {
-				const cmd = args.command;
-				return typeof cmd === "string" ? replaceTabs(cmd) : "";
-			}
-			case "lsp":
-				return [args.action, args.file, args.symbol].filter(Boolean).join(" ");
 			case "ast_grep":
 			case "ast_edit":
 				return args.path !== null && args.path !== undefined ? `path: ${String(args.path)}` : "";
-			case "task": {
-				const tasks = args.tasks;
-				return Array.isArray(tasks) ? `${tasks.length} task(s)` : "";
-			}
-			default: {
-				const parts: string[] = [];
-				let total = 0;
-				for (const [key, value] of Object.entries(args)) {
-					if (key.startsWith("_")) continue;
-					const v = typeof value === "string" ? value : JSON.stringify(value);
-					const entry = `${key}: ${replaceTabs(v ?? "")}`;
-					if (total + entry.length > MAX_TOOL_ARGS_CHARS) break;
-					parts.push(entry);
-					total += entry.length;
-				}
-				return parts.join(", ");
-			}
+			case "search":
+				return this.#formatSearchArgs(args);
+			case "find":
+				return args.pattern !== null && args.pattern !== undefined ? `pattern: ${String(args.pattern)}` : "";
+			case "bash":
+				return typeof args.command === "string" ? replaceTabs(args.command) : "";
+			case "lsp":
+				return [args.action, args.file, args.symbol].filter(Boolean).join(" ");
+			case "task":
+				return Array.isArray(args.tasks) ? `${args.tasks.length} task(s)` : "";
+			default:
+				return this.#formatGenericArgs(args);
 		}
+	}
+
+	#formatSearchArgs(args: Record<string, unknown>): string {
+		return [
+			args.pattern !== null && args.pattern !== undefined ? `pattern: ${String(args.pattern)}` : "",
+			args.path !== null && args.path !== undefined ? `path: ${String(args.path)}` : "",
+		]
+			.filter(Boolean)
+			.join(", ");
+	}
+
+	#formatGenericArgs(args: Record<string, unknown>): string {
+		const parts: string[] = [];
+		let total = 0;
+		for (const [key, value] of Object.entries(args)) {
+			if (key.startsWith("_")) continue;
+			const v = typeof value === "string" ? value : JSON.stringify(value);
+			const entry = `${key}: ${replaceTabs(v ?? "")}`;
+			if (total + entry.length > MAX_TOOL_ARGS_CHARS) break;
+			parts.push(entry);
+			total += entry.length;
+		}
+		return parts.join(", ");
 	}
 
 	#loadTranscript(sessionFile: string): SessionMessageEntry[] | null {
 		if (this.#transcriptCache && this.#transcriptCache.path !== sessionFile) {
 			this.#transcriptCache = undefined;
 		}
-
 		const fromByte = this.#transcriptCache?.bytesRead ?? 0;
 		const result = readFileIncremental(sessionFile, fromByte);
 		if (!result) {
 			logger.debug("Session observer: failed to read session file", { path: sessionFile });
 			return this.#transcriptCache?.entries ?? null;
 		}
-
 		if (result.newSize < fromByte) {
 			this.#transcriptCache = undefined;
 			return this.#loadTranscript(sessionFile);
 		}
-
 		if (!this.#transcriptCache) {
 			this.#transcriptCache = { path: sessionFile, bytesRead: 0, entries: [] };
 		}
-
 		if (result.text.length > 0) {
 			const lastNewline = result.text.lastIndexOf("\n");
 			if (lastNewline >= 0) {
@@ -599,7 +635,6 @@ export class SessionObserverOverlayComponent extends Container {
 				for (const entry of newEntries) {
 					if (entry.type === "message") {
 						this.#transcriptCache.entries.push(entry);
-						// Extract model from first assistant message
 						const msg = entry.message;
 						if (
 							(this.#transcriptCache.model === null ||
@@ -631,125 +666,104 @@ export class SessionObserverOverlayComponent extends Container {
 		return true;
 	}
 
-	handleInput(keyData: string): void {
-		// Ctrl+S (observe key) always closes the overlay
-		for (const key of this.#observeKeys) {
-			if (matchesKey(keyData, key)) {
-				this.#onDone();
-				return;
-			}
-		}
-
-		this.#handleViewerInput(keyData);
-	}
-
 	#handleViewerInput(keyData: string): void {
 		const entryCount = this.#viewerEntries.length;
 
-		// Escape — pop breadcrumb navigation or close overlay
 		if (matchesKey(keyData, "escape")) {
-			if (!this.#navigateBack()) {
-				this.#onDone();
-			}
+			if (!this.#navigateBack()) this.#onDone();
 			return;
 		}
 
-		// j / down — move selection down
 		if (keyData === "j" || matchesKey(keyData, "down")) {
-			if (entryCount > 0) {
-				this.#selectedEntryIndex = Math.min(this.#selectedEntryIndex + 1, entryCount - 1);
-			}
+			if (entryCount > 0) this.#selectedEntryIndex = Math.min(this.#selectedEntryIndex + 1, entryCount - 1);
 			this.#rebuildAndScroll();
 			return;
 		}
 
-		// k / up — move selection up
 		if (keyData === "k" || matchesKey(keyData, "up")) {
-			if (entryCount > 0) {
-				this.#selectedEntryIndex = Math.max(this.#selectedEntryIndex - 1, 0);
-			}
+			if (entryCount > 0) this.#selectedEntryIndex = Math.max(this.#selectedEntryIndex - 1, 0);
 			this.#rebuildAndScroll();
 			return;
 		}
 
-		// Page Down
 		if (matchesKey(keyData, "pageDown")) {
-			if (entryCount > 0) {
-				const prevIndex = this.#selectedEntryIndex;
-				this.#selectedEntryIndex = Math.min(this.#selectedEntryIndex + 5, entryCount - 1);
-				// If selection didn't move (bottom of list or single oversized entry), fall back to line scroll
-				if (this.#selectedEntryIndex === prevIndex) {
-					this.#scrollOffset = Math.min(
-						this.#scrollOffset + PAGE_SIZE,
-						Math.max(0, this.#renderedLines.length - this.#viewportHeight),
-					);
-				}
-			} else {
+			this.#handlePageDown(entryCount);
+			return;
+		}
+		if (matchesKey(keyData, "pageUp")) {
+			this.#handlePageUp(entryCount);
+			return;
+		}
+		if (matchesKey(keyData, "enter") || keyData === "\r" || keyData === "\n") {
+			this.#handleToggleEntry(entryCount);
+			return;
+		}
+		if (keyData === "G") {
+			this.#handleJumpToBottom(entryCount);
+			return;
+		}
+		if (keyData === "g") {
+			this.#handleJumpToTop();
+			return;
+		}
+		if (keyData === "]" || matchesKey(keyData, "tab") || matchesKey(keyData, "right")) {
+			this.#cycleSession(1);
+			return;
+		}
+		if (keyData === "[" || matchesKey(keyData, "shift+tab") || matchesKey(keyData, "left")) {
+			this.#cycleSession(-1);
+		}
+	}
+
+	#handlePageDown(entryCount: number): void {
+		if (entryCount > 0) {
+			const prevIndex = this.#selectedEntryIndex;
+			this.#selectedEntryIndex = Math.min(this.#selectedEntryIndex + 5, entryCount - 1);
+			if (this.#selectedEntryIndex === prevIndex) {
 				this.#scrollOffset = Math.min(
 					this.#scrollOffset + PAGE_SIZE,
 					Math.max(0, this.#renderedLines.length - this.#viewportHeight),
 				);
 			}
+		} else {
+			this.#scrollOffset = Math.min(
+				this.#scrollOffset + PAGE_SIZE,
+				Math.max(0, this.#renderedLines.length - this.#viewportHeight),
+			);
+		}
+		this.#rebuildAndScroll();
+	}
+
+	#handlePageUp(entryCount: number): void {
+		if (entryCount > 0) {
+			const prevIndex = this.#selectedEntryIndex;
+			this.#selectedEntryIndex = Math.max(this.#selectedEntryIndex - 5, 0);
+			if (this.#selectedEntryIndex === prevIndex) this.#scrollOffset = Math.max(this.#scrollOffset - PAGE_SIZE, 0);
+		} else {
+			this.#scrollOffset = Math.max(this.#scrollOffset - PAGE_SIZE, 0);
+		}
+		this.#rebuildAndScroll();
+	}
+
+	#handleToggleEntry(entryCount: number): void {
+		if (entryCount > 0 && this.#selectedEntryIndex < entryCount) {
+			if (this.#expandedEntries.has(this.#selectedEntryIndex))
+				this.#expandedEntries.delete(this.#selectedEntryIndex);
+			else this.#expandedEntries.add(this.#selectedEntryIndex);
 			this.#rebuildAndScroll();
-			return;
 		}
+	}
 
-		// Page Up
-		if (matchesKey(keyData, "pageUp")) {
-			if (entryCount > 0) {
-				const prevIndex = this.#selectedEntryIndex;
-				this.#selectedEntryIndex = Math.max(this.#selectedEntryIndex - 5, 0);
-				// If selection didn't move (top of list or single oversized entry), fall back to line scroll
-				if (this.#selectedEntryIndex === prevIndex) {
-					this.#scrollOffset = Math.max(this.#scrollOffset - PAGE_SIZE, 0);
-				}
-			} else {
-				this.#scrollOffset = Math.max(this.#scrollOffset - PAGE_SIZE, 0);
-			}
-			this.#rebuildAndScroll();
-			return;
-		}
+	#handleJumpToBottom(entryCount: number): void {
+		if (entryCount > 0) this.#selectedEntryIndex = entryCount - 1;
+		this.#scrollOffset = Math.max(0, this.#renderedLines.length - this.#viewportHeight);
+		this.#rebuildAndScroll();
+	}
 
-		// Enter — toggle expand/collapse, or dive into nested session
-		if (matchesKey(keyData, "enter") || keyData === "\r" || keyData === "\n") {
-			if (entryCount > 0 && this.#selectedEntryIndex < entryCount) {
-				// Toggle expand/collapse
-				if (this.#expandedEntries.has(this.#selectedEntryIndex)) {
-					this.#expandedEntries.delete(this.#selectedEntryIndex);
-				} else {
-					this.#expandedEntries.add(this.#selectedEntryIndex);
-				}
-				this.#rebuildAndScroll();
-			}
-			return;
-		}
-
-		// G — jump to bottom
-		if (keyData === "G") {
-			if (entryCount > 0) this.#selectedEntryIndex = entryCount - 1;
-			this.#scrollOffset = Math.max(0, this.#renderedLines.length - this.#viewportHeight);
-			this.#rebuildAndScroll();
-			return;
-		}
-
-		// g — jump to top
-		if (keyData === "g") {
-			this.#selectedEntryIndex = 0;
-			this.#scrollOffset = 0;
-			this.#rebuildAndScroll();
-			return;
-		}
-
-		// ] / → / Tab — next sub-agent session
-		if (keyData === "]" || matchesKey(keyData, "tab") || matchesKey(keyData, "right")) {
-			this.#cycleSession(1);
-			return;
-		}
-
-		// [ / ← / Shift+Tab — previous sub-agent session
-		if (keyData === "[" || matchesKey(keyData, "shift+tab") || matchesKey(keyData, "left")) {
-			this.#cycleSession(-1);
-		}
+	#handleJumpToTop(): void {
+		this.#selectedEntryIndex = 0;
+		this.#scrollOffset = 0;
+		this.#rebuildAndScroll();
 	}
 
 	/** Get the ordered list of sub-agent session IDs (excludes main) */
@@ -822,8 +836,6 @@ export class SessionObserverOverlayComponent extends Container {
 }
 
 // Sync helpers for render path
-import * as fs from "node:fs";
-
 function readFileIncremental(filePath: string, fromByte: number): { text: string; newSize: number } | null {
 	try {
 		const stat = fs.statSync(filePath);

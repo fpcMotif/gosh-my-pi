@@ -12,7 +12,7 @@ Classify and label **newly opened** GitHub issues that are missing labels.
 
 Parse `$ARGUMENTS` to determine the new-issue window (`--days`, default `7`).
 
-```bash
+````bash
 # Build cutoff date (UTC) for "new" issues
 CUTOFF_DATE="$(python - <<'PY'
 from datetime import datetime, timedelta, timezone
@@ -96,7 +96,7 @@ Do not add provider or platform labels without explicit evidence from issue body
 
 ```bash
 gh issue edit <number> --add-label "bug,prio:p1,tool,providers,provider:openai"
-```
+````
 
 ### 5. Print Summary
 

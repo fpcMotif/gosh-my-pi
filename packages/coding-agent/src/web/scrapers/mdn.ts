@@ -37,71 +37,75 @@ function convertMDNBody(sections: MDNSection[]): string {
 
 		switch (type) {
 			case "prose":
-				if (value.content !== null && value.content !== undefined && value.content !== "") {
-					const markdown = htmlToBasicMarkdown(value.content);
-					if (value.title !== null && value.title !== undefined && value.title !== "") {
-						const level = value.isH3 === true ? "###" : "##";
-						parts.push(`${level} ${value.title}\n\n${markdown}`);
-					} else {
-						parts.push(markdown);
-					}
-				}
+				renderProse(value, parts);
 				break;
-
 			case "browser_compatibility":
-				if (value.title !== null && value.title !== undefined && value.title !== "") {
-					parts.push(`## ${value.title}\n\n(See browser compatibility data at MDN)`);
-				}
-				break;
-
 			case "specifications":
-				if (value.title !== null && value.title !== undefined && value.title !== "") {
-					parts.push(`## ${value.title}\n\n(See specifications at MDN)`);
-				}
+				renderMetadataSection(type, value, parts);
 				break;
-
 			case "code_example":
-				if (value.title !== null && value.title !== undefined && value.title !== "") {
-					parts.push(`### ${value.title}`);
-				}
-				if (value.code !== null && value.code !== undefined && value.code !== "") {
-					const lang = value.language ?? "";
-					parts.push(`\`\`\`${lang}\n${value.code}\n\`\`\``);
-				}
+				renderCodeExample(value, parts);
 				break;
-
 			case "definition_list":
-				if (value.items) {
-					for (const item of value.items) {
-						parts.push(`**${item.term}**`);
-						const desc = htmlToBasicMarkdown(item.description);
-						parts.push(desc);
-					}
-				}
+				renderDefinitionList(value, parts);
 				break;
-
 			case "table":
-				if (value.rows && value.rows.length > 0) {
-					// Simple markdown table
-					const header = value.rows[0].map(cell => htmlToBasicMarkdown(cell)).join(" | ");
-					const separator = value.rows[0].map(() => "---").join(" | ");
-					const bodyRows = value.rows.slice(1).map(row => row.map(cell => htmlToBasicMarkdown(cell)).join(" | "));
-
-					parts.push(`| ${header} |`);
-					parts.push(`| ${separator} |`);
-					for (const row of bodyRows) {
-						parts.push(`| ${row} |`);
-					}
-				}
+				renderTable(value, parts);
 				break;
-
 			default:
-				// Skip unknown types
 				break;
 		}
 	}
 
 	return parts.join("\n\n");
+}
+
+function renderProse(value: MDNSection["value"], parts: string[]): void {
+	if (value.content === null || value.content === undefined || value.content === "") return;
+	const markdown = htmlToBasicMarkdown(value.content);
+	if (value.title !== null && value.title !== undefined && value.title !== "") {
+		const level = value.isH3 === true ? "###" : "##";
+		parts.push(`${level} ${value.title}\n\n${markdown}`);
+	} else {
+		parts.push(markdown);
+	}
+}
+
+function renderMetadataSection(type: string, value: MDNSection["value"], parts: string[]): void {
+	if (value.title === null || value.title === undefined || value.title === "") return;
+	const label = type === "browser_compatibility" ? "browser compatibility" : "specifications";
+	parts.push(`## ${value.title}\n\n(See ${label} data at MDN)`);
+}
+
+function renderCodeExample(value: MDNSection["value"], parts: string[]): void {
+	if (value.title !== null && value.title !== undefined && value.title !== "") {
+		parts.push(`### ${value.title}`);
+	}
+	if (value.code !== null && value.code !== undefined && value.code !== "") {
+		const lang = value.language ?? "";
+		parts.push(`\`\`\`${lang}\n${value.code}\n\`\`\``);
+	}
+}
+
+function renderDefinitionList(value: MDNSection["value"], parts: string[]): void {
+	if (!value.items) return;
+	for (const item of value.items) {
+		parts.push(`**${item.term}**`);
+		parts.push(htmlToBasicMarkdown(item.description));
+	}
+}
+
+function renderTable(value: MDNSection["value"], parts: string[]): void {
+	if (!value.rows || value.rows.length === 0) return;
+	const header = value.rows[0].map(cell => htmlToBasicMarkdown(cell)).join(" | ");
+	const separator = value.rows[0].map(() => "---").join(" | ");
+	const bodyRows = value.rows.slice(1).map(row => row.map(cell => htmlToBasicMarkdown(cell)).join(" | "));
+
+	parts.push(`| ${header} |`);
+	parts.push(`| ${separator} |`);
+	for (const row of bodyRows) {
+		parts.push(`| ${row} |`);
+	}
 }
 
 export const handleMDN: SpecialHandler = async (url: string, timeout: number, signal?: AbortSignal) => {

@@ -4,6 +4,9 @@
  * Hooks are TypeScript modules that can subscribe to agent lifecycle events
  * and interact with the user via UI primitives.
  */
+import type * as piCodingAgent from "../..";
+import type * as PiUtils from "@oh-my-pi/pi-utils";
+import type * as TypeboxNs from "@sinclair/typebox";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, Model, TextContent, ToolResultMessage } from "@oh-my-pi/pi-ai";
 import type { Component, TUI } from "@oh-my-pi/pi-tui";
@@ -794,11 +797,11 @@ export interface HookAPI {
 	exec(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
 
 	/** File logger for error/warning/debug messages */
-	logger: typeof import("@oh-my-pi/pi-utils").logger;
+	logger: typeof PiUtils.logger;
 	/** Injected @sinclair/typebox module */
-	typebox: typeof import("@sinclair/typebox");
+	typebox: typeof TypeboxNs;
 	/** Injected pi-coding-agent exports */
-	pi: typeof import("../..");
+	pi: typeof piCodingAgent;
 }
 
 /**

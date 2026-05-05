@@ -197,6 +197,10 @@
       },
     },
   },
+  "trustedDependencies": [
+    "@google/genai",
+    "protobufjs",
+  ],
   "overrides": {
     "ajv": "8.20.0",
   },

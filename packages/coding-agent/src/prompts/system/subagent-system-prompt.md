@@ -31,9 +31,11 @@ This is your only way to return a result. You **MUST NOT** put JSON in plain tex
 
 {{#if outputSchema}}
 Your result **MUST** match this TypeScript interface:
+
 ```ts
 {{jtdToTypeScript outputSchema}}
 ```
+
 {{/if}}
 
 {{SECTION_SEPARATOR "Giving Up"}}

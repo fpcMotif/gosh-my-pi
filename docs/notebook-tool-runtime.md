@@ -50,16 +50,16 @@ This mirrors notebook JSON conventions and avoids accidental line concatenation 
 ## Action behavior
 
 - `edit`
-  - replaces `cells[cell_index].source`
-  - preserves existing `cell_type`
+   - replaces `cells[cell_index].source`
+   - preserves existing `cell_type`
 - `insert`
-  - inserts at `[0..cellCount]`
-  - `cell_type` defaults to `code`
-  - code cells initialize `execution_count: null` and `outputs: []`
-  - markdown cells initialize only `metadata` + `source`
+   - inserts at `[0..cellCount]`
+   - `cell_type` defaults to `code`
+   - code cells initialize `execution_count: null` and `outputs: []`
+   - markdown cells initialize only `metadata` + `source`
 - `delete`
-  - removes `cells[cell_index]`
-  - returns removed `source` in details for renderer preview
+   - removes `cells[cell_index]`
+   - returns removed `source` in details for renderer preview
 
 ## Error surfaces
 
@@ -82,14 +82,14 @@ Kernel semantics are implemented in `executePython` / `PythonKernel` and apply t
 `PythonKernelMode`:
 
 - `session` (default)
-  - kernels cached in `kernelSessions` map
-  - max 4 sessions; oldest evicted on overflow
-  - idle/dead cleanup every 30s, timeout after 5 minutes
-  - per-session queue serializes execution (`session.queue`)
+   - kernels cached in `kernelSessions` map
+   - max 4 sessions; oldest evicted on overflow
+   - idle/dead cleanup every 30s, timeout after 5 minutes
+   - per-session queue serializes execution (`session.queue`)
 - `per-call`
-  - creates kernel for request
-  - executes
-  - always shuts down kernel in `finally`
+   - creates kernel for request
+   - executes
+   - always shuts down kernel in `finally`
 
 ## Reset behavior
 
@@ -137,11 +137,11 @@ The kernel client processes Jupyter protocol messages per execution:
 
 - `stream` -> text chunk to `onChunk`
 - `execute_result` / `display_data` ->
-  - display text chosen by MIME precedence: `text/markdown` > `text/plain` > converted `text/html`
-  - structured outputs captured separately:
-    - `application/json` -> `{ type: "json" }`
-    - `image/png` -> `{ type: "image" }`
-    - `application/x-omp-status` -> `{ type: "status" }` (no text emission)
+   - display text chosen by MIME precedence: `text/markdown` > `text/plain` > converted `text/html`
+   - structured outputs captured separately:
+      - `application/json` -> `{ type: "json" }`
+      - `image/png` -> `{ type: "image" }`
+      - `application/x-omp-status` -> `{ type: "status" }` (no text emission)
 - `error` -> traceback text pushed to chunk stream + structured error metadata
 - `input_request` -> emits stdin warning text, sends empty `input_reply`, marks stdin requested
 - completion waits for both `execute_reply` and kernel `status=idle`
@@ -160,9 +160,9 @@ Cancellation/timeout:
 - tracks total/output lines and bytes
 - optional artifact spill file (`artifactPath`, `artifactId`)
 - when in-memory buffer exceeds threshold (`DEFAULT_MAX_BYTES` unless overridden):
-  - marks truncated
-  - keeps tail bytes in memory (UTF-8 safe boundary)
-  - can spill full stream to artifact sink
+   - marks truncated
+   - keeps tail bytes in memory (UTF-8 safe boundary)
+   - can spill full stream to artifact sink
 
 `dump()` returns:
 
@@ -180,12 +180,12 @@ Cancellation/timeout:
 
 - call view: status line with action + notebook path + cell/type metadata
 - result view:
-  - success summary derived from `details`
-  - `cellSource` rendered via `renderCodeCell`
-  - markdown cells set language hint `markdown`; other cells have no explicit language override
-  - collapsed code preview limit is `PREVIEW_LIMITS.COLLAPSED_LINES * 2`
-  - supports expanded mode via shared render options
-  - uses render cache keyed by width + expanded state
+   - success summary derived from `details`
+   - `cellSource` rendered via `renderCodeCell`
+   - markdown cells set language hint `markdown`; other cells have no explicit language override
+   - collapsed code preview limit is `PREVIEW_LIMITS.COLLAPSED_LINES * 2`
+   - supports expanded mode via shared render options
+   - uses render cache keyed by width + expanded state
 
 Error rendering assumption:
 

@@ -8,6 +8,7 @@
 - Recognized tsgo and oxfmt as shell minimizer lint/check tools.
 
 ## [14.5.9] - 2026-04-30
+
 ### Fixed
 
 - Fixed shell minimizer output so successful commands whose noise is fully stripped still return `OK` instead of an artifact-only result
@@ -19,6 +20,7 @@
 - Added shell minimizer support for CMake, CTest, Ninja, GoogleTest binaries, and Bun/Bunx wrappers that run those tools
 
 ## [14.5.2] - 2026-04-26
+
 ### Changed
 
 - Changed local native build profile from `dev` to `local` for non-CI builds, updating the profile used by the build and local build output label
@@ -30,6 +32,7 @@
 - Removed the `chunk` napi module (`ChunkState`, chunk schema, chunk rendering, chunk edit) and dropped `generate_chunk_schema()` from the build script
 
 ## [14.3.0] - 2026-04-25
+
 ### Added
 
 - Added `text` to `MinimizerResult` so consumers can replace rewritten output with the minimized replacement text
@@ -74,6 +77,7 @@
 - Removed the `fuzzyFind`, `glob`, and `grep` cache database argument previously used for search state
 
 ## [14.0.5] - 2026-04-11
+
 ### Breaking Changes
 
 - Made `tabWidth` parameter required (no longer optional) for `visibleWidth`, `truncateToWidth`, `wrapTextWithAnsi`, `sliceWithWidth`, and `extractSegments`
@@ -169,11 +173,13 @@
 - Updated `grep()`, `glob()`, and `fuzzyFind()` function signatures to accept optional `db` parameter for database-backed searching
 
 ## [13.12.0] - 2026-03-14
+
 ### Breaking Changes
 
 - Changed `abort()` method signature: removed optional `reason` parameter and changed return type from `void` to `Promise<void>`
 
 ## [13.4.0] - 2026-03-01
+
 ### Breaking Changes
 
 - Changed `AstFindOptions.pattern` to `patterns` (now accepts array of strings instead of single string)
@@ -186,6 +192,7 @@
 - Result ordering in `astGrep` is now deterministic: sorted by path, line, column using `BTreeSet`/`BTreeMap`
 
 ## [13.3.8] - 2026-02-28
+
 ### Added
 
 - Added `astGrep()` function for structural code search using AST patterns with support for language-specific matching, selectors, and meta-variable extraction
@@ -193,6 +200,7 @@
 - Added `./ast` export path for accessing AST search and rewrite functionality
 
 ## [12.18.0] - 2026-02-21
+
 ### Changed
 
 - Replaced custom `TextDecoder` usage with native `toString('utf-8')` for buffer decoding
@@ -212,16 +220,19 @@
 - Added README.md to package distribution files
 
 ## [12.10.0] - 2026-02-18
+
 ### Changed
 
 - Updated addon filename resolution to include default filename fallback in both modern and baseline variant paths
 
 ## [12.8.2] - 2026-02-17
+
 ### Breaking Changes
 
 - Removed `getSystemInfo()` and `SystemInfo` from package exports, breaking consumers that imported system info APIs from this package
 
 ## [12.8.0] - 2026-02-16
+
 ### Added
 
 - Added support for x64 CPU variant selection with `TARGET_VARIANT` environment variable (modern/baseline) during build to optimize for specific ISA levels
@@ -245,6 +256,7 @@
 - Fixed regex patterns containing literal braces (e.g. `${platform}`) failing with "repetition quantifier expects a valid decimal" by escaping `{`/`}` that don't form valid repetition quantifiers
 
 ## [12.5.0] - 2026-02-15
+
 ### Added
 
 - Added `recursive` option to `GlobOptions` to control whether simple patterns match recursively (defaults to true)
@@ -255,17 +267,20 @@
 - Updated `fileType` filter documentation to clarify that symlinks match file/dir filters based on their target type
 
 ## [12.4.0] - 2026-02-14
+
 ### Added
 
 - Exported `sanitizeText` function to strip ANSI codes, remove binary garbage, and normalize line endings in text output
 
 ## [12.1.0] - 2026-02-13
+
 ### Added
 
 - Added `cache` option to `glob()`, `grep()`, and `fuzzyFind()` to enable shared filesystem scan caching
 - Added `invalidateFsScanCache()` function to manually invalidate filesystem scan cache entries
 
 ## [11.14.0] - 2026-02-12
+
 ### Added
 
 - Added `PtySession` class for PTY-backed interactive command execution with streaming output
@@ -292,6 +307,7 @@
 - Native clipboard operations are now best-effort with graceful degradation
 
 ## [11.0.0] - 2026-02-05
+
 ### Removed
 
 - Removed legacy type aliases `WasmMatch` and `WasmSearchResult`
@@ -303,11 +319,13 @@
 - Added separate grep context before/after options in bindings
 
 ## [10.2.2] - 2026-02-02
+
 ### Added
 
 - Exported `getWorkProfile` function and `WorkProfile` type for work profiling capabilities
 
 ## [10.2.0] - 2026-02-02
+
 ### Breaking Changes
 
 - Replaced `find()` with `glob()` - update imports and function calls
@@ -349,6 +367,7 @@
 - Added `WorkProfile` type with folded stack format, markdown summary, SVG flamegraph, and sample metrics for profiling results
 
 ## [9.8.0] - 2026-02-01
+
 ### Breaking Changes
 
 - Removed `resize()` function; use `PhotonImage.resize()` method instead
@@ -418,11 +437,13 @@
 - Fixed potential issue where cross-compiled binaries could overwrite platform-specific native builds with incorrect architecture binaries
 
 ## [9.6.4] - 2026-02-01
+
 ### Breaking Changes
 
 - Changed callback signature for `find()` and `grep()` streaming callbacks to receive `(error, match)` instead of `(match)` for proper error handling
 
 ## [9.6.2] - 2026-02-01
+
 ### Breaking Changes
 
 - Renamed `EllipsisKind` enum to `Ellipsis`
@@ -446,6 +467,7 @@
 - Removed early return optimization in `truncateToWidth()` when text fits within maxWidth
 
 ## [9.6.1] - 2026-02-01
+
 ### Added
 
 - Added `matchesKittySequence` function to match Kitty protocol sequences for codepoint and modifier
@@ -455,6 +477,7 @@
 - Removed `visibleWidth` function from text utilities
 
 ## [9.6.0] - 2026-02-01
+
 ### Added
 
 - Support for cross-compilation via `CARGO_BUILD_TARGET` environment variable

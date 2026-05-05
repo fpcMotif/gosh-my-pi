@@ -3,27 +3,30 @@ The next pending task is auto-promoted to `in_progress` after each completion.
 
 ## Operations
 
-|`op`|Required fields|Effect|
-|---|---|---|
-|`init`|`list`|Initialize the full list|
-|`start`|`task`|Mark in progress|
-|`done`|`task` or `phase`|Mark completed|
-|`drop`|`task` or `phase`|Mark abandoned|
-|`rm`|`task` or `phase`|Remove|
-|`append`|`phase`, `items: string[]`|Append tasks; lazily creates phase|
-|`note`|`task`, `text`|Append a note to a task. Reminders for future-you only.|
+| `op`     | Required fields            | Effect                                                  |
+| -------- | -------------------------- | ------------------------------------------------------- |
+| `init`   | `list`                     | Initialize the full list                                |
+| `start`  | `task`                     | Mark in progress                                        |
+| `done`   | `task` or `phase`          | Mark completed                                          |
+| `drop`   | `task` or `phase`          | Mark abandoned                                          |
+| `rm`     | `task` or `phase`          | Remove                                                  |
+| `append` | `phase`, `items: string[]` | Append tasks; lazily creates phase                      |
+| `note`   | `task`, `text`             | Append a note to a task. Reminders for future-you only. |
 
 ## Anatomy
+
 - **Task content**: 5–10 words, what is being done, not how. Used as the task identifier — unique.
 - **Phase name**: short noun phrase (e.g. `Foundation`, `Auth`, `Verification`). Used as the phase identifier — unique. Do not add prefixes like `1.`, `A)`, `Phase 1:`, etc.
 
 ## Rules
+
 - Mark tasks done immediately after finishing.
 - Complete phases in order.
 - On blockers, `append` a new task to the active phase to unblock yourself, or `drop`.
 - `task` and `phase` fields reference content/name verbatim; keep them stable once introduced.
 
 ## When to create a list
+
 - Task requires 3+ distinct steps
 - User explicitly requests one
 - User provides a set of tasks to complete

@@ -7,53 +7,53 @@ model: pi/slow
 thinking-level: high
 blocking: true
 output:
-  properties:
-    overall_correctness:
-      metadata:
-        description: Whether change correct (no bugs/blockers)
-      enum: [correct, incorrect]
-    explanation:
-      metadata:
-        description: Plain-text verdict summary, 1-3 sentences
-      type: string
-    confidence:
-      metadata:
-        description: Verdict confidence (0.0-1.0)
-      type: number
-  optionalProperties:
-    findings:
-      metadata:
-        description: Auto-populated from report_finding; don't set manually
-      elements:
-        properties:
-          title:
-            metadata:
-              description: Imperative, ≤80 chars
-            type: string
-          body:
-            metadata:
-              description: "One paragraph: bug, trigger, impact"
-            type: string
-          priority:
-            metadata:
-              description: "P0-P3: 0 blocks release, 1 fix next cycle, 2 fix eventually, 3 nice to have"
-            type: number
-          confidence:
-            metadata:
-              description: Confidence it's real bug (0.0-1.0)
-            type: number
-          file_path:
-            metadata:
-              description: Path to affected file
-            type: string
-          line_start:
-            metadata:
-              description: First line (1-indexed)
-            type: number
-          line_end:
-            metadata:
-              description: Last line (1-indexed, ≤10 lines)
-            type: number
+   properties:
+      overall_correctness:
+         metadata:
+            description: Whether change correct (no bugs/blockers)
+         enum: [correct, incorrect]
+      explanation:
+         metadata:
+            description: Plain-text verdict summary, 1-3 sentences
+         type: string
+      confidence:
+         metadata:
+            description: Verdict confidence (0.0-1.0)
+         type: number
+   optionalProperties:
+      findings:
+         metadata:
+            description: Auto-populated from report_finding; don't set manually
+         elements:
+            properties:
+               title:
+                  metadata:
+                     description: Imperative, ≤80 chars
+                  type: string
+               body:
+                  metadata:
+                     description: "One paragraph: bug, trigger, impact"
+                  type: string
+               priority:
+                  metadata:
+                     description: "P0-P3: 0 blocks release, 1 fix next cycle, 2 fix eventually, 3 nice to have"
+                  type: number
+               confidence:
+                  metadata:
+                     description: Confidence it's real bug (0.0-1.0)
+                  type: number
+               file_path:
+                  metadata:
+                     description: Path to affected file
+                  type: string
+               line_start:
+                  metadata:
+                     description: First line (1-indexed)
+                  type: number
+               line_end:
+                  metadata:
+                     description: Last line (1-indexed, ≤10 lines)
+                  type: number
 ---
 
 You are an expert software engineer reviewing proposed changes.
@@ -112,6 +112,7 @@ Each `report_finding` requires:
 - `line_start`, `line_end`: Range ≤10 lines, must overlap diff
 
 Final `yield` call (payload under `result.data`):
+
 - `result.data.overall_correctness`: "correct" (no bugs/blockers) or "incorrect"
 - `result.data.explanation`: Plain text, 1-3 sentences summarizing verdict. Don't repeat findings (captured via `report_finding`).
 - `result.data.confidence`: 0.0-1.0

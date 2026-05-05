@@ -39,14 +39,14 @@ There is no current `NativeBindings` declaration-merging lifecycle and no `valid
 
 ```json
 {
-  "main": "./native/index.js",
-  "types": "./native/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./native/index.d.ts",
-      "import": "./native/index.js"
-    }
-  }
+	"main": "./native/index.js",
+	"types": "./native/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./native/index.d.ts",
+			"import": "./native/index.js"
+		}
+	}
 }
 ```
 

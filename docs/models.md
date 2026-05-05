@@ -27,13 +27,13 @@ Legacy behavior still present:
 
 ```yaml
 providers:
-  <provider-id>:
-    # provider-level config
+   <provider-id>:
+      # provider-level config
 equivalence:
-  overrides:
-    <provider-id>/<model-id>: <canonical-model-id>
-  exclude:
-    - <provider-id>/<model-id>
+   overrides:
+      <provider-id>/<model-id>: <canonical-model-id>
+   exclude:
+      - <provider-id>/<model-id>
 ```
 
 `provider-id` is the canonical provider key used across selection and auth lookup.
@@ -47,46 +47,46 @@ equivalence:
 
 ```yaml
 providers:
-  my-provider:
-    baseUrl: https://api.example.com/v1
-    apiKey: MY_PROVIDER_API_KEY
-    api: openai-completions
-    headers:
-      X-Team: platform
-    authHeader: true
-    auth: apiKey
-    discovery:
-      type: ollama
-    modelOverrides:
-      some-model-id:
-        name: Renamed model
-    models:
-      - id: some-model-id
-        name: Some Model
-        api: openai-completions
-        reasoning: false
-        input: [text]
-        cost:
-          input: 0
-          output: 0
-          cacheRead: 0
-          cacheWrite: 0
-        contextWindow: 128000
-        maxTokens: 16384
-        headers:
-          X-Model: value
-        compat:
-          supportsStore: true
-          supportsDeveloperRole: true
-          supportsReasoningEffort: true
-          maxTokensField: max_completion_tokens
-          openRouterRouting:
-            only: [anthropic]
-          vercelGatewayRouting:
-            order: [anthropic, openai]
-          extraBody:
-            gateway: m1-01
-            controller: mlx
+   my-provider:
+      baseUrl: https://api.example.com/v1
+      apiKey: MY_PROVIDER_API_KEY
+      api: openai-completions
+      headers:
+         X-Team: platform
+      authHeader: true
+      auth: apiKey
+      discovery:
+         type: ollama
+      modelOverrides:
+         some-model-id:
+            name: Renamed model
+      models:
+         - id: some-model-id
+           name: Some Model
+           api: openai-completions
+           reasoning: false
+           input: [text]
+           cost:
+              input: 0
+              output: 0
+              cacheRead: 0
+              cacheWrite: 0
+           contextWindow: 128000
+           maxTokens: 16384
+           headers:
+              X-Model: value
+           compat:
+              supportsStore: true
+              supportsDeveloperRole: true
+              supportsReasoningEffort: true
+              maxTokensField: max_completion_tokens
+              openRouterRouting:
+                 only: [anthropic]
+              vercelGatewayRouting:
+                 order: [anthropic, openai]
+              extraBody:
+                 gateway: m1-01
+                 controller: mlx
 ```
 
 ### Allowed provider/model `api` values
@@ -162,29 +162,29 @@ Example:
 
 ```yaml
 providers:
-  zenmux:
-    baseUrl: https://api.zenmux.example/v1
-    apiKey: ZENMUX_API_KEY
-    api: openai-codex-responses
-    models:
-      - id: codex
-        name: Zenmux Codex
-        reasoning: true
-        input: [text]
-        cost:
-          input: 0
-          output: 0
-          cacheRead: 0
-          cacheWrite: 0
-        contextWindow: 200000
-        maxTokens: 32768
+   zenmux:
+      baseUrl: https://api.zenmux.example/v1
+      apiKey: ZENMUX_API_KEY
+      api: openai-codex-responses
+      models:
+         - id: codex
+           name: Zenmux Codex
+           reasoning: true
+           input: [text]
+           cost:
+              input: 0
+              output: 0
+              cacheRead: 0
+              cacheWrite: 0
+           contextWindow: 200000
+           maxTokens: 32768
 
 equivalence:
-  overrides:
-    zenmux/codex: gpt-5.3-codex
-    p-codex/codex: gpt-5.3-codex
-  exclude:
-    - demo/codex-preview
+   overrides:
+      zenmux/codex: gpt-5.3-codex
+      p-codex/codex: gpt-5.3-codex
+   exclude:
+      - demo/codex-preview
 ```
 
 Build order for canonical grouping:
@@ -260,19 +260,19 @@ You can configure discovery yourself:
 
 ```yaml
 providers:
-  ollama:
-    baseUrl: http://127.0.0.1:11434
-    api: openai-responses
-    auth: none
-    discovery:
-      type: ollama
+   ollama:
+      baseUrl: http://127.0.0.1:11434
+      api: openai-responses
+      auth: none
+      discovery:
+         type: ollama
 
-  llama.cpp:
-    baseUrl: http://127.0.0.1:8080
-    api: openai-responses
-    auth: none
-    discovery:
-      type: llama.cpp
+   llama.cpp:
+      baseUrl: http://127.0.0.1:8080
+      api: openai-responses
+      auth: none
+      discovery:
+         type: llama.cpp
 ```
 
 ### Extension provider registration
@@ -431,10 +431,10 @@ Example (`models.yml`) for Spark -> non-Spark on the same provider:
 
 ```yaml
 providers:
-  openai-codex:
-    modelOverrides:
-      gpt-5.3-codex-spark:
-        contextPromotionTarget: openai-codex/gpt-5.3-codex
+   openai-codex:
+      modelOverrides:
+         gpt-5.3-codex-spark:
+            contextPromotionTarget: openai-codex/gpt-5.3-codex
 ```
 
 The built-in model generator also assigns this automatically for `*-spark` models when a same-provider base model exists.
@@ -458,45 +458,45 @@ These are consumed by the OpenAI-completions transport logic and combined with U
 
 ```yaml
 providers:
-  local-openai:
-    baseUrl: http://127.0.0.1:8000/v1
-    auth: none
-    api: openai-completions
-    models:
-      - id: Qwen/Qwen2.5-Coder-32B-Instruct
-        name: Qwen 2.5 Coder 32B (local)
+   local-openai:
+      baseUrl: http://127.0.0.1:8000/v1
+      auth: none
+      api: openai-completions
+      models:
+         - id: Qwen/Qwen2.5-Coder-32B-Instruct
+           name: Qwen 2.5 Coder 32B (local)
 ```
 
 ### Hosted proxy with env-based key
 
 ```yaml
 providers:
-  anthropic-proxy:
-    baseUrl: https://proxy.example.com/anthropic
-    apiKey: ANTHROPIC_PROXY_API_KEY
-    api: anthropic-messages
-    authHeader: true
-    models:
-      - id: claude-sonnet-4-20250514
-        name: Claude Sonnet 4 (Proxy)
-        reasoning: true
-        input: [text, image]
+   anthropic-proxy:
+      baseUrl: https://proxy.example.com/anthropic
+      apiKey: ANTHROPIC_PROXY_API_KEY
+      api: anthropic-messages
+      authHeader: true
+      models:
+         - id: claude-sonnet-4-20250514
+           name: Claude Sonnet 4 (Proxy)
+           reasoning: true
+           input: [text, image]
 ```
 
 ### Override built-in provider route + model metadata
 
 ```yaml
 providers:
-  openrouter:
-    baseUrl: https://my-proxy.example.com/v1
-    headers:
-      X-Team: platform
-    modelOverrides:
-      anthropic/claude-sonnet-4:
-        name: Sonnet 4 (Corp)
-        compat:
-          openRouterRouting:
-            only: [anthropic]
+   openrouter:
+      baseUrl: https://my-proxy.example.com/v1
+      headers:
+         X-Team: platform
+      modelOverrides:
+         anthropic/claude-sonnet-4:
+            name: Sonnet 4 (Corp)
+            compat:
+               openRouterRouting:
+                  only: [anthropic]
 ```
 
 ## Legacy consumer caveat

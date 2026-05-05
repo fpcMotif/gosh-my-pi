@@ -2,7 +2,7 @@
 
 import * as path from "node:path";
 import { $ } from "bun";
-import { detectHostAvx2Support } from "./host-detect"
+import { detectHostAvx2Support } from "./host-detect";
 
 interface NativeBuildVariant {
 	name: "baseline" | "modern";
@@ -28,7 +28,7 @@ function parseTargetVariants(): NativeBuildVariant[] {
 	const rawVariants = (Bun.env.TARGET_VARIANTS ?? "").trim();
 	if (!rawVariants) return [];
 
-	return rawVariants.split(/\s+/).map((rawVariant) => {
+	return rawVariants.split(/\s+/).map(rawVariant => {
 		const variant = variantConfigs[rawVariant as keyof typeof variantConfigs];
 		if (!variant) {
 			throw new Error(`Unsupported TARGET_VARIANTS entry: ${rawVariant}. Expected baseline or modern.`);
@@ -63,16 +63,16 @@ async function runNativeBuild(env: Record<string, string | undefined>, label: st
 
 async function verifyBuiltAddons(expectedAddons: string[]): Promise<void> {
 	if (isDryRun) {
-		console.log(`DRY RUN bun scripts/ci-release-verify-natives.ts PI_NATIVE_EXPECTED_ADDONS=${expectedAddons.join(" ")}`);
+		console.log(
+			`DRY RUN bun scripts/ci-release-verify-natives.ts PI_NATIVE_EXPECTED_ADDONS=${expectedAddons.join(" ")}`,
+		);
 		return;
 	}
 
-	await $`bun scripts/ci-release-verify-natives.ts`
-		.cwd(repoRoot)
-		.env({
-			...Bun.env,
-			PI_NATIVE_EXPECTED_ADDONS: expectedAddons.join(" "),
-		});
+	await $`bun scripts/ci-release-verify-natives.ts`.cwd(repoRoot).env({
+		...Bun.env,
+		PI_NATIVE_EXPECTED_ADDONS: expectedAddons.join(" "),
+	});
 }
 
 async function main(): Promise<void> {

@@ -185,11 +185,11 @@ This is why slash command expansion sits before prompt-template expansion, and w
 - parses args from remaining text via `parseCommandArgs`
 - finds exact name match in loaded `fileCommands`
 - if matched, applies:
-  - positional replacement: `$1`, `$2`, ...
-  - slice replacement: `$@[start]` / `$@[start:length]` using 1-based positions
-  - aggregate replacement: `$ARGUMENTS` and `$@`
-  - template rendering via `prompt.render` with `{ args, ARGUMENTS, arguments }`
-  - inline-argument fallback append when the template did not use an inline argument placeholder
+   - positional replacement: `$1`, `$2`, ...
+   - slice replacement: `$@[start]` / `$@[start:length]` using 1-based positions
+   - aggregate replacement: `$ARGUMENTS` and `$@`
+   - template rendering via `prompt.render` with `{ args, ARGUMENTS, arguments }`
+   - inline-argument fallback append when the template did not use an inline argument placeholder
 
 ### `parseCommandArgs` caveats
 
@@ -218,8 +218,8 @@ Interactive mode separately hard-handles many built-ins in `InputController` (fo
 
 - `prompt(...)` still runs extension/custom/file/template transforms first
 - then requires `streamingBehavior`:
-  - `"steer"` -> queue interrupt message (`agent.steer`)
-  - `"followUp"` -> queue post-turn message (`agent.followUp`)
+   - `"steer"` -> queue interrupt message (`agent.steer`)
+   - `"followUp"` -> queue post-turn message (`agent.followUp`)
 - if `streamingBehavior` is omitted, prompt throws an error
 
 ### Important command-specific streaming behavior
@@ -233,6 +233,6 @@ Interactive mode separately hard-handles many built-ins in `InputController` (fo
 - Provider load failures are isolated; registry collects warnings and continues with other providers.
 - Invalid slash command items (missing name/path/content or invalid level) are dropped by capability validation.
 - Frontmatter parse failures:
-  - native commands: fatal parse error bubbles
-  - non-native commands: warning + fallback key/value parse
+   - native commands: fatal parse error bubbles
+   - non-native commands: warning + fallback key/value parse
 - Extension/custom command handler exceptions are caught and reported via extension error channel (or logger fallback for custom commands without extension runner), and treated as handled (no unintended fallback execution).

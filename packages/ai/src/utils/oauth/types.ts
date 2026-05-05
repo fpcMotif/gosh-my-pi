@@ -8,7 +8,17 @@ export type OAuthCredentials = {
 	accountId?: string;
 };
 
-export type OAuthProvider = "kimi" | "minimax-code" | "moonshot" | "openai-codex" | "zai";
+export type OAuthProvider =
+	| "kagi"
+	| "kimi"
+	| "kimi-code"
+	| "minimax-code"
+	| "minimax-code-cn"
+	| "moonshot"
+	| "openai-codex"
+	| "parallel"
+	| "tavily"
+	| "zai";
 
 export type OAuthProviderId = OAuthProvider | (string & {});
 

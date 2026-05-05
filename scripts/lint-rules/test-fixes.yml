@@ -1,0 +1,11 @@
+id: expect-non-null-to-optional
+language: ts
+rule:
+   pattern: "expect($X!.$Y)"
+fix: "expect($X?.$Y)"
+---
+id: expect-call-non-null-to-optional
+language: ts
+rule:
+   pattern: "expect($X!.$Y($$$ARGS))"
+fix: "expect($X?.$Y($$$ARGS))"

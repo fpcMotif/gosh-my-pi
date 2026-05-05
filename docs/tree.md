@@ -178,9 +178,9 @@ Flow details:
 - Emits `session_before_tree` (extensions can cancel or inject summary)
 - Uses default summarizer only if requested and needed
 - Applies move with:
-  - `branchWithSummary(...)` when summary exists
-  - `branch(newLeafId)` for non-root move without summary
-  - `resetLeaf()` for root move without summary
+   - `branchWithSummary(...)` when summary exists
+   - `branch(newLeafId)` for non-root move without summary
+   - `resetLeaf()` for root move without summary
 - Replaces agent conversation with rebuilt session context
 - Emits `session_tree`
 

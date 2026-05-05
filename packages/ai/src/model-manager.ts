@@ -1,7 +1,7 @@
 import { getBundledModels, type GeneratedProvider } from "./models";
 import { type Api, type Model } from "./types";
 import { DEFAULT_CACHE_TTL_MS, readModelCache, writeModelCache } from "./model-cache";
-import { isRecord } from "./utils/schema/utils";
+import { isRecord } from "./utils";
 
 export type ModelRefreshStrategy = "online-if-uncached" | "online" | "offline";
 
@@ -19,6 +19,26 @@ export interface ModelManagerOptions<TApi extends Api = Api, TModelsDevPayload =
 export interface ModelResolutionResult<TApi extends Api = Api> {
 	models: Model<TApi>[];
 	stale: boolean;
+}
+
+/**
+ * Stateful facade over provider model resolution.
+ */
+export interface ModelManager<TApi extends Api = Api> {
+	refresh(strategy?: ModelRefreshStrategy): Promise<ModelResolutionResult<TApi>>;
+}
+
+/**
+ * Creates a reusable provider model manager.
+ */
+export function createModelManager<TApi extends Api = Api, TModelsDevPayload = unknown>(
+	options: ModelManagerOptions<TApi, TModelsDevPayload>,
+): ModelManager<TApi> {
+	return {
+		refresh(strategy: ModelRefreshStrategy = "online-if-uncached") {
+			return resolveProviderModels(options, strategy);
+		},
+	};
 }
 
 /**

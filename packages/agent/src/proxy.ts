@@ -1,12 +1,13 @@
-import {
-	type AssistantMessage,
-	type AssistantMessageEvent,
-	AssistantMessageEventStream as ProxyMessageEventStream,
-	type Effort,
-	type Message,
-	type Model,
-	type ProviderSessionState,
-	parseStreamingJson,
+import { AssistantMessageEventStream as ProxyMessageEventStream, parseStreamingJson } from "@oh-my-pi/pi-ai";
+import type {
+	AssistantMessage,
+	AssistantMessageEvent,
+	Effort,
+	Message,
+	Model,
+	ProviderSessionState,
+	StopReason,
+	ToolCall,
 } from "@oh-my-pi/pi-ai";
 import { readSseJson } from "@oh-my-pi/pi-utils";
 import type { ProxyAssistantMessageEvent } from "./types";
@@ -101,7 +102,7 @@ async function processStream(
 		}
 	}
 
-	if (options.signal?.aborted === true && !sawTerminalEvent) {
+	if (options.signal !== undefined && options.signal.aborted && !sawTerminalEvent) {
 		const reason = options.signal.reason;
 		throw reason instanceof Error ? reason : new Error(String(reason ?? "Request aborted"));
 	}
@@ -162,7 +163,7 @@ function handleStreamError(
 	stream: ProxyMessageEventStream,
 ) {
 	const errorMessage = error instanceof Error ? error.message : String(error);
-	const reason = options.signal?.aborted === true ? "aborted" : "error";
+	const reason = options.signal !== undefined && options.signal.aborted ? "aborted" : "error";
 	partial.stopReason = reason;
 	partial.errorMessage = errorMessage;
 	stream.push({
@@ -182,15 +183,15 @@ function processProxyEvent(
 ): AssistantMessageEvent | undefined {
 	const type = proxyEvent.type;
 	if (type === "start") return { type: "start", partial };
-	if (type === "done") return { type: "done", message: partial };
+	if (type === "done") return { type: "done", reason: "stop" as const, message: partial };
 	if (type === "error") {
 		partial.stopReason = proxyEvent.reason;
 		partial.errorMessage = proxyEvent.message;
-		return { type: "error", reason: proxyEvent.reason, error: partial };
+		return { type: "error", reason: proxyEvent.reason as Extract<StopReason, "aborted" | "error">, error: partial };
 	}
 	if (type === "usage") {
 		partial.usage = proxyEvent.usage;
-		return { type: "usage", usage: proxyEvent.usage, partial };
+		return undefined;
 	}
 
 	return handleContentEvent(proxyEvent, partial);

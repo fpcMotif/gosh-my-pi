@@ -6,11 +6,11 @@ description = "Compact basedpyright type checker output — strip blank lines, k
 match_command = "^basedpyright$"
 strip_ansi = true
 strip_lines_matching = [
-  "^\\s*$",
-  "^Searching for source files",
-  "^Found \\d+ source file",
-  "^Pyright \\d+\\.\\d+",
-  "^basedpyright \\d+\\.\\d+",
+	"^\\s*$",
+	"^Searching for source files",
+	"^Found \\d+ source file",
+	"^Pyright \\d+\\.\\d+",
+	"^basedpyright \\d+\\.\\d+",
 ]
 max_lines = 50
 on_empty = "basedpyright: ok"

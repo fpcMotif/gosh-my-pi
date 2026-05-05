@@ -8,14 +8,16 @@ Read the file first. Copy the full anchors exactly as shown by `read`.
 - `path` (required) — file path for all edits in this request
 
 **Edit entry**: `{ loc, content }`
+
 - `loc` — where to apply the edit (see below)
 - `content` — replacement/inserted lines (`string[]`, one element per line; `null` to delete)
 
 **`loc` values**
+
 - `"append"` / `"prepend"` — insert at end/start of file
 - `{ append: "123th" }` / `{ prepend: "123th" }` — insert after/before anchored line
 - `{ range: { pos: "123th", end: "123th" } }` — replace inclusive range `pos..end` with new content (set `pos == end` for single-line replace)
-</operations>
+  </operations>
 
 <examples>
 All examples below reference the same file:
@@ -42,18 +44,27 @@ All examples below reference the same file:
 ```
 
 # Replace a block body
+
 Replace only the catch body. Do not target the shared boundary line `} catch (err) {`.
 `{path:"a.ts",edits:[{loc:{range:{pos:{{href 15}},end:{{href 16}}}},content:["\t\tif (isEnoent(err)) return null;","\t\tthrow err;"]}]}`
+
 # Replace whole block including closing brace
+
 Replace `alpha`'s entire body including the closing `}`. `end` **MUST** be {{href 7}} because `content` includes `}`.
 `{path:"a.ts",edits:[{loc:{range:{pos:{{href 6}},end:{{href 7}}}},content:["\tvalidate();","\tlog();","}"]}]}`
 **Wrong**: `end: {{href 6}}` — line 7 (`}`) survives AND content emits `}`, producing two closing braces.
+
 # Replace one line
+
 Single-line replace uses `pos == end`.
 `{path:"a.ts",edits:[{loc:{range:{pos:{{href 2}},end:{{href 2}}}},content:["const timeout = 30_000;"]}]}`
+
 # Delete a range
+
 `{path:"a.ts",edits:[{loc:{range:{pos:{{href 10}},end:{{href 11}}}},content:null}]}`
+
 # Insert before a sibling
+
 When adding a sibling declaration, prefer `prepend` on the next declaration.
 `{path:"a.ts",edits:[{loc:{prepend:{{href 9}}},content:["function gamma() {","\tvalidate();","}",""]}]}`
 </examples>

@@ -96,11 +96,11 @@ Runtime x64 candidate order also includes the unsuffixed default filename after 
 - `TARGET_VARIANT` (x64 only): force `modern` or `baseline` for output filename and RUSTFLAGS policy.
 - `CARGO_TARGET_DIR`: if set, respected; otherwise CI/cross builds use an isolated managed target directory under `target/napi-build/...`.
 - `RUSTFLAGS`:
-  - if unset and not cross-compiling, script sets:
-    - modern: `-C target-cpu=x86-64-v3`
-    - baseline: `-C target-cpu=x86-64-v2`
-    - non-x64 / no variant: `-C target-cpu=native`
-  - if already set, script does not override.
+   - if unset and not cross-compiling, script sets:
+      - modern: `-C target-cpu=x86-64-v3`
+      - baseline: `-C target-cpu=x86-64-v2`
+      - non-x64 / no variant: `-C target-cpu=native`
+   - if already set, script does not override.
 - `ZIG`: optional real Zig path used when the host Zig CPU contract wrapper is enabled.
 - `PI_NATIVE_REAL_ZIG`, `PI_NATIVE_ZIG_TARGET`, `PI_NATIVE_ZIG_CPU`: set internally for `zig-safe-wrapper.ts` when building local x64 Linux/macOS artifacts with Zig available.
 
@@ -177,9 +177,9 @@ Generated declarations currently include exports from these Rust modules:
 ## Build-time failures
 
 - Invalid variant configuration:
-  - `TARGET_VARIANT` set on non-x64 → immediate error.
-  - unsupported `TARGET_VARIANT` value → immediate error.
-  - x64 cross-build without explicit `TARGET_VARIANT` → immediate error.
+   - `TARGET_VARIANT` set on non-x64 → immediate error.
+   - unsupported `TARGET_VARIANT` value → immediate error.
+   - x64 cross-build without explicit `TARGET_VARIANT` → immediate error.
 - napi-rs build failure: script surfaces non-zero exit and stderr.
 - Artifact not found or ambiguous: script prints expected/candidate filenames and output directory contents.
 - Install failure: explicit message; Windows includes locked-file hint.

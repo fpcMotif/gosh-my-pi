@@ -23,7 +23,6 @@ const packageDirs: PublishPackage[] = [
 	{ dir: "packages/coding-agent" },
 ];
 
-
 async function readPackageJson(packageDir: string): Promise<PackageJson> {
 	return (await Bun.file(path.join(repoRoot, packageDir, "package.json")).json()) as PackageJson;
 }
@@ -42,7 +41,10 @@ async function publishPackage(pkg: PublishPackage): Promise<void> {
 	}
 
 	console.log(`Publishing ${packageName}...`);
-	const result = await $`bun publish --access public --tolerate-republish`.cwd(path.join(repoRoot, pkg.dir)).quiet().nothrow();
+	const result = await $`bun publish --access public --tolerate-republish`
+		.cwd(path.join(repoRoot, pkg.dir))
+		.quiet()
+		.nothrow();
 	const output = `${result.stdout.toString()}${result.stderr.toString()}`.trim();
 	if (result.exitCode === 0) {
 		if (output) console.log(output);

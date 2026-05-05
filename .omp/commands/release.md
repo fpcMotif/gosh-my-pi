@@ -21,6 +21,7 @@ bun scripts/release.ts $ARGUMENTS
 ```
 
 The script handles everything automatically:
+
 1. Pre-flight checks (clean working dir, on main branch)
 2. Updates all package.json versions
 3. Regenerates bun.lock

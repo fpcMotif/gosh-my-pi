@@ -44,14 +44,14 @@ Current capability groups in the generated API include:
 
 - Platform tag is `${process.platform}-${process.arch}`.
 - Supported tags are currently:
-  - `linux-x64`
-  - `linux-arm64`
-  - `darwin-x64`
-  - `darwin-arm64`
-  - `win32-x64`
+   - `linux-x64`
+   - `linux-arm64`
+   - `darwin-x64`
+   - `darwin-arm64`
+   - `win32-x64`
 - x64 can use CPU variants:
-  - `modern` (AVX2-capable)
-  - `baseline` (fallback)
+   - `modern` (AVX2-capable)
+   - `baseline` (fallback)
 - Non-x64 uses the default filename without a variant suffix.
 
 Filename strategy:
@@ -129,17 +129,17 @@ N-API exports are generated from Rust `#[napi]` functions/classes/objects/enums.
 ## Ownership boundaries
 
 - **Loader/package ownership (`packages/natives/native`, `packages/natives/scripts`)**
-  - runtime binary selection
-  - CPU variant selection and override handling
-  - compiled-binary embedded extraction
-  - generated TypeScript declarations and enum export patching
+   - runtime binary selection
+   - CPU variant selection and override handling
+   - compiled-binary embedded extraction
+   - generated TypeScript declarations and enum export patching
 - **Rust ownership (`crates/pi-natives/src`)**
-  - algorithmic and system-level implementation
-  - platform-native behavior and performance-sensitive logic
-  - N-API symbol implementation consumed directly by package callers
+   - algorithmic and system-level implementation
+   - platform-native behavior and performance-sensitive logic
+   - N-API symbol implementation consumed directly by package callers
 - **Consumer ownership (`packages/coding-agent`, `packages/tui`)**
-  - user-facing policy and fallbacks that are not built into the native API
-  - higher-level rendering, artifact, shell-session, and command behavior
+   - user-facing policy and fallbacks that are not built into the native API
+   - higher-level rendering, artifact, shell-session, and command behavior
 
 ## Runtime flow (high level)
 

@@ -34,9 +34,9 @@ Tree APIs:
 
 - `getBranch(fromId?)` walks parent links to root and returns root→node path
 - `getTree()` returns `SessionTreeNode[]` (`entry`, `children`, `label`)
-  - parent links become children arrays
-  - entries with missing parents are treated as roots
-  - children are sorted oldest→newest by timestamp
+   - parent links become children arrays
+   - entries with missing parents are treated as roots
+   - children are sorted oldest→newest by timestamp
 - `getChildren(parentId)` returns direct children
 - `getLabel(id)` resolves current label from `labelsById`
 
@@ -110,9 +110,9 @@ User-facing `/branch` flow (`SelectorController.showUserMessageSelector` → `Ag
 
 - Tracks latest thinking/model/service-tier/mode/TTSR/MCP-selection state on path.
 - Handles latest compaction on path:
-  - emits compaction summary first
-  - replays kept messages from `firstKeptEntryId` to compaction point
-  - then replays post-compaction messages
+   - emits compaction summary first
+   - replays kept messages from `firstKeptEntryId` to compaction point
+   - then replays post-compaction messages
 - Includes `branch_summary` and `custom_message` entries as `AgentMessage` objects.
 
 `session/messages.ts` then maps these message types for model input:
@@ -152,19 +152,19 @@ Command-time extension API (`ExtensionCommandContext`):
 Events around tree navigation:
 
 - `session_before_tree`
-  - receives `TreePreparation`:
-    - `targetId`
-    - `oldLeafId`
-    - `commonAncestorId`
-    - `entriesToSummarize`
-    - `userWantsSummary`
-  - may cancel navigation
-  - may provide summary payload used instead of built-in summarizer
-  - receives abort `signal` (Escape cancellation path)
+   - receives `TreePreparation`:
+      - `targetId`
+      - `oldLeafId`
+      - `commonAncestorId`
+      - `entriesToSummarize`
+      - `userWantsSummary`
+   - may cancel navigation
+   - may provide summary payload used instead of built-in summarizer
+   - receives abort `signal` (Escape cancellation path)
 - `session_tree`
-  - emits `newLeafId`, `oldLeafId`
-  - includes `summaryEntry` when a summary was created
-  - `fromExtension` indicates summary origin
+   - emits `newLeafId`, `oldLeafId`
+   - includes `summaryEntry` when a summary was created
+   - `fromExtension` indicates summary origin
 
 Adjacent but related lifecycle hooks:
 

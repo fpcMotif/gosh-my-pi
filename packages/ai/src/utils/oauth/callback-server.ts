@@ -7,8 +7,8 @@
  * - Common OAuth flow logic
  *
  * Providers extend this and implement:
- * - generateAuthUrl(): Build provider-specific authorization URL
- * - exchangeToken(): Exchange authorization code for tokens
+ * - `generateAuthUrl()`: Build provider-specific authorization URL
+ * - `exchangeToken()`: Exchange authorization code for tokens
  */
 import templateHtml from "./oauth.html" with { type: "text" };
 import type { OAuthController, OAuthCredentials } from "./types";
@@ -27,9 +27,8 @@ export interface OAuthCallbackFlowOptions {
 	redirectUri?: string;
 }
 
-/**
- * Abstract base class for OAuth flows with local callback servers.
- */
+type CallbackState = { ok: true; code: string; state: string } | { ok: false; error: string };
+
 export abstract class OAuthCallbackFlow {
 	ctrl: OAuthController;
 	preferredPort: number;
@@ -49,13 +48,12 @@ export abstract class OAuthCallbackFlow {
 			this.preferredPort = preferredPortOrOptions;
 			this.callbackPath = callbackPath;
 			this.callbackHostname = DEFAULT_HOSTNAME;
-			return;
+		} else {
+			this.preferredPort = preferredPortOrOptions.preferredPort;
+			this.callbackPath = preferredPortOrOptions.callbackPath ?? CALLBACK_PATH;
+			this.callbackHostname = preferredPortOrOptions.callbackHostname ?? DEFAULT_HOSTNAME;
+			this.redirectUri = preferredPortOrOptions.redirectUri;
 		}
-
-		this.preferredPort = preferredPortOrOptions.preferredPort;
-		this.callbackPath = preferredPortOrOptions.callbackPath ?? CALLBACK_PATH;
-		this.callbackHostname = preferredPortOrOptions.callbackHostname ?? DEFAULT_HOSTNAME;
-		this.redirectUri = preferredPortOrOptions.redirectUri;
 	}
 
 	/**
@@ -91,23 +89,14 @@ export abstract class OAuthCallbackFlow {
 	 */
 	async login(): Promise<OAuthCredentials> {
 		const state = this.generateState();
-
-		// Start callback server first to get actual redirect URI
+		// Start callback server first to learn the actual redirect URI (port may have fallen back).
 		const { server, redirectUri } = await this.#startCallbackServer(state);
-
 		try {
-			// Generate auth URL with the ACTUAL redirect URI (may differ from expected if port was busy)
 			const { url: authUrl, instructions } = await this.generateAuthUrl(state, redirectUri);
-
-			// Notify controller that auth is ready
 			this.ctrl.onAuth?.({ url: authUrl, instructions });
 			this.ctrl.onProgress?.("Waiting for browser authentication...");
-
-			// Wait for callback or manual input
 			const { code } = await this.#waitForCallback(state);
-
 			this.ctrl.onProgress?.("Exchanging authorization code for tokens...");
-
 			return await this.exchangeToken(code, state, redirectUri);
 		} finally {
 			void server.stop();
@@ -156,47 +145,36 @@ export abstract class OAuthCallbackFlow {
 	 */
 	#handleCallback(req: Request, expectedState: string): Response {
 		const url = new URL(req.url);
-
-		if (url.pathname !== this.callbackPath) {
-			return new Response("Not Found", { status: 404 });
-		}
+		if (url.pathname !== this.callbackPath) return new Response("Not Found", { status: 404 });
 
 		const code = url.searchParams.get("code");
 		const state = url.searchParams.get("state") ?? "";
 		const error = url.searchParams.get("error") ?? "";
 		const errorDescription = url.searchParams.get("error_description") ?? error;
 
-		type OkState = { ok: true; code: string; state: string };
-		type ErrorState = { ok?: false; error?: string };
-		let resultState: OkState | ErrorState;
+		const resultState = ((): CallbackState => {
+			if (error !== "") return { ok: false, error: `Authorization failed: ${errorDescription}` };
+			if (code === null || code === "") return { ok: false, error: "Missing authorization code" };
+			if (expectedState !== "" && state !== expectedState) {
+				return { ok: false, error: "State mismatch - possible CSRF attack" };
+			}
+			return { ok: true, code, state };
+		})();
 
-		if (error) {
-			resultState = { ok: false, error: `Authorization failed: ${errorDescription}` };
-		} else if (code === null || code === undefined || code === "") {
-			resultState = { ok: false, error: "Missing authorization code" };
-		} else if (expectedState && state !== expectedState) {
-			resultState = { ok: false, error: "State mismatch - possible CSRF attack" };
-		} else {
-			resultState = { ok: true, code, state };
-		}
-
-		// Signal to waitForCallback - capture refs before they could be cleared
+		// Capture refs before they could be cleared by abort handler.
 		const resolve = this.#callbackResolve;
 		const reject = this.#callbackReject;
 		queueMicrotask(() => {
-			if (resultState.ok === true) {
+			if (resultState.ok) {
 				resolve?.({ code: resultState.code, state: resultState.state });
 			} else {
-				reject?.(resultState.error ?? "Unknown error");
+				reject?.(resultState.error);
 			}
 		});
 
 		return new Response(
 			(templateHtml as unknown as string).replaceAll("__OAUTH_STATE__", JSON.stringify(resultState)),
-			{
-				status: resultState.ok === true ? 200 : 500,
-				headers: { "Content-Type": "text/html" },
-			},
+			{ status: resultState.ok ? 200 : 500, headers: { "Content-Type": "text/html" } },
 		);
 	}
 
@@ -206,11 +184,9 @@ export abstract class OAuthCallbackFlow {
 	#waitForCallback(expectedState: string): Promise<CallbackResult> {
 		const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT);
 		const signal = this.ctrl.signal ? AbortSignal.any([this.ctrl.signal, timeoutSignal]) : timeoutSignal;
-
 		const callbackPromise = new Promise<CallbackResult>((resolve, reject) => {
 			this.#callbackResolve = resolve;
 			this.#callbackReject = reject;
-
 			signal.addEventListener("abort", () => {
 				this.#callbackResolve = undefined;
 				this.#callbackReject = undefined;
@@ -218,38 +194,44 @@ export abstract class OAuthCallbackFlow {
 			});
 		});
 
-		if (this.ctrl.onManualCodeInput) {
-			const manualPromise = this.#manualInputRace(expectedState, callbackPromise);
+		if (typeof this.ctrl.onManualCodeInput === "function") {
+			// Capture as an arrow to preserve `this` and to satisfy the unbound-method lint.
+			const ctrl = this.ctrl;
+			const requestManualInput = (): Promise<string> => ctrl.onManualCodeInput!();
+			const manualPromise = manualInputRace(expectedState, callbackPromise, requestManualInput);
 			return Promise.race([callbackPromise, manualPromise]);
 		}
-
 		return callbackPromise;
 	}
+}
 
-	async #manualInputRace(expectedState: string, callbackPromise: Promise<CallbackResult>): Promise<CallbackResult> {
-		const requestManualInput = this.ctrl.onManualCodeInput!;
-		while (true) {
-			/* eslint-disable-line no-await-in-loop */
-			const result = await Promise.race([
-				callbackPromise,
-				requestManualInput()
-					.then((input): CallbackResult | null => {
-						const parsed = parseCallbackInput(input);
-						if (parsed.code === null || parsed.code === undefined || parsed.code === "") return null;
-						if (
-							expectedState &&
-							parsed.state !== null &&
-							parsed.state !== undefined &&
-							parsed.state !== "" &&
-							parsed.state !== expectedState
-						)
-							return null;
-						return { code: parsed.code, state: parsed.state ?? "" };
-					})
-					.catch((): CallbackResult | null => null),
-			]);
-			if (result) return result;
-		}
+async function manualInputRace(
+	expectedState: string,
+	callbackPromise: Promise<CallbackResult>,
+	requestManualInput: () => Promise<string>,
+): Promise<CallbackResult> {
+	while (true) {
+		// eslint-disable-next-line no-await-in-loop
+		const result = await Promise.race([
+			callbackPromise,
+			requestManualInput()
+				.then((input): CallbackResult | null => {
+					const parsed = parseCallbackInput(input);
+					if (parsed.code === null || parsed.code === undefined || parsed.code === "") return null;
+					if (
+						expectedState !== "" &&
+						parsed.state !== null &&
+						parsed.state !== undefined &&
+						parsed.state !== "" &&
+						parsed.state !== expectedState
+					) {
+						return null;
+					}
+					return { code: parsed.code, state: parsed.state ?? "" };
+				})
+				.catch((): CallbackResult | null => null),
+		]);
+		if (result !== null) return result;
 	}
 }
 
@@ -258,27 +240,18 @@ export abstract class OAuthCallbackFlow {
  */
 export function parseCallbackInput(input: string): { code?: string; state?: string } {
 	const value = input.trim();
-	if (!value) return {};
-
+	if (value === "") return {};
 	try {
 		const url = new URL(value);
-		return {
-			code: url.searchParams.get("code") ?? undefined,
-			state: url.searchParams.get("state") ?? undefined,
-		};
+		return { code: url.searchParams.get("code") ?? undefined, state: url.searchParams.get("state") ?? undefined };
 	} catch {
-		// Not a URL - check for query string format
+		/* Not a URL — fall through */
 	}
-
 	if (value.includes("code=")) {
 		const params = new URLSearchParams(value.replace(/^[?#]/, ""));
-		return {
-			code: params.get("code") ?? undefined,
-			state: params.get("state") ?? undefined,
-		};
+		return { code: params.get("code") ?? undefined, state: params.get("state") ?? undefined };
 	}
-
-	// Assume raw code, possibly with state after #
+	// Assume raw code, possibly with state after `#`.
 	const [code, state] = value.split("#", 2);
 	return { code, state };
 }

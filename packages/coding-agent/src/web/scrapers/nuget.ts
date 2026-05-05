@@ -68,46 +68,18 @@ export const handleNuGet: SpecialHandler = async (
 
 		// Get the latest page (or fetch it if not inlined)
 		let latestPage = index.items[index.items.length - 1];
-
-		// If items are not inlined, fetch the page
 		if (!latestPage.items && latestPage["@id"]) {
-			const pageResult = await loadPage(latestPage["@id"], { timeout, signal });
-			if (!pageResult.ok) return null;
-			const fetched = tryParseJson<NuGetRegistrationPage>(pageResult.content);
+			const fetched = await fetchRegistrationPage(latestPage["@id"], timeout, signal);
 			if (!fetched) return null;
 			latestPage = fetched;
 		}
 
-		if (latestPage.items?.length === null || latestPage.items?.length === undefined || latestPage.items?.length === 0)
-			return null;
+		if (!latestPage.items || latestPage.items.length === 0) return null;
 
 		// Find the requested version or get the latest
 		let targetEntry: NuGetCatalogEntry | null = null;
-
 		if (requestedVersion !== null && requestedVersion !== undefined && requestedVersion !== "") {
-			// Search all pages for the requested version
-			for (const page of index.items) {
-				let pageItems = page.items;
-
-				// Fetch page if items not inlined
-				if (!pageItems && page["@id"]) {
-					const pageResult = await loadPage(page["@id"], { timeout: Math.min(timeout, 5), signal });
-					if (pageResult.ok) {
-						const fetchedPage = tryParseJson<NuGetRegistrationPage>(pageResult.content);
-						if (fetchedPage) pageItems = fetchedPage.items;
-					}
-				}
-
-				if (pageItems) {
-					const found = pageItems.find(
-						item => item.catalogEntry.version.toLowerCase() === requestedVersion.toLowerCase(),
-					);
-					if (found) {
-						targetEntry = found.catalogEntry;
-						break;
-					}
-				}
-			}
+			targetEntry = await findVersionInIndex(index, requestedVersion, timeout, signal);
 		}
 
 		// If no specific version requested or not found, use the latest
@@ -194,3 +166,37 @@ export const handleNuGet: SpecialHandler = async (
 
 	return null;
 };
+
+async function fetchRegistrationPage(
+	pageId: string,
+	timeout: number,
+	signal?: AbortSignal,
+): Promise<NuGetRegistrationPage | null> {
+	const result = await loadPage(pageId, { timeout, signal });
+	if (!result.ok) return null;
+	return tryParseJson<NuGetRegistrationPage>(result.content);
+}
+
+async function findVersionInIndex(
+	index: NuGetRegistrationIndex,
+	requestedVersion: string,
+	timeout: number,
+	signal?: AbortSignal,
+): Promise<NuGetCatalogEntry | null> {
+	const lowerRequested = requestedVersion.toLowerCase();
+	for (const page of index.items) {
+		let pageItems = page.items;
+
+		// Fetch page if items not inlined
+		if (!pageItems && page["@id"]) {
+			const fetchedPage = await fetchRegistrationPage(page["@id"], Math.min(timeout, 5), signal);
+			if (fetchedPage) pageItems = fetchedPage.items;
+		}
+
+		if (pageItems) {
+			const found = pageItems.find(item => item.catalogEntry.version.toLowerCase() === lowerRequested);
+			if (found) return found.catalogEntry;
+		}
+	}
+	return null;
+}

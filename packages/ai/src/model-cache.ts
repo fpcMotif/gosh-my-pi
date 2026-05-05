@@ -6,6 +6,8 @@ import { Database } from "bun:sqlite";
 import { getModelDbPath } from "@oh-my-pi/pi-utils";
 import type { Api, Model } from "./types";
 
+export const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 const CACHE_SCHEMA_VERSION = 2;
 
 interface CacheRow {

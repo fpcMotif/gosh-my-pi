@@ -19,9 +19,16 @@ describe("ExtensionRunner", () => {
 	let sessionManager: SessionManager;
 	let modelRegistry: ModelRegistry;
 	let authStorage: AuthStorage;
+	let originalHome: string | undefined;
 
 	beforeEach(async () => {
 		tempDir = TempDir.createSync("@pi-runner-test-");
+		// Isolate global plugin / config discovery from the developer's machine.
+		// getEnabledPlugins() in plugins/loader.ts reads ~/.omp/agent paths via
+		// getPluginsPackageJson()/getPluginsNodeModules(); without this override
+		// it can traverse arbitrary user-installed plugins and stall indefinitely.
+		originalHome = process.env.HOME;
+		process.env.HOME = tempDir.path();
 		extensionsDir = path.join(getProjectAgentDir(tempDir.path()), "extensions");
 		fs.mkdirSync(extensionsDir, { recursive: true });
 		sessionManager = SessionManager.inMemory();
@@ -30,6 +37,8 @@ describe("ExtensionRunner", () => {
 	});
 
 	afterEach(() => {
+		if (originalHome === undefined) delete process.env.HOME;
+		else process.env.HOME = originalHome;
 		authStorage.close();
 		tempDir.removeSync();
 	});

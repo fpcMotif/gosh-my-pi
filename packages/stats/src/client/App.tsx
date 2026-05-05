@@ -42,7 +42,7 @@ export default function App() {
 	};
 
 	useEffect(() => {
-		loadData();
+		void loadData();
 		const interval = setInterval(loadData, 30000);
 		return () => clearInterval(interval);
 	}, [loadData]);

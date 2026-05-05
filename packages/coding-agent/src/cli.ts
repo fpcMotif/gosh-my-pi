@@ -4,7 +4,7 @@ import { APP_NAME, MIN_BUN_VERSION, VERSION } from "@oh-my-pi/pi-utils";
  * CLI entry point — registers all commands explicitly and delegates to the
  * lightweight CLI runner from pi-utils.
  */
-import { type CommandEntry, run } from "@oh-my-pi/pi-utils/cli";
+import { type CliConfig, type CommandEntry, run } from "@oh-my-pi/pi-utils/cli";
 
 function parseSemver(version: string): [number, number, number] {
 	function toint(value: string): number {
@@ -59,7 +59,7 @@ const commands: CommandEntry[] = [
 	{ name: "search", load: () => import("./commands/web-search").then(m => m.default), aliases: ["q"] },
 ];
 
-async function showHelp(config: import("@oh-my-pi/pi-utils/cli").CliConfig): Promise<void> {
+async function showHelp(config: CliConfig): Promise<void> {
 	const { renderRootHelp } = await import("@oh-my-pi/pi-utils/cli");
 	const { getExtraHelpText } = await import("./cli/args");
 	renderRootHelp(config);

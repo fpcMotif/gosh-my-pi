@@ -26,37 +26,37 @@
 - [Highlights](#highlights)
 - [Installation](#installation)
 - [Getting Started](#getting-started)
-  - [Terminal Setup](#terminal-setup)
-  - [API Keys & OAuth](#api-keys--oauth)
-  - [First 15 Minutes (Recommended)](#first-15-minutes-recommended)
+   - [Terminal Setup](#terminal-setup)
+   - [API Keys & OAuth](#api-keys--oauth)
+   - [First 15 Minutes (Recommended)](#first-15-minutes-recommended)
 - [Usage](#usage)
-  - [Slash Commands](#slash-commands)
-  - [Editor Features](#editor-features)
-  - [Keyboard Shortcuts](#keyboard-shortcuts)
-  - [Bash Mode](#bash-mode)
-  - [Image Support](#image-support)
+   - [Slash Commands](#slash-commands)
+   - [Editor Features](#editor-features)
+   - [Keyboard Shortcuts](#keyboard-shortcuts)
+   - [Bash Mode](#bash-mode)
+   - [Image Support](#image-support)
 - [Sessions](#sessions)
-  - [Session Management](#session-management)
-  - [Context Compaction](#context-compaction)
-  - [Branching](#branching)
-  - [Autonomous Memory](#autonomous-memory)
+   - [Session Management](#session-management)
+   - [Context Compaction](#context-compaction)
+   - [Branching](#branching)
+   - [Autonomous Memory](#autonomous-memory)
 - [Configuration](#configuration)
-  - [Project Context Files](#project-context-files)
-  - [Custom System Prompt](#custom-system-prompt)
-  - [Custom Models and Providers](#custom-models-and-providers)
-  - [Settings File](#settings-file)
+   - [Project Context Files](#project-context-files)
+   - [Custom System Prompt](#custom-system-prompt)
+   - [Custom Models and Providers](#custom-models-and-providers)
+   - [Settings File](#settings-file)
 - [Extensions](#extensions)
-  - [Themes](#themes)
-  - [Custom Slash Commands](#custom-slash-commands)
-  - [Skills](#skills)
-  - [Hooks](#hooks)
-  - [Custom Tools](#custom-tools)
+   - [Themes](#themes)
+   - [Custom Slash Commands](#custom-slash-commands)
+   - [Skills](#skills)
+   - [Hooks](#hooks)
+   - [Custom Tools](#custom-tools)
 - [CLI Reference](#cli-reference)
 - [Tools](#tools)
 - [Programmatic Usage](#programmatic-usage)
-  - [SDK](#sdk)
-  - [RPC Mode](#rpc-mode)
-  - [HTML Export](#html-export)
+   - [SDK](#sdk)
+   - [RPC Mode](#rpc-mode)
+   - [HTML Export](#html-export)
 - [Philosophy](#philosophy)
 - [Development](#development)
 - [Monorepo Packages](#monorepo-packages)
@@ -775,10 +775,10 @@ Long sessions can exhaust context windows. Compaction summarizes older messages 
 
 ```yaml
 compaction:
-  enabled: true
-  reserveTokens: 16384
-  keepRecentTokens: 20000
-  autoContinue: true
+   enabled: true
+   reserveTokens: 16384
+   keepRecentTokens: 20000
+   autoContinue: true
 ```
 
 See [docs/compaction.md](docs/compaction.md) for internals and hook integration.
@@ -845,36 +845,36 @@ Add custom providers/models via `~/.omp/agent/models.yml`.
 
 ```yaml
 providers:
-  ollama:
-    baseUrl: http://localhost:11434/v1
-    apiKey: OLLAMA_API_KEY
-    api: openai-completions
-    models:
-      - id: llama-3.1-8b
-        name: Llama 3.1 8B (Local)
-        reasoning: false
-        input: [text]
-        cost:
-          input: 0
-          output: 0
-          cacheRead: 0
-          cacheWrite: 0
-        contextWindow: 128000
-        maxTokens: 32000
+   ollama:
+      baseUrl: http://localhost:11434/v1
+      apiKey: OLLAMA_API_KEY
+      api: openai-completions
+      models:
+         - id: llama-3.1-8b
+           name: Llama 3.1 8B (Local)
+           reasoning: false
+           input: [text]
+           cost:
+              input: 0
+              output: 0
+              cacheRead: 0
+              cacheWrite: 0
+           contextWindow: 128000
+           maxTokens: 32000
 
-  llama.cpp:
-    baseUrl: http://127.0.0.1:8080
-    api: openai-responses
-    auth: none
-    discovery:
-      type: llama.cpp
+   llama.cpp:
+      baseUrl: http://127.0.0.1:8080
+      api: openai-responses
+      auth: none
+      discovery:
+         type: llama.cpp
 
 equivalence:
-  overrides:
-    zenmux/codex: gpt-5.3-codex
-    p-codex/codex: gpt-5.3-codex
-  exclude:
-    - demo/codex-preview
+   overrides:
+      zenmux/codex: gpt-5.3-codex
+      p-codex/codex: gpt-5.3-codex
+   exclude:
+      - demo/codex-preview
 ```
 
 **Supported APIs:** `openai-completions`, `openai-responses`, `openai-codex-responses`, `azure-openai-responses`, `anthropic-messages`, `google-generative-ai`, `google-vertex`
@@ -893,40 +893,40 @@ Global `config.yml` example:
 
 ```yaml
 theme:
-  dark: titanium
-  light: light
+   dark: titanium
+   light: light
 
 enabledModels:
-  - "anthropic/*"
-  - "gpt-5.3-codex"
-  - "gemini-2.5-pro:high"
+   - "anthropic/*"
+   - "gpt-5.3-codex"
+   - "gemini-2.5-pro:high"
 
 modelRoles:
-  default: claude-sonnet-4-6
-  plan: claude-opus-4-6:high
-  smol: anthropic/claude-sonnet-4-6
+   default: claude-sonnet-4-6
+   plan: claude-opus-4-6:high
+   smol: anthropic/claude-sonnet-4-6
 modelProviderOrder:
-  - github-copilot
-  - zenmux
-  - openai
+   - github-copilot
+   - zenmux
+   - openai
 defaultThinkingLevel: high
 
 retry:
-  enabled: true
-  # Number of retries before giving up on rate limits/server errors
-  maxRetries: 3
-  # Wait this long as a base (exponentially backed off) unless the API provides a retry-after-ms
-  baseDelayMs: 2000
-  # Configure role-specific model fallback chains
-  fallbackChains:
-    default:
-      - "openai/gpt-4o-mini"
-      - "openai/gpt-4o"
-    plan:
-      - "anthropic/claude-sonnet-4-6:high"
-      - "openai/o3:high"
-  # Whether to revert to the primary model when a fallback's cooldown expires
-  fallbackRevertPolicy: cooldown-expiry
+   enabled: true
+   # Number of retries before giving up on rate limits/server errors
+   maxRetries: 3
+   # Wait this long as a base (exponentially backed off) unless the API provides a retry-after-ms
+   baseDelayMs: 2000
+   # Configure role-specific model fallback chains
+   fallbackChains:
+      default:
+         - "openai/gpt-4o-mini"
+         - "openai/gpt-4o"
+      plan:
+         - "anthropic/claude-sonnet-4-6:high"
+         - "openai/o3:high"
+   # Whether to revert to the primary model when a fallback's cooldown expires
+   fallbackRevertPolicy: cooldown-expiry
 steeringMode: one-at-a-time
 followUpMode: one-at-a-time
 interruptMode: immediate
@@ -939,32 +939,32 @@ disabledProviders: []
 disabledExtensions: []
 
 compaction:
-  enabled: true
-  reserveTokens: 16384
-  keepRecentTokens: 20000
+   enabled: true
+   reserveTokens: 16384
+   keepRecentTokens: 20000
 
 skills:
-  enabled: true
+   enabled: true
 
 terminal:
-  showImages: true
+   showImages: true
 
 topP: -1 # Nucleus sampling (0-1, -1 = provider default)
 topK: -1 # Top-K tokens (-1 = provider default)
 minP: -1 # Minimum probability (0-1, -1 = provider default)
 
 display:
-  tabWidth: 4 # Tab rendering width (.editorconfig integration)
+   tabWidth: 4 # Tab rendering width (.editorconfig integration)
 
 async:
-  enabled: false
-  maxJobs: 100
+   enabled: false
+   maxJobs: 100
 
 task:
-  eager: false
-  isolation:
-    mode: none # none | worktree | fuse-overlay | fuse-projfs
-    merge: patch # patch | branch
+   eager: false
+   isolation:
+      mode: none # none | worktree | fuse-overlay | fuse-projfs
+      merge: patch # patch | branch
 ```
 
 `modelRoles` may use either canonical ids or explicit `provider/model` selectors. `modelProviderOrder` decides which provider backs a canonical model when multiple equivalent variants are available.
@@ -989,8 +989,8 @@ Select theme via `/settings` or set in `~/.omp/agent/config.yml`:
 
 ```yaml
 theme:
-  dark: titanium
-  light: light
+   dark: titanium
+   light: light
 ```
 
 **Custom themes:** create `~/.omp/agent/themes/*.json`.
@@ -1287,7 +1287,7 @@ const { session } = await createAgentSession({
 	authStorage,
 	modelRegistry,
 });
-session.subscribe((event) => {
+session.subscribe(event => {
 	if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 		process.stdout.write(event.assistantMessageEvent.delta);
 	}

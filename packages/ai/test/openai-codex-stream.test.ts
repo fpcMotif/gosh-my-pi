@@ -1700,7 +1700,7 @@ describe("openai-codex streaming", () => {
 		type WsListener = (event: Event) => void;
 		const sentTypesByConnection: string[][] = [];
 		let constructorCount = 0;
-		let abortSecondRequest: (() => void) | undefined;
+		const abortSecondRequestRef: { fn: (() => void) | undefined } = { fn: undefined };
 
 		class AbortResetWebSocket {
 			static readonly CONNECTING = 0;
@@ -1761,7 +1761,7 @@ describe("openai-codex streaming", () => {
 						data: JSON.stringify({ type: "response.output_text.delta", delta: "Still streaming" }),
 					} as unknown as Event);
 					setTimeout(() => {
-						abortSecondRequest?.();
+						abortSecondRequestRef.fn?.();
 					}, 0);
 					return;
 				}
@@ -1871,7 +1871,7 @@ describe("openai-codex streaming", () => {
 		expect(firstResult.role).toBe("assistant");
 
 		const secondAbortController = new AbortController();
-		abortSecondRequest = () => {
+		abortSecondRequestRef.fn = () => {
 			secondAbortController.abort();
 		};
 		const secondResult = await streamOpenAICodexResponses(model, secondContext, {

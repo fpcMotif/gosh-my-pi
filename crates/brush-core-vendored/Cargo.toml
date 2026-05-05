@@ -22,17 +22,8 @@ autotests = false
 autobenches = false
 description = "Reusable core of a POSIX/bash shell (used by brush-shell)"
 readme = "README.md"
-keywords = [
-    "cli",
-    "shell",
-    "sh",
-    "bash",
-    "script",
-]
-categories = [
-    "command-line-utilities",
-    "development-tools",
-]
+keywords = ["cli", "shell", "sh", "bash", "script"]
+categories = ["command-line-utilities", "development-tools"]
 license = "MIT"
 repository = "https://github.com/reubeno/brush"
 
@@ -64,10 +55,7 @@ version = "0.4.42"
 
 [dependencies.clap]
 version = "4.5.51"
-features = [
-    "derive",
-    "wrap_help",
-]
+features = ["derive", "wrap_help"]
 
 [dependencies.fancy-regex]
 version = "0.16.2"
@@ -113,38 +101,18 @@ version = "0.4.1"
 
 [target."cfg(any(unix, windows))".dependencies.tokio]
 version = "1.48.0"
-features = [
-    "io-util",
-    "macros",
-    "process",
-    "rt",
-    "rt-multi-thread",
-    "signal",
-    "sync",
-]
+features = ["io-util", "macros", "process", "rt", "rt-multi-thread", "signal", "sync"]
 
 [target.'cfg(target_family = "wasm")'.dependencies.tokio]
 version = "1.48.0"
-features = [
-    "io-util",
-    "macros",
-    "rt",
-    "sync",
-]
+features = ["io-util", "macros", "rt", "sync"]
 
 [target."cfg(unix)".dependencies.command-fds]
 version = "0.3.2"
 
 [target."cfg(unix)".dependencies.nix]
 version = "0.30.1"
-features = [
-    "fs",
-    "process",
-    "resource",
-    "signal",
-    "term",
-    "user",
-]
+features = ["fs", "process", "resource", "signal", "term", "user"]
 
 [target."cfg(unix)".dependencies.terminfo]
 version = "0.9.0"

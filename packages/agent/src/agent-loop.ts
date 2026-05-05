@@ -1,6 +1,8 @@
-import { EventStream, type AssistantMessage } from "@oh-my-pi/pi-ai";
+import { EventStream, type AssistantMessage, type ToolResultMessage } from "@oh-my-pi/pi-ai";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, StreamFn } from "./types";
-import { createAbortedToolResult, executeToolCalls } from "./agent-loop/execution";
+import { createAbortedToolResult, executeToolCalls, INTENT_FIELD } from "./agent-loop/execution";
+
+export { INTENT_FIELD };
 import { streamAssistantResponse } from "./agent-loop/streaming";
 
 /* eslint-disable no-await-in-loop */
@@ -146,7 +148,7 @@ async function handleToolCallsIfAny(
 	const toolCalls = message.content.filter(c => c.type === "toolCall");
 	if (toolCalls.length === 0) return null;
 
-	return executeToolCalls(currentContext.tools, message, signal, stream, config);
+	return executeToolCalls(currentContext.tools ?? [], message, signal, stream, config);
 }
 
 function handlePendingMessages(

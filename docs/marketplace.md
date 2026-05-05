@@ -85,22 +85,22 @@ A marketplace catalog lives at `.claude-plugin/marketplace.json` in the reposito
 
 ```json
 {
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "my-marketplace",
-  "owner": {
-    "name": "Your Name",
-    "email": "you@example.com"
-  },
-  "description": "A collection of plugins",
-  "plugins": [
-    {
-      "name": "my-plugin",
-      "description": "What this plugin does",
-      "source": "./plugins/my-plugin",
-      "category": "development",
-      "homepage": "https://github.com/you/my-plugin"
-    }
-  ]
+	"$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+	"name": "my-marketplace",
+	"owner": {
+		"name": "Your Name",
+		"email": "you@example.com"
+	},
+	"description": "A collection of plugins",
+	"plugins": [
+		{
+			"name": "my-plugin",
+			"description": "What this plugin does",
+			"source": "./plugins/my-plugin",
+			"category": "development",
+			"homepage": "https://github.com/you/my-plugin"
+		}
+	]
 }
 ```
 

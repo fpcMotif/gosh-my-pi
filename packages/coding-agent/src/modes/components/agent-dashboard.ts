@@ -1003,61 +1003,74 @@ export class AgentDashboard extends Container {
 		}
 
 		if (this.#createSpec) {
-			if (matchesAppInterrupt(data)) {
-				this.#clearCreateFlow();
-				this.#buildLayout();
-				return;
-			}
-			if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
-				this.#toggleCreateScope();
-				return;
-			}
-			if (data.toLowerCase() === "r") {
-				void this.#generateAgentFromDescription(this.#createDescription);
-				return;
-			}
-			if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
-				void this.#saveGeneratedAgent().catch(error => {
-					this.#createError = error instanceof Error ? error.message : String(error);
-					this.#rebuildAndRender();
-				});
-				return;
-			}
+			this.#handleCreateSpecInput(data);
 			return;
 		}
 
 		if (this.#createInput || this.#createGenerating) {
-			if (matchesAppInterrupt(data)) {
-				if (!this.#createGenerating) {
-					this.#clearCreateFlow();
-					this.#buildLayout();
-				}
-				return;
-			}
-			if (!this.#createGenerating && (matchesKey(data, "tab") || matchesKey(data, "shift+tab"))) {
-				this.#toggleCreateScope();
-				return;
-			}
-			if (!this.#createGenerating && this.#createInput) {
-				this.#createInput.handleInput(data);
-				this.#createDescription = this.#createInput.getValue();
-				this.#buildLayout();
-			}
+			this.#handleCreateInputState(data);
 			return;
 		}
 
 		if (this.#editInput) {
-			if (matchesAppInterrupt(data)) {
-				this.#cancelModelEdit();
-				return;
-			}
-			this.#editInput.handleInput(data);
-			if (this.#editInput) {
+			this.#handleEditInputState(data);
+			return;
+		}
+
+		this.#handleMainDashboardInput(data);
+	}
+
+	#handleCreateSpecInput(data: string): void {
+		if (matchesAppInterrupt(data)) {
+			this.#clearCreateFlow();
+			this.#buildLayout();
+			return;
+		}
+		if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
+			this.#toggleCreateScope();
+			return;
+		}
+		if (data.toLowerCase() === "r") {
+			void this.#generateAgentFromDescription(this.#createDescription);
+			return;
+		}
+		if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
+			void this.#saveGeneratedAgent().catch(error => {
+				this.#createError = error instanceof Error ? error.message : String(error);
+				this.#rebuildAndRender();
+			});
+		}
+	}
+
+	#handleCreateInputState(data: string): void {
+		if (matchesAppInterrupt(data)) {
+			if (!this.#createGenerating) {
+				this.#clearCreateFlow();
 				this.#buildLayout();
 			}
 			return;
 		}
+		if (!this.#createGenerating && (matchesKey(data, "tab") || matchesKey(data, "shift+tab"))) {
+			this.#toggleCreateScope();
+			return;
+		}
+		if (!this.#createGenerating && this.#createInput) {
+			this.#createInput.handleInput(data);
+			this.#createDescription = this.#createInput.getValue();
+			this.#buildLayout();
+		}
+	}
 
+	#handleEditInputState(data: string): void {
+		if (matchesAppInterrupt(data)) {
+			this.#cancelModelEdit();
+			return;
+		}
+		this.#editInput?.handleInput(data);
+		this.#buildLayout();
+	}
+
+	#handleMainDashboardInput(data: string): void {
 		if (matchesAppInterrupt(data)) {
 			if (this.#searchQuery.length > 0) {
 				this.#searchQuery = "";
@@ -1073,7 +1086,6 @@ export class AgentDashboard extends Container {
 			void this.#reloadData();
 			return;
 		}
-
 		if (matchesKey(data, "tab")) {
 			this.#switchTab(1);
 			return;
@@ -1082,7 +1094,6 @@ export class AgentDashboard extends Container {
 			this.#switchTab(-1);
 			return;
 		}
-
 		if (matchesKey(data, "up") || data === "k") {
 			this.#moveSelection(-1);
 			return;
@@ -1091,7 +1102,6 @@ export class AgentDashboard extends Container {
 			this.#moveSelection(1);
 			return;
 		}
-
 		if (data === " ") {
 			this.#toggleSelectedAgent();
 			return;
@@ -1116,11 +1126,8 @@ export class AgentDashboard extends Container {
 
 		const printableText = extractPrintableText(data);
 		if (printableText !== null && printableText !== undefined && printableText !== "" && printableText.length === 1) {
-			const printableCharCode = printableText.charCodeAt(0);
-			if (printableCharCode > 32 && printableCharCode < 127) {
-				if (printableText === "j" || printableText === "k") {
-					return;
-				}
+			const charCode = printableText.charCodeAt(0);
+			if (charCode > 32 && charCode < 127 && printableText !== "j" && printableText !== "k") {
 				this.#searchQuery += printableText;
 				this.#applyFilters();
 				this.#buildLayout();

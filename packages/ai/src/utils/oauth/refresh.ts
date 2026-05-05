@@ -13,10 +13,6 @@ export async function refreshOAuthToken(
 	provider: OAuthProvider,
 	credentials: OAuthCredentials,
 ): Promise<OAuthCredentials> {
-	if (!credentials) {
-		throw new Error(`No OAuth credentials found for ${provider}`);
-	}
-
 	let newCredentials: OAuthCredentials;
 
 	switch (provider) {
@@ -36,7 +32,7 @@ export async function refreshOAuthToken(
 			newCredentials = await refreshZaiToken(credentials.refresh);
 			break;
 		default:
-			throw new Error(`Unknown OAuth provider: ${provider}`);
+			throw new Error(`Unknown OAuth provider: ${provider as string}`);
 	}
 
 	return newCredentials;

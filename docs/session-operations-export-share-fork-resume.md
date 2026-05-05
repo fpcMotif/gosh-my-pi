@@ -107,9 +107,9 @@ If present and valid:
 
 - UI enters `Sharing...` loader state.
 - Handler result interpretation:
-  - string => treated as URL, shown and opened
-  - object => `url` and/or `message` shown; `url` opened
-  - `undefined`/falsy => generic `Session shared`
+   - string => treated as URL, shown and opened
+   - object => `url` and/or `message` shown; `url` opened
+   - `undefined`/falsy => generic `Session shared`
 - Temp file is removed after completion.
 
 Critical fallback behavior:
@@ -159,10 +159,10 @@ Interactive `/fork` creates a new session from the current one and switches the 
 - Requires persistent mode and existing session file.
 - Creates new session id and new JSONL file path.
 - Rewrites header with:
-  - new `id`
-  - new timestamp
-  - `cwd` unchanged
-  - `parentSession` set to previous session id
+   - new `id`
+   - new timestamp
+   - `cwd` unchanged
+   - `parentSession` set to previous session id
 - Keeps all non-header entries unchanged in the new file.
 
 ### Non-persistent behavior
@@ -214,7 +214,7 @@ Notes:
 Cross-project id match behavior:
 
 - If matched session cwd differs from current cwd, CLI asks:
-  - `Session found in different project ... Fork into current directory? [y/N]`
+   - `Session found in different project ... Fork into current directory? [y/N]`
 - On yes: `SessionManager.forkFrom(match.path, cwd, sessionDir)` creates a new local forked file.
 - On no/non-TTY default: command errors.
 
@@ -242,8 +242,8 @@ This is startup-only behavior; there is no interactive `/continue` slash command
 7. Emit `session_switch` with `reason: "resume"`.
 8. Replace agent messages from context.
 9. Restore model (if available in current registry).
-10. Restore or initialize thinking level.
-11. Reconnect agent event subscription.
+10.   Restore or initialize thinking level.
+11.   Reconnect agent event subscription.
 
 No new session file is created by `switchSession()` itself.
 
@@ -254,11 +254,11 @@ No new session file is created by `switchSession()` itself.
 For `newSession`, `fork`, and `switchSession`:
 
 - Before event: `session_before_switch`
-  - reasons: `new`, `fork`, `resume`
-  - cancellable by returning `{ cancel: true }`
+   - reasons: `new`, `fork`, `resume`
+   - cancellable by returning `{ cancel: true }`
 - After event: `session_switch`
-  - same reason set
-  - includes `previousSessionFile`
+   - same reason set
+   - includes `previousSessionFile`
 
 `ExtensionRunner.emit()` returns early on the first cancelling before-event result.
 

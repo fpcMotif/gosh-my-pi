@@ -758,13 +758,11 @@ export class MCPAddWizard extends Container {
 				// Go back to last authentication step
 				if (this.#state.authMethod === "oauth") {
 					this.#currentStep = "oauth-scopes";
+				} else if (this.#state.authLocation === "env") {
+					// manual - go back to env var name
+					this.#currentStep = "env-var-name";
 				} else {
-					// manual - go back to env var name or header name
-					if (this.#state.authLocation === "env") {
-						this.#currentStep = "env-var-name";
-					} else {
-						this.#currentStep = "header-name";
-					}
+					this.#currentStep = "header-name";
 				}
 				break;
 			case "oauth-error":

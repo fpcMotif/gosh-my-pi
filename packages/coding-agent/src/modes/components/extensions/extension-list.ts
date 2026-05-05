@@ -284,41 +284,34 @@ export class ExtensionList implements Component {
 
 	#rebuildList(): void {
 		this.#listItems = [];
-
-		// Apply search filter
 		const filtered = this.#searchQuery.length > 0 ? applyFilter(this.extensions, this.#searchQuery) : this.extensions;
 
-		// When searching, show flat list
 		if (this.#searchQuery.length > 0) {
-			for (const ext of filtered) {
-				this.#listItems.push({ type: "extension", item: ext });
-			}
+			for (const ext of filtered) this.#listItems.push({ type: "extension", item: ext });
 			return;
 		}
 
-		// Provider-specific view: Master switch + flat list
 		if (
 			this.#masterSwitchProvider !== null &&
 			this.#masterSwitchProvider !== undefined &&
 			this.#masterSwitchProvider !== ""
 		) {
-			const providerName = filtered[0]?.source.providerName ?? this.#masterSwitchProvider;
-			const enabled = isProviderEnabled(this.#masterSwitchProvider);
-
-			this.#listItems.push({
-				type: "master",
-				providerId: this.#masterSwitchProvider,
-				providerName,
-				enabled,
-			});
-
-			for (const ext of filtered) {
-				this.#listItems.push({ type: "extension", item: ext });
-			}
-			return;
+			this.#rebuildProviderView(filtered);
+		} else {
+			this.#rebuildAllView(filtered);
 		}
+	}
 
-		// ALL view: Group by kind with headers
+	#rebuildProviderView(filtered: Extension[]): void {
+		const providerId = this.#masterSwitchProvider!;
+		const providerName = filtered[0]?.source.providerName ?? providerId;
+		const enabled = isProviderEnabled(providerId);
+
+		this.#listItems.push({ type: "master", providerId, providerName, enabled });
+		for (const ext of filtered) this.#listItems.push({ type: "extension", item: ext });
+	}
+
+	#rebuildAllView(filtered: Extension[]): void {
 		const byKind = new Map<ExtensionKind, Extension[]>();
 		for (const ext of filtered) {
 			const list = byKind.get(ext.kind) ?? [];
@@ -351,9 +344,7 @@ export class ExtensionList implements Component {
 				count: items.length,
 			});
 
-			for (const ext of items) {
-				this.#listItems.push({ type: "extension", item: ext });
-			}
+			for (const ext of items) this.#listItems.push({ type: "extension", item: ext });
 		}
 	}
 
@@ -403,69 +394,58 @@ export class ExtensionList implements Component {
 	}
 
 	handleInput(data: string): void {
-		// Navigation
+		if (this.#handleNavigation(data)) return;
+		if (this.#handleToggle(data)) return;
+		if (this.#handleSearchInput(data)) return;
+	}
+
+	#handleNavigation(data: string): boolean {
 		if (matchesKey(data, "up") || data === "k") {
 			this.#moveSelectionUp();
-			return;
+			return true;
 		}
-
 		if (matchesKey(data, "down") || data === "j") {
 			this.#moveSelectionDown();
-			return;
+			return true;
+		}
+		return false;
+	}
+
+	#handleToggle(data: string): boolean {
+		if (data !== " " && !matchesKey(data, "enter") && !matchesKey(data, "return") && data !== "\n") {
+			return false;
 		}
 
-		// Space: Toggle selected item
-		if (data === " ") {
-			const item = this.#listItems[this.#selectedIndex];
-			if (item?.type === "master") {
-				this.callbacks.onMasterToggle?.(item.providerId);
-			} else if (item?.type === "extension") {
-				// Only allow toggling if master is enabled
-				const masterDisabled =
-					this.#masterSwitchProvider !== null && !isProviderEnabled(this.#masterSwitchProvider);
-				if (!masterDisabled) {
-					const newEnabled = item.item.state === "disabled";
-					this.callbacks.onToggle?.(item.item.id, newEnabled);
-				}
+		const item = this.#listItems[this.#selectedIndex];
+		if (item?.type === "master") {
+			this.callbacks.onMasterToggle?.(item.providerId);
+		} else if (item?.type === "extension") {
+			const masterDisabled = this.#masterSwitchProvider !== null && !isProviderEnabled(this.#masterSwitchProvider);
+			if (!masterDisabled) {
+				const newEnabled = item.item.state === "disabled";
+				this.callbacks.onToggle?.(item.item.id, newEnabled);
 			}
-			return;
 		}
+		return true;
+	}
 
-		// Enter: Same as space - toggle selected item
-		if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
-			const item = this.#listItems[this.#selectedIndex];
-			if (item?.type === "master") {
-				this.callbacks.onMasterToggle?.(item.providerId);
-			} else if (item?.type === "extension") {
-				const masterDisabled =
-					this.#masterSwitchProvider !== null && !isProviderEnabled(this.#masterSwitchProvider);
-				if (!masterDisabled) {
-					const newEnabled = item.item.state === "disabled";
-					this.callbacks.onToggle?.(item.item.id, newEnabled);
-				}
-			}
-			return;
-		}
-
-		// Backspace: Delete from search query
+	#handleSearchInput(data: string): boolean {
 		if (matchesKey(data, "backspace")) {
 			if (this.#searchQuery.length > 0) {
 				this.setSearchQuery(this.#searchQuery.slice(0, -1));
 			}
-			return;
+			return true;
 		}
 
-		// Printable characters -> search
 		const printableText = extractPrintableText(data);
 		if (printableText !== null && printableText !== undefined && printableText !== "" && printableText.length === 1) {
-			const printableCharCode = printableText.charCodeAt(0);
-			if (printableCharCode > 32 && printableCharCode < 127) {
-				if (printableText === "j" || printableText === "k") {
-					return;
-				}
+			const charCode = printableText.charCodeAt(0);
+			if (charCode > 32 && charCode < 127 && printableText !== "j" && printableText !== "k") {
 				this.setSearchQuery(this.#searchQuery + printableText);
+				return true;
 			}
 		}
+		return false;
 	}
 
 	#moveSelectionUp(): void {

@@ -1,9 +1,10 @@
 Launches subagents to parallelize workflows.
 
 {{#if asyncEnabled}}
+
 - `read jobs://` for state, `read jobs://<id>` for detail.
 - Use `job` (with `poll`) to wait. **MUST NOT** poll `read jobs://` in a loop.
-{{/if}}
+  {{/if}}
 
 Subagents have no access to your conversation history. Every fact, file path, and decision they need **MUST** be explicit in {{#if contextEnabled}}`context` or `assignment`{{else}}each `assignment`{{/if}}.
 
@@ -34,9 +35,13 @@ Parallel when tasks touch disjoint files or are independent refactors/tests.
 
 {{#if contextEnabled}}
 <context-fmt>
-# Goal         ← one sentence: what the batch accomplishes
-# Constraints  ← **MUST**/**MUST NOT** rules and session decisions
-# Contract     ← exact types/signatures if tasks share an interface
+
+# Goal ← one sentence: what the batch accomplishes
+
+# Constraints ← **MUST**/**MUST NOT** rules and session decisions
+
+# Contract ← exact types/signatures if tasks share an interface
+
 </context-fmt>
 {{/if}}
 

@@ -1729,8 +1729,8 @@ export const SETTINGS_SCHEMA = {
 
 	"providers.kimiApiFormat": {
 		type: "enum",
-		values: ["openai", "anthropic"] as const,
-		default: "anthropic",
+		values: ["openai"] as const,
+		default: "openai",
 		ui: {
 			tab: "providers",
 			label: "Kimi API Format",

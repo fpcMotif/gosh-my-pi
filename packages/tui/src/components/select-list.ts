@@ -99,7 +99,7 @@ export class SelectList implements Component {
 		// Render visible items
 		for (let i = startIndex; i < endIndex; i++) {
 			const item = this.#filteredItems[i];
-			if (!item) continue;
+			if (item === undefined) continue;
 
 			const isSelected = i === this.#selectedIndex;
 			const descriptionText =
@@ -145,7 +145,7 @@ export class SelectList implements Component {
 		// Enter
 		else if (kb.matches(keyData, "tui.select.confirm") || keyData === "\n") {
 			const selectedItem = this.#filteredItems[this.#selectedIndex];
-			if (selectedItem && this.onSelect) {
+			if (selectedItem !== undefined && this.onSelect) {
 				this.onSelect(selectedItem);
 			}
 		}
@@ -245,13 +245,13 @@ export class SelectList implements Component {
 
 	#notifySelectionChange(): void {
 		const selectedItem = this.#filteredItems[this.#selectedIndex];
-		if (selectedItem && this.onSelectionChange) {
+		if (selectedItem !== undefined && this.onSelectionChange) {
 			this.onSelectionChange(selectedItem);
 		}
 	}
 
 	getSelectedItem(): SelectItem | null {
 		const item = this.#filteredItems[this.#selectedIndex];
-		return item || null;
+		return item ?? null;
 	}
 }

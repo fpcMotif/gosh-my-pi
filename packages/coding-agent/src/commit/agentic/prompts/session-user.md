@@ -11,10 +11,14 @@ Changelog targets (must call propose_changelog for these files):
 {{/if}}
 
 {{#if existing_changelog_entries}}
+
 ## Existing Unreleased Changelog Entries
+
 May include entries from list in propose_changelog `deletions` field for removal.
 {{#each existing_changelog_entries}}
+
 ### {{path}}
+
 {{#each sections}}
 {{name}}:
 {{#list items prefix="- " join="\n"}}{{this}}{{/list}}
@@ -22,4 +26,4 @@ May include entries from list in propose_changelog `deletions` field for removal
 {{/each}}
 {{/if}}
 
-Use git_* tools to inspect changes. Call analyze_files for deeper per-file summaries. Finish with propose_commit or split_commit.
+Use git\_\* tools to inspect changes. Call analyze_files for deeper per-file summaries. Finish with propose_commit or split_commit.

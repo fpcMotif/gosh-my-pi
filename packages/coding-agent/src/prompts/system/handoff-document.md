@@ -13,31 +13,40 @@ Include concrete file paths, symbol names, commands run, test results, observed 
 Use exactly this structure:
 
 ## Goal
+
 [What the user is trying to accomplish]
 
 ## Constraints & Preferences
+
 - [Any constraints, preferences, or requirements mentioned]
 
 ## Progress
+
 ### Done
+
 - [x] [Completed tasks with specifics]
 
 ### In Progress
+
 - [ ] [Current work if any]
 
 ### Pending
+
 - [ ] [Tasks mentioned but not started]
 
 ## Key Decisions
+
 - **[Decision]**: [Rationale]
 
 ## Critical Context
+
 - [Code snippets, file paths, function/type names, error messages, or data essential to continue]
 - [Repository state if relevant]
 
 ## Next Steps
+
 1. [What should happen next]
-</output>
+   </output>
 
 {{#if additionalFocus}}
 <instruction>

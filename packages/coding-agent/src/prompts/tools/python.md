@@ -13,6 +13,7 @@ Kernel persists across calls and cells; **imports, variables, and functions surv
 All helpers auto-print results and return values for chaining.
 
 {{#each categories}}
+
 ### {{name}}
 
 ```
@@ -21,6 +22,7 @@ All helpers auto-print results and return values for chaining.
     {{docstring}}
 {{/each}}
 ```
+
 {{/each}}
 </prelude>
 {{/if}}

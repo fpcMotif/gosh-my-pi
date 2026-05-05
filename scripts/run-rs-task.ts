@@ -21,16 +21,7 @@ const TASK_COMMANDS = {
 	],
 	"fix:rs": [
 		["cargo", "fmt", "--all"],
-		[
-			"cargo",
-			"clippy",
-			"--workspace",
-			"--fix",
-			"--allow-dirty",
-			"--no-deps",
-			"--allow-staged",
-			"--allow-no-vcs",
-		],
+		["cargo", "clippy", "--workspace", "--fix", "--allow-dirty", "--no-deps", "--allow-staged", "--allow-no-vcs"],
 	],
 	"fmt:rs": [["cargo", "fmt", "--all"]],
 	"lint:rs": [["cargo", "clippy", "--workspace", "--", "-D", "warnings"]],
@@ -60,7 +51,7 @@ for (const command of TASK_COMMANDS[taskName]) {
 }
 
 function isRustTaskName(value: string | undefined): value is RustTaskName {
-	return value != null && value in TASK_COMMANDS;
+	return value !== undefined && value in TASK_COMMANDS;
 }
 
 function isCI(): boolean {
@@ -111,9 +102,7 @@ function isRustAffectingPath(changedPath: string): boolean {
 	const normalized = changedPath.replace(/\\/g, "/");
 	const fileName = normalized.slice(normalized.lastIndexOf("/") + 1);
 	return (
-		normalized.endsWith(".rs") ||
-		normalized.startsWith(".cargo/") ||
-		isOneOf(fileName, RUST_AFFECTING_FILE_NAMES)
+		normalized.endsWith(".rs") || normalized.startsWith(".cargo/") || isOneOf(fileName, RUST_AFFECTING_FILE_NAMES)
 	);
 }
 

@@ -1,5 +1,6 @@
 import { structuredCloneJSON } from "@oh-my-pi/pi-utils";
 import Ajv from "ajv";
+import type { ValidateFunction } from "ajv";
 import addFormats from "ajv-formats";
 import type { Tool, ToolCall } from "../types";
 
@@ -671,8 +672,8 @@ addFormats(ajv);
 
 // Cache compiled validators by schema object identity to avoid
 // re-compiling the same tool schema on every call.
-const compiledSchemaCache = new WeakMap<object, import("ajv").ValidateFunction>();
-function compileSchema(schema: object): import("ajv").ValidateFunction {
+const compiledSchemaCache = new WeakMap<object, ValidateFunction>();
+function compileSchema(schema: object): ValidateFunction {
 	let validate = compiledSchemaCache.get(schema);
 	if (!validate) {
 		validate = ajv.compile(schema);

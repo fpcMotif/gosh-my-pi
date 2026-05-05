@@ -141,40 +141,40 @@ Data payloads are command-specific and defined in `rpc-types.ts`.
 
 ```json
 {
-  "model": { "provider": "...", "id": "..." },
-  "thinkingLevel": "off|minimal|low|medium|high|xhigh",
-  "isStreaming": false,
-  "isCompacting": false,
-  "steeringMode": "all|one-at-a-time",
-  "followUpMode": "all|one-at-a-time",
-  "interruptMode": "immediate|wait",
-  "sessionFile": "...",
-  "sessionId": "...",
-  "sessionName": "...",
-  "autoCompactionEnabled": true,
-  "messageCount": 0,
-  "queuedMessageCount": 0,
-  "todoPhases": [
-    {
-      "id": "phase-1",
-      "name": "Todos",
-      "tasks": [
-        {
-          "id": "task-1",
-          "content": "Map the tool surface",
-          "status": "in_progress"
-        }
-      ]
-    }
-  ],
-  "systemPrompt": "...",
-  "dumpTools": [
-    {
-      "name": "read",
-      "description": "Read files and URLs",
-      "parameters": {}
-    }
-  ]
+	"model": { "provider": "...", "id": "..." },
+	"thinkingLevel": "off|minimal|low|medium|high|xhigh",
+	"isStreaming": false,
+	"isCompacting": false,
+	"steeringMode": "all|one-at-a-time",
+	"followUpMode": "all|one-at-a-time",
+	"interruptMode": "immediate|wait",
+	"sessionFile": "...",
+	"sessionId": "...",
+	"sessionName": "...",
+	"autoCompactionEnabled": true,
+	"messageCount": 0,
+	"queuedMessageCount": 0,
+	"todoPhases": [
+		{
+			"id": "phase-1",
+			"name": "Todos",
+			"tasks": [
+				{
+					"id": "task-1",
+					"content": "Map the tool surface",
+					"status": "in_progress"
+				}
+			]
+		}
+	],
+	"systemPrompt": "...",
+	"dumpTools": [
+		{
+			"name": "read",
+			"description": "Read files and URLs",
+			"parameters": {}
+		}
+	]
 }
 ```
 
@@ -184,26 +184,26 @@ Replaces the in-memory todo state for the current session and returns the normal
 
 ```json
 {
-  "id": "req_2",
-  "type": "set_todos",
-  "phases": [
-    {
-      "id": "phase-1",
-      "name": "Evaluation",
-      "tasks": [
-        {
-          "id": "task-1",
-          "content": "Map the read tool surface",
-          "status": "in_progress"
-        },
-        {
-          "id": "task-2",
-          "content": "Exercise edit operations",
-          "status": "pending"
-        }
-      ]
-    }
-  ]
+	"id": "req_2",
+	"type": "set_todos",
+	"phases": [
+		{
+			"id": "phase-1",
+			"name": "Evaluation",
+			"tasks": [
+				{
+					"id": "task-1",
+					"content": "Map the read tool surface",
+					"status": "in_progress"
+				},
+				{
+					"id": "task-2",
+					"content": "Exercise edit operations",
+					"status": "pending"
+				}
+			]
+		}
+	]
 }
 ```
 
@@ -216,23 +216,23 @@ into over stdio:
 
 ```json
 {
-  "id": "req_3",
-  "type": "set_host_tools",
-  "tools": [
-    {
-      "name": "echo_host",
-      "label": "Echo Host",
-      "description": "Echo a value from the embedding host",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "message": { "type": "string" }
-        },
-        "required": ["message"],
-        "additionalProperties": false
-      }
-    }
-  ]
+	"id": "req_3",
+	"type": "set_host_tools",
+	"tools": [
+		{
+			"name": "echo_host",
+			"label": "Echo Host",
+			"description": "Echo a value from the embedding host",
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"message": { "type": "string" }
+				},
+				"required": ["message"],
+				"additionalProperties": false
+			}
+		}
+	]
 }
 ```
 
@@ -240,7 +240,7 @@ The response payload is:
 
 ```json
 {
-  "toolNames": ["echo_host"]
+	"toolNames": ["echo_host"]
 }
 ```
 
@@ -267,10 +267,10 @@ Extension runner errors are emitted separately as:
 
 ```json
 {
-  "type": "extension_error",
-  "extensionPath": "...",
-  "event": "...",
-  "error": "..."
+	"type": "extension_error",
+	"extensionPath": "...",
+	"event": "...",
+	"error": "..."
 }
 ```
 
@@ -313,11 +313,11 @@ From `packages/agent/src/agent.ts` defaults:
 ### Mode semantics
 
 - `set_steering_mode` / `set_follow_up_mode`
-  - `"one-at-a-time"`: dequeue one queued message per turn
-  - `"all"`: dequeue entire queue at once
+   - `"one-at-a-time"`: dequeue one queued message per turn
+   - `"all"`: dequeue entire queue at once
 - `set_interrupt_mode`
-  - `"immediate"`: tool execution checks steering between tool calls; pending steering can abort remaining tool calls in the turn
-  - `"wait"`: defer steering until turn completion
+   - `"immediate"`: tool execution checks steering between tool calls; pending steering can abort remaining tool calls in the turn
+   - `"wait"`: defer steering until turn completion
 
 ## Extension UI Sub-Protocol
 
@@ -341,12 +341,12 @@ Example:
 
 ```json
 {
-  "type": "extension_ui_request",
-  "id": "123",
-  "method": "confirm",
-  "title": "Confirm",
-  "message": "Continue?",
-  "timeout": 30000
+	"type": "extension_ui_request",
+	"id": "123",
+	"method": "confirm",
+	"title": "Confirm",
+	"message": "Continue?",
+	"timeout": 30000
 }
 ```
 
@@ -371,11 +371,11 @@ When the agent wants the host to execute one of those tools, RPC mode emits:
 
 ```json
 {
-  "type": "host_tool_call",
-  "id": "host_1",
-  "toolCallId": "toolu_123",
-  "toolName": "echo_host",
-  "arguments": { "message": "hello" }
+	"type": "host_tool_call",
+	"id": "host_1",
+	"toolCallId": "toolu_123",
+	"toolName": "echo_host",
+	"arguments": { "message": "hello" }
 }
 ```
 
@@ -383,9 +383,9 @@ If the tool execution is later aborted, RPC mode emits:
 
 ```json
 {
-  "type": "host_tool_cancel",
-  "id": "host_cancel_1",
-  "targetId": "host_1"
+	"type": "host_tool_cancel",
+	"id": "host_cancel_1",
+	"targetId": "host_1"
 }
 ```
 
@@ -395,11 +395,11 @@ Hosts can optionally stream progress:
 
 ```json
 {
-  "type": "host_tool_update",
-  "id": "host_1",
-  "partialResult": {
-    "content": [{ "type": "text", "text": "working" }]
-  }
+	"type": "host_tool_update",
+	"id": "host_1",
+	"partialResult": {
+		"content": [{ "type": "text", "text": "working" }]
+	}
 }
 ```
 
@@ -407,11 +407,11 @@ Completion uses:
 
 ```json
 {
-  "type": "host_tool_result",
-  "id": "host_1",
-  "result": {
-    "content": [{ "type": "text", "text": "done" }]
-  }
+	"type": "host_tool_result",
+	"id": "host_1",
+	"result": {
+		"content": [{ "type": "text", "text": "done" }]
+	}
 }
 ```
 
@@ -425,11 +425,11 @@ Failures are `success: false` with string `error`.
 
 ```json
 {
-  "id": "req_2",
-  "type": "response",
-  "command": "set_model",
-  "success": false,
-  "error": "Model not found: provider/model"
+	"id": "req_2",
+	"type": "response",
+	"command": "set_model",
+	"success": false,
+	"error": "Model not found: provider/model"
 }
 ```
 
@@ -466,10 +466,10 @@ stdin:
 
 ```json
 {
-  "id": "req_2",
-  "type": "prompt",
-  "message": "Also include risks",
-  "streamingBehavior": "followUp"
+	"id": "req_2",
+	"type": "prompt",
+	"message": "Also include risks",
+	"streamingBehavior": "followUp"
 }
 ```
 
@@ -489,11 +489,11 @@ stdout:
 
 ```json
 {
-  "type": "extension_ui_request",
-  "id": "ui_7",
-  "method": "input",
-  "title": "Branch name",
-  "placeholder": "feature/..."
+	"type": "extension_ui_request",
+	"id": "ui_7",
+	"method": "input",
+	"title": "Branch name",
+	"placeholder": "feature/..."
 }
 ```
 

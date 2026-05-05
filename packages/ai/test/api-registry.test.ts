@@ -6,7 +6,7 @@ import {
 	registerCustomApi,
 	unregisterCustomApis,
 } from "../src/api-registry";
-import type { AssistantMessageEventStream } from "../src/types";
+import type { AssistantMessageEventStream } from "../src/utils/event-stream";
 
 afterEach(() => {
 	clearCustomApis();

@@ -33,7 +33,7 @@ console.log(`Benchmark: ${ITERATIONS} iterations per case\n`);
 async function runCase(c: BenchCase): Promise<void> {
 	const grepArgs = { pattern: c.pattern, path: c.path, glob: c.glob };
 	const rgDefaultArgs = ["--hidden", "--no-ignore", "--no-ignore-vcs"];
-	const globArg = c.glob ? ["-g", c.glob] : [];
+	const globArg = c.glob === undefined ? [] : ["-g", c.glob];
 	const runNative = () => grep(grepArgs);
 
 	const runRg = async (): Promise<string> => {

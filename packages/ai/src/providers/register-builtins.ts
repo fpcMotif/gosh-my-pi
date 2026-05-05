@@ -4,16 +4,11 @@
  * Each provider module is loaded only when its stream function is first called.
  * This avoids eagerly importing heavy SDK dependencies at startup.
  */
-import type {
-	Api,
-	AssistantMessage,
-	AssistantMessageEvent,
-	AssistantMessageEventStream,
-	Context,
-	Model,
-	OptionsForApi,
-} from "../types";
-import { AssistantMessageEventStream as EventStreamImpl } from "../utils/event-stream";
+import type { Api, AssistantMessage, AssistantMessageEvent, Context, Model, OptionsForApi } from "../types";
+import {
+	type AssistantMessageEventStream,
+	AssistantMessageEventStream as EventStreamImpl,
+} from "../utils/event-stream";
 import type { OpenAICodexResponsesOptions } from "./openai-codex-responses";
 import type { OpenAICompletionsOptions } from "./openai-completions";
 import type { OpenAIResponsesOptions } from "./openai-responses";

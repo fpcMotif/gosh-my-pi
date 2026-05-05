@@ -21,15 +21,15 @@ my-marketplace/
 
 ```json
 {
-  "name": "my-marketplace",
-  "owner": { "name": "Your Name" },
-  "plugins": [
-    {
-      "name": "my-plugin",
-      "description": "What it does",
-      "source": "./plugins/my-plugin"
-    }
-  ]
+	"name": "my-marketplace",
+	"owner": { "name": "Your Name" },
+	"plugins": [
+		{
+			"name": "my-plugin",
+			"description": "What it does",
+			"source": "./plugins/my-plugin"
+		}
+	]
 }
 ```
 
@@ -46,58 +46,58 @@ The catalog file must live at `.claude-plugin/marketplace.json` in the repositor
 
 ### Top-level fields
 
-| Field | Required | Description |
-|---|---|---|
-| `name` | yes | Marketplace name. Lowercase alphanumeric, hyphens, dots. Must start and end with alphanumeric. Max 64 chars. |
-| `owner` | yes | Object with at minimum `owner.name` (string) |
-| `owner.name` | yes | Marketplace owner name |
-| `owner.email` | no | Owner contact email |
-| `description` | no | Short description of the marketplace |
-| `plugins` | yes | Array of plugin entries (see below) |
-| `metadata.pluginRoot` | no | String prepended to all relative plugin source paths |
+| Field                 | Required | Description                                                                                                  |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `name`                | yes      | Marketplace name. Lowercase alphanumeric, hyphens, dots. Must start and end with alphanumeric. Max 64 chars. |
+| `owner`               | yes      | Object with at minimum `owner.name` (string)                                                                 |
+| `owner.name`          | yes      | Marketplace owner name                                                                                       |
+| `owner.email`         | no       | Owner contact email                                                                                          |
+| `description`         | no       | Short description of the marketplace                                                                         |
+| `plugins`             | yes      | Array of plugin entries (see below)                                                                          |
+| `metadata.pluginRoot` | no       | String prepended to all relative plugin source paths                                                         |
 
 ### Plugin entry fields
 
-| Field | Required | Description |
-|---|---|---|
-| `name` | yes | Plugin name (same naming rules as marketplace name) |
-| `source` | yes | Where to find the plugin — string or object (see source types below) |
-| `description` | no | Short plugin description |
-| `version` | no | Version string |
-| `author` | no | `{ name, email? }` |
-| `homepage` | no | URL |
-| `category` | no | e.g. `development`, `productivity`, `security` |
-| `tags` | no | Array of string tags |
+| Field         | Required | Description                                                          |
+| ------------- | -------- | -------------------------------------------------------------------- |
+| `name`        | yes      | Plugin name (same naming rules as marketplace name)                  |
+| `source`      | yes      | Where to find the plugin — string or object (see source types below) |
+| `description` | no       | Short plugin description                                             |
+| `version`     | no       | Version string                                                       |
+| `author`      | no       | `{ name, email? }`                                                   |
+| `homepage`    | no       | URL                                                                  |
+| `category`    | no       | e.g. `development`, `productivity`, `security`                       |
+| `tags`        | no       | Array of string tags                                                 |
 
 ### Full catalog example
 
 ```json
 {
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "acme-plugins",
-  "owner": {
-    "name": "Acme Corp",
-    "email": "plugins@acme.example"
-  },
-  "description": "Official Acme plugins for oh-my-pi",
-  "plugins": [
-    {
-      "name": "acme-linter",
-      "description": "Enforce Acme coding standards",
-      "category": "development",
-      "source": "./plugins/linter"
-    },
-    {
-      "name": "acme-deploy",
-      "description": "One-command deploy to Acme cloud",
-      "category": "devops",
-      "source": {
-        "source": "github",
-        "repo": "acme-corp/omp-deploy-plugin",
-        "ref": "main"
-      }
-    }
-  ]
+	"$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+	"name": "acme-plugins",
+	"owner": {
+		"name": "Acme Corp",
+		"email": "plugins@acme.example"
+	},
+	"description": "Official Acme plugins for oh-my-pi",
+	"plugins": [
+		{
+			"name": "acme-linter",
+			"description": "Enforce Acme coding standards",
+			"category": "development",
+			"source": "./plugins/linter"
+		},
+		{
+			"name": "acme-deploy",
+			"description": "One-command deploy to Acme cloud",
+			"category": "devops",
+			"source": {
+				"source": "github",
+				"repo": "acme-corp/omp-deploy-plugin",
+				"ref": "main"
+			}
+		}
+	]
 }
 ```
 
@@ -117,11 +117,11 @@ Use `metadata.pluginRoot` to avoid repeating a common prefix:
 
 ```json
 {
-  "metadata": { "pluginRoot": "./plugins" },
-  "plugins": [
-    { "name": "plugin-a", "source": "./plugin-a" },
-    { "name": "plugin-b", "source": "./plugin-b" }
-  ]
+	"metadata": { "pluginRoot": "./plugins" },
+	"plugins": [
+		{ "name": "plugin-a", "source": "./plugin-a" },
+		{ "name": "plugin-b", "source": "./plugin-b" }
+	]
 }
 ```
 
@@ -197,10 +197,10 @@ Minimum `package.json`:
 
 ```json
 {
-  "name": "my-plugin",
-  "omp": {
-    "extensions": ["./src/main.ts"]
-  }
+	"name": "my-plugin",
+	"omp": {
+		"extensions": ["./src/main.ts"]
+	}
 }
 ```
 

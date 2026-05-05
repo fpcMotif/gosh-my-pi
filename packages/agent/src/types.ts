@@ -6,9 +6,13 @@ import type {
 	ImageContent,
 	Message,
 	Model,
+	ProviderSessionState,
+	ServiceTier,
 	SimpleStreamOptions,
+	StopReason,
 	streamSimple,
 	TextContent,
+	ThinkingBudgets,
 	Tool,
 	ToolChoice,
 	ToolResultMessage,
@@ -138,7 +142,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Inspect assistant streaming events before they are published to the outer agent event stream.
 	 * Callers may abort synchronously to stop consuming buffered provider events.
 	 */
-	onAssistantMessageEvent?: (message: AssistantMessage, event: AssistantMessageEvent) => void;
+	onAssistantMessageEvent?: (event: AssistantMessageEvent) => void;
 
 	/**
 	 * Dynamic tool choice override, resolved per LLM call.
@@ -229,9 +233,9 @@ export interface AgentOptions {
 	interruptMode?: "immediate" | "wait";
 
 	/**
-	 * API format for Kimi Code provider: "openai" or "anthropic" (default: "anthropic")
+	 * API format for Kimi Code provider. Currently only `"openai"` is supported.
 	 */
-	kimiApiFormat?: "openai" | "anthropic";
+	kimiApiFormat?: "openai";
 
 	/**
 	 * Hint that websocket transport should be preferred when supported by the provider implementation.
@@ -520,3 +524,19 @@ export type AgentEvent =
 			result: AgentToolResult<unknown, unknown>;
 			isError?: boolean;
 	  };
+
+/** Events emitted by a proxy server and consumed by streamProxy. */
+export type ProxyAssistantMessageEvent =
+	| { type: "start" }
+	| { type: "done" }
+	| { type: "error"; reason: StopReason; message?: string }
+	| { type: "usage"; usage: AssistantMessage["usage"] }
+	| { type: "text_start"; contentIndex: number }
+	| { type: "text_delta"; contentIndex: number; delta: string }
+	| { type: "text_end"; contentIndex: number; contentSignature?: string }
+	| { type: "thinking_start"; contentIndex: number }
+	| { type: "thinking_delta"; contentIndex: number; delta: string }
+	| { type: "thinking_end"; contentIndex: number; contentSignature?: string }
+	| { type: "toolcall_start"; contentIndex: number; id: string; toolName: string }
+	| { type: "toolcall_delta"; contentIndex: number; delta: string }
+	| { type: "toolcall_end"; contentIndex: number };

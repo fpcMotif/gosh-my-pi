@@ -821,7 +821,7 @@ export async function sendRequest(
 	client.lastActivity = Date.now();
 
 	const { promise, resolve, reject } = Promise.withResolvers<unknown>();
-	let timeout: NodeJS.Timeout | undefined;
+	const timer: { ref: NodeJS.Timeout | undefined } = { ref: undefined };
 	const cleanup = () => {
 		if (signal) {
 			signal.removeEventListener("abort", abortHandler);
@@ -832,14 +832,14 @@ export async function sendRequest(
 			client.pendingRequests.delete(id);
 		}
 		void sendNotification(client, "$/cancelRequest", { id }).catch(() => {});
-		if (timeout) clearTimeout(timeout);
+		if (timer.ref !== undefined) clearTimeout(timer.ref);
 		cleanup();
 		const reason = signal?.reason instanceof Error ? signal.reason : new ToolAbortError();
 		reject(reason);
 	};
 
 	// Set timeout
-	timeout = setTimeout(() => {
+	timer.ref = setTimeout(() => {
 		if (client.pendingRequests.has(id)) {
 			client.pendingRequests.delete(id);
 			const err = new Error(`LSP request ${method} timed out after ${timeoutMs}ms`);
@@ -858,12 +858,12 @@ export async function sendRequest(
 	// Register pending request with timeout wrapper
 	client.pendingRequests.set(id, {
 		resolve: result => {
-			if (timeout) clearTimeout(timeout);
+			if (timer.ref !== undefined) clearTimeout(timer.ref);
 			cleanup();
 			resolve(result);
 		},
 		reject: err => {
-			if (timeout) clearTimeout(timeout);
+			if (timer.ref !== undefined) clearTimeout(timer.ref);
 			cleanup();
 			reject(err);
 		},
@@ -872,7 +872,7 @@ export async function sendRequest(
 
 	// Write request
 	queueWriteMessage(client, request).catch(error => {
-		if (timeout) clearTimeout(timeout);
+		if (timer.ref !== undefined) clearTimeout(timer.ref);
 		client.pendingRequests.delete(id);
 		cleanup();
 		reject(error);

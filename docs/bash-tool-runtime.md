@@ -36,12 +36,12 @@ If `bashInterceptor.enabled` is true, `BashTool` loads rules from settings and r
 Interception behavior:
 
 - command is blocked **only** when:
-  - regex rule matches, and
-  - the suggested tool is present in `ctx.toolNames`.
+   - regex rule matches, and
+   - the suggested tool is present in `ctx.toolNames`.
 - invalid regex rules are silently skipped.
 - on block, `BashTool` throws `ToolError` with message:
-  - `Blocked: ...`
-  - original command included.
+   - `Blocked: ...`
+   - original command included.
 
 Default rule patterns (defined in code) target common misuses:
 
@@ -201,9 +201,9 @@ Success payload structure:
 
 - `content`: text output,
 - `details.meta.truncation` when truncated, including:
-  - `direction`, `truncatedBy`, total/output line+byte counts,
-  - `shownRange`,
-  - `artifactId` when available.
+   - `direction`, `truncatedBy`, total/output line+byte counts,
+   - `shownRange`,
+   - `artifactId` when available.
 
 Because built-in tools are wrapped with `wrapToolWithMetaNotice()`, truncation notice text is appended to final text content automatically (for example: `Full: artifact://<id>`).
 
@@ -236,13 +236,13 @@ This component is wired by `CommandController.handleBashCommand()` and fed from 
 
 ## Mode-specific behavior differences
 
-| Surface                        | Entry path                                            | PTY eligible                                                         | Live output UX                                                           | Error surfacing                                  |
-| ------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------ |
-| Interactive tool call          | `BashTool.execute`                                    | Yes, when `pty=true` and UI exists and `PI_NO_PTY!=1`                | PTY overlay (interactive) or streamed tail updates                       | Tool errors become `toolResult.isError`          |
-| Print mode tool call           | `BashTool.execute`                                    | No (no UI context)                                                   | No TUI overlay; output appears in event stream/final assistant text flow | Same tool error mapping                          |
-| RPC tool call (agent tooling)  | `BashTool.execute`                                    | Usually no UI -> non-PTY                                             | Structured tool events/results                                           | Same tool error mapping                          |
-| Interactive bang command (`!`) | `AgentSession.executeBash` + `BashExecutionComponent` | No (uses executor directly)                                          | Dedicated bash execution component                                       | Controller catches exceptions and shows UI error |
-| RPC `bash` command             | `rpc-mode` -> `session.executeBash`                   | No                                                                   | Returns `BashResult` directly                                            | Consumer handles returned fields                 |
+| Surface                        | Entry path                                            | PTY eligible                                          | Live output UX                                                           | Error surfacing                                  |
+| ------------------------------ | ----------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------ |
+| Interactive tool call          | `BashTool.execute`                                    | Yes, when `pty=true` and UI exists and `PI_NO_PTY!=1` | PTY overlay (interactive) or streamed tail updates                       | Tool errors become `toolResult.isError`          |
+| Print mode tool call           | `BashTool.execute`                                    | No (no UI context)                                    | No TUI overlay; output appears in event stream/final assistant text flow | Same tool error mapping                          |
+| RPC tool call (agent tooling)  | `BashTool.execute`                                    | Usually no UI -> non-PTY                              | Structured tool events/results                                           | Same tool error mapping                          |
+| Interactive bang command (`!`) | `AgentSession.executeBash` + `BashExecutionComponent` | No (uses executor directly)                           | Dedicated bash execution component                                       | Controller catches exceptions and shows UI error |
+| RPC `bash` command             | `rpc-mode` -> `session.executeBash`                   | No                                                    | Returns `BashResult` directly                                            | Consumer handles returned fields                 |
 
 ## Operational caveats
 
@@ -250,8 +250,8 @@ This component is wired by `CommandController.handleBashCommand()` and fed from 
 - If artifact allocation fails, truncation still occurs but no `artifact://` back-reference is available.
 - Shell session cache has no explicit eviction in this module; lifetime is process-scoped.
 - PTY and non-PTY timeout surfaces differ:
-  - PTY exposes explicit `timedOut` result field,
-  - non-PTY maps timeout into `cancelled + annotation` summary.
+   - PTY exposes explicit `timedOut` result field,
+   - non-PTY maps timeout into `cancelled + annotation` summary.
 
 ## Implementation files
 

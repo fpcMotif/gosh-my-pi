@@ -20,16 +20,16 @@ Replace for content-addressed changes—you identify \_what* to change by its te
 
 For position-addressed or pattern-addressed changes, bash more efficient:
 
-|Operation|Command|
-|---|---|
-|Append to file|`cat >> file <<'EOF'`…`EOF`|
-|Prepend to file|`{ cat - file; } <<'EOF' > tmp && mv tmp file`|
-|Delete lines N-M|`sed -i 'N,Md' file`|
-|Insert after line N|`sed -i 'Na\text' file`|
-|Regex replace|`sd 'pattern' 'replacement' file`|
-|Bulk replace across files|`sd 'pattern' 'replacement' **/*.ts`|
-|Copy lines N-M to another file|`sed -n 'N,Mp' src >> dest`|
-|Move lines N-M to another file|`sed -n 'N,Mp' src >> dest && sed -i 'N,Md' src`|
+| Operation                      | Command                                          |
+| ------------------------------ | ------------------------------------------------ |
+| Append to file                 | `cat >> file <<'EOF'`…`EOF`                      |
+| Prepend to file                | `{ cat - file; } <<'EOF' > tmp && mv tmp file`   |
+| Delete lines N-M               | `sed -i 'N,Md' file`                             |
+| Insert after line N            | `sed -i 'Na\text' file`                          |
+| Regex replace                  | `sd 'pattern' 'replacement' file`                |
+| Bulk replace across files      | `sd 'pattern' 'replacement' **/*.ts`             |
+| Copy lines N-M to another file | `sed -n 'N,Mp' src >> dest`                      |
+| Move lines N-M to another file | `sed -n 'N,Mp' src >> dest && sed -i 'N,Md' src` |
 
 Use Replace when _content itself_ identifies location.
 Use bash when _position_ or _pattern_ identifies what to change.

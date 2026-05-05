@@ -63,7 +63,7 @@ const { session } = await createAgentSession({ model, thinkingLevel: "high", aut
 
 // Modify prompt
 const { session } = await createAgentSession({
-	systemPrompt: (defaultPrompt) => defaultPrompt + "\n\nBe concise.",
+	systemPrompt: defaultPrompt => defaultPrompt + "\n\nBe concise.",
 	authStorage,
 	modelRegistry,
 });
@@ -98,7 +98,7 @@ const { session } = await createAgentSession({
 });
 
 // Run prompts
-session.subscribe((event) => {
+session.subscribe(event => {
 	if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 		process.stdout.write(event.assistantMessageEvent.delta);
 	}
@@ -122,10 +122,11 @@ const tools = await createTools(toolSession, ["ast_edit"]); // resolve is auto-i
 const resolveTool = tools.find(t => t.name === "resolve") as ResolveTool;
 
 await resolveTool.execute("call-1", {
-  action: "apply",
-  reason: "Preview matches expected replacements",
+	action: "apply",
+	reason: "Preview matches expected replacements",
 });
 ```
+
 ## Options
 
 | Option                      | Default                       | Description                       |
@@ -151,7 +152,7 @@ await resolveTool.execute("call-1", {
 ## Events
 
 ```typescript
-session.subscribe((event) => {
+session.subscribe(event => {
 	switch (event.type) {
 		case "message_update":
 			if (event.assistantMessageEvent.type === "text_delta") {

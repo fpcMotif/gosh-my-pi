@@ -1,4 +1,5 @@
 Vim-style `edit` mode. The tool name stays `edit`; every call requires `file`, and the buffer loads automatically on first use.
+
 - `{"file": "path"}` - view file
 - `{"file": "path", "steps": [{"kbd": ["…"], "insert": "…"}]}` - edit file
 
@@ -12,6 +13,7 @@ Vim-style `edit` mode. The tool name stays `edit`; every call requires `file`, a
 `o`/`O` already create a new line — do not start `insert` with `\n`. A trailing `\n` in `insert` adds an extra blank line.
 
 Never put text content in `kbd`. Only Vim keystrokes go there.
+
 - BAD: `{"steps": [{"kbd": ["1Gohello world<Esc>"]}]}`
 - BAD: `{"steps": [{"kbd": ["1Go", "hello world"]}]}`
 - BAD: `{"steps": [{"kbd": ["1Ao"], "insert": "text"}]}`
@@ -26,56 +28,71 @@ Between steps, the tool auto-exits INSERT mode.
 Whitespace in `kbd` is literal. Do not use spaces as separators between keys; `ggdGi` is one sequence, not `ggdG i`.
 
 Common mistake: `Ni` means "insert N copies", NOT "insert at line N". To insert at line N, use `NGo` (below) or `NGO` (above).
+
 ## Editing patterns
 
 `NGo` = new line BELOW line N. `NGO` = new line ABOVE line N.
 
 Insert new line after line 3:
+
 ```json
-{"file": "f.py", "steps": [{"kbd": ["3Go"], "insert": "    new line here"}]}
+{ "file": "f.py", "steps": [{ "kbd": ["3Go"], "insert": "    new line here" }] }
 ```
 
 Insert new line before line 3:
+
 ```json
-{"file": "f.py", "steps": [{"kbd": ["3GO"], "insert": "    new line here"}]}
+{ "file": "f.py", "steps": [{ "kbd": ["3GO"], "insert": "    new line here" }] }
 ```
 
 Replace line N:
+
 ```json
-{"file": "f.py", "steps": [{"kbd": ["5Gcc"], "insert": "    replacement content"}]}
+{ "file": "f.py", "steps": [{ "kbd": ["5Gcc"], "insert": "    replacement content" }] }
 ```
 
 Replace entire file. `ggdGi` = go to top, delete all, enter INSERT. Use that exact sequence when rewriting the whole file:
+
 ```json
-{"file": "f.py", "steps": [{"kbd": ["ggdGi"], "insert": "entire new file content"}]}
+{ "file": "f.py", "steps": [{ "kbd": ["ggdGi"], "insert": "entire new file content" }] }
 ```
 
 Multi-location edit — edit **highest line number first** (bottom-up) so inserts don't shift later targets:
+
 ```json
-{"file": "f.py", "steps": [
-  {"kbd": ["8Go"], "insert": "    print(result)"},
-  {"kbd": ["3Go"], "insert": "def helper(x):\n    return x + 1"}
-]}
+{
+	"file": "f.py",
+	"steps": [
+		{ "kbd": ["8Go"], "insert": "    print(result)" },
+		{ "kbd": ["3Go"], "insert": "def helper(x):\n    return x + 1" }
+	]
+}
 ```
+
 Each `o`/`O` insert adds lines, shifting everything below. Bottom-up order keeps all line numbers valid. Use `\n` within `insert` for multi-line content.
 
 Navigation or search step without insert:
+
 ```json
-{"file": "f.py", "steps": [{"kbd": ["/pattern<CR>"]}]}
+{ "file": "f.py", "steps": [{ "kbd": ["/pattern<CR>"] }] }
 ```
 
 Find and replace:
+
 ```json
-{"file": "f.py", "steps": [{"kbd": [":%s/old/new/g<CR>"]}]}
+{ "file": "f.py", "steps": [{ "kbd": [":%s/old/new/g<CR>"] }] }
 ```
 
 Delete line range:
+
 ```json
-{"file": "f.py", "steps": [{"kbd": [":3,5d<CR>"]}]}
+{ "file": "f.py", "steps": [{ "kbd": [":3,5d<CR>"] }] }
 ```
+
 Ex commands always start with `:` and end with `<CR>`. `3,5d` without `:` is NOT an ex command — it is interpreted as normal-mode keystrokes and will fail.
 
 ## Undo mistakes
+
 - `{"file": "f.py", "steps": [{"kbd": ["u"]}]}` - undo last change
 - `{"file": "f.py", "steps": [{"kbd": ["3u"]}]}` - undo last 3 changes
 

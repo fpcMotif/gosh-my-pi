@@ -65,9 +65,9 @@ Flow (`#handleRetryableError`):
 7. For usage-limit errors, parse retry hints and call auth storage (`markUsageLimitReached(...)`); if credential switching succeeds, force delay to `0`, otherwise use a larger retry-after/backoff hint when present.
 8. If no credential switch occurred, suppress the current model selector for cooldown, try configured retry model fallback chains, and force delay to `0` on model switch.
 9. Emit `auto_retry_start`.
-10. Remove the trailing assistant error message from agent runtime state (kept in persisted session history).
-11. Sleep with abort support.
-12. Schedule `agent.continue()` through the post-prompt task scheduler (`delayMs: 1`) for the same prompt generation.
+10.   Remove the trailing assistant error message from agent runtime state (kept in persisted session history).
+11.   Sleep with abort support.
+12.   Schedule `agent.continue()` through the post-prompt task scheduler (`delayMs: 1`) for the same prompt generation.
 
 ### What resets retry counters
 

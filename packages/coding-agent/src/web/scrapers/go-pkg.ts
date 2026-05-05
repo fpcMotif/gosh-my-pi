@@ -205,7 +205,8 @@ export const handleGoPkg: SpecialHandler = async (
 		if (parsed.hostname !== "pkg.go.dev") return null;
 		const parsedPath = parsePkgGoUrl(parsed.pathname.slice(1));
 		if (parsedPath === null) return null;
-		let { modulePath, version } = parsedPath;
+		const { modulePath } = parsedPath;
+		let { version } = parsedPath;
 
 		const moduleInfo = await fetchModuleInfo(modulePath, version, timeout, signal);
 		if (moduleInfo !== null && version === "latest") version = moduleInfo.Version;

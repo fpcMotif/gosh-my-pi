@@ -73,7 +73,7 @@ async function main(): Promise<void> {
 	console.log();
 	console.log(`Expected addons: ${expectedAddons.join(", ")}`);
 
-	const missingAddons = expectedAddons.filter((platform) => !entries.includes(`pi_natives.${platform}.node`));
+	const missingAddons = expectedAddons.filter(platform => !entries.includes(`pi_natives.${platform}.node`));
 	if (missingAddons.length > 0) {
 		for (const platform of missingAddons) {
 			console.error(`MISSING pi_natives.${platform}.node`);
@@ -94,7 +94,9 @@ async function main(): Promise<void> {
 		const binaryPath = path.join(nativeDir, contract.filename);
 		const disassembly = disassemble(binaryPath);
 		if (hasAvx512Markers(disassembly)) {
-			isaFailures.push(`${contract.filename} contains AVX-512 markers; ${contract.label} artifacts must stay below x86-64-v4.`);
+			isaFailures.push(
+				`${contract.filename} contains AVX-512 markers; ${contract.label} artifacts must stay below x86-64-v4.`,
+			);
 			continue;
 		}
 		console.log(`OK ${contract.filename} contains no AVX-512 markers`);

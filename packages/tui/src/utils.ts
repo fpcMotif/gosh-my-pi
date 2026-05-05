@@ -206,14 +206,14 @@ export function moveWordLeft(text: string, cursor: number): number {
 
 	// Skip trailing whitespace.
 	while (graphemes.length > 0 && getWordNavKind(graphemes[graphemes.length - 1]?.segment || "") === "whitespace") {
-		i -= graphemes.pop()?.segment.length || 0;
+		i -= graphemes.pop()?.segment.length ?? 0;
 	}
 	if (i === 0 || graphemes.length === 0) return i;
 
 	const kind = getWordNavKind(graphemes[graphemes.length - 1]?.segment || "");
 	if (kind === "delimiter" || kind === "cjk") {
 		while (graphemes.length > 0 && getWordNavKind(graphemes[graphemes.length - 1]?.segment || "") === kind) {
-			i -= graphemes.pop()?.segment.length || 0;
+			i -= graphemes.pop()?.segment.length ?? 0;
 		}
 		return i;
 	}
@@ -226,13 +226,13 @@ export function moveWordLeft(text: string, cursor: number): number {
 			const k = getWordNavKind(g);
 			if (k === "word") {
 				hasRightWord = true;
-				i -= graphemes.pop()?.segment.length || 0;
+				i -= graphemes.pop()?.segment.length ?? 0;
 				continue;
 			}
 			if (hasRightWord && k === "delimiter" && isWordNavJoiner(g)) {
 				const left = graphemes[graphemes.length - 2]?.segment || "";
 				if (getWordNavKind(left) === "word") {
-					i -= graphemes.pop()?.segment.length || 0;
+					i -= graphemes.pop()?.segment.length ?? 0;
 					continue;
 				}
 			}
@@ -242,7 +242,7 @@ export function moveWordLeft(text: string, cursor: number): number {
 	}
 
 	// Fallback: move by one grapheme.
-	i -= graphemes.pop()?.segment.length || 0;
+	i -= graphemes.pop()?.segment.length ?? 0;
 	return Math.max(0, i);
 }
 

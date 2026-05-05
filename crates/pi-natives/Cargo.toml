@@ -32,9 +32,7 @@ grep-matcher = "0.1"
 globset = "0.4"
 ignore = "0.4"
 rayon = "1.10"
-ast-grep-core = { version = "0.39", default-features = false, features = [
-   "tree-sitter",
-] }
+ast-grep-core = { version = "0.39", default-features = false, features = ["tree-sitter"] }
 tree-sitter = "0.25"
 tree-sitter-astro = { version = "0.1.1", package = "tree-sitter-astro-next" }
 tree-sitter-bash = "0.25"
@@ -92,30 +90,20 @@ tree-sitter-xml = "0.7"
 tree-sitter-yaml = "0.7"
 tree-sitter-zig = "1.1"
 inferno = { version = "0.12", default-features = false }
-image = { version = "0.25", default-features = false, features = [
-   "png",
-   "jpeg",
-   "gif",
-   "webp",
-] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 webp = "0.3"
 arboard = { version = "3.5.0", features = ["wayland-data-control"] }
 icy_sixel = "0.5"
 unicode-segmentation = "1.11"
 unicode-width = "0.2"
 syntect = { version = "5.3", default-features = false, features = [
-   "default-syntaxes",
-   "default-themes",
-   "regex-fancy",
+	"default-syntaxes",
+	"default-themes",
+	"regex-fancy",
 ] }
 html-to-markdown-rs = { version = "2.24", default-features = false }
 phf = { version = "0.13", features = ["macros"] }
-smallvec = { version = "1.15.1", features = [
-   "serde",
-   "write",
-   "union",
-   "const_new",
-] }
+smallvec = { version = "1.15.1", features = ["serde", "write", "union", "const_new"] }
 memmap2 = "0.9"
 xxhash-rust = { version = "0.8", features = ["xxh64"] }
 regex = "1"
@@ -132,10 +120,10 @@ libc = "0.2"
 winreg = "0.55"
 
 windows-sys = { version = "0.61", features = [
-   "Win32_Foundation",
-   "Win32_Storage_ProjectedFileSystem",
-   "Win32_System_Com",
-   "Win32_System_LibraryLoader",
+	"Win32_Foundation",
+	"Win32_Storage_ProjectedFileSystem",
+	"Win32_System_Com",
+	"Win32_System_LibraryLoader",
 ] }
 [build-dependencies]
 napi-build = "2"

@@ -8,7 +8,7 @@ function stripHtmlComments(content: string): string {
 
 /** Convert kebab-case to camelCase (e.g. "thinking-level" -> "thinkingLevel") */
 function kebabToCamel(key: string): string {
-	return key.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+	return key.replaceAll(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
 /** Recursively normalize object keys from kebab-case to camelCase */
@@ -97,7 +97,15 @@ export function parseFrontmatter(
 		const loaded = YAML.parse(metadata.replaceAll("\t", "  ")) as Record<string, unknown> | null;
 		return { frontmatter: normalizeKeys({ ...frontmatter, ...loaded }), body };
 	} catch (error) {
-		return handleFrontmatterParseError({ error, content, metadata, loc, level, frontmatter, body });
+		return handleFrontmatterParseError({
+			error,
+			content,
+			metadata,
+			loc: typeof loc === "string" ? loc : undefined,
+			level,
+			frontmatter,
+			body,
+		});
 	}
 }
 

@@ -386,7 +386,7 @@ function appendCategorySummary(lines: string[], tasks: TaskResult[]): void {
 	const difficultyByCategory = new Map<string, number[]>();
 
 	for (const task of tasks) {
-		const metadata = task.runs.find(run => run.mutationCategory ?? run.difficultyScore !== undefined);
+		const metadata = task.runs.find(run => run.mutationCategory !== undefined || run.difficultyScore !== undefined);
 		const category = metadata?.mutationCategory ?? "unknown";
 		if (typeof metadata?.difficultyScore === "number") {
 			const scores = difficultyByCategory.get(category) ?? [];

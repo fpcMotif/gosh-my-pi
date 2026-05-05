@@ -40,11 +40,10 @@ async function watchCI(): Promise<boolean> {
 
 		// Check job-level status for in-progress runs (fail fast on first job failure)
 		const failedJobs: Array<{ workflow: string; job: string; jobId: number; conclusion: string }> = [];
-		const inProgressRuns = runs.filter((r) => r.status === "in_progress" || r.status === "queued");
+		const inProgressRuns = runs.filter(r => r.status === "in_progress" || r.status === "queued");
 
 		for (const run of inProgressRuns) {
-			const jobsOutput =
-				await $`gh run view ${run.databaseId} --json jobs`.quiet().nothrow().text();
+			const jobsOutput = await $`gh run view ${run.databaseId} --json jobs`.quiet().nothrow().text();
 			try {
 				const { jobs } = JSON.parse(jobsOutput) as {
 					jobs: Array<{ name: string; databaseId: number; status: string; conclusion: string | null }>;
@@ -80,9 +79,9 @@ async function watchCI(): Promise<boolean> {
 		}
 
 		// Check workflow-level status
-		const pending = runs.filter((r) => r.status !== "completed");
-		const failed = runs.filter((r) => r.status === "completed" && r.conclusion !== "success");
-		const passed = runs.filter((r) => r.status === "completed" && r.conclusion === "success");
+		const pending = runs.filter(r => r.status !== "completed");
+		const failed = runs.filter(r => r.status === "completed" && r.conclusion !== "success");
+		const passed = runs.filter(r => r.status === "completed" && r.conclusion === "success");
 
 		console.log(`  ${passed.length} passed, ${pending.length} pending, ${failed.length} failed`);
 
@@ -239,10 +238,7 @@ async function cmdRelease(version: string): Promise<void> {
 	// Update @oh-my-pi/* catalog entries in root package.json
 	console.log("Updating root catalog versions...");
 	let rootPkgRaw = await Bun.file("package.json").text();
-	rootPkgRaw = rootPkgRaw.replace(
-		/("@oh-my-pi\/[^"]+":\s*)"[^"]+"/g,
-		`$1"${version}"`,
-	);
+	rootPkgRaw = rootPkgRaw.replace(/("@oh-my-pi\/[^"]+":\s*)"[^"]+"/g, `$1"${version}"`);
 	await Bun.write("package.json", rootPkgRaw);
 	console.log("  Updated root catalog @oh-my-pi/* entries");
 
@@ -307,7 +303,7 @@ async function cmdRelease(version: string): Promise<void> {
 		console.log(`=== Released v${version} ===`);
 	} else {
 		console.log("\nTo retry after fixing (repeat until CI passes):");
-		console.log("  git commit -m \"fix: <brief description>\"");
+		console.log('  git commit -m "fix: <brief description>"');
 		console.log("  git push origin main");
 		console.log(`  git tag -f v${version} && git push origin v${version} --force`);
 		console.log("  bun scripts/release.ts watch");

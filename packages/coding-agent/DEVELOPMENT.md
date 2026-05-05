@@ -61,12 +61,12 @@ createAgentSession(...)
 
 3. **Mode runtime layer** (`packages/coding-agent/src/modes/index.ts`)
    - Re-exports mode entrypoints:
-     - `InteractiveMode`
-     - `runPrintMode`
-     - `runRpcMode`
-     - `RpcClient` (+ RPC types)
+      - `InteractiveMode`
+      - `runPrintMode`
+      - `runRpcMode`
+      - `RpcClient` (+ RPC types)
    - Registers a postmortem terminal recovery hook:
-     - `postmortem.register("terminal-restore", () => emergencyTerminalRestore())`
+      - `postmortem.register("terminal-restore", () => emergencyTerminalRestore())`
 
 4. **SDK/programmatic surface layer** (`packages/coding-agent/src/index.ts`)
    - Re-exports SDK/session/mode/theme/tool/types for non-CLI consumers.
@@ -84,9 +84,9 @@ createAgentSession(...)
    - Build/open session management (`createSessionManager(...)`, resume handling via `selectSession(...)` when `--resume` has no value).
    - Build options (`buildSessionOptions(...)`) and create runtime session (`createAgentSession(sessionOptions)`).
    - Dispatch mode:
-     - `mode === "rpc"` -> `runRpcMode(session)`
-     - interactive -> `runInteractiveMode(...)` (wrapper around `new InteractiveMode(...)` loop)
-     - non-interactive text/json stream path -> `runPrintMode(session, ...)`
+      - `mode === "rpc"` -> `runRpcMode(session)`
+      - interactive -> `runInteractiveMode(...)` (wrapper around `new InteractiveMode(...)` loop)
+      - non-interactive text/json stream path -> `runPrintMode(session, ...)`
 
 ### CLI vs programmatic usage
 
@@ -148,11 +148,11 @@ This file is orchestration-heavy: business logic mostly lives in session/control
 Behavior by output mode:
 
 - `mode: "json"`
-  - Writes session header (`session.sessionManager.getHeader()`) first if available.
-  - Subscribes to session events and writes every event as one JSON line.
+   - Writes session header (`session.sessionManager.getHeader()`) first if available.
+   - Subscribes to session events and writes every event as one JSON line.
 - `mode: "text"`
-  - Sends prompts, then prints only text blocks from the final assistant message.
-  - If final assistant stop reason is `error` or `aborted`, writes error to stderr and exits with code 1.
+   - Sends prompts, then prints only text blocks from the final assistant message.
+   - If final assistant stop reason is `error` or `aborted`, writes error to stderr and exits with code 1.
 
 Additional responsibilities:
 
@@ -259,9 +259,9 @@ Key responsibilities in code:
 - Subscribes once to agent events in constructor (`this.agent.subscribe(this.#handleAgentEvent)`), then fans out to UI/extensions via `subscribe()` and `#emitSessionEvent()`.
 - Owns operational state not stored in model history (abort controllers, retry counters, queued steering/follow-up messages, plan mode state, provider session caches).
 - Persists conversation events as they complete:
-  - `message_end` with `user` / `assistant` / `toolResult` / `fileMention` -> `sessionManager.appendMessage(...)`
-  - `message_end` with `custom` / `hookMessage` -> `sessionManager.appendCustomMessageEntry(...)`
-  - TTSR injections -> `sessionManager.appendTtsrInjection(...)`
+   - `message_end` with `user` / `assistant` / `toolResult` / `fileMention` -> `sessionManager.appendMessage(...)`
+   - `message_end` with `custom` / `hookMessage` -> `sessionManager.appendCustomMessageEntry(...)`
+   - TTSR injections -> `sessionManager.appendTtsrInjection(...)`
 - Flushes persistence on shutdown via `dispose()` -> `await sessionManager.flush()`.
 
 This keeps the agent loop and durable session log synchronized without requiring each caller mode to persist manually.
@@ -566,11 +566,11 @@ Path normalization and filtering:
 Directory entry resolution:
 
 - `resolveExtensionEntries(dir)` checks, in order:
-  - `package.json` manifest (`omp` or `pi`) with `extensions[]` entries,
-  - `index.ts`, then `index.js` fallback.
+   - `package.json` manifest (`omp` or `pi`) with `extensions[]` entries,
+   - `index.ts`, then `index.js` fallback.
 - `discoverExtensionsInDir(dir)` applies one-level rules when the directory itself has no root entry:
-  - direct `*.ts`/`*.js` files,
-  - child directories with manifest or index entry.
+   - direct `*.ts`/`*.js` files,
+   - child directories with manifest or index entry.
 
 Module loading:
 
@@ -596,9 +596,9 @@ Flow:
 - Uses dynamic `import(resolvedPath)`.
 - Requires a **default export function** (`HookFactory`); otherwise returns error.
 - Builds API via `createHookAPI(...)`, then calls `factory(api)` to register:
-  - event handlers (`api.on`),
-  - message renderers (`registerMessageRenderer`),
-  - commands (`registerCommand`).
+   - event handlers (`api.on`),
+   - message renderers (`registerMessageRenderer`),
+   - commands (`registerCommand`).
 - Exposes deferred runtime wiring via `setSendMessageHandler` / `setAppendEntryHandler` on `LoadedHook`.
 
 ### Skills loading points (`src/extensibility/skills.ts`)
@@ -609,8 +609,8 @@ Provider-driven loading:
 
 - Calls `loadCapability<CapabilitySkill>(skillCapability.id, { cwd })`.
 - Applies source gating through `isSourceEnabled(source)`:
-  - explicit toggles for `codex:user`, `claude:user`, `claude:project`, `native:user`, `native:project`,
-  - other providers treated as built-in and allowed when any built-in source toggle is enabled.
+   - explicit toggles for `codex:user`, `claude:user`, `claude:project`, `native:user`, `native:project`,
+   - other providers treated as built-in and allowed when any built-in source toggle is enabled.
 - Applies name filters using `includeSkills` / `ignoredSkills` (`Bun.Glob`).
 
 Normalization and collision handling:
@@ -618,10 +618,10 @@ Normalization and collision handling:
 - Resolves real paths (`fs.realpath`) to collapse symlink duplicates.
 - Keeps first skill per name; later name collisions are reported as warnings.
 - Transforms capability skills to legacy `Skill` shape:
-  - `filePath = capSkill.path`,
-  - `baseDir` from `.../SKILL.md` trimming,
-  - `source = "<provider>:<level>",`
-  - preserves `_source`.
+   - `filePath = capSkill.path`,
+   - `baseDir` from `.../SKILL.md` trimming,
+   - `source = "<provider>:<level>",`
+   - preserves `_source`.
 
 Custom directory loading (delegated scanner):
 
@@ -658,39 +658,39 @@ internal URL input (rule://, docs://, ...)
 
 - Discovery entrypoint: `discoverAndConnect(options)` calls `loadAllMCPConfigs()` and then `connectServers()`.
 - Connection state is tracked in private maps:
-  - `#connections` (live `MCPServerConnection`)
-  - `#pendingConnections` (in-flight connection promises)
-  - `#pendingToolLoads` (in-flight `listTools()` promises)
-  - `#sources` (server `SourceMeta` provenance)
+   - `#connections` (live `MCPServerConnection`)
+   - `#pendingConnections` (in-flight connection promises)
+   - `#pendingToolLoads` (in-flight `listTools()` promises)
+   - `#sources` (server `SourceMeta` provenance)
 - Config validation occurs per server via `validateServerConfig(name, config)` before any connect attempt.
 - Auth/config resolution happens in `#resolveAuthConfig()`:
-  - OAuth credentials from `AuthStorage` are injected into HTTP/SSE headers (`Authorization: Bearer ...`) or stdio env (`OAUTH_ACCESS_TOKEN`).
-  - Dynamic config values are resolved with `resolveConfigValue()` for env/header entries.
+   - OAuth credentials from `AuthStorage` are injected into HTTP/SSE headers (`Authorization: Bearer ...`) or stdio env (`OAUTH_ACCESS_TOKEN`).
+   - Dynamic config values are resolved with `resolveConfigValue()` for env/header entries.
 - Connections and tool enumeration are parallelized in `connectServers()`:
-  - connect with `connectToServer()`
-  - list remote tools with `listTools()`
-  - convert to agent tools using `MCPTool.fromTools(connection, serverTools)`
+   - connect with `connectToServer()`
+   - list remote tools with `listTools()`
+   - convert to agent tools using `MCPTool.fromTools(connection, serverTools)`
 - Startup is bounded by `STARTUP_TIMEOUT_MS` (250ms). If tool loads are still pending, cached definitions may be used from `MCPToolCache` and exposed as deferred wrappers via `DeferredMCPTool.fromTools(...)`.
 - Lifecycle operations:
-  - `disconnectServer(name)` and `disconnectAll()` tear down connections via `disconnectServer(connection)` and remove associated `mcp__<server>_` tools.
-  - `refreshServerTools(name)` / `refreshAllTools()` re-run `listTools()` and replace server tool registrations.
+   - `disconnectServer(name)` and `disconnectAll()` tear down connections via `disconnectServer(connection)` and remove associated `mcp__<server>_` tools.
+   - `refreshServerTools(name)` / `refreshAllTools()` re-run `listTools()` and replace server tool registrations.
 
 `discoverAndLoadMCPTools()` in `src/mcp/loader.ts` is the adapter from manager internals to extensibility-facing output:
 
 - Optionally creates `MCPToolCache` (`resolveToolCache()` via `AgentStorage`).
 - Creates/configures `MCPManager` (including optional `setAuthStorage()`).
 - Normalizes output into `MCPToolsLoadResult`:
-  - `tools: LoadedCustomTool[]`
-  - `errors: Array<{ path: string; error: string }>` using `mcp:<server>` paths
-  - `connectedServers` and `exaApiKeys`
+   - `tools: LoadedCustomTool[]`
+   - `errors: Array<{ path: string; error: string }>` using `mcp:<server>` paths
+   - `connectedServers` and `exaApiKeys`
 
 ### MCP tool bridge role
 
 `MCPManager` does not expose raw MCP protocol tool records directly. It bridges server tool definitions into the coding-agent custom-tool system:
 
 - Core conversion points:
-  - eager: `MCPTool.fromTools(connection, serverTools)`
-  - deferred/cached: `DeferredMCPTool.fromTools(name, cached, () => this.waitForConnection(name), source)`
+   - eager: `MCPTool.fromTools(connection, serverTools)`
+   - deferred/cached: `DeferredMCPTool.fromTools(name, cached, () => this.waitForConnection(name), source)`
 - Internal tool registry is `#tools: CustomTool<TSchema, MCPToolDetails>[]`.
 - Manager consumers access bridged tools through `getTools()`; loader re-wraps those tools into `LoadedCustomTool` entries with resolved display paths (`mcp:<server> via <provider>` when provider metadata exists).
 
@@ -699,19 +699,19 @@ internal URL input (rule://, docs://, ...)
 This module is a process-level JSON-RPC client/runtime for language servers. It is intentionally lower-level than feature tools.
 
 - Client acquisition boundary: `getOrCreateClient(config, cwd, initTimeoutMs?)`.
-  - Spawns server process (`ptree.spawn`) and optionally wraps command through lspmux (`isLspmuxSupported()`, `getLspmuxCommand()`).
-  - Sends `initialize` request with static `CLIENT_CAPABILITIES`, stores `serverCapabilities`, then sends `initialized` notification.
+   - Spawns server process (`ptree.spawn`) and optionally wraps command through lspmux (`isLspmuxSupported()`, `getLspmuxCommand()`).
+   - Sends `initialize` request with static `CLIENT_CAPABILITIES`, stores `serverCapabilities`, then sends `initialized` notification.
 - Message transport boundary:
-  - framing/parsing via `parseMessage()`, `findHeaderEnd()`, `writeMessage()`
-  - background reader `startMessageReader()` routes replies to `pendingRequests` and handles selected server-initiated requests (`workspace/configuration`, `workspace/applyEdit`).
+   - framing/parsing via `parseMessage()`, `findHeaderEnd()`, `writeMessage()`
+   - background reader `startMessageReader()` routes replies to `pendingRequests` and handles selected server-initiated requests (`workspace/configuration`, `workspace/applyEdit`).
 - File sync boundary (editor-like document state into LSP):
-  - `ensureFileOpen()`, `syncContent()`, `notifySaved()`, `refreshFile()`
-  - per-file operation serialization via `fileOperationLocks`
+   - `ensureFileOpen()`, `syncContent()`, `notifySaved()`, `refreshFile()`
+   - per-file operation serialization via `fileOperationLocks`
 - Request API boundary:
-  - `sendRequest()` handles request IDs, timeout (`DEFAULT_REQUEST_TIMEOUT_MS`), abort propagation (`$/cancelRequest`), and promise settlement.
-  - `sendNotification()` is fire-and-forget transport.
+   - `sendRequest()` handles request IDs, timeout (`DEFAULT_REQUEST_TIMEOUT_MS`), abort propagation (`$/cancelRequest`), and promise settlement.
+   - `sendNotification()` is fire-and-forget transport.
 - Lifecycle boundary:
-  - `shutdownClient()`, `shutdownAll()`, idle cleanup (`setIdleTimeout()`, periodic checker), and process-signal cleanup hooks.
+   - `shutdownClient()`, `shutdownAll()`, idle cleanup (`setIdleTimeout()`, periodic checker), and process-signal cleanup hooks.
 
 In short, `src/lsp/client.ts` is the transport/session substrate; higher-level LSP feature modules call into it rather than reimplementing process or protocol handling.
 
@@ -722,11 +722,11 @@ In short, `src/lsp/client.ts` is the transport/session substrate; higher-level L
 - Handler registration: `register(handler)` keyed by `handler.scheme`.
 - Fast capability check: `canHandle(input)` parses scheme and checks handler presence.
 - Resolution pipeline in `resolve(input)`:
-  1. Parse with `new URL(input)` (invalid URLs throw).
-  2. Preserve decoded host/path fidelity by attaching `rawHost` and `rawPathname` to `InternalUrl`.
-  3. Select handler by normalized scheme.
-  4. Delegate to `handler.resolve(parsedInternalUrl)`.
-  5. If scheme is unknown, throw with a supported-schemes list.
+   1. Parse with `new URL(input)` (invalid URLs throw).
+   2. Preserve decoded host/path fidelity by attaching `rawHost` and `rawPathname` to `InternalUrl`.
+   3. Select handler by normalized scheme.
+   4. Delegate to `handler.resolve(parsedInternalUrl)`.
+   5. If scheme is unknown, throw with a supported-schemes list.
 
 `src/internal-urls/index.ts` defines the public integration surface for this subsystem by exporting:
 
@@ -769,22 +769,22 @@ This subsystem is split into two layers:
 - Streams output into `OutputSink` (`onChunk`, artifact path/id support).
 - Serializes sink writes with `pendingChunks` to preserve chunk ordering.
 - Shapes terminal result into `BashResult`:
-  - `output`, `truncated`, `totalLines/totalBytes`, `outputLines/outputBytes`, optional `artifactId`
-  - `exitCode` / `cancelled` states for normal completion, timeout, and abort.
+   - `output`, `truncated`, `totalLines/totalBytes`, `outputLines/outputBytes`, optional `artifactId`
+   - `exitCode` / `cancelled` states for normal completion, timeout, and abort.
 
 #### Python executor (`src/ipy/executor.ts`)
 
 - Entry points:
-  - `executePython(code, options)`
-  - `executePythonWithKernel(kernel, code, options)`
-  - warmup/session utilities (`warmPythonEnvironment`, `disposeAllKernelSessions`).
+   - `executePython(code, options)`
+   - `executePythonWithKernel(kernel, code, options)`
+   - warmup/session utilities (`warmPythonEnvironment`, `disposeAllKernelSessions`).
 - Manages kernel session lifecycle in `kernelSessions: Map<string, KernelSession>` with:
-  - bounded session count (`MAX_KERNEL_SESSIONS`), LRU eviction (`evictOldestSession`)
-  - idle cleanup timer (`cleanupIdleSessions`)
-  - heartbeat/dead detection and restart (`restartKernelSession`).
+   - bounded session count (`MAX_KERNEL_SESSIONS`), LRU eviction (`evictOldestSession`)
+   - idle cleanup timer (`cleanupIdleSessions`)
+   - heartbeat/dead detection and restart (`restartKernelSession`).
 - Supports two modes via `PythonKernelMode`:
-  - `"session"` (reuse kernel per `sessionId`)
-  - `"per-call"` (start/shutdown each execution).
+   - `"session"` (reuse kernel per `sessionId`)
+   - `"per-call"` (start/shutdown each execution).
 - Uses `OutputSink` in `executeWithKernel(...)` for streaming/truncation/artifact output.
 - Aggregates rich kernel outputs (`displayOutputs`) and stdin/timed-out/cancelled state into `PythonResult`.
 - Caches prelude helper docs in `pycache` under agent dir (`buildPreludeCacheState`, `readPreludeCache`, `writePreludeCache`) for faster startup.
@@ -805,19 +805,19 @@ This subsystem is split into two layers:
 - Adapter class: `BashTool implements AgentTool<typeof bashSchema, BashToolDetails>`.
 - Defines tool contract (`bashSchema`: `command`, `timeout`, `cwd`, `head`, `tail`) and prompt text import (`../prompts/tools/bash.md`).
 - Pre-execution adaptation:
-  - strips inline shell truncation patterns (`normalizeBashCommand`)
-  - applies explicit/derived head-tail params
-  - optional command interception (`checkBashInterception`) based on settings
-  - expands internal URLs (`expandInternalUrls`)
-  - resolves/validates working directory (`resolveToCwd`, `fs.promises.stat`).
+   - strips inline shell truncation patterns (`normalizeBashCommand`)
+   - applies explicit/derived head-tail params
+   - optional command interception (`checkBashInterception`) based on settings
+   - expands internal URLs (`expandInternalUrls`)
+   - resolves/validates working directory (`resolveToCwd`, `fs.promises.stat`).
 - Chooses backend:
-  - PTY path: `runInteractiveBashPty(...)`
-  - non-PTY path: `executeBash(...)`.
+   - PTY path: `runInteractiveBashPty(...)`
+   - non-PTY path: `executeBash(...)`.
 - Streaming to UI is adapter-owned: updates `onUpdate` using `createTailBuffer(...)` while backend runs.
 - Post-execution shaping is adapter-owned:
-  - applies `applyHeadTail(...)`
-  - converts backend cancellation/timeout/exit status into `ToolAbortError` / `ToolError`
-  - returns `toolResult(...).text(...).truncationFromSummary(...)`.
+   - applies `applyHeadTail(...)`
+   - converts backend cancellation/timeout/exit status into `ToolAbortError` / `ToolError`
+   - returns `toolResult(...).text(...).truncationFromSummary(...)`.
 
 #### Python tool (`src/tools/python.ts`)
 
@@ -825,15 +825,15 @@ This subsystem is split into two layers:
 - Defines schema (`cells[]`, `timeout`, `cwd`, `reset`) and dynamic description from prelude docs (`getPythonToolDescription`, `getPreludeDocs`).
 - Supports proxy mode via `PythonProxyExecutor`; otherwise executes locally.
 - Per-call adaptation:
-  - validates and resolves working dir
-  - clamps timeout and combines abort signals (`AbortSignal.any`)
-  - allocates artifact output and local `OutputSink`
-  - builds stable `sessionId` from session file + cwd.
+   - validates and resolves working dir
+   - clamps timeout and combines abort signals (`AbortSignal.any`)
+   - allocates artifact output and local `OutputSink`
+   - builds stable `sessionId` from session file + cwd.
 - Executes cells sequentially by repeatedly calling core `executePython(...)`; adapter tracks cell-level state (`PythonCellResult`) and emits progressive updates (`onUpdate`).
 - Adapter merges backend outputs into UI-facing shape:
-  - combined text output across cells
-  - JSON/image/status display outputs from `result.displayOutputs`
-  - cell status transitions (`pending/running/complete/error`), duration, exit code.
+   - combined text output across cells
+   - JSON/image/status display outputs from `result.displayOutputs`
+   - cell status transitions (`pending/running/complete/error`), duration, exit code.
 - Adapter owns error messaging semantics for failed/aborted cells and final `toolResult(...).truncationFromSummary(...)` construction.
 
 ### Streaming and result-shaping boundaries
@@ -877,8 +877,8 @@ Key orchestration responsibilities in `TaskTool.execute(...)`:
 - Re-discover available agents on each call with `discoverAgents(this.session.cwd)`.
 - Validate agent existence (`getAgent(...)`), disabled-agent settings (`task.disabledAgents`), and task list integrity (non-empty IDs, case-insensitive duplicate detection).
 - Resolve model/thinking/output schema precedence:
-  - model: `task.agentModelOverrides[agentName]` → resolved agent frontmatter patterns (single inheriting aliases fall back to the parent active model) → parent active model
-  - output schema: agent frontmatter `output` → tool params `schema` → parent session schema
+   - model: `task.agentModelOverrides[agentName]` → resolved agent frontmatter patterns (single inheriting aliases fall back to the parent active model) → parent active model
+   - output schema: agent frontmatter `output` → tool params `schema` → parent session schema
 - Prepare shared context (`context.md`) and unique per-task IDs via `AgentOutputManager.allocateBatch(...)`.
 - Execute all tasks with bounded concurrency using `mapWithConcurrencyLimit(...)` from `src/task/parallel.ts`.
 
@@ -907,12 +907,12 @@ Despite the name `runSubprocess`, `packages/coding-agent/src/task/executor.ts` c
 What _is_ isolated is execution context and artifacts, not process memory:
 
 - Optional filesystem isolation is controlled by the `task.isolation.mode` setting (`"none"`, `"worktree"`, `"fuse-overlay"`, or `"fuse-projfs"`).
-  - **worktree**: `ensureWorktree(...)`, `applyBaseline(...)`, `captureDeltaPatch(...)`, `cleanupWorktree(...)`. Nested non-submodule git repos are discovered and handled independently.
-  - **fuse-overlay**: `ensureFuseOverlay(...)`, `captureDeltaPatch(...)`, `cleanupFuseOverlay(...)` using `fuse-overlayfs` on Unix hosts. On Windows, this mode falls back to `worktree` with a system notification.
-  - **fuse-projfs**: `ensureProjfsOverlay(...)`, `captureDeltaPatch(...)`, `cleanupProjfsOverlay(...)` using ProjFS on Windows. Missing ProjFS prerequisites fall back to `worktree` with a system notification; non-prerequisite startup errors still fail the task.
+   - **worktree**: `ensureWorktree(...)`, `applyBaseline(...)`, `captureDeltaPatch(...)`, `cleanupWorktree(...)`. Nested non-submodule git repos are discovered and handled independently.
+   - **fuse-overlay**: `ensureFuseOverlay(...)`, `captureDeltaPatch(...)`, `cleanupFuseOverlay(...)` using `fuse-overlayfs` on Unix hosts. On Windows, this mode falls back to `worktree` with a system notification.
+   - **fuse-projfs**: `ensureProjfsOverlay(...)`, `captureDeltaPatch(...)`, `cleanupProjfsOverlay(...)` using ProjFS on Windows. Missing ProjFS prerequisites fall back to `worktree` with a system notification; non-prerequisite startup errors still fail the task.
 - The `task.isolation.merge` setting controls how isolated changes are integrated back:
-  - **patch** (default): captures a diff via `captureDeltaPatch(...)`, combines patches, and applies with `git apply`.
-  - **branch**: each task commits to a temp branch (`omp/task/<id>`) via `commitToBranch(...)`, then `mergeTaskBranches(...)` cherry-picks them sequentially onto HEAD. If `git apply` fails inside `commitToBranch`, the error is non-fatal — the agent result is preserved with a `merge failed` status.
+   - **patch** (default): captures a diff via `captureDeltaPatch(...)`, combines patches, and applies with `git apply`.
+   - **branch**: each task commits to a temp branch (`omp/task/<id>`) via `commitToBranch(...)`, then `mergeTaskBranches(...)` cherry-picks them sequentially onto HEAD. If `git apply` fails inside `commitToBranch`, the error is non-fatal — the agent result is preserved with a `merge failed` status.
 - The `task.isolation.commits` setting (`generic` or `ai`) controls commit messages for branch commits and nested repo patches. `ai` mode uses a smol model to generate conventional commit messages from diffs.
 - Nested repo patches are applied via `applyNestedPatches(...)` after the parent merge, grouped by repo with one commit per repo.
 - Child session JSONL/markdown outputs are written under the task artifacts directory (`<id>.jsonl`, `<id>.md`, and in isolated mode `<id>.patch`).
@@ -936,9 +936,9 @@ If parent MCP connections exist, executor creates in-process MCP proxy tools wit
 - Tracks tool events and extracted data through `subprocessToolRegistry` handlers.
 - Retries reminder prompts up to 3 times (`MAX_YIELD_RETRIES`) using `subagent-yield-reminder.md` if `yield` was not called.
 - Final output normalization is centralized in `finalizeSubprocessOutput(...)`:
-  - If `yield.status === "aborted"`, task is converted to an aborted result payload.
-  - If missing `yield`, fallback attempts JSON parse/validation against output schema.
-  - Emits warnings when `yield` is missing/null and fallback cannot safely validate.
+   - If `yield.status === "aborted"`, task is converted to an aborted result payload.
+   - If missing `yield`, fallback attempts JSON parse/validation against output schema.
+   - Emits warnings when `yield` is missing/null and fallback cannot safely validate.
 
 This module also accumulates token/cost usage from assistant `message_end` events and truncates returned output with `truncateTail(...)` using `MAX_OUTPUT_BYTES` and `MAX_OUTPUT_LINES`.
 
@@ -959,9 +959,9 @@ This module also accumulates token/cost usage from assistant `message_end` event
 `packages/coding-agent/src/task/subprocess-tool-registry.ts` defines a singleton registry (`subprocessToolRegistry`) used by executor event handling:
 
 - `register(toolName, handler)` attaches optional hooks:
-  - `extractData(event)` for structured extraction into `progress.extractedToolData[toolName][]`
-  - `shouldTerminate(event)` to request early child termination after tool completion
-  - `renderInline(...)` and `renderFinal(...)` for UI rendering integrations
+   - `extractData(event)` for structured extraction into `progress.extractedToolData[toolName][]`
+   - `shouldTerminate(event)` to request early child termination after tool completion
+   - `renderInline(...)` and `renderFinal(...)` for UI rendering integrations
 - Executor consumes these hooks inside `tool_execution_end` processing to build structured task outputs (not only plain text streams).
 
 This keeps tool-specific extraction/termination logic decoupled from generic task execution flow.
@@ -1066,8 +1066,8 @@ Only code-backed auth behavior should be assumed:
 
 - Availability gating is provider-specific `isAvailable()` checks.
 - `formatProviderError(...)` maps `SearchProviderError` status codes:
-  - `401/403`: authorization failure message (special-case message passthrough for `zai`)
-  - Anthropic `404`: specific endpoint/model-not-found message
+   - `401/403`: authorization failure message (special-case message passthrough for `zai`)
+   - Anthropic `404`: specific endpoint/model-not-found message
 
 No explicit rate-limit policy is encoded in these files beyond generic provider failure handling and fallback chaining.
 
@@ -1106,17 +1106,17 @@ This section covers the day-to-day commands and three common extension paths in 
 Use only script names that exist in `packages/coding-agent/package.json`:
 
 - Typecheck package:
-  - `bun --cwd=packages/coding-agent run check`
+   - `bun --cwd=packages/coding-agent run check`
 - Run package tests:
-  - `bun --cwd=packages/coding-agent run test`
+   - `bun --cwd=packages/coding-agent run test`
 - Reformat prompt assets used by this package:
-  - `bun --cwd=packages/coding-agent run format-prompts`
+   - `bun --cwd=packages/coding-agent run format-prompts`
 - Regenerate docs index files for package docs:
-  - `bun --cwd=packages/coding-agent run generate-docs-index`
+   - `bun --cwd=packages/coding-agent run generate-docs-index`
 - Regenerate template artifacts:
-  - `bun --cwd=packages/coding-agent run generate-template`
+   - `bun --cwd=packages/coding-agent run generate-template`
 - Build compiled binary artifact (`dist/omp`):
-  - `bun --cwd=packages/coding-agent run build`
+   - `bun --cwd=packages/coding-agent run build`
 
 `packages/coding-agent/README.md` intentionally delegates install/config/CLI docs to the monorepo root README (`../../README.md`) and keeps package-specific references to `CHANGELOG.md`, `docs/`, and `DEVELOPMENT.md`.
 

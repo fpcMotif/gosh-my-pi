@@ -297,10 +297,10 @@ export class DapClient {
 			throw signal.reason instanceof Error ? signal.reason : new ToolAbortError();
 		}
 		const { promise, resolve, reject } = Promise.withResolvers<TBody>();
-		let timeout: NodeJS.Timeout | undefined;
+		const timer: { ref: NodeJS.Timeout | undefined } = { ref: undefined };
 		const cleanup = () => {
 			unsubscribe();
-			if (timeout) clearTimeout(timeout);
+			if (timer.ref !== undefined) clearTimeout(timer.ref);
 			if (signal) {
 				signal.removeEventListener("abort", abortHandler);
 			}
@@ -320,7 +320,7 @@ export class DapClient {
 		if (signal) {
 			signal.addEventListener("abort", abortHandler, { once: true });
 		}
-		timeout = setTimeout(() => {
+		timer.ref = setTimeout(() => {
 			cleanup();
 			reject(new Error(`DAP event ${event} timed out after ${timeoutMs}ms`));
 		}, timeoutMs);
@@ -347,9 +347,9 @@ export class DapClient {
 			arguments: args,
 		};
 		const { promise, resolve, reject } = Promise.withResolvers<TBody>();
-		let timeout: NodeJS.Timeout | undefined;
+		const timer: { ref: NodeJS.Timeout | undefined } = { ref: undefined };
 		const cleanup = () => {
-			if (timeout) clearTimeout(timeout);
+			if (timer.ref !== undefined) clearTimeout(timer.ref);
 			if (signal) {
 				signal.removeEventListener("abort", abortHandler);
 			}
@@ -359,7 +359,7 @@ export class DapClient {
 			cleanup();
 			reject(signal?.reason instanceof Error ? signal.reason : new ToolAbortError());
 		};
-		timeout = setTimeout(() => {
+		timer.ref = setTimeout(() => {
 			if (!this.#pendingRequests.has(requestSeq)) return;
 			this.#pendingRequests.delete(requestSeq);
 			cleanup();

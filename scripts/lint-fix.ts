@@ -26,9 +26,7 @@ interface OxlintReport {
 	diagnostics: Diagnostic[];
 }
 
-const SKIP_FILES = new Set([
-	"packages/coding-agent/src/export/html/template.generated.ts",
-]);
+const SKIP_FILES = new Set(["packages/coding-agent/src/export/html/template.generated.ts"]);
 
 function runOxlint(target: string): Diagnostic[] {
 	const result = spawnSync("bunx", ["oxlint", "--format", "json", "--no-error-on-unmatched-pattern", target], {
@@ -153,8 +151,8 @@ function fixTemplateExpression(line: string, column: number, length: number): Fi
 	if (!isFixableExpr(expr)) return null;
 	const before = line.slice(0, ci);
 	const after = line.slice(ci + length);
-	if (/String\($/.test(before)) return null;
-	return { newLine: before + `String(${expr.trim()})` + after };
+	if (before.endsWith("String(")) return null;
+	return { newLine: `${before}String(${expr.trim()})${after}` };
 }
 
 function fixUselessReturn(line: string, column: number, length: number): FixResult | null {
@@ -181,10 +179,10 @@ function fixNonNullAssertion(line: string, column: number, length: number): FixR
 
 	const next = after[0];
 	if (next === ".") {
-		return { newLine: before + inner + "?" + after };
+		return { newLine: `${before + inner}?${after}` };
 	}
 	if (next === "[") {
-		return { newLine: before + inner + "?." + after };
+		return { newLine: `${before + inner}?.${after}` };
 	}
 	if (next === "(") {
 		return { newLine: before + inner + after };

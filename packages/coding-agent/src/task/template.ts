@@ -22,8 +22,8 @@ export function renderTemplate(
 	task: TaskItem,
 	simpleMode: TaskSimpleMode = "default",
 ): RenderResult {
-	let { id, description, assignment } = task;
-	assignment = assignment.trim();
+	const { id, description, assignment: assignmentRaw } = task;
+	const assignment = assignmentRaw.trim();
 	const { contextEnabled } = getTaskSimpleModeCapabilities(simpleMode);
 	context = contextEnabled ? context?.trim() : undefined;
 

@@ -6,15 +6,10 @@ description = "Compact bundle install/update — strip 'Using' lines, keep insta
 match_command = "^bundle$"
 match_subcommand = "^(install|update)$"
 strip_ansi = true
-strip_lines_matching = [
-  "^Using ",
-  "^\\s*$",
-  "^Fetching gem metadata",
-  "^Resolving dependencies",
-]
+strip_lines_matching = ["^Using ", "^\\s*$", "^Fetching gem metadata", "^Resolving dependencies"]
 match_output = [
-  { pattern = "Bundle complete!", message = "ok bundle: complete" },
-  { pattern = "Bundle updated!", message = "ok bundle: updated" },
+	{ pattern = "Bundle complete!", message = "ok bundle: complete" },
+	{ pattern = "Bundle updated!", message = "ok bundle: updated" },
 ]
 max_lines = 30
 

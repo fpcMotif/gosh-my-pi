@@ -36,7 +36,7 @@ function randomLine(r: ReturnType<typeof rng>, len: number): string {
 	return out;
 }
 
-function expectBounded(lines: string[], width: number, label: string): void {
+function expectBounded(lines: string[], width: number, _label: string): void {
 	for (const line of lines) {
 		expect(line.includes("\t")).toBe(false);
 		const w = visibleWidth(line);

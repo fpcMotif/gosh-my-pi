@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import * as readline from "node:readline";
-import { AuthCredentialStore } from "./auth-storage";
+import { AuthCredentialStore } from "./auth-credential-store";
 import { getOAuthProviders } from "./utils/oauth";
 import { loginKagi } from "./utils/oauth/kagi";
 import { loginKimi } from "./utils/oauth/kimi";
@@ -8,12 +8,12 @@ import { loginMiniMaxCode, loginMiniMaxCodeCn } from "./utils/oauth/minimax-code
 import { loginOpenAICodex } from "./utils/oauth/openai-codex";
 import { loginParallel } from "./utils/oauth/parallel";
 import { loginTavily } from "./utils/oauth/tavily";
-import type { OAuthCredentials, OAuthProvider } from "./utils/oauth/types";
+import type { OAuthController, OAuthCredentials, OAuthProvider } from "./utils/oauth/types";
 import { loginZai } from "./utils/oauth/zai";
 
 const PROVIDERS = getOAuthProviders();
 
-function prompt(rl: readline.Interface, question: string): Promise<string> {
+async function prompt(rl: readline.Interface, question: string): Promise<string> {
 	const { promise, resolve, reject } = Promise.withResolvers<string>();
 	const input = process.stdin as NodeJS.ReadStream;
 	const supportsRawMode = input.isTTY && typeof input.setRawMode === "function";
@@ -36,19 +36,20 @@ function prompt(rl: readline.Interface, question: string): Promise<string> {
 	};
 
 	const cancel = () => {
-		finish(() => reject(new Error("Login cancelled")));
+		finish(() => {
+			reject(new Error("Login cancelled"));
+		});
 	};
 
-	const onSigint = () => {
+	function onSigint() {
 		cancel();
-	};
-
-	const onKeypress = (_str: string, key: readline.Key) => {
+	}
+	function onKeypress(_str: string, key: readline.Key) {
 		if (key.name === "escape" || (key.ctrl === true && key.name === "c")) {
 			cancel();
 			rl.close();
 		}
-	};
+	}
 
 	if (supportsRawMode) {
 		readline.emitKeypressEvents(input, rl);
@@ -58,188 +59,208 @@ function prompt(rl: readline.Interface, question: string): Promise<string> {
 
 	rl.once("SIGINT", onSigint);
 	rl.question(question, answer => {
-		finish(() => resolve(answer));
+		finish(() => {
+			resolve(answer);
+		});
 	});
 	return promise;
 }
 
-async function login(provider: OAuthProvider): Promise<void> {
-	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+async function selectProviderToLogout(storage: AuthCredentialStore): Promise<OAuthProvider | undefined> {
+	const providers = storage.listProviders();
+	if (providers.length === 0) {
+		console.log("No credentials stored.");
+		return undefined;
+	}
 
-	const promptFn = (msg: string) => prompt(rl, `${msg} `);
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+	console.log("Select a provider to logout:\n");
+	for (let i = 0; i < providers.length; i += 1) {
+		console.log(`  ${i + 1}. ${providers[i]}`);
+	}
+	console.log();
+
+	const choice = await prompt(rl, `Enter number (1-${providers.length}): `);
+	rl.close();
+
+	const index = Number.parseInt(choice, 10) - 1;
+	if (index < 0 || index >= providers.length) {
+		console.error("Invalid selection");
+		process.exit(1);
+	}
+	return providers[index] as OAuthProvider;
+}
+
+async function handleLogoutCommand(args: string[]): Promise<void> {
+	let provider = args[1] as OAuthProvider | undefined;
 	const storage = await AuthCredentialStore.open();
 
 	try {
-		let credentials: OAuthCredentials;
+		if (provider === undefined || provider === null) {
+			provider = await selectProviderToLogout(storage);
+		}
 
+		if (provider === undefined || provider === null) return;
+
+		const oauth = storage.getOAuth(provider);
+		const apiKey = storage.getApiKey(provider);
+		if ((oauth === null || oauth === undefined) && (apiKey === null || apiKey === undefined || apiKey === "")) {
+			console.error(`Not logged in to ${provider}`);
+			process.exit(1);
+		}
+
+		storage.deleteProvider(provider);
+		console.log(`Logged out from ${provider}`);
+	} finally {
+		storage.close();
+	}
+}
+
+async function performOAuthLogin(
+	provider: OAuthProvider,
+	storage: AuthCredentialStore,
+	loginFn: (handlers: OAuthController) => Promise<OAuthCredentials>,
+	handlers: OAuthController,
+): Promise<void> {
+	const credentials = await loginFn(handlers);
+	storage.saveOAuth(provider, credentials);
+	console.log(`\nCredentials saved to ~/.omp/agent/agent.db`);
+}
+
+async function performApiKeyLogin(
+	provider: OAuthProvider,
+	storage: AuthCredentialStore,
+	loginFn: (handlers: OAuthController) => Promise<string>,
+	handlers: OAuthController,
+): Promise<void> {
+	const apiKey = await loginFn(handlers);
+	storage.saveApiKey(provider, apiKey);
+	console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
+}
+
+async function login(provider: OAuthProvider): Promise<void> {
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+	const promptFn = (msg: string) => prompt(rl, `${msg} `);
+	const storage = await AuthCredentialStore.open();
+
+	const handlers: OAuthController = {
+		onAuth(info) {
+			const { url, instructions } = info;
+			console.log(`\nOpen this URL in your browser:\n${url}`);
+			if (instructions !== null && instructions !== undefined && instructions !== "") console.log(instructions);
+			console.log();
+		},
+		onPrompt(p) {
+			const ph =
+				p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : "";
+			return promptFn(`${p.message}${ph}:`);
+		},
+	};
+
+	try {
 		switch (provider) {
 			case "openai-codex":
-				credentials = await loginOpenAICodex({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions !== null && instructions !== undefined && instructions !== "")
-							console.log(instructions);
-						console.log();
-					},
-					async onPrompt(p) {
-						return await promptFn(
-							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
-						);
-					},
-				});
+				await performOAuthLogin(provider, storage, loginOpenAICodex, handlers);
 				break;
-
 			case "kimi-code":
-				credentials = await loginKimi({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions !== null && instructions !== undefined && instructions !== "")
-							console.log(instructions);
-						console.log();
-					},
-				});
+				await performOAuthLogin(provider, storage, loginKimi, handlers);
 				break;
-
-			case "kagi": {
-				const apiKey = await loginKagi({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions !== null && instructions !== undefined && instructions !== "")
-							console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(
-							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
-						);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-
-			case "tavily": {
-				const apiKey = await loginTavily({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions !== null && instructions !== undefined && instructions !== "")
-							console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(
-							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
-						);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-
-			case "parallel": {
-				const apiKey = await loginParallel({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions !== null && instructions !== undefined && instructions !== "")
-							console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(
-							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
-						);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-
-			case "zai": {
-				const apiKey = await loginZai({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions !== null && instructions !== undefined && instructions !== "")
-							console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(
-							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
-						);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-
-			case "minimax-code": {
-				const apiKey = await loginMiniMaxCode({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions !== null && instructions !== undefined && instructions !== "")
-							console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(
-							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
-						);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-
-			case "minimax-code-cn": {
-				const apiKey = await loginMiniMaxCodeCn({
-					onAuth(info) {
-						const { url, instructions } = info;
-						console.log(`\nOpen this URL in your browser:\n${url}`);
-						if (instructions !== null && instructions !== undefined && instructions !== "")
-							console.log(instructions);
-						console.log();
-					},
-					onPrompt(p) {
-						return promptFn(
-							`${p.message}${p.placeholder !== null && p.placeholder !== undefined && p.placeholder !== "" ? ` (${p.placeholder})` : ""}:`,
-						);
-					},
-				});
-				storage.saveApiKey(provider, apiKey);
-				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
-				return;
-			}
-
+			case "kagi":
+				await performApiKeyLogin(provider, storage, loginKagi, handlers);
+				break;
+			case "tavily":
+				await performApiKeyLogin(provider, storage, loginTavily, handlers);
+				break;
+			case "parallel":
+				await performApiKeyLogin(provider, storage, loginParallel, handlers);
+				break;
+			case "zai":
+				await performApiKeyLogin(provider, storage, loginZai, handlers);
+				break;
+			case "minimax-code":
+				await performApiKeyLogin(provider, storage, loginMiniMaxCode, handlers);
+				break;
+			case "minimax-code-cn":
+				await performApiKeyLogin(provider, storage, loginMiniMaxCodeCn, handlers);
+				break;
 			default:
 				throw new Error(`Unknown provider: ${provider}`);
 		}
-
-		storage.saveOAuth(provider, credentials);
-
-		console.log(`\nCredentials saved to ~/.omp/agent/agent.db`);
 	} finally {
 		storage.close();
 		rl.close();
 	}
 }
 
+async function handleStatusCommand(): Promise<void> {
+	const storage = await AuthCredentialStore.open();
+	try {
+		const providers = storage.listProviders();
+		if (providers.length === 0) {
+			console.log("No credentials stored.\nUse 'bunx @oh-my-pi/pi-ai login' to authenticate.");
+		} else {
+			console.log("Logged-in providers:\n");
+			for (const provider of providers) {
+				const oauth = storage.getOAuth(provider as OAuthProvider);
+				if (oauth !== undefined && oauth !== null) {
+					const status =
+						Date.now() >= oauth.expires ? "(expired)" : `(expires ${new Date(oauth.expires).toLocaleString()})`;
+					console.log(`  ${provider.padEnd(20)} ${status}`);
+					continue;
+				}
+				const apiKey = storage.getApiKey(provider);
+				if (apiKey !== null && apiKey !== undefined && apiKey !== "")
+					console.log(`  ${provider.padEnd(20)} (api key)`);
+			}
+		}
+	} finally {
+		storage.close();
+	}
+}
+
+function handleListCommand(): void {
+	console.log("Available providers:\n");
+	if (Array.isArray(PROVIDERS)) {
+		for (const p of PROVIDERS) console.log(`  ${p.id.padEnd(20)} ${p.name}`);
+	}
+}
+
+async function selectProviderFromList(): Promise<OAuthProvider | undefined> {
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+	console.log("Select a provider:\n");
+	if (Array.isArray(PROVIDERS)) {
+		for (let i = 0; i < PROVIDERS.length; i += 1) console.log(`  ${i + 1}. ${PROVIDERS[i].name}`);
+	}
+	console.log();
+	const choice = await prompt(rl, `Enter number (1-${PROVIDERS.length}): `);
+	rl.close();
+	const index = Number.parseInt(choice, 10) - 1;
+	if (Array.isArray(PROVIDERS) && (index < 0 || index >= PROVIDERS.length)) {
+		console.error("Invalid selection");
+		process.exit(1);
+	}
+	return PROVIDERS[index].id as OAuthProvider;
+}
+
+async function handleLoginCommand(args: string[]): Promise<void> {
+	let provider = args[1] as OAuthProvider | undefined;
+	if (provider === undefined || provider === null) provider = await selectProviderFromList();
+	if (provider === undefined || provider === null) {
+		console.error("No provider selected");
+		process.exit(1);
+	}
+	if (Array.isArray(PROVIDERS) && PROVIDERS.some(p => p.id === provider) === false) {
+		console.error(`Unknown provider: ${provider}\nUse 'bunx @oh-my-pi/pi-ai list' to see available providers`);
+		process.exit(1);
+	}
+	console.log(`Logging in to ${provider}…`);
+	await login(provider);
+}
+
 async function main(): Promise<void> {
 	const args = process.argv.slice(2);
-	const command = args[0];
-
-	if (!command || command === "help" || command === "--help" || command === "-h") {
+	const [command] = args;
+	if (command === undefined || command === "help" || command === "--help" || command === "-h") {
 		console.log(`Usage: bunx @oh-my-pi/pi-ai <command> [provider]
 
 Commands:
@@ -267,137 +288,28 @@ Examples:
 `);
 		return;
 	}
-
 	if (command === "status") {
-		const storage = await AuthCredentialStore.open();
-		try {
-			const providers = storage.listProviders();
-			if (providers.length === 0) {
-				console.log("No credentials stored.");
-				console.log(`Use 'bunx @oh-my-pi/pi-ai login' to authenticate.`);
-			} else {
-				console.log("Logged-in providers:\n");
-				for (const provider of providers) {
-					const oauth = storage.getOAuth(provider);
-					if (oauth) {
-						const expires = new Date(oauth.expires);
-						const expired = Date.now() >= oauth.expires;
-						const status = expired ? "(expired)" : `(expires ${expires.toLocaleString()})`;
-						console.log(`  ${provider.padEnd(20)} ${status}`);
-						continue;
-					}
-					const apiKey = storage.getApiKey(provider);
-					if (apiKey !== null && apiKey !== undefined && apiKey !== "") {
-						console.log(`  ${provider.padEnd(20)} (api key)`);
-					}
-				}
-			}
-		} finally {
-			storage.close();
-		}
+		await handleStatusCommand();
 		return;
 	}
-
 	if (command === "list") {
-		console.log("Available providers:\n");
-		for (const p of PROVIDERS) {
-			console.log(`  ${p.id.padEnd(20)} ${p.name}`);
-		}
+		handleListCommand();
 		return;
 	}
-
 	if (command === "logout") {
-		let provider = args[1] as OAuthProvider | undefined;
-		const storage = await AuthCredentialStore.open();
-
-		try {
-			if (!provider) {
-				const providers = storage.listProviders();
-				if (providers.length === 0) {
-					console.log("No credentials stored.");
-					return;
-				}
-
-				const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-				console.log("Select a provider to logout:\n");
-				for (let i = 0; i < providers.length; i++) {
-					console.log(`  ${i + 1}. ${providers[i]}`);
-				}
-				console.log();
-
-				const choice = await prompt(rl, `Enter number (1-${providers.length}): `);
-				rl.close();
-
-				const index = parseInt(choice, 10) - 1;
-				if (index < 0 || index >= providers.length) {
-					console.error("Invalid selection");
-					process.exit(1);
-				}
-				provider = providers[index] as OAuthProvider;
-			}
-			if (!provider) {
-				console.error("No provider selected");
-				process.exit(1);
-			}
-
-			const oauth = storage.getOAuth(provider);
-			const apiKey = storage.getApiKey(provider);
-			if (!oauth && (apiKey === null || apiKey === undefined || apiKey === "")) {
-				console.error(`Not logged in to ${provider}`);
-				process.exit(1);
-			}
-
-			storage.deleteProvider(provider);
-			console.log(`Logged out from ${provider}`);
-		} finally {
-			storage.close();
-		}
+		await handleLogoutCommand(args);
 		return;
 	}
-
 	if (command === "login") {
-		let provider = args[1] as OAuthProvider | undefined;
-
-		if (!provider) {
-			const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-			console.log("Select a provider:\n");
-			for (let i = 0; i < PROVIDERS.length; i++) {
-				console.log(`  ${i + 1}. ${PROVIDERS[i].name}`);
-			}
-			console.log();
-
-			const choice = await prompt(rl, `Enter number (1-${PROVIDERS.length}): `);
-			rl.close();
-
-			const index = parseInt(choice, 10) - 1;
-			if (index < 0 || index >= PROVIDERS.length) {
-				console.error("Invalid selection");
-				process.exit(1);
-			}
-			provider = PROVIDERS[index].id as OAuthProvider;
-		}
-		if (!provider) {
-			console.error("No provider selected");
-			process.exit(1);
-		}
-
-		if (!PROVIDERS.some(p => p.id === provider)) {
-			console.error(`Unknown provider: ${provider}`);
-			console.error(`Use 'bunx @oh-my-pi/pi-ai list' to see available providers`);
-			process.exit(1);
-		}
-
-		console.log(`Logging in to ${provider}…`);
-		await login(provider);
+		await handleLoginCommand(args);
 		return;
 	}
-
-	console.error(`Unknown command: ${command}`);
-	console.error(`Use 'bunx @oh-my-pi/pi-ai --help' for usage`);
+	console.error(`Unknown command: ${command}\nUse 'bunx @oh-my-pi/pi-ai --help' for usage`);
 	process.exit(1);
 }
 
 main().catch(error => {
-	console.error("Error:", error.message);
+	const msg = error instanceof Error ? error.message : String(error);
+	console.error("Error:", msg);
 	process.exit(1);
 });

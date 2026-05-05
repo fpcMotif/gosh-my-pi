@@ -1,8 +1,7 @@
-import { type AssistantMessage, type ToolCall, type ToolResultMessage } from "@oh-my-pi/pi-ai";
+import { type AssistantMessage, type EventStream, type ToolCall, type ToolResultMessage } from "@oh-my-pi/pi-ai";
 import type { AgentEvent, AgentLoopConfig, AgentMessage, AnyAgentTool, ToolCallContext } from "../types";
-import type { EventStream } from "../utils/event-stream";
 
-const INTENT_FIELD = "intent";
+export const INTENT_FIELD = "intent";
 
 export function createAbortedToolResult(
 	toolCall: ToolCall,
@@ -38,6 +37,13 @@ export function createAbortedToolResult(
 /**
  * Execute multiple tool calls, checking for steering messages between calls if interruptMode is "immediate".
  */
+type BatchInfo = {
+	batchId: string;
+	index: number;
+	total: number;
+	toolCalls: Array<{ id: string; name: string }>;
+};
+
 export async function executeToolCalls(
 	tools: AnyAgentTool[],
 	message: AssistantMessage,
@@ -47,8 +53,11 @@ export async function executeToolCalls(
 ): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
 	const toolResults: ToolResultMessage[] = [];
 	const toolCalls = message.content.filter((c): c is ToolCall => c.type === "toolCall");
+	const batchId = crypto.randomUUID();
+	const batchToolCalls = toolCalls.map(tc => ({ id: tc.id, name: tc.name }));
 
-	for (const toolCall of toolCalls) {
+	for (let i = 0; i < toolCalls.length; i++) {
+		const toolCall = toolCalls[i];
 		if (config.interruptMode === "immediate") {
 			const steeringMessages = (await config.getSteeringMessages?.()) ?? [];
 			if (steeringMessages.length > 0) {
@@ -56,12 +65,13 @@ export async function executeToolCalls(
 			}
 		}
 
-		if (signal?.aborted === true) {
+		if (signal !== undefined && signal.aborted) {
 			toolResults.push(createAbortedToolResult(toolCall, stream, "aborted"));
 			continue;
 		}
 
-		const result = await executeSingleToolCall(tools, toolCall, signal, stream, config);
+		const batch: BatchInfo = { batchId, index: i, total: toolCalls.length, toolCalls: batchToolCalls };
+		const result = await executeSingleToolCall(tools, toolCall, signal, stream, config, batch);
 		toolResults.push(result);
 	}
 
@@ -74,6 +84,7 @@ async function executeSingleToolCall(
 	signal: AbortSignal | undefined,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	config: AgentLoopConfig,
+	batch: BatchInfo,
 ): Promise<ToolResultMessage> {
 	const tool = tools.find(t => t.name === toolCall.name);
 	const { args, intent } = prepareToolArgs(toolCall, config);
@@ -85,7 +96,7 @@ async function executeSingleToolCall(
 	}
 
 	try {
-		return await performToolExecution(tool, toolCall, args, signal, stream, config);
+		return await performToolExecution(tool, toolCall, args, signal, stream, config, batch);
 	} catch (error: unknown) {
 		return handleToolExecutionError(error, toolCall, stream);
 	}
@@ -136,11 +147,13 @@ async function performToolExecution(
 	signal: AbortSignal | undefined,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	config: AgentLoopConfig,
+	batch: BatchInfo,
 ): Promise<ToolResultMessage> {
 	const toolCallContext: ToolCallContext = {
-		toolCallId: toolCall.id,
-		toolName: toolCall.name,
-		arguments: args,
+		batchId: batch.batchId,
+		index: batch.index,
+		total: batch.total,
+		toolCalls: batch.toolCalls,
 	};
 	const toolContext = config.getToolContext?.(toolCallContext);
 
@@ -165,7 +178,7 @@ async function performToolExecution(
 		toolName: toolCall.name,
 		content: toolResult.content,
 		details: toolResult.details,
-		isError: toolResult.isError === true,
+		isError: false,
 		timestamp: Date.now(),
 	};
 

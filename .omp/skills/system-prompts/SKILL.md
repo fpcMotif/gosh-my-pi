@@ -288,13 +288,13 @@ Good: "Critical: X."
 
 All prompt prose that prescribes behavior MUST use RFC 2119 key words in **full caps**. This removes ambiguity about whether an instruction is absolute or advisory.
 
-| Keyword | Meaning | Replaces |
-| --- | --- | --- |
-| **MUST** / **REQUIRED** | Absolute requirement | "always", "make sure", "ensure", "do" |
-| **MUST NOT** / **PROHIBITED** | Absolute prohibition | "never", "do not", "don't", "strictly prohibited" |
-| **SHOULD** / **RECOMMENDED** | Strong preference; deviation allowed with known tradeoffs | "prefer", "recommend", "it's best to" |
-| **SHOULD NOT** / **NOT RECOMMENDED** | Strong discouragement; deviation allowed with known tradeoffs | "avoid", "try not to" |
-| **MAY** / **OPTIONAL** | Truly optional | "can", "may", "you could" |
+| Keyword                              | Meaning                                                       | Replaces                                          |
+| ------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------- |
+| **MUST** / **REQUIRED**              | Absolute requirement                                          | "always", "make sure", "ensure", "do"             |
+| **MUST NOT** / **PROHIBITED**        | Absolute prohibition                                          | "never", "do not", "don't", "strictly prohibited" |
+| **SHOULD** / **RECOMMENDED**         | Strong preference; deviation allowed with known tradeoffs     | "prefer", "recommend", "it's best to"             |
+| **SHOULD NOT** / **NOT RECOMMENDED** | Strong discouragement; deviation allowed with known tradeoffs | "avoid", "try not to"                             |
+| **MAY** / **OPTIONAL**               | Truly optional                                                | "can", "may", "you could"                         |
 
 ```
 Bad:  "Never edit from a grep snippet alone"
@@ -537,18 +537,18 @@ description: Fast read-only codebase scout returning compressed context for hand
 tools: read, grep, find, bash
 model: pi/smol, haiku-4.5, haiku-4-5, gemini-flash-latest, gemini-3-flash, zai-glm-4.7, glm-4.7-flash, glm-4.5-flash, gpt-5.1-codex-mini, haiku, flash, mini
 output:
-  properties:
-    query:
-      type: string
-    files:
-      elements:
-        properties:
-          path: { type: string }
-          line_start: { type: number }
-          line_end: { type: number }
-          description: { type: string }
-    architecture:
-      type: string
+   properties:
+      query:
+         type: string
+      files:
+         elements:
+            properties:
+               path: { type: string }
+               line_start: { type: number }
+               line_end: { type: number }
+               description: { type: string }
+      architecture:
+         type: string
 ---
 
 <role>File search specialist. Investigate codebase, return structured findings for handoff.</role>

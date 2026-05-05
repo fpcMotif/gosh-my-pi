@@ -10,7 +10,7 @@
  */
 
 import { validateOpenAICompatibleApiKey } from "./api-key-validation";
-import type { OAuthController } from "./types";
+import type { OAuthController, OAuthCredentials } from "./types";
 
 const AUTH_URL = "https://z.ai/manage-apikey/apikey-list";
 const API_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
@@ -57,4 +57,9 @@ export async function loginZai(options: OAuthController): Promise<string> {
 		signal: options.signal,
 	});
 	return trimmed;
+}
+
+/** Z.AI uses API keys — token refresh is not supported. */
+export function refreshZaiToken(_refreshToken: string): Promise<OAuthCredentials> {
+	return Promise.reject(new Error("Z.AI does not support token refresh"));
 }

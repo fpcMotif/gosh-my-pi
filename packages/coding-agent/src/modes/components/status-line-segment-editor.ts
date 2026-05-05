@@ -109,141 +109,157 @@ export class StatusLineSegmentEditorComponent extends Container {
 	}
 
 	handleInput(data: string): void {
-		const columnSegments = this.#getCurrentColumnSegments();
+		if (this.#handleNavigation(data)) return;
+		if (this.#handleCycleColumn(data)) return;
+		if (this.#handleQuickToggle(data)) return;
+		if (this.#handleReorder(data)) return;
 
-		if (matchesKey(data, "up") || data === "k") {
-			// Move selection up within column, or jump to previous column
-			if (this.#selectedIndex > 0) {
-				this.#selectedIndex--;
-			} else {
-				// Jump to previous column
-				if (this.#focusColumn === "disabled") {
-					const rightSegs = this.#getSegmentsForColumn("right");
-					if (rightSegs.length > 0) {
-						this.#focusColumn = "right";
-						this.#selectedIndex = rightSegs.length - 1;
-					} else {
-						const leftSegs = this.#getSegmentsForColumn("left");
-						if (leftSegs.length > 0) {
-							this.#focusColumn = "left";
-							this.#selectedIndex = leftSegs.length - 1;
-						}
-					}
-				} else if (this.#focusColumn === "right") {
-					const leftSegs = this.#getSegmentsForColumn("left");
-					if (leftSegs.length > 0) {
-						this.#focusColumn = "left";
-						this.#selectedIndex = leftSegs.length - 1;
-					}
-				}
-			}
-		} else if (matchesKey(data, "down") || data === "j") {
-			// Move selection down within column, or jump to next column
-			if (this.#selectedIndex < columnSegments.length - 1) {
-				this.#selectedIndex++;
-			} else {
-				// Jump to next column
-				if (this.#focusColumn === "left") {
-					const rightSegs = this.#getSegmentsForColumn("right");
-					if (rightSegs.length > 0) {
-						this.#focusColumn = "right";
-						this.#selectedIndex = 0;
-					} else {
-						const disabledSegs = this.#getSegmentsForColumn("disabled");
-						if (disabledSegs.length > 0) {
-							this.#focusColumn = "disabled";
-							this.#selectedIndex = 0;
-						}
-					}
-				} else if (this.#focusColumn === "right") {
-					const disabledSegs = this.#getSegmentsForColumn("disabled");
-					if (disabledSegs.length > 0) {
-						this.#focusColumn = "disabled";
-						this.#selectedIndex = 0;
-					}
-				}
-			}
-		} else if (matchesKey(data, "tab")) {
-			// Cycle segment: left → right → disabled → left
-			const seg = columnSegments[this.#selectedIndex];
-			if (seg) {
-				const oldColumn = seg.column;
-				if (seg.column === "left") {
-					seg.column = "right";
-					seg.order = this.#getSegmentsForColumn("right").length;
-				} else if (seg.column === "right") {
-					seg.column = "disabled";
-					seg.order = 999;
-				} else {
-					seg.column = "left";
-					seg.order = this.#getSegmentsForColumn("left").length;
-				}
-				// Recompact orders in old column
-				this.#recompactColumn(oldColumn);
-				this.#triggerPreview();
-			}
-		} else if (matchesKey(data, "shift+tab")) {
-			// Reverse cycle: left ← right ← disabled ← left
-			const seg = columnSegments[this.#selectedIndex];
-			if (seg) {
-				const oldColumn = seg.column;
-				if (seg.column === "left") {
-					seg.column = "disabled";
-					seg.order = 999;
-				} else if (seg.column === "right") {
-					seg.column = "left";
-					seg.order = this.#getSegmentsForColumn("left").length;
-				} else {
-					seg.column = "right";
-					seg.order = this.#getSegmentsForColumn("right").length;
-				}
-				this.#recompactColumn(oldColumn);
-				this.#triggerPreview();
-			}
-		} else if (data === " ") {
-			// Quick toggle: disabled ↔ left
-			const seg = columnSegments[this.#selectedIndex];
-			if (seg) {
-				const oldColumn = seg.column;
-				if (seg.column === "disabled") {
-					seg.column = "left";
-					seg.order = this.#getSegmentsForColumn("left").length;
-				} else {
-					seg.column = "disabled";
-					seg.order = 999;
-				}
-				this.#recompactColumn(oldColumn);
-				this.#triggerPreview();
-			}
-		} else if (data === "K") {
-			// Move segment up in order (Shift+K)
-			const seg = columnSegments[this.#selectedIndex];
-			if (seg && seg.column !== "disabled" && this.#selectedIndex > 0) {
-				const prevSeg = columnSegments[this.#selectedIndex - 1];
-				const tempOrder = seg.order;
-				seg.order = prevSeg.order;
-				prevSeg.order = tempOrder;
-				this.#selectedIndex--;
-				this.#triggerPreview();
-			}
-		} else if (data === "J") {
-			// Move segment down in order (Shift+J)
-			const seg = columnSegments[this.#selectedIndex];
-			if (seg && seg.column !== "disabled" && this.#selectedIndex < columnSegments.length - 1) {
-				const nextSeg = columnSegments[this.#selectedIndex + 1];
-				const tempOrder = seg.order;
-				seg.order = nextSeg.order;
-				nextSeg.order = tempOrder;
-				this.#selectedIndex++;
-				this.#triggerPreview();
-			}
-		} else if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
+		if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
 			const left = this.#getSegmentsForColumn("left").map(s => s.id);
 			const right = this.#getSegmentsForColumn("right").map(s => s.id);
 			this.callbacks.onSave(left, right);
 		} else if (matchesAppInterrupt(data)) {
 			this.callbacks.onCancel();
 		}
+	}
+
+	#handleNavigation(data: string): boolean {
+		const columnSegments = this.#getCurrentColumnSegments();
+		if (matchesKey(data, "up") || data === "k") {
+			if (this.#selectedIndex > 0) {
+				this.#selectedIndex--;
+			} else if (this.#focusColumn === "disabled") {
+				const rightSegs = this.#getSegmentsForColumn("right");
+				if (rightSegs.length > 0) {
+					this.#focusColumn = "right";
+					this.#selectedIndex = rightSegs.length - 1;
+				} else {
+					const leftSegs = this.#getSegmentsForColumn("left");
+					if (leftSegs.length > 0) {
+						this.#focusColumn = "left";
+						this.#selectedIndex = leftSegs.length - 1;
+					}
+				}
+			} else if (this.#focusColumn === "right") {
+				const leftSegs = this.#getSegmentsForColumn("left");
+				if (leftSegs.length > 0) {
+					this.#focusColumn = "left";
+					this.#selectedIndex = leftSegs.length - 1;
+				}
+			}
+			return true;
+		}
+
+		if (matchesKey(data, "down") || data === "j") {
+			if (this.#selectedIndex < columnSegments.length - 1) {
+				this.#selectedIndex++;
+			} else if (this.#focusColumn === "left") {
+				const rightSegs = this.#getSegmentsForColumn("right");
+				if (rightSegs.length > 0) {
+					this.#focusColumn = "right";
+					this.#selectedIndex = 0;
+				} else {
+					const disabledSegs = this.#getSegmentsForColumn("disabled");
+					if (disabledSegs.length > 0) {
+						this.#focusColumn = "disabled";
+						this.#selectedIndex = 0;
+					}
+				}
+			} else if (this.#focusColumn === "right") {
+				const disabledSegs = this.#getSegmentsForColumn("disabled");
+				if (disabledSegs.length > 0) {
+					this.#focusColumn = "disabled";
+					this.#selectedIndex = 0;
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
+	#handleCycleColumn(data: string): boolean {
+		const isForward = matchesKey(data, "tab");
+		const isReverse = matchesKey(data, "shift+tab");
+		if (!isForward && !isReverse) return false;
+
+		const columnSegments = this.#getCurrentColumnSegments();
+		const seg = columnSegments[this.#selectedIndex];
+		if (seg) {
+			const oldColumn = seg.column;
+			if (isForward) {
+				if (seg.column === "left") {
+					seg.column = "right";
+					seg.order = this.#getSegmentsForColumn("right").length;
+				} else if (seg.column === "right") {
+					seg.column = "disabled";
+					seg.order = 999;
+				} else {
+					seg.column = "left";
+					seg.order = this.#getSegmentsForColumn("left").length;
+				}
+			} else {
+				if (seg.column === "left") {
+					seg.column = "disabled";
+					seg.order = 999;
+				} else if (seg.column === "right") {
+					seg.column = "left";
+					seg.order = this.#getSegmentsForColumn("left").length;
+				} else {
+					seg.column = "right";
+					seg.order = this.#getSegmentsForColumn("right").length;
+				}
+			}
+			this.#recompactColumn(oldColumn);
+			this.#triggerPreview();
+		}
+		return true;
+	}
+
+	#handleQuickToggle(data: string): boolean {
+		if (data !== " ") return false;
+		const columnSegments = this.#getCurrentColumnSegments();
+		const seg = columnSegments[this.#selectedIndex];
+		if (seg) {
+			const oldColumn = seg.column;
+			if (seg.column === "disabled") {
+				seg.column = "left";
+				seg.order = this.#getSegmentsForColumn("left").length;
+			} else {
+				seg.column = "disabled";
+				seg.order = 999;
+			}
+			this.#recompactColumn(oldColumn);
+			this.#triggerPreview();
+		}
+		return true;
+	}
+
+	#handleReorder(data: string): boolean {
+		const columnSegments = this.#getCurrentColumnSegments();
+		const seg = columnSegments[this.#selectedIndex];
+		if (!seg || seg.column === "disabled") return false;
+
+		if (data === "K" && this.#selectedIndex > 0) {
+			const prevSeg = columnSegments[this.#selectedIndex - 1];
+			const tempOrder = seg.order;
+			seg.order = prevSeg.order;
+			prevSeg.order = tempOrder;
+			this.#selectedIndex--;
+			this.#triggerPreview();
+			return true;
+		}
+
+		if (data === "J" && this.#selectedIndex < columnSegments.length - 1) {
+			const nextSeg = columnSegments[this.#selectedIndex + 1];
+			const tempOrder = seg.order;
+			seg.order = nextSeg.order;
+			nextSeg.order = tempOrder;
+			this.#selectedIndex++;
+			this.#triggerPreview();
+			return true;
+		}
+
+		return false;
 	}
 
 	#recompactColumn(column: Column): void {

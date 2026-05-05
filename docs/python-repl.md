@@ -44,9 +44,9 @@ There are two gateway paths:
    - Metadata file: `gateway.json`
    - Lock file: `gateway.lock`
    - Spawn command:
-     - `python -m kernel_gateway`
-     - bound to `127.0.0.1:<allocated-port>`
-     - startup health check: `GET /api/kernelspecs`
+      - `python -m kernel_gateway`
+      - bound to `127.0.0.1:<allocated-port>`
+      - startup health check: `GET /api/kernelspecs`
 
 ### Local shared gateway coordination
 
@@ -94,17 +94,17 @@ Kernel shutdown:
 `python.kernelMode` controls retained kernel reuse:
 
 - `session` (default)
-  - Reuses kernel sessions keyed by session file plus cwd when a session file exists; otherwise by cwd.
-  - Execution is serialized per session via a queue.
-  - Idle sessions are evicted after 5 minutes.
-  - At most 4 sessions; oldest is evicted on overflow.
-  - Heartbeat checks detect dead kernels.
-  - Auto-restart allowed once; repeated crash => hard failure.
+   - Reuses kernel sessions keyed by session file plus cwd when a session file exists; otherwise by cwd.
+   - Execution is serialized per session via a queue.
+   - Idle sessions are evicted after 5 minutes.
+   - At most 4 sessions; oldest is evicted on overflow.
+   - Heartbeat checks detect dead kernels.
+   - Auto-restart allowed once; repeated crash => hard failure.
 
 - `per-call`
-  - Creates a fresh kernel for each execute request.
-  - Shuts kernel down after the request.
-  - No cross-call state persistence.
+   - Creates a fresh kernel for each execute request.
+   - Shuts kernel down after the request.
+   - No cross-call state persistence.
 
 ### Multi-cell behavior in a single tool call
 
@@ -225,14 +225,14 @@ Tool results can include truncation metadata and `artifact://<id>` for full outp
 ### Renderer behavior
 
 - Tool renderer (`python.ts`):
-  - shows code-cell blocks with per-cell status
-  - collapsed preview defaults to 10 lines
-  - supports expanded mode for full output and richer status detail
+   - shows code-cell blocks with per-cell status
+   - collapsed preview defaults to 10 lines
+   - supports expanded mode for full output and richer status detail
 - Interactive renderer (`python-execution.ts`):
-  - used for user-triggered Python execution in TUI
-  - collapsed preview defaults to 20 lines
-  - clamps very long individual lines to 4000 chars for display safety
-  - shows cancellation/error/truncation notices
+   - used for user-triggered Python execution in TUI
+   - collapsed preview defaults to 20 lines
+   - clamps very long individual lines to 4000 chars for display safety
+   - shows cancellation/error/truncation notices
 
 ## External gateway support
 
@@ -254,35 +254,35 @@ Behavior differences from local shared gateway:
 ## Operational troubleshooting (current failure modes)
 
 - **Python tool not available**
-  - Check `python.toolMode` / `PI_PY`.
-  - If preflight fails, runtime falls back to bash-only.
+   - Check `python.toolMode` / `PI_PY`.
+   - If preflight fails, runtime falls back to bash-only.
 
 - **Kernel availability errors**
-  - Local mode requires both `kernel_gateway` and `ipykernel` importable in resolved Python runtime.
-  - Install with:
-    ```bash
-    python -m pip install jupyter_kernel_gateway ipykernel
-    ```
+   - Local mode requires both `kernel_gateway` and `ipykernel` importable in resolved Python runtime.
+   - Install with:
+      ```bash
+      python -m pip install jupyter_kernel_gateway ipykernel
+      ```
 
 - **`python.sharedGateway=false` causes startup failure**
-  - This is expected with current implementation.
+   - This is expected with current implementation.
 
 - **External gateway auth/reachability failures**
-  - 401/403 -> set `PI_PYTHON_GATEWAY_TOKEN`.
-  - timeout/unreachable -> verify URL/network and gateway health.
+   - 401/403 -> set `PI_PYTHON_GATEWAY_TOKEN`.
+   - timeout/unreachable -> verify URL/network and gateway health.
 
 - **Execution hangs then times out**
-  - Increase tool `timeout` (max 600s) if workload is legitimate.
-  - For stuck code, cancellation triggers kernel interrupt but user code may still need refactor.
+   - Increase tool `timeout` (max 600s) if workload is legitimate.
+   - For stuck code, cancellation triggers kernel interrupt but user code may still need refactor.
 
 - **stdin/input prompts in Python code**
-  - `input()` is not supported interactively in this runtime path; pass data programmatically.
+   - `input()` is not supported interactively in this runtime path; pass data programmatically.
 
 - **Resource exhaustion (`EMFILE` / too many open files)**
-  - Session manager triggers shared-gateway recovery (session teardown + shared gateway restart).
+   - Session manager triggers shared-gateway recovery (session teardown + shared gateway restart).
 
 - **Working directory errors**
-  - Tool validates `cwd` exists and is a directory before execution.
+   - Tool validates `cwd` exists and is a directory before execution.
 
 ## Relevant environment variables
 

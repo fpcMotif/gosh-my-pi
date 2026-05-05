@@ -2,7 +2,7 @@
 	"extends": "./tsconfig.base.json",
 	"compilerOptions": {
 		"composite": true,
-		"noEmit": true,
+		"noEmit": false,
 		"emitDeclarationOnly": false
 	},
 	"include": ["scripts"],

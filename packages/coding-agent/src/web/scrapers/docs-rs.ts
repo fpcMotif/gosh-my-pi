@@ -150,7 +150,7 @@ async function fetchRustdocCrate(
 		}
 		return crate;
 	} catch {
-		if (signal?.aborted === true) throw new ToolAbortError();
+		if (signal !== undefined && signal.aborted) throw new ToolAbortError();
 		return null;
 	}
 }

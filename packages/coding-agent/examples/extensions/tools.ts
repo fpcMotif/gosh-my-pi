@@ -98,7 +98,7 @@ export default function toolsExtension(pi: ExtensionAPI) {
 						} else {
 							enabledTools.delete(id);
 						}
-						applyTools();
+						void applyTools();
 						persistState();
 					},
 					() => {

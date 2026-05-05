@@ -190,8 +190,8 @@ In `runSubprocess` (`src/task/executor.ts`):
 - depth computed from `taskDepth`
 - `task.maxRecursionDepth` controls cutoff
 - when at max depth:
-  - `task` tool is removed from child tool list
-  - child `spawns` env is set to empty
+   - `task` tool is removed from child tool list
+   - child `spawns` env is set to empty
 
 So deeper levels cannot spawn further tasks even if the agent definition includes `spawns`.
 

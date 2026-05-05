@@ -1,298 +1,298 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      skip_npm:
-        description: "Skip npm publish"
-        type: boolean
-        default: false
+   push:
+      branches: [main]
+      tags: ["v*"]
+   pull_request:
+      branches: [main]
+   workflow_dispatch:
+      inputs:
+         skip_npm:
+            description: "Skip npm publish"
+            type: boolean
+            default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+   group: ${{ github.workflow }}-${{ github.ref }}
+   cancel-in-progress: true
 
 jobs:
-  # Fast lint + type check (no Rust, no native build needed)
-  check:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3"
-      - name: Cache bun dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-      - run: bun install --frozen-lockfile
-      - name: Type check workspace
-        run: bun run ci:check:full
+   # Fast lint + type check (no Rust, no native build needed)
+   check:
+      runs-on: ubuntu-22.04
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              fetch-depth: 0
+         - uses: oven-sh/setup-bun@v2
+           with:
+              bun-version: "1.3"
+         - name: Cache bun dependencies
+           uses: actions/cache@v4
+           with:
+              path: ~/.bun/install/cache
+              key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+         - run: bun install --frozen-lockfile
+         - name: Type check workspace
+           run: bun run ci:check:full
 
-  native:
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ startsWith(github.ref, 'refs/tags/v') && fromJSON('[
-          {"os":"ubuntu-22.04","platform":"linux","arch":"x64","variants":"baseline modern","rust_checks":true},
-          {"os":"ubuntu-22.04","platform":"linux","arch":"arm64","target":"aarch64-unknown-linux-gnu"},
-          {"os":"macos-15-intel","platform":"darwin","arch":"x64","variants":"baseline modern"},
-          {"os":"macos-14","platform":"darwin","arch":"arm64"},
-          {"os":"windows-latest","platform":"win32","arch":"x64","variants":"baseline modern"}
-          ]') || fromJSON('[
-          {"os":"ubuntu-22.04","platform":"linux","arch":"x64","variants":"baseline modern","rust_checks":true}
-          ]') }}
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly-2026-04-29
-          components: ${{ matrix.rust_checks && 'clippy, rustfmt' || '' }}
-          targets: ${{ matrix.target }}
-      - name: Ensure cross-compilation target is installed
-        if: matrix.target
-        run: rustup target add ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-          cache-workspace-crates: true
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3"
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-      - run: bun install --frozen-lockfile
-      - name: Install cross-compilation toolchain
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-      - name: Rust checks
-        if: matrix.rust_checks
-        run: bun run check:rs
-      - name: Build native addon(s)
-        env:
-          CROSS_TARGET: ${{ matrix.target }}
-          TARGET_PLATFORM: ${{ matrix.platform }}
-          TARGET_ARCH: ${{ matrix.arch }}
-          TARGET_VARIANTS: ${{ matrix.variants }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        shell: bash
-        run: |
-          bun run ci:build:native
-      - name: Upload native addon(s)
-        uses: actions/upload-artifact@v4
-        with:
-          name: pi-natives-${{ matrix.platform }}-${{ matrix.arch }}
-          path: packages/natives/native/pi_natives.${{ matrix.platform }}-${{ matrix.arch }}*.node
-          if-no-files-found: error
+   native:
+      strategy:
+         fail-fast: false
+         matrix:
+            include: ${{ startsWith(github.ref, 'refs/tags/v') && fromJSON('[
+               {"os":"ubuntu-22.04","platform":"linux","arch":"x64","variants":"baseline modern","rust_checks":true},
+               {"os":"ubuntu-22.04","platform":"linux","arch":"arm64","target":"aarch64-unknown-linux-gnu"},
+               {"os":"macos-15-intel","platform":"darwin","arch":"x64","variants":"baseline modern"},
+               {"os":"macos-14","platform":"darwin","arch":"arm64"},
+               {"os":"windows-latest","platform":"win32","arch":"x64","variants":"baseline modern"}
+               ]') || fromJSON('[
+               {"os":"ubuntu-22.04","platform":"linux","arch":"x64","variants":"baseline modern","rust_checks":true}
+               ]') }}
+      runs-on: ${{ matrix.os }}
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              lfs: true
+         - uses: dtolnay/rust-toolchain@nightly
+           with:
+              toolchain: nightly-2026-04-29
+              components: ${{ matrix.rust_checks && 'clippy, rustfmt' || '' }}
+              targets: ${{ matrix.target }}
+         - name: Ensure cross-compilation target is installed
+           if: matrix.target
+           run: rustup target add ${{ matrix.target }}
+         - uses: Swatinem/rust-cache@v2
+           with:
+              key: ${{ matrix.target }}
+              cache-workspace-crates: true
+         - uses: oven-sh/setup-bun@v2
+           with:
+              bun-version: "1.3"
+         - uses: mlugg/setup-zig@v2
+           with:
+              version: 0.15.2
+         - run: bun install --frozen-lockfile
+         - name: Install cross-compilation toolchain
+           if: matrix.target == 'aarch64-unknown-linux-gnu'
+           run: |
+              sudo apt-get update
+              sudo apt-get install -y gcc-aarch64-linux-gnu
+         - name: Rust checks
+           if: matrix.rust_checks
+           run: bun run check:rs
+         - name: Build native addon(s)
+           env:
+              CROSS_TARGET: ${{ matrix.target }}
+              TARGET_PLATFORM: ${{ matrix.platform }}
+              TARGET_ARCH: ${{ matrix.arch }}
+              TARGET_VARIANTS: ${{ matrix.variants }}
+              CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+           shell: bash
+           run: |
+              bun run ci:build:native
+         - name: Upload native addon(s)
+           uses: actions/upload-artifact@v4
+           with:
+              name: pi-natives-${{ matrix.platform }}-${{ matrix.arch }}
+              path: packages/natives/native/pi_natives.${{ matrix.platform }}-${{ matrix.arch }}*.node
+              if-no-files-found: error
 
-  test:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          lfs: true
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3"
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly-2026-04-29
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-workspace-crates: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-      - name: Cache bun dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep imagemagick
-          sudo ln -s $(which fdfind) /usr/local/bin/fd
-          sudo ln -sf /usr/bin/convert /usr/local/bin/magick
-      - run: bun install --frozen-lockfile
-      - run: bun run build:native
-      - name: Test workspace
-        run: bun run ci:test:full
-      - name: CLI smoke test
-        run: bun run ci:test:smoke
+   test:
+      runs-on: ubuntu-22.04
+      timeout-minutes: 30
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              fetch-depth: 0
+              lfs: true
+         - uses: oven-sh/setup-bun@v2
+           with:
+              bun-version: "1.3"
+         - uses: dtolnay/rust-toolchain@nightly
+           with:
+              toolchain: nightly-2026-04-29
+         - uses: Swatinem/rust-cache@v2
+           with:
+              cache-workspace-crates: true
+         - uses: taiki-e/install-action@v2
+           with:
+              tool: nextest
+         - uses: mlugg/setup-zig@v2
+           with:
+              version: 0.15.2
+         - name: Cache bun dependencies
+           uses: actions/cache@v4
+           with:
+              path: ~/.bun/install/cache
+              key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+         - name: Install system deps
+           run: |
+              sudo apt-get update
+              sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep imagemagick
+              sudo ln -s $(which fdfind) /usr/local/bin/fd
+              sudo ln -sf /usr/bin/convert /usr/local/bin/magick
+         - run: bun install --frozen-lockfile
+         - run: bun run build:native
+         - name: Test workspace
+           run: bun run ci:test:full
+         - name: CLI smoke test
+           run: bun run ci:test:smoke
 
-  install_methods:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3"
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly-2026-04-29
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-workspace-crates: true
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-      - name: Cache bun dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep imagemagick
-          sudo ln -s $(which fdfind) /usr/local/bin/fd
-          sudo ln -sf /usr/bin/convert /usr/local/bin/magick
-      - run: bun install --frozen-lockfile
-      - name: Install method smoke tests
-        run: bun run ci:test:install-methods
+   install_methods:
+      runs-on: ubuntu-22.04
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              lfs: true
+         - uses: oven-sh/setup-bun@v2
+           with:
+              bun-version: "1.3"
+         - uses: dtolnay/rust-toolchain@nightly
+           with:
+              toolchain: nightly-2026-04-29
+         - uses: Swatinem/rust-cache@v2
+           with:
+              cache-workspace-crates: true
+         - uses: mlugg/setup-zig@v2
+           with:
+              version: 0.15.2
+         - name: Cache bun dependencies
+           uses: actions/cache@v4
+           with:
+              path: ~/.bun/install/cache
+              key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+         - name: Install system deps
+           run: |
+              sudo apt-get update
+              sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep imagemagick
+              sudo ln -s $(which fdfind) /usr/local/bin/fd
+              sudo ln -sf /usr/bin/convert /usr/local/bin/magick
+         - run: bun install --frozen-lockfile
+         - name: Install method smoke tests
+           run: bun run ci:test:install-methods
 
-  release_binary:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, native, test, install_methods]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            target_id: linux-x64
-            native_artifact: pi-natives-linux-x64
-            binary_path: packages/coding-agent/binaries/omp-linux-x64
-          - os: ubuntu-24.04-arm
-            target_id: linux-arm64
-            native_artifact: pi-natives-linux-arm64
-            binary_path: packages/coding-agent/binaries/omp-linux-arm64
-          - os: macos-15-intel
-            target_id: darwin-x64
-            native_artifact: pi-natives-darwin-x64
-            binary_path: packages/coding-agent/binaries/omp-darwin-x64
-          - os: macos-14
-            target_id: darwin-arm64
-            native_artifact: pi-natives-darwin-arm64
-            binary_path: packages/coding-agent/binaries/omp-darwin-arm64
-          - os: windows-latest
-            target_id: win32-x64
-            native_artifact: pi-natives-win32-x64
-            binary_path: packages/coding-agent/binaries/omp-windows-x64.exe
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3"
-      - name: Cache bun dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-      - run: bun install --frozen-lockfile
-      - name: Download native addon(s)
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.native_artifact }}
-          path: packages/natives/native
-      - name: Build release binary
-        env:
-          RELEASE_TARGETS: ${{ matrix.target_id }}
-        run: bun run ci:release:build-binaries
-      - name: Smoke release binary
-        if: runner.os != 'Windows'
-        run: |
-          runtime_dir="$(mktemp -d)"
-          HOME="$runtime_dir/home" XDG_DATA_HOME="$runtime_dir/xdg" "${{ matrix.binary_path }}" --version
-      - name: Smoke release binary (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $runtimeDir = Join-Path $env:TEMP ("omp-runtime-" + [System.Guid]::NewGuid().ToString("N"))
-          New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
-          $env:HOME = Join-Path $runtimeDir "home"
-          $env:XDG_DATA_HOME = Join-Path $runtimeDir "xdg"
-          & "${{ matrix.binary_path }}" --version
-      - name: Upload release binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: omp-binary-${{ matrix.target_id }}
-          path: ${{ matrix.binary_path }}
+   release_binary:
+      if: startsWith(github.ref, 'refs/tags/v')
+      needs: [check, native, test, install_methods]
+      strategy:
+         fail-fast: false
+         matrix:
+            include:
+               - os: ubuntu-22.04
+                 target_id: linux-x64
+                 native_artifact: pi-natives-linux-x64
+                 binary_path: packages/coding-agent/binaries/omp-linux-x64
+               - os: ubuntu-24.04-arm
+                 target_id: linux-arm64
+                 native_artifact: pi-natives-linux-arm64
+                 binary_path: packages/coding-agent/binaries/omp-linux-arm64
+               - os: macos-15-intel
+                 target_id: darwin-x64
+                 native_artifact: pi-natives-darwin-x64
+                 binary_path: packages/coding-agent/binaries/omp-darwin-x64
+               - os: macos-14
+                 target_id: darwin-arm64
+                 native_artifact: pi-natives-darwin-arm64
+                 binary_path: packages/coding-agent/binaries/omp-darwin-arm64
+               - os: windows-latest
+                 target_id: win32-x64
+                 native_artifact: pi-natives-win32-x64
+                 binary_path: packages/coding-agent/binaries/omp-windows-x64.exe
+      runs-on: ${{ matrix.os }}
+      permissions:
+         contents: read
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              lfs: true
+         - uses: oven-sh/setup-bun@v2
+           with:
+              bun-version: "1.3"
+         - name: Cache bun dependencies
+           uses: actions/cache@v4
+           with:
+              path: ~/.bun/install/cache
+              key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+         - run: bun install --frozen-lockfile
+         - name: Download native addon(s)
+           uses: actions/download-artifact@v4
+           with:
+              name: ${{ matrix.native_artifact }}
+              path: packages/natives/native
+         - name: Build release binary
+           env:
+              RELEASE_TARGETS: ${{ matrix.target_id }}
+           run: bun run ci:release:build-binaries
+         - name: Smoke release binary
+           if: runner.os != 'Windows'
+           run: |
+              runtime_dir="$(mktemp -d)"
+              HOME="$runtime_dir/home" XDG_DATA_HOME="$runtime_dir/xdg" "${{ matrix.binary_path }}" --version
+         - name: Smoke release binary (Windows)
+           if: runner.os == 'Windows'
+           shell: pwsh
+           run: |
+              $runtimeDir = Join-Path $env:TEMP ("omp-runtime-" + [System.Guid]::NewGuid().ToString("N"))
+              New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
+              $env:HOME = Join-Path $runtimeDir "home"
+              $env:XDG_DATA_HOME = Join-Path $runtimeDir "xdg"
+              & "${{ matrix.binary_path }}" --version
+         - name: Upload release binary artifact
+           uses: actions/upload-artifact@v4
+           with:
+              name: omp-binary-${{ matrix.target_id }}
+              path: ${{ matrix.binary_path }}
 
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [release_binary]
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-      - name: Cache bun dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-      - run: bun install --frozen-lockfile
-      - name: Download release binaries
-        uses: actions/download-artifact@v4
-        with:
-          pattern: omp-binary-*
-          path: packages/coding-agent/binaries
-          merge-multiple: true
-      - name: Download native addons
-        uses: actions/download-artifact@v4
-        with:
-          pattern: pi-natives-*
-          path: packages/natives/native
-          merge-multiple: true
-      - name: Verify native addons
-        run: bun run ci:release:verify-natives
-      - name: Stage native addons for release
-        run: cp packages/natives/native/*.node packages/coding-agent/binaries/
-      - name: Build release archives
-        run: bun run ci:release:build-archives
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: packages/coding-agent/binaries/*
-          generate_release_notes: true
-      - name: Publish to npm
-        if: ${{ !inputs.skip_npm }}
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: bun run ci:release:publish
+   release:
+      if: startsWith(github.ref, 'refs/tags/v')
+      needs: [release_binary]
+      runs-on: ubuntu-22.04
+      permissions:
+         contents: write
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              lfs: true
+         - uses: oven-sh/setup-bun@v2
+           with:
+              bun-version: "1.3"
+         - uses: actions/setup-node@v4
+           with:
+              node-version: "24"
+              registry-url: "https://registry.npmjs.org"
+         - name: Cache bun dependencies
+           uses: actions/cache@v4
+           with:
+              path: ~/.bun/install/cache
+              key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+         - run: bun install --frozen-lockfile
+         - name: Download release binaries
+           uses: actions/download-artifact@v4
+           with:
+              pattern: omp-binary-*
+              path: packages/coding-agent/binaries
+              merge-multiple: true
+         - name: Download native addons
+           uses: actions/download-artifact@v4
+           with:
+              pattern: pi-natives-*
+              path: packages/natives/native
+              merge-multiple: true
+         - name: Verify native addons
+           run: bun run ci:release:verify-natives
+         - name: Stage native addons for release
+           run: cp packages/natives/native/*.node packages/coding-agent/binaries/
+         - name: Build release archives
+           run: bun run ci:release:build-archives
+         - name: Create GitHub Release
+           uses: softprops/action-gh-release@v2
+           with:
+              files: packages/coding-agent/binaries/*
+              generate_release_notes: true
+         - name: Publish to npm
+           if: ${{ !inputs.skip_npm }}
+           env:
+              NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+           run: bun run ci:release:publish

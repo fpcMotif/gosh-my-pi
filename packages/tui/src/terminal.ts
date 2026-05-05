@@ -204,7 +204,7 @@ export class ProcessTerminal implements Terminal {
 			const handle = kernel32.symbols.GetStdHandle(STD_INPUT_HANDLE);
 			const mode = new Uint32Array(1);
 			const modePtr = ptr(mode);
-			if (!modePtr || !kernel32.symbols.GetConsoleMode(handle, modePtr)) {
+			if (modePtr === null || !kernel32.symbols.GetConsoleMode(handle, modePtr)) {
 				kernel32.close();
 				return;
 			}
@@ -557,7 +557,7 @@ export class ProcessTerminal implements Terminal {
 		process.stdin.pause();
 
 		// Restore raw mode state
-		if (process.stdin.setRawMode) {
+		if (typeof process.stdin.setRawMode === "function") {
 			process.stdin.setRawMode(this.#wasRaw);
 		}
 	}

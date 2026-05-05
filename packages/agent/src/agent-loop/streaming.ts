@@ -33,7 +33,7 @@ export async function streamAssistantResponse(
 	const llmContext: Context = {
 		systemPrompt: context.systemPrompt,
 		messages: normalizedMessages,
-		tools: normalizeTools(context.tools, config.intentTracing === true),
+		tools: normalizeTools(context.tools ?? [], config.intentTracing === true),
 	};
 
 	const streamFunction = streamFn || streamSimple;
@@ -66,19 +66,13 @@ async function processAssistantStream(
 	let addedPartial = false;
 
 	for await (const event of response) {
-		if (signal?.aborted === true) {
+		if (signal !== undefined && signal.aborted) {
 			return handleAbortedStream(config, partialMessage, addedPartial, context, stream);
 		}
 
 		switch (event.type) {
 			case "start":
 				partialMessage = event.partial;
-				break;
-
-			case "usage":
-				if (partialMessage) {
-					partialMessage.usage = event.usage;
-				}
 				break;
 
 			case "done":
@@ -88,12 +82,14 @@ async function processAssistantStream(
 				return finishPartialMessage(event.error, addedPartial, context, stream);
 
 			default:
-				if (!addedPartial && partialMessage) {
-					context.messages.push(partialMessage);
-					stream.push({ type: "message_start", message: partialMessage });
-					addedPartial = true;
+				if (partialMessage) {
+					if (!addedPartial) {
+						context.messages.push(partialMessage);
+						stream.push({ type: "message_start", message: partialMessage });
+						addedPartial = true;
+					}
+					stream.push({ type: "message_update", message: partialMessage, assistantMessageEvent: event });
 				}
-				stream.push({ type: "message_update", message: partialMessage!, assistantMessageEvent: event });
 				break;
 		}
 	}

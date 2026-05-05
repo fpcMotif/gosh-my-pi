@@ -24,15 +24,15 @@ Both are persisted as session entries and converted back into user-context messa
 Compaction and branch summaries are first-class session entries, not plain assistant/user messages.
 
 - `CompactionEntry`
-  - `type: "compaction"`
-  - `summary`, optional `shortSummary`
-  - `firstKeptEntryId` (compaction boundary)
-  - `tokensBefore`
-  - optional `details`, `preserveData`, `fromExtension`
+   - `type: "compaction"`
+   - `summary`, optional `shortSummary`
+   - `firstKeptEntryId` (compaction boundary)
+   - `tokensBefore`
+   - optional `details`, `preserveData`, `fromExtension`
 - `BranchSummaryEntry`
-  - `type: "branch_summary"`
-  - `fromId`, `summary`
-  - optional `details`, `fromExtension`
+   - `type: "branch_summary"`
+   - `fromId`, `summary`
+   - optional `details`, `fromExtension`
 
 When context is rebuilt (`buildSessionContext`):
 
@@ -97,23 +97,23 @@ What the LLM sees:
 The automatic paths are intentionally different:
 
 - **Overflow recovery**
-  - Trigger: current-model assistant error is detected as context overflow and the error is not older than the latest compaction.
-  - The failing assistant error message is removed from active agent state before retry.
-  - Context promotion is tried first; if a configured larger model is available, the agent switches model and retries without compacting.
-  - If promotion is unavailable and compaction is enabled, context-full compaction runs with `reason: "overflow"` and `willRetry: true`; handoff strategy is not used for overflow.
-  - On success, agent auto-continues (`agent.continue()`) after compaction.
+   - Trigger: current-model assistant error is detected as context overflow and the error is not older than the latest compaction.
+   - The failing assistant error message is removed from active agent state before retry.
+   - Context promotion is tried first; if a configured larger model is available, the agent switches model and retries without compacting.
+   - If promotion is unavailable and compaction is enabled, context-full compaction runs with `reason: "overflow"` and `willRetry: true`; handoff strategy is not used for overflow.
+   - On success, agent auto-continues (`agent.continue()`) after compaction.
 
 - **Threshold maintenance**
-  - Trigger: successful, non-error assistant message whose adjusted context tokens exceed `resolveThresholdTokens(...)`.
-  - Tool-output pruning can reduce the measured token count before threshold comparison.
-  - Context promotion is tried before compaction.
-  - If promotion is unavailable, auto maintenance runs with `reason: "threshold"` and `willRetry: false`.
-  - With `compaction.strategy: "handoff"`, threshold maintenance starts a new handoff session instead of writing a compaction entry; if handoff returns no document without aborting, it falls back to context-full compaction.
-  - On success, if `compaction.autoContinue !== false`, schedules an agent-authored developer auto-continue prompt from `prompts/system/auto-continue.md`.
+   - Trigger: successful, non-error assistant message whose adjusted context tokens exceed `resolveThresholdTokens(...)`.
+   - Tool-output pruning can reduce the measured token count before threshold comparison.
+   - Context promotion is tried before compaction.
+   - If promotion is unavailable, auto maintenance runs with `reason: "threshold"` and `willRetry: false`.
+   - With `compaction.strategy: "handoff"`, threshold maintenance starts a new handoff session instead of writing a compaction entry; if handoff returns no document without aborting, it falls back to context-full compaction.
+   - On success, if `compaction.autoContinue !== false`, schedules an agent-authored developer auto-continue prompt from `prompts/system/auto-continue.md`.
 
 - **Idle maintenance**
-  - Trigger: `runIdleCompaction()` when not streaming or already compacting.
-  - Uses `reason: "idle"` and does not auto-continue afterward.
+   - Trigger: `runIdleCompaction()` when not streaming or already compacting.
+   - Uses `reason: "idle"` and does not auto-continue afterward.
 
 ### Pre-compaction pruning
 
@@ -199,7 +199,7 @@ Prompt selection:
 Remote summarization modes:
 
 - If `compaction.remoteEndpoint` is set and remote compaction is enabled, local summary generation POSTs:
-  - `{ systemPrompt, prompt }`
+   - `{ systemPrompt, prompt }`
 - Expects JSON containing at least `{ summary }`.
 - For OpenAI/OpenAI Codex models, compaction first tries the provider-native `/responses/compact` endpoint when remote compaction is enabled. It preserves provider replacement history in `preserveData.openaiRemoteCompaction` and falls back to local summarization if that native request fails.
 
@@ -344,8 +344,8 @@ Post-navigation event exposing new/old leaf and optional summary entry.
 - Auto compaction can try multiple model candidates and retry transient failures; long retry delays prefer the next candidate when one is available.
 - Overflow errors are excluded from generic retry path because they are handled by context promotion/compaction.
 - If auto-compaction fails:
-  - overflow path emits `Context overflow recovery failed: ...`
-  - threshold path emits `Auto-compaction failed: ...`
+   - overflow path emits `Context overflow recovery failed: ...`
+   - threshold path emits `Auto-compaction failed: ...`
 - Branch summarization can be cancelled via abort signal (e.g., Escape), returning canceled/aborted navigation result.
 
 ## Settings and defaults

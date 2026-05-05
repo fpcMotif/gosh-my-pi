@@ -1,0 +1,20 @@
+id: escape-case-x1b
+language: ts
+rule:
+   kind: escape_sequence
+   regex: '^\\x1b$'
+fix: "\\x1B"
+---
+id: escape-case-u001b
+language: ts
+rule:
+   kind: escape_sequence
+   regex: '^\\u001b$'
+fix: "\\u001B"
+---
+id: escape-case-x1b-regex
+language: ts
+rule:
+   kind: regex
+   regex: '\\x1b'
+fix: "\\x1B"

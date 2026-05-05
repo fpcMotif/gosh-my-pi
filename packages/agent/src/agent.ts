@@ -3,10 +3,13 @@
  */
 import {
 	type AssistantMessage,
-	type Effort,
+	type AssistantMessageEvent,
+	Effort,
 	type ImageContent,
 	type Message,
 	type Model,
+	type ServiceTier,
+	type ThinkingBudgets,
 	type ToolChoice,
 	type ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
@@ -61,23 +64,46 @@ export class Agent {
 	#abortController?: AbortController;
 
 	#opts: AgentOptions;
+	#onAssistantMessageEvent?: (event: AssistantMessageEvent) => void;
 
 	// Cursor-specific buffering state
 	#cursorToolResultBuffer: Array<{ toolResult: ToolResultMessage; textLengthAtCall: number }> = [];
 
 	constructor(options: AgentOptions = {}) {
 		this.#opts = options;
+		this.#onAssistantMessageEvent = options.onAssistantMessageEvent;
 		this.#state = {
 			messages: options.initialState?.messages ?? [],
 			systemPrompt: options.initialState?.systemPrompt ?? "You are a helpful assistant.",
 			tools: options.initialState?.tools ?? [],
 			model: options.initialState?.model as unknown as Model,
-			thinkingLevel: options.initialState?.thinkingLevel ?? "MEDIUM",
+			thinkingLevel: options.initialState?.thinkingLevel ?? Effort.Medium,
 			isStreaming: false,
 			streamMessage: null,
 			pendingToolCalls: new Set<string>(),
 			error: undefined,
 		};
+	}
+
+	setAssistantMessageEventInterceptor(fn: ((event: AssistantMessageEvent) => void) | undefined): void {
+		this.#onAssistantMessageEvent = fn;
+	}
+
+	emitExternalEvent(event: AgentEvent) {
+		switch (event.type) {
+			case "message_start":
+			case "message_update":
+				this.#state.streamMessage = event.message;
+				break;
+			case "message_end":
+				this.#handleMessageEnd(event.message);
+				break;
+			case "agent_end":
+				this.#state.isStreaming = false;
+				this.#state.streamMessage = null;
+				break;
+		}
+		this.#emit(event);
 	}
 
 	get state(): AgentState {
@@ -96,11 +122,19 @@ export class Agent {
 		this.#state.model = model as unknown as Model;
 	}
 
+	setModel(model: Model | undefined): void {
+		this.#state.model = model as unknown as Model;
+	}
+
 	get systemPrompt(): string {
 		return this.#state.systemPrompt;
 	}
 
 	set systemPrompt(prompt: string) {
+		this.#state.systemPrompt = prompt;
+	}
+
+	setSystemPrompt(prompt: string): void {
 		this.#state.systemPrompt = prompt;
 	}
 
@@ -112,12 +146,48 @@ export class Agent {
 		this.#state.tools = tools;
 	}
 
+	setTools(tools: AnyAgentTool[]): void {
+		this.#state.tools = tools;
+	}
+
 	get thinkingLevel(): Effort {
-		return this.#state.thinkingLevel;
+		return this.#state.thinkingLevel ?? Effort.Medium;
 	}
 
 	set thinkingLevel(level: Effort) {
 		this.#state.thinkingLevel = level;
+	}
+
+	setThinkingLevel(level: Effort): void {
+		this.#state.thinkingLevel = level;
+	}
+
+	get thinkingBudgets(): ThinkingBudgets | undefined {
+		return this.#opts.thinkingBudgets;
+	}
+
+	set thinkingBudgets(budgets: ThinkingBudgets | undefined) {
+		this.#opts.thinkingBudgets = budgets;
+	}
+
+	clearMessages(): void {
+		this.#state.messages = [];
+	}
+
+	get sessionId(): string | undefined {
+		return this.#opts.sessionId;
+	}
+
+	set sessionId(sessionId: string | undefined) {
+		this.#opts.sessionId = sessionId;
+	}
+
+	get serviceTier(): ServiceTier | undefined {
+		return this.#opts.serviceTier;
+	}
+
+	set serviceTier(serviceTier: ServiceTier | undefined) {
+		this.#opts.serviceTier = serviceTier;
 	}
 
 	subscribe(listener: AgentListener): () => void {
@@ -317,7 +387,7 @@ export class Agent {
 			},
 			transformToolCallArguments: this.#opts.transformToolCallArguments,
 			intentTracing: this.#opts.intentTracing,
-			onAssistantMessageEvent: this.#opts.onAssistantMessageEvent,
+			onAssistantMessageEvent: this.#onAssistantMessageEvent,
 			getToolChoice,
 			getSteeringMessages: async () => {
 				if (skipInitialSteeringPoll) {
@@ -439,22 +509,20 @@ export class Agent {
 	}
 
 	/**
-	 * Dequeue all current steering messages.
+	 * Drain a message queue: take all when mode is "all" (default), otherwise
+	 * one at a time. Returns `[]` when the queue is empty.
 	 */
-	#dequeueSteeringMessages(): AgentMessage[] {
-		if ((this.#opts.steeringMode ?? "all") === "all") {
-			return this.#steeringQueue.splice(0);
-		}
-		return this.#steeringQueue.length > 0 ? [this.#steeringQueue.shift()!] : [];
+	#drainQueue(queue: AgentMessage[], mode: "all" | "one-at-a-time" | undefined): AgentMessage[] {
+		if ((mode ?? "all") === "all") return queue.splice(0);
+		const msg = queue.shift();
+		return msg !== undefined ? [msg] : [];
 	}
 
-	/**
-	 * Dequeue follow-up messages.
-	 */
+	#dequeueSteeringMessages(): AgentMessage[] {
+		return this.#drainQueue(this.#steeringQueue, this.#opts.steeringMode);
+	}
+
 	#dequeueFollowUpMessages(): AgentMessage[] {
-		if ((this.#opts.followUpMode ?? "all") === "all") {
-			return this.#followUpQueue.splice(0);
-		}
-		return this.#followUpQueue.length > 0 ? [this.#followUpQueue.shift()!] : [];
+		return this.#drainQueue(this.#followUpQueue, this.#opts.followUpMode);
 	}
 }

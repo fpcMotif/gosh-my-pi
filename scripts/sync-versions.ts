@@ -22,8 +22,8 @@ interface PackageInfo {
 
 const packagesDir = join(process.cwd(), "packages");
 const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
-	.filter((dirent) => dirent.isDirectory())
-	.map((dirent) => dirent.name);
+	.filter(dirent => dirent.isDirectory())
+	.map(dirent => dirent.name);
 
 // Read all package.json files and build version map
 const packages: Record<string, PackageInfo> = {};
@@ -35,14 +35,14 @@ for (const dir of packageDirs) {
 		const pkg = (await Bun.file(pkgPath).json()) as PackageJson;
 		packages[dir] = { path: pkgPath, data: pkg };
 		versionMap[pkg.name] = pkg.version;
-	} catch (e) {
-		const error = e as Error;
-		console.error(`Failed to read ${pkgPath}:`, error.message);
+	} catch (error) {
+		const err = error as Error;
+		console.error(`Failed to read ${pkgPath}:`, err.message);
 	}
 }
 
 console.log("Current versions:");
-for (const [name, version] of Object.entries(versionMap).sort()) {
+for (const [name, version] of Object.entries(versionMap).sort(([a], [b]) => a.localeCompare(b))) {
 	console.log(`  ${name}: ${version}`);
 }
 
@@ -98,7 +98,7 @@ for (const [dir, pkg] of Object.entries(packages)) {
 
 	// Write if updated
 	if (updated) {
-		await Bun.write(pkg.path, JSON.stringify(pkg.data, null, "\t") + "\n");
+		await Bun.write(pkg.path, `${JSON.stringify(pkg.data, null, "\t")}\n`);
 	}
 }
 

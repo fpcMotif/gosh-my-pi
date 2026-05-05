@@ -93,6 +93,7 @@ function createContext(): {
 		clearCustomKeyHandlers: vi.fn(),
 	};
 
+	// eslint-disable-next-line prefer-const
 	let ctx!: InteractiveModeContext;
 	const ensureLoadingAnimation = vi.fn(() => {
 		ctx.loadingAnimation = {} as InteractiveModeContext["loadingAnimation"];

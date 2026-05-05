@@ -58,28 +58,26 @@ export function createApiKeyLogin(config: ApiKeyLoginConfig): (options: OAuthCon
 		}
 
 		const trimmed = apiKey.trim();
-		if (!trimmed) {
+		if (trimmed === "") {
 			throw new Error("API key is required");
 		}
 
-		if (config.validation) {
+		if (config.validation !== null) {
 			options.onProgress?.("Validating API key...");
-			if (config.validation.kind === "chat-completions") {
-				await validateOpenAICompatibleApiKey({
-					provider: config.validation.provider,
-					apiKey: trimmed,
-					baseUrl: config.validation.baseUrl,
-					model: config.validation.model,
-					signal: options.signal,
-				});
-			} else {
-				await validateApiKeyAgainstModelsEndpoint({
-					provider: config.validation.provider,
-					apiKey: trimmed,
-					modelsUrl: config.validation.modelsUrl,
-					signal: options.signal,
-				});
-			}
+			await (config.validation.kind === "chat-completions"
+				? validateOpenAICompatibleApiKey({
+						provider: config.validation.provider,
+						apiKey: trimmed,
+						baseUrl: config.validation.baseUrl,
+						model: config.validation.model,
+						signal: options.signal,
+					})
+				: validateApiKeyAgainstModelsEndpoint({
+						provider: config.validation.provider,
+						apiKey: trimmed,
+						modelsUrl: config.validation.modelsUrl,
+						signal: options.signal,
+					}));
 		}
 
 		return trimmed;

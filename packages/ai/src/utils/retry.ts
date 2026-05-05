@@ -1,4 +1,5 @@
-import { abortableSleep } from "@oh-my-pi/pi-utils";
+import * as Effect from "effect/Effect";
+import { withCopilotRetry } from "../effect-utils";
 
 type ErrorLike = {
 	message?: string;
@@ -153,9 +154,6 @@ function extractErrorCode(error: unknown): string | undefined {
 	return undefined;
 }
 
-const COPILOT_MODEL_RETRY_MAX_ATTEMPTS = 3;
-const COPILOT_MODEL_RETRY_BASE_DELAY_MS = 400;
-
 /**
  * Wrap an initial Copilot request so transient `model_not_supported` 400s are
  * retried a small number of times. No-op for non-Copilot providers.
@@ -164,18 +162,6 @@ export async function callWithCopilotModelRetry<T>(
 	fn: () => Promise<T>,
 	options: { provider: string; signal?: AbortSignal },
 ): Promise<T> {
-	if (options.provider !== "github-copilot") return fn();
-
-	let lastError: unknown;
-	for (let attempt = 0; attempt < COPILOT_MODEL_RETRY_MAX_ATTEMPTS; attempt++) {
-		try {
-			return await fn();
-		} catch (error) {
-			lastError = error;
-			if (isCopilotRetryableError(error) === false) throw error;
-			if (attempt === COPILOT_MODEL_RETRY_MAX_ATTEMPTS - 1) break;
-			await abortableSleep(COPILOT_MODEL_RETRY_BASE_DELAY_MS * (attempt + 1), options.signal); // eslint-disable-line no-await-in-loop
-		}
-	}
-	throw lastError;
+	const program = withCopilotRetry(Effect.promise(fn), options);
+	return Effect.runPromise(program, { signal: options.signal });
 }

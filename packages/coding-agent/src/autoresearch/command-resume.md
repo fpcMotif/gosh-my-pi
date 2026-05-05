@@ -11,6 +11,7 @@ Additional context from the user:
 {{/if}}
 
 Use the notes as the source of truth for the current direction, scope, and constraints.
+
 - inspect recent git history for context
 - inspect `autoresearch.jsonl` if it exists
 - continue the most promising unfinished direction on the current protected branch

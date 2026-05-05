@@ -4,6 +4,9 @@
  * Custom tools are TypeScript modules that define additional tools for the agent.
  * They can provide custom rendering for tool calls and results in the TUI.
  */
+import type * as piCodingAgent from "../..";
+import type * as PiUtils from "@oh-my-pi/pi-utils";
+import type * as TypeboxNs from "@sinclair/typebox";
 import type { AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Model } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -51,11 +54,11 @@ export interface CustomToolAPI {
 	/** Whether UI is available (false in print/RPC mode) */
 	hasUI: boolean;
 	/** File logger for error/warning/debug messages */
-	logger: typeof import("@oh-my-pi/pi-utils").logger;
+	logger: typeof PiUtils.logger;
 	/** Injected @sinclair/typebox module */
-	typebox: typeof import("@sinclair/typebox");
+	typebox: typeof TypeboxNs;
 	/** Injected pi-coding-agent exports */
-	pi: typeof import("../..");
+	pi: typeof piCodingAgent;
 	/** Push a preview action that can later be resolved with the hidden resolve tool */
 	pushPendingAction(action: CustomToolPendingAction): void;
 }

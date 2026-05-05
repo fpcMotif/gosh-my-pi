@@ -24,6 +24,7 @@ describe("createAgentSession skills option", () => {
 	let skillsDir: string;
 	let tempHomeDir = "";
 	let originalHome: string | undefined;
+	const sessionsToDispose: Array<{ dispose: () => Promise<void> }> = [];
 
 	beforeEach(() => {
 		tempDir = path.join(os.tmpdir(), `pi-sdk-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -67,7 +68,17 @@ Loaded via symbolic link.
 		fs.symlinkSync(externalSkillDir, path.join(path.dirname(skillsDir), "symlinked-skill-link"), "dir");
 	});
 
-	afterEach(cleanupTempHome(() => ({ tempDir, tempHomeDir, originalHome })));
+	afterEach(async () => {
+		for (const s of sessionsToDispose) {
+			try {
+				await s.dispose();
+			} catch {
+				// best-effort; cleanup must continue
+			}
+		}
+		sessionsToDispose.length = 0;
+		cleanupTempHome(() => ({ tempDir, tempHomeDir, originalHome }))();
+	});
 
 	it("should discover skills by default and expose them on session.skills", async () => {
 		const { session } = await createAgentSession({
@@ -75,7 +86,10 @@ Loaded via symbolic link.
 			agentDir: tempDir,
 			sessionManager: SessionManager.inMemory(),
 			settings: createIsolatedSkillsSettings(),
+			enableMCP: false,
+			enableLsp: false,
 		});
+		sessionsToDispose.push(session);
 
 		// Skills should be discovered and exposed on the session
 		expect(session.skills.length).toBeGreaterThan(0);
@@ -88,7 +102,10 @@ Loaded via symbolic link.
 			agentDir: tempDir,
 			sessionManager: SessionManager.inMemory(),
 			settings: createIsolatedSkillsSettings(),
+			enableMCP: false,
+			enableLsp: false,
 		});
+		sessionsToDispose.push(session);
 
 		expect(session.skills.some((s: Skill) => s.name === "symlinked-skill")).toBe(true);
 	});
@@ -103,7 +120,10 @@ Loaded via symbolic link.
 			agentDir: tempDir,
 			sessionManager: SessionManager.inMemory(),
 			settings: createIsolatedSkillsSettings(),
+			enableMCP: false,
+			enableLsp: false,
 		});
+		sessionsToDispose.push(session);
 
 		expect(session.skills.some((s: Skill) => s.name === "test-skill")).toBe(true);
 	});
@@ -114,7 +134,10 @@ Loaded via symbolic link.
 			sessionManager: SessionManager.inMemory(),
 			skills: [], // Explicitly empty - like --no-skills
 			settings: createIsolatedSkillsSettings(),
+			enableMCP: false,
+			enableLsp: false,
 		});
+		sessionsToDispose.push(session);
 
 		// session.skills should be empty
 		expect(session.skills).toEqual([]);
@@ -137,7 +160,10 @@ Loaded via symbolic link.
 			sessionManager: SessionManager.inMemory(),
 			skills: [customSkill],
 			settings: createIsolatedSkillsSettings(),
+			enableMCP: false,
+			enableLsp: false,
 		});
+		sessionsToDispose.push(session);
 
 		// session.skills should contain only the provided skill
 		expect(session.skills).toEqual([customSkill]);

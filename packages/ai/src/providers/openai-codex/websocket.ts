@@ -90,7 +90,6 @@ export class CodexWebSocketConnection {
 		const socket = new WebSocketWithHeaders(this.#url, { headers: this.#headers });
 		this.#socket = socket;
 		let settled = false;
-		let timeout: NodeJS.Timeout | undefined;
 
 		const onAbort = () => {
 			socket.close(1000, "aborted");
@@ -108,18 +107,17 @@ export class CodexWebSocketConnection {
 			}
 		}
 
-		const clearPending = () => {
-			if (timeout !== undefined && timeout !== null) clearTimeout(timeout);
-			if (signal !== undefined && signal !== null) signal.removeEventListener("abort", onAbort);
-		};
-
-		timeout = setTimeout(() => {
+		const timeout = setTimeout(() => {
 			socket.close(1000, "connect-timeout");
 			if (settled === false) {
 				settled = true;
 				reject(createCodexWebSocketTransportError("connection timeout"));
 			}
 		}, CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS);
+		const clearPending = () => {
+			clearTimeout(timeout);
+			if (signal !== undefined && signal !== null) signal.removeEventListener("abort", onAbort);
+		};
 
 		socket.addEventListener("open", event => {
 			if (settled === false) {

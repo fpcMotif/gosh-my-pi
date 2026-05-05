@@ -147,11 +147,10 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		userSignal.addEventListener("abort", abortHandler, { once: true });
 	}
 
-	let hardTimeoutTimer: NodeJS.Timeout | undefined;
 	const hardTimeoutDeferred = Promise.withResolvers<"hard-timeout">();
 	const baseTimeoutMs = Math.max(1_000, options?.timeout ?? 300_000);
 	const hardTimeoutMs = baseTimeoutMs + HARD_TIMEOUT_GRACE_MS;
-	hardTimeoutTimer = setTimeout(() => {
+	const hardTimeoutTimer = setTimeout(() => {
 		abortCurrentExecution();
 		hardTimeoutDeferred.resolve("hard-timeout");
 	}, hardTimeoutMs);

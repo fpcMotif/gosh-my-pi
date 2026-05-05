@@ -1,13 +1,14 @@
-import {
-	type Api,
-	type AssistantMessageEventStream,
-	type Context,
-	type KnownApi,
-	type KnownProvider,
-	type Model,
-	type OptionsForApi,
-	type SimpleStreamOptions,
-	type ToolChoice,
+import type { AssistantMessageEventStream } from "./utils/event-stream";
+import type {
+	Api,
+	AssistantMessage,
+	Context,
+	KnownApi,
+	KnownProvider,
+	Model,
+	OptionsForApi,
+	SimpleStreamOptions,
+	ToolChoice,
 } from "./types";
 import { streamOpenAICodexResponses, type OpenAICodexResponsesOptions } from "./providers/openai-codex-responses";
 import { streamOpenAICompletions, type OpenAICompletionsOptions } from "./providers/openai-completions";
@@ -65,6 +66,19 @@ export function streamSimple<TApi extends Api>(
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream {
 	return stream(model, context, options);
+}
+
+/**
+ * Convenience wrapper that drains `streamSimple()` and resolves to the final
+ * `AssistantMessage`. Mirrors the pre-prune signature consumers in
+ * `packages/coding-agent` (compaction, commit-pipeline, changelog) still use.
+ */
+export async function completeSimple<TApi extends Api>(
+	model: Model<TApi>,
+	context: Context,
+	options?: SimpleStreamOptions,
+): Promise<AssistantMessage> {
+	return await streamSimple(model, context, options).result();
 }
 
 /**

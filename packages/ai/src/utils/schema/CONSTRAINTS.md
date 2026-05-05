@@ -5,11 +5,11 @@ This document is the operational contract for schema normalization/strictness in
 ## Scope
 
 - Applies to provider-facing tool schemas produced by:
-  - `sanitize-google.ts`
-  - `normalize-cca.ts`
-  - `strict-mode.ts`
-  - `adapt.ts`
-  - `fields.ts`
+   - `sanitize-google.ts`
+   - `normalize-cca.ts`
+   - `strict-mode.ts`
+   - `adapt.ts`
+   - `fields.ts`
 - Covers OpenAI-style strict mode, Google schema constraints, and Cloud Code Assist Claude constraints.
 
 ---
@@ -21,17 +21,17 @@ When strict mode is requested (`strict=true` at call site), the schema MUST sati
 1. **Non-structural keywords are removed before strict enforcement**
    - Sanitization uses `sanitizeSchemaForStrictMode`.
    - Removed keys include formatting/validation/decorative keywords and unsupported structural extras:
-     - `format`, `pattern`, `minLength`, `maxLength`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`
-     - `minItems`, `maxItems`, `uniqueItems`, `multipleOf`
-     - `$schema`, `examples`, `default`, `title`, `$comment`
-     - `if`, `then`, `else`, `not`
-     - `prefixItems`, `unevaluatedProperties`, `unevaluatedItems`, `patternProperties`
-     - `propertyNames`, `contains`, `minContains`, `maxContains`
-     - `dependentRequired`, `dependentSchemas`
-     - `contentEncoding`, `contentMediaType`, `contentSchema`
-     - `deprecated`, `readOnly`, `writeOnly`
-     - `minProperties`, `maxProperties`
-     - `$dynamicRef`, `$dynamicAnchor`
+      - `format`, `pattern`, `minLength`, `maxLength`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`
+      - `minItems`, `maxItems`, `uniqueItems`, `multipleOf`
+      - `$schema`, `examples`, `default`, `title`, `$comment`
+      - `if`, `then`, `else`, `not`
+      - `prefixItems`, `unevaluatedProperties`, `unevaluatedItems`, `patternProperties`
+      - `propertyNames`, `contains`, `minContains`, `maxContains`
+      - `dependentRequired`, `dependentSchemas`
+      - `contentEncoding`, `contentMediaType`, `contentSchema`
+      - `deprecated`, `readOnly`, `writeOnly`
+      - `minProperties`, `maxProperties`
+      - `$dynamicRef`, `$dynamicAnchor`
    - Before stripping `default`, its value is inlined into the sibling `description` as ` (default: X)` so that strict-mode providers retain the default hint in free-form text. Inlining is skipped when `description` already contains `(default:` or when no sibling `description` is present.
 
 2. **`const` is normalized to `enum`**
@@ -41,7 +41,7 @@ When strict mode is requested (`strict=true` at call site), the schema MUST sati
    - Every object node gets `additionalProperties: false`.
    - Every property key is included in `required`.
    - Optional properties are wrapped as nullable unions:
-     - `anyOf: [<original schema>, { "type": "null" }]`.
+      - `anyOf: [<original schema>, { "type": "null" }]`.
 
 4. **Schema nodes must be representable in strict mode**
    - Nodes without `type`, combinator, `$ref`, or `not` are invalid in strict enforcement and MUST throw.
@@ -62,12 +62,12 @@ Schemas sent on Google JSON Schema path MUST follow:
 
 1. **Unsupported JSON Schema keywords are stripped (except property names under `properties`)**
    - Unsupported keys (`UNSUPPORTED_SCHEMA_FIELDS`):
-     - `$schema`, `$ref`, `$defs`, `$dynamicRef`, `$dynamicAnchor`
-     - `examples`, `prefixItems`, `unevaluatedProperties`, `unevaluatedItems`
-     - `patternProperties`, `additionalProperties`
-     - `minItems`, `maxItems`, `minLength`, `maxLength`
-     - `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`
-     - `pattern`, `format`
+      - `$schema`, `$ref`, `$defs`, `$dynamicRef`, `$dynamicAnchor`
+      - `examples`, `prefixItems`, `unevaluatedProperties`, `unevaluatedItems`
+      - `patternProperties`, `additionalProperties`
+      - `minItems`, `maxItems`, `minLength`, `maxLength`
+      - `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`
+      - `pattern`, `format`
    - Important: keys inside a `properties` object are treated as property names and MUST NOT be stripped by keyword match.
 
 2. **`type` arrays are normalized to scalar type + nullable marker**
@@ -140,14 +140,14 @@ If any remain, schema is incompatible.
 ## 4) Practical provider mapping
 
 - **OpenAI-compatible strict paths** (`openai-completions`, `openai-responses`, `openai-codex-responses`):
-  - Use `adaptSchemaForStrict`.
-  - Emit `strict: true` only when effective strict enforcement succeeded.
+   - Use `adaptSchemaForStrict`.
+   - Emit `strict: true` only when effective strict enforcement succeeded.
 
 - **Google Gemini/Vertex/Gemini CLI (non-CCA Claude)**:
-  - Use Google sanitizer and send schema on `parametersJsonSchema` path.
+   - Use Google sanitizer and send schema on `parametersJsonSchema` path.
 
 - **Cloud Code Assist Claude models (`model.id` starts with `claude-`)**:
-  - Use CCA preparation pipeline and send sanitized normalized schema in `parameters`.
+   - Use CCA preparation pipeline and send sanitized normalized schema in `parameters`.
 
 ---
 

@@ -13,6 +13,7 @@
 - Added provider response metadata callbacks for Anthropic and OpenAI streaming requests.
 
 ## [14.5.9] - 2026-04-30
+
 ### Added
 
 - Added `usage.reasoningTokens` to OpenAI and Google usage output when providers report reasoning/thinking tokens
@@ -25,6 +26,7 @@
 - Fixed Anthropic streaming usage handling so a previously populated cache TTL breakdown is preserved when later events omit `cache_creation`
 
 ## [14.5.4] - 2026-04-28
+
 ### Changed
 
 - Changed OpenAI custom Lark grammar payloads to strip comments and blank lines before sending provider requests.
@@ -34,6 +36,7 @@
 - Fixed OpenAI Codex GPT model pricing by inheriting matching OpenAI catalog rates for zero-priced discovered Codex entries.
 
 ## [14.5.3] - 2026-04-27
+
 ### Added
 
 - Added `fireworks` as a supported provider with API key login flow and credential storage
@@ -82,8 +85,8 @@
 ### Added
 
 - Added support for Claude Opus 4.7 (`claude-opus-4-7`) model ([#726](https://github.com/can1357/oh-my-pi/issues/726))
-  - Suppresses sampling parameters (temperature/top_p/top_k) that Opus 4.7 rejects
-  - Enables `display: "summarized"` for adaptive thinking to restore visible thinking content
+   - Suppresses sampling parameters (temperature/top_p/top_k) that Opus 4.7 rejects
+   - Enables `display: "summarized"` for adaptive thinking to restore visible thinking content
 
 ### Fixed
 
@@ -126,6 +129,7 @@
 - Preserved user-provided `session_id` and `x-client-request-id` headers in OpenAI Responses requests instead of overriding them with automatic session-derived values
 - Stopped sending `session_id` and `x-client-request-id` headers for OpenAI Responses requests when `cacheRetention` is set to `none`
 - Fixed direct OpenAI Responses requests to send `session_id` and `x-client-request-id` from the same session-derived value as `prompt_cache_key`, improving prompt cache affinity for append-only sessions
+
 ## [14.1.1] - 2026-04-14
 
 ### Added
@@ -2179,10 +2183,10 @@ _Dedicated to Peter's shoulder ([@steipete](https://twitter.com/steipete))_
 - **OpenAI Token Counting**: Fixed `usage.input` to exclude cached tokens for OpenAI providers. Previously, `input` included cached tokens, causing double-counting when calculating total context size via `input + cacheRead`. Now `input` represents non-cached input tokens across all providers, making `input + output + cacheRead + cacheWrite` the correct formula for total context size.
 
 - **Fixed Claude Opus 4.5 cache pricing** (was 3x too expensive)
-  - Corrected cache_read: $1.50 → $0.50 per MTok
-  - Corrected cache_write: $18.75 → $6.25 per MTok
-  - Added manual override in `scripts/generate-models.ts` until upstream fix is merged
-  - Submitted PR to models.dev: https://github.com/sst/models.dev/pull/439
+   - Corrected cache_read: $1.50 → $0.50 per MTok
+   - Corrected cache_write: $18.75 → $6.25 per MTok
+   - Added manual override in `scripts/generate-models.ts` until upstream fix is merged
+   - Submitted PR to models.dev: https://github.com/sst/models.dev/pull/439
 
 ## [0.9.4] - 2025-11-26
 

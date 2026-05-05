@@ -133,7 +133,7 @@ export class Input implements Component, Focusable {
 				const beforeCursor = this.#value.slice(0, this.#cursor);
 				const graphemes = [...segmenter.segment(beforeCursor)];
 				const lastGrapheme = graphemes[graphemes.length - 1];
-				this.#cursor -= lastGrapheme ? lastGrapheme.segment.length : 1;
+				this.#cursor -= lastGrapheme !== undefined ? lastGrapheme.segment.length : 1;
 			}
 			return;
 		}
@@ -144,7 +144,7 @@ export class Input implements Component, Focusable {
 				const afterCursor = this.#value.slice(this.#cursor);
 				const graphemes = [...segmenter.segment(afterCursor)];
 				const firstGrapheme = graphemes[0];
-				this.#cursor += firstGrapheme ? firstGrapheme.segment.length : 1;
+				this.#cursor += firstGrapheme !== undefined ? firstGrapheme.segment.length : 1;
 			}
 			return;
 		}
@@ -201,7 +201,7 @@ export class Input implements Component, Focusable {
 		const beforeCursor = this.#value.slice(0, this.#cursor);
 		const graphemes = [...segmenter.segment(beforeCursor)];
 		const lastGrapheme = graphemes[graphemes.length - 1];
-		const graphemeLength = lastGrapheme ? lastGrapheme.segment.length : 1;
+		const graphemeLength = lastGrapheme !== undefined ? lastGrapheme.segment.length : 1;
 
 		this.#value = this.#value.slice(0, this.#cursor - graphemeLength) + this.#value.slice(this.#cursor);
 		this.#cursor -= graphemeLength;
@@ -218,7 +218,7 @@ export class Input implements Component, Focusable {
 		const afterCursor = this.#value.slice(this.#cursor);
 		const graphemes = [...segmenter.segment(afterCursor)];
 		const firstGrapheme = graphemes[0];
-		const graphemeLength = firstGrapheme ? firstGrapheme.segment.length : 1;
+		const graphemeLength = firstGrapheme !== undefined ? firstGrapheme.segment.length : 1;
 
 		this.#value = this.#value.slice(0, this.#cursor) + this.#value.slice(this.#cursor + graphemeLength);
 	}

@@ -3,6 +3,7 @@
  */
 import type * as fs1 from "node:fs";
 import * as fs from "node:fs/promises";
+import type * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model, TextContent } from "@oh-my-pi/pi-ai";
@@ -27,6 +28,7 @@ import type {
 	ExtensionRuntime as IExtensionRuntime,
 	LoadExtensionsResult,
 	MessageRenderer,
+	ProviderConfig,
 	RegisteredCommand,
 	ToolDefinition,
 } from "./types";
@@ -45,8 +47,7 @@ export class ExtensionRuntimeNotInitializedError extends Error {
  */
 export class ExtensionRuntime implements IExtensionRuntime {
 	flagValues = new Map<string, boolean | string>();
-	pendingProviderRegistrations: Array<{ name: string; config: import("./types").ProviderConfig; sourceId: string }> =
-		[];
+	pendingProviderRegistrations: Array<{ name: string; config: ProviderConfig; sourceId: string }> = [];
 
 	sendMessage(): void {
 		throw new ExtensionRuntimeNotInitializedError();
@@ -112,12 +113,12 @@ class ConcreteExtensionAPI implements ExtensionAPI, IExtensionRuntime {
 	readonly flagValues = new Map<string, boolean | string>();
 	readonly pendingProviderRegistrations: Array<{
 		name: string;
-		config: import("./types").ProviderConfig;
+		config: ProviderConfig;
 		sourceId: string;
 	}> = [];
 
 	constructor(
-		readonly pi: typeof import("@oh-my-pi/pi-coding-agent"),
+		readonly pi: typeof piCodingAgent,
 		private readonly extension: Extension,
 		private readonly runtime: IExtensionRuntime,
 		private readonly cwd: string,
@@ -239,7 +240,7 @@ class ConcreteExtensionAPI implements ExtensionAPI, IExtensionRuntime {
 		return this.runtime.setSessionName(name);
 	}
 
-	registerProvider(name: string, config: import("./types").ProviderConfig): void {
+	registerProvider(name: string, config: ProviderConfig): void {
 		this.runtime.pendingProviderRegistrations.push({ name, config, sourceId: this.extension.path });
 	}
 }

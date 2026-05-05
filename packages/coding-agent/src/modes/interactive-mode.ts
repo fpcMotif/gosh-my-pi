@@ -70,6 +70,7 @@ import { EventController } from "./controllers/event-controller";
 import { ExtensionUiController } from "./controllers/extension-ui-controller";
 import { InputController } from "./controllers/input-controller";
 import { MCPCommandController } from "./controllers/mcp-command-controller";
+import type { MCPManager } from "../mcp";
 import { SelectorController } from "./controllers/selector-controller";
 import { SSHCommandController } from "./controllers/ssh-command-controller";
 import { RowSplit } from "./components/row-split";
@@ -208,7 +209,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	#planModeHasEntered = false;
 	#planReviewContainer: Container | undefined;
 	readonly lspServers: LspStartupServerInfo[] | undefined = undefined;
-	mcpManager?: import("../mcp").MCPManager;
+	mcpManager?: MCPManager;
 	readonly #toolUiContextSetter: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
 
 	readonly #btwController: BtwController;

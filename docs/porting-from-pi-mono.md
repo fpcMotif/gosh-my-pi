@@ -43,10 +43,10 @@ Upstream uses different package scopes. Replace them consistently.
 
 - Replace old scopes with the local scope used here.
 - Examples (adjust to match the actual packages you are porting):
-  - `@mariozechner/pi-coding-agent` → `@oh-my-pi/pi-coding-agent`
-  - `@mariozechner/pi-agent-core` → `@oh-my-pi/pi-agent-core`
-  - `@mariozechner/pi-tui` → `@oh-my-pi/pi-tui`
-  - `@mariozechner/pi-ai` → `@oh-my-pi/pi-ai`
+   - `@mariozechner/pi-coding-agent` → `@oh-my-pi/pi-coding-agent`
+   - `@mariozechner/pi-agent-core` → `@oh-my-pi/pi-agent-core`
+   - `@mariozechner/pi-tui` → `@oh-my-pi/pi-tui`
+   - `@mariozechner/pi-ai` → `@oh-my-pi/pi-ai`
 
 ## 4) Use Bun APIs where they improve on Node
 
@@ -105,10 +105,10 @@ Do not add new runtime asset copy steps. Keep assets in repo and prefer Bun embe
 - Keep assets in-repo and let the bundler include them.
 - Eliminate copy scripts unless the user explicitly requests them or the package already has an intentional generation step.
 - If upstream reads a bundled fallback file at runtime, replace filesystem reads with a Bun text embed import unless the current package already uses a generated asset pipeline.
-  - Example (Codex instructions fallback):
-    - `const FALLBACK_PROMPT_PATH = join(import.meta.dir, "codex-instructions.md");` -> removed
-    - `import FALLBACK_INSTRUCTIONS from "./codex-instructions.md" with { type: "text" };`
-    - Use `return FALLBACK_INSTRUCTIONS;` instead of `readFileSync(FALLBACK_PROMPT_PATH, "utf8")`
+   - Example (Codex instructions fallback):
+      - `const FALLBACK_PROMPT_PATH = join(import.meta.dir, "codex-instructions.md");` -> removed
+      - `import FALLBACK_INSTRUCTIONS from "./codex-instructions.md" with { type: "text" };`
+      - Use `return FALLBACK_INSTRUCTIONS;` instead of `readFileSync(FALLBACK_PROMPT_PATH, "utf8")`
 
 ## 6) Port `package.json` carefully
 
@@ -131,13 +131,13 @@ Treat `package.json` as a contract. Merge intentionally.
 - Prefer ES `#` private fields for new encapsulated state. Constructor parameter properties already exist in current code and are acceptable; do not churn unrelated access modifiers while porting.
 - Prefer existing helpers and utilities over new ad-hoc code.
   Preserve Bun-first infrastructure changes already made in this repo:
-  - Runtime is Bun (no Node entry points for the main CLI).
-  - Package manager is Bun (no npm lockfiles).
-  - Heavy Node APIs should not be introduced casually; current source still uses selected Node APIs (`node:crypto`, `node:readline`, synchronous `node:fs`, and `child_process`) where they fit provider, CLI, or process-control semantics.
-  - Lightweight Node APIs (`os.homedir`, `os.tmpdir`, `fs.mkdtempSync`, `path.*`) are kept.
-  - CLI shebangs use `bun` (not `node`, not `tsx`).
-  - TypeScript packages generally use source files directly; `@oh-my-pi/pi-natives` exports generated native bindings from `packages/natives/native`.
-  - CI workflows run Bun for install/check/test.
+   - Runtime is Bun (no Node entry points for the main CLI).
+   - Package manager is Bun (no npm lockfiles).
+   - Heavy Node APIs should not be introduced casually; current source still uses selected Node APIs (`node:crypto`, `node:readline`, synchronous `node:fs`, and `child_process`) where they fit provider, CLI, or process-control semantics.
+   - Lightweight Node APIs (`os.homedir`, `os.tmpdir`, `fs.mkdtempSync`, `path.*`) are kept.
+   - CLI shebangs use `bun` (not `node`, not `tsx`).
+   - TypeScript packages generally use source files directly; `@oh-my-pi/pi-natives` exports generated native bindings from `packages/natives/native`.
+   - CI workflows run Bun for install/check/test.
 
 ## 8) Remove old compatibility layers
 

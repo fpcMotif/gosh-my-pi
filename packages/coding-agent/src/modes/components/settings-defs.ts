@@ -360,10 +360,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "gemini", label: "Gemini", description: "Requires GEMINI_API_KEY" },
 		{ value: "openrouter", label: "OpenRouter", description: "Requires OPENROUTER_API_KEY" },
 	],
-	"providers.kimiApiFormat": [
-		{ value: "openai", label: "OpenAI", description: "api.kimi.com" },
-		{ value: "anthropic", label: "Anthropic", description: "api.moonshot.ai" },
-	],
+	"providers.kimiApiFormat": [{ value: "openai", label: "OpenAI", description: "api.kimi.com" }],
 	"providers.openaiWebsockets": [
 		{ value: "auto", label: "Auto", description: "Use model/provider default websocket behavior" },
 		{ value: "off", label: "Off", description: "Disable websockets for OpenAI Codex models" },

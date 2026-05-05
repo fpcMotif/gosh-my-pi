@@ -293,7 +293,7 @@ export async function terminate(options: TerminateOptions): Promise<boolean> {
 		if (typeof target !== "number" && target.killed) return true;
 
 		// Give it a moment to exit gracefully first.
-		sendTerminationSignal(target, TERM_SIGNAL);
+		if (TERM_SIGNAL !== undefined) sendTerminationSignal(target, TERM_SIGNAL);
 		if (exitPromise !== undefined) {
 			const exited = await Promise.race([Bun.sleep(1000).then(() => false), exitPromise]);
 			if (exited) return true;

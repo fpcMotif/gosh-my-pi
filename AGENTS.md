@@ -25,44 +25,44 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 - Prefer `export * from "./module"` over named re-export-from blocks, including `export type { ... } from`. In pure `index.ts` barrel files (re-exports only), use star re-exports even for single-specifier cases. If star re-exports create symbol ambiguity, remove the redundant export path instead of keeping duplicate exports.
 - **No `private`/`protected`/`public` keyword on class fields or methods** — use ES native `#` private fields for encapsulation; leave members that need external access as bare (no keyword). The only place `private`/`protected`/`public` is allowed is on **constructor parameter properties** (e.g., `constructor(private readonly session: ToolSession)`), where TypeScript requires the keyword for the implicit field declaration.
 
-  ```typescript
-  // BAD: TypeScript keyword privacy
-  class Foo {
-      private bar: string;
-      private _baz = 0;
-      protected qux(): void { ... }
-      public greet(): void { ... }
-  }
+   ```typescript
+   // BAD: TypeScript keyword privacy
+   class Foo {
+       private bar: string;
+       private _baz = 0;
+       protected qux(): void { ... }
+       public greet(): void { ... }
+   }
 
-  // GOOD: ES native # for private, bare for accessible
-  class Foo {
-      #bar: string;
-      #baz = 0;
-      qux(): void { ... }
-      greet(): void { ... }
-  }
+   // GOOD: ES native # for private, bare for accessible
+   class Foo {
+       #bar: string;
+       #baz = 0;
+       qux(): void { ... }
+       greet(): void { ... }
+   }
 
-  // OK: constructor parameter properties keep the keyword
-  class Service {
-      constructor(private readonly session: ToolSession) {}
-  }
-  ```
+   // OK: constructor parameter properties keep the keyword
+   class Service {
+       constructor(private readonly session: ToolSession) {}
+   }
+   ```
 
 - **NEVER use `ReturnType<>`** — it obscures types behind indirection. Use the actual type name instead. Look up return types in source or `node_modules` type definitions and reference them directly.
 
-  ```typescript
-  // BAD: Indirection through ReturnType
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let stmt: ReturnType<Database["prepare"]>;
-  let stat: Awaited<ReturnType<typeof fs.stat>>;
+   ```typescript
+   // BAD: Indirection through ReturnType
+   let timer: ReturnType<typeof setTimeout> | null = null;
+   let stmt: ReturnType<Database["prepare"]>;
+   let stat: Awaited<ReturnType<typeof fs.stat>>;
 
-  // GOOD: Use the actual type
-  let timer?: NodeJS.Timeout;
-  let stmt: Statement;
-  let stat: Stats;
-  ```
+   // GOOD: Use the actual type
+   let timer?: NodeJS.Timeout;
+   let stmt: Statement;
+   let stat: Stats;
+   ```
 
-  If a function's return type has no exported name, define a named type alias at the call site — don't use `ReturnType<>`.
+   If a function's return type has no exported name, define a named type alias at the call site — don't use `ReturnType<>`.
 
 - Check node_modules for external API type definitions instead of guessing
 - **NEVER use inline imports** - no `await import("./foo.js")`, no `import("pkg").Type` in type positions, no dynamic imports for types. Always use standard top-level imports.
@@ -72,13 +72,13 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 - **Import static text files via Bun** — use `import content from "./prompt.md" with { type: "text" }` instead of `readFileSync`
 - **Use `Promise.withResolvers()`** instead of `new Promise((resolve, reject) => ...)` — cleaner, avoids callback nesting, and the resolver functions are properly typed:
 
-  ```typescript
-  // BAD: Verbose, callback nesting
-  const promise = new Promise<string>((resolve, reject) => { ... });
+   ```typescript
+   // BAD: Verbose, callback nesting
+   const promise = new Promise<string>((resolve, reject) => { ... });
 
-  // GOOD: Clean destructuring, typed resolvers
-  const { promise, resolve, reject } = Promise.withResolvers<string>();
-  ```
+   // GOOD: Clean destructuring, typed resolvers
+   const { promise, resolve, reject } = Promise.withResolvers<string>();
+   ```
 
 ## Bun Over Node
 
@@ -292,7 +292,7 @@ const output = Bun.JSON5.stringify(obj);
 ```typescript
 // BAD: Manual split + JSON.parse
 const lines = text.split("\n").filter(Boolean);
-const entries = lines.map((line) => JSON.parse(line));
+const entries = lines.map(line => JSON.parse(line));
 
 // GOOD: Full blob parsing
 const entries = Bun.JSONL.parse(text);
@@ -334,20 +334,20 @@ const wrapped = Bun.wrapAnsi(text, width, {
 
 ### Where Bun Wins
 
-| Operation       | Use                                   | Not                             |
-| --------------- | ------------------------------------- | ------------------------------- |
-| File read/write | `Bun.file()`, `Bun.write()`           | `readFileSync`, `writeFileSync` |
-| Spawn process   | `$\`cmd\``, `Bun.spawn()`             | `child_process`                 |
-| Sleep           | `Bun.sleep(ms)`                       | `setTimeout` promise            |
+| Operation       | Use                                       | Not                             |
+| --------------- | ----------------------------------------- | ------------------------------- |
+| File read/write | `Bun.file()`, `Bun.write()`               | `readFileSync`, `writeFileSync` |
+| Spawn process   | `$\`cmd\``, `Bun.spawn()`                 | `child_process`                 |
+| Sleep           | `Bun.sleep(ms)`                           | `setTimeout` promise            |
 | Binary lookup   | `$which("git")` from `@oh-my-pi/pi-utils` | `spawnSync(["which", "git"])`   |
-| HTTP server     | `Bun.serve()`                         | `http.createServer()`           |
-| SQLite          | `bun:sqlite`                          | `better-sqlite3`                |
-| Hashing         | `Bun.hash()`, Web Crypto              | `node:crypto`                   |
-| Path resolution | `import.meta.dir`, `import.meta.path` | `fileURLToPath` dance           |
-| JSON5 parsing   | `Bun.JSON5.parse()`                   | `json5` package                 |
-| JSONL parsing   | `Bun.JSONL.parse()`, `.parseChunk()`  | manual split + `JSON.parse`     |
-| String width    | `Bun.stringWidth()`                   | `get-east-asian-width`, custom  |
-| Text wrapping   | `Bun.wrapAnsi()`                      | custom ANSI-aware wrappers      |
+| HTTP server     | `Bun.serve()`                             | `http.createServer()`           |
+| SQLite          | `bun:sqlite`                              | `better-sqlite3`                |
+| Hashing         | `Bun.hash()`, Web Crypto                  | `node:crypto`                   |
+| Path resolution | `import.meta.dir`, `import.meta.path`     | `fileURLToPath` dance           |
+| JSON5 parsing   | `Bun.JSON5.parse()`                       | `json5` package                 |
+| JSONL parsing   | `Bun.JSONL.parse()`, `.parseChunk()`      | manual split + `JSON.parse`     |
+| String width    | `Bun.stringWidth()`                       | `get-east-asian-width`, custom  |
+| Text wrapping   | `Bun.wrapAnsi()`                          | custom ANSI-aware wrappers      |
 
 ### Patterns
 
@@ -432,6 +432,7 @@ A common mistake is sanitizing the happy path but forgetting error paths. If a m
 Streaming tool-call previews can have **multiple render paths**. If you add preview-only fields or depend on partially streamed arguments, update every path — not just the final renderer.
 
 For the bash tool specifically:
+
 - The pending preview may need raw `partialJson`, not just parsed `arguments`. Parsed tool-call args can lag until a JSON object closes, which makes inline env assignments appear only at the end.
 - Preserve any preview-only fields (for example `__partialJson`) when tool-call args flow through `event-controller.ts`, transcript rebuilds in `ui-helpers.ts`, and merged call/result rendering in `tool-execution.ts`. Missing one path causes inconsistent previews.
 - `ToolExecutionComponent.#buildRenderContext()` for bash must work even before a result exists. The bash renderer uses call args plus render context to show the command preview while streaming, not only after output arrives.
@@ -439,20 +440,20 @@ For the bash tool specifically:
 
 ## Commands
 
-| Command        | Description                                           |
-| -------------- | ----------------------------------------------------- |
-| `bun check`    | Check all (TypeScript + Rust)                         |
-| `bun check:ts` | oxfmt check + oxlint + tsgo type checking             |
-| `bun check:rs` | Cargo fmt --check + clippy                            |
-| `bun lint`     | Lint all                                              |
-| `bun lint:ts`  | oxlint                                                |
-| `bun lint:rs`  | Cargo clippy                                          |
-| `bun fmt`      | Format all                                            |
-| `bun fmt:ts`   | oxfmt                                                 |
-| `bun fmt:rs`   | Cargo fmt                                             |
-| `bun fix`      | Fix all (unsafe fixes + format)                       |
-| `bun fix:ts`   | oxfmt + oxlint --fix-dangerously + format-prompts     |
-| `bun fix:rs`   | Clippy --fix + cargo fmt                              |
+| Command        | Description                                       |
+| -------------- | ------------------------------------------------- |
+| `bun check`    | Check all (TypeScript + Rust)                     |
+| `bun check:ts` | oxfmt check + oxlint + tsgo type checking         |
+| `bun check:rs` | Cargo fmt --check + clippy                        |
+| `bun lint`     | Lint all                                          |
+| `bun lint:ts`  | oxlint                                            |
+| `bun lint:rs`  | Cargo clippy                                      |
+| `bun fmt`      | Format all                                        |
+| `bun fmt:ts`   | oxfmt                                             |
+| `bun fmt:rs`   | Cargo fmt                                         |
+| `bun fix`      | Fix all (unsafe fixes + format)                   |
+| `bun fix:ts`   | oxfmt + oxlint --fix-dangerously + format-prompts |
+| `bun fix:rs`   | Clippy --fix + cargo fmt                          |
 
 - NEVER run: `bun run dev`, `bun test` unless user instructs
 - Only run specific tests if user instructs: `bun test test/specific.test.ts`

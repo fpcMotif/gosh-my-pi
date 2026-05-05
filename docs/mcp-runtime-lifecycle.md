@@ -106,8 +106,8 @@ After 250ms:
 - fulfilled tasks become live `MCPTool`s,
 - rejected tasks produce per-server errors,
 - still-pending tasks:
-  - use cached tool definitions if available (`MCPToolCache.get`) to create `DeferredMCPTool`s,
-  - otherwise block until those pending tasks settle.
+   - use cached tool definitions if available (`MCPToolCache.get`) to create `DeferredMCPTool`s,
+   - otherwise block until those pending tasks settle.
 
 This is a hybrid startup model: fast return when cache is available, correctness wait when cache is not.
 

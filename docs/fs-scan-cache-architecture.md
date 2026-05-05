@@ -16,15 +16,15 @@ Primary goals:
 
 - Cache implementation and policy: `crates/pi-natives/src/fs_cache.rs`
 - Native consumers:
-  - `crates/pi-natives/src/glob.rs`
-  - `crates/pi-natives/src/fd.rs` (`fuzzyFind`)
-  - `crates/pi-natives/src/grep.rs`
+   - `crates/pi-natives/src/glob.rs`
+   - `crates/pi-natives/src/fd.rs` (`fuzzyFind`)
+   - `crates/pi-natives/src/grep.rs`
 - JS binding/export:
-  - `packages/natives/src/glob/index.ts` (`invalidateFsScanCache`)
-  - `packages/natives/src/glob/types.ts`
-  - `packages/natives/src/grep/types.ts`
+   - `packages/natives/src/glob/index.ts` (`invalidateFsScanCache`)
+   - `packages/natives/src/glob/types.ts`
+   - `packages/natives/src/grep/types.ts`
 - Coding-agent mutation invalidation helpers:
-  - `packages/coding-agent/src/tools/fs-cache-invalidation.ts`
+   - `packages/coding-agent/src/tools/fs-cache-invalidation.ts`
 
 ## Cache key partitioning (hard contract)
 
@@ -69,9 +69,9 @@ Global policy (environment-overridable):
 Behavior:
 
 - `get_or_scan(...)`
-  - if TTL is `0`: bypass cache entirely, always fresh scan (`cache_age_ms = 0`)
-  - on cache hit within TTL: return cached entries + non-zero `cache_age_ms`
-  - on expired hit: evict key, rescan, store fresh entry
+   - if TTL is `0`: bypass cache entirely, always fresh scan (`cache_age_ms = 0`)
+   - on cache hit within TTL: return cached entries + non-zero `cache_age_ms`
+   - on expired hit: evict key, rescan, store fresh entry
 - max entry enforcement is oldest-first eviction by `created_at`
 
 ## Empty-result fast recheck (separate from normal hits)
@@ -105,18 +105,18 @@ Current defaults in native APIs:
 Coding-agent callers today:
 
 - High-volume mention candidate discovery enables cache:
-  - `packages/coding-agent/src/utils/file-mentions.ts`
-  - profile: `hidden=true`, `gitignore=true`, `includeNodeModules=true`, `cache=true`
+   - `packages/coding-agent/src/utils/file-mentions.ts`
+   - profile: `hidden=true`, `gitignore=true`, `includeNodeModules=true`, `cache=true`
 - Tool-level `grep` integration currently disables scan cache (`cache: false`):
-  - `packages/coding-agent/src/tools/grep.ts`
+   - `packages/coding-agent/src/tools/grep.ts`
 
 ## Invalidation contract
 
 Native invalidation entrypoint:
 
 - `invalidateFsScanCache(path?: string)`
-  - with `path`: remove cache entries whose root is a prefix of target path
-  - without path: clear all scan cache entries
+   - with `path`: remove cache entries whose root is a prefix of target path
+   - without path: clear all scan cache entries
 
 Path handling details:
 

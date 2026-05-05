@@ -6,13 +6,7 @@
 description = "Keep only ping summary + loss line"
 match_command = "^ping6?$"
 strip_ansi = true
-keep_lines_matching = [
-	"^PING ",
-	"^--- .* ping statistics ---$",
-	"packet loss",
-	"^rtt min",
-	"^round-trip min",
-]
+keep_lines_matching = ["^PING ", "^--- .* ping statistics ---$", "packet loss", "^rtt min", "^round-trip min"]
 on_empty = "ping: ok"
 
 [[tests.ping]]

@@ -11,7 +11,7 @@ const COPILOT_PREMIUM_MULTIPLIERS: Record<string, number> = {
 
 import * as path from "node:path";
 import { $env } from "@oh-my-pi/pi-utils";
-import { AuthCredentialStore } from "../src/auth-storage";
+import { AuthCredentialStore } from "../src/auth-credential-store";
 import { createModelManager } from "../src/model-manager";
 import {
 	applyGeneratedModelPolicies,

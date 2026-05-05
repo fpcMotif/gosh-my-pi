@@ -28,16 +28,16 @@ All providers normalize source files into `Rule`:
 
 ```ts
 interface Rule {
-  name: string;
-  path: string;
-  content: string;
-  globs?: string[];
-  alwaysApply?: boolean;
-  description?: string;
-  condition?: string[];
-  scope?: string[];
-  interruptMode?: "never" | "prose-only" | "tool-only" | "always";
-  _source: SourceMeta;
+	name: string;
+	path: string;
+	content: string;
+	globs?: string[];
+	alwaysApply?: boolean;
+	description?: string;
+	condition?: string[];
+	scope?: string[];
+	interruptMode?: "never" | "prose-only" | "tool-only" | "always";
+	_source: SourceMeta;
 }
 ```
 
@@ -230,7 +230,7 @@ This is advisory/contextual: prompt text asks the model to read applicable rules
 
 ```ts
 new RuleProtocolHandler({
-  getRules: () => [...rulebookRules, ...alwaysApplyRules],
+	getRules: () => [...rulebookRules, ...alwaysApplyRules],
 });
 ```
 

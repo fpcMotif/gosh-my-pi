@@ -87,8 +87,8 @@ export const handleChocolatey: SpecialHandler = async (
 		})();
 
 		if (!pkg) {
-			const xmlId = extractXmlField(result.content, "Id");
-			if (xmlId === null || xmlId === undefined || xmlId === "") {
+			pkg = parseChocolateyXml(result.content);
+			if (pkg === null) {
 				const fallback = `# ${packageName}\n\nChocolatey package metadata could not be parsed.\n\n---\n**Install:** \`choco install ${packageName}\`\n`;
 				return buildResult(fallback, {
 					url,
@@ -97,30 +97,6 @@ export const handleChocolatey: SpecialHandler = async (
 					notes: ["Chocolatey API response parsing failed"],
 				});
 			}
-
-			pkg = {
-				Id: xmlId,
-				Version: extractXmlField(result.content, "Version") ?? "",
-				Title: extractXmlField(result.content, "Title") ?? undefined,
-				Description: extractXmlField(result.content, "Description") ?? undefined,
-				Summary: extractXmlField(result.content, "Summary") ?? undefined,
-				Authors: extractXmlField(result.content, "Authors") ?? undefined,
-				ProjectUrl: extractXmlField(result.content, "ProjectUrl") ?? undefined,
-				PackageSourceUrl: extractXmlField(result.content, "PackageSourceUrl") ?? undefined,
-				Tags: extractXmlField(result.content, "Tags") ?? undefined,
-				DownloadCount: (() => {
-					const value = extractXmlField(result.content, "DownloadCount");
-					return value !== null && value !== undefined && value !== "" ? Number.parseInt(value, 10) : undefined;
-				})(),
-				VersionDownloadCount: (() => {
-					const value = extractXmlField(result.content, "VersionDownloadCount");
-					return value !== null && value !== undefined && value !== "" ? Number.parseInt(value, 10) : undefined;
-				})(),
-				Published: extractXmlField(result.content, "Published") ?? undefined,
-				LicenseUrl: extractXmlField(result.content, "LicenseUrl") ?? undefined,
-				ReleaseNotes: extractXmlField(result.content, "ReleaseNotes") ?? undefined,
-				Dependencies: extractXmlField(result.content, "Dependencies") ?? undefined,
-			};
 		}
 
 		// Build markdown output
@@ -183,17 +159,7 @@ export const handleChocolatey: SpecialHandler = async (
 		}
 
 		if (pkg.Dependencies !== null && pkg.Dependencies !== undefined && pkg.Dependencies !== "") {
-			// Dependencies format: "id:version|id:version"
-			const deps = pkg.Dependencies.split("|").filter(d => d.trim().length > 0);
-			if (deps.length > 0) {
-				md += `\n## Dependencies\n\n`;
-				for (const dep of deps) {
-					const [depId, depVersion] = dep.split(":");
-					if (depId) {
-						md += `- ${depId}${depVersion ? `: ${depVersion}` : ""}\n`;
-					}
-				}
-			}
+			md += formatChocolateyDependencies(pkg.Dependencies);
 		}
 
 		md += `\n---\n**Install:** \`choco install ${packageName}\`\n`;
@@ -203,3 +169,47 @@ export const handleChocolatey: SpecialHandler = async (
 
 	return null;
 };
+
+function parseChocolateyXml(content: string): NuGetODataEntry | null {
+	const xmlId = extractXmlField(content, "Id");
+	if (xmlId === null || xmlId === undefined || xmlId === "") return null;
+
+	return {
+		Id: xmlId,
+		Version: extractXmlField(content, "Version") ?? "",
+		Title: extractXmlField(content, "Title") ?? undefined,
+		Description: extractXmlField(content, "Description") ?? undefined,
+		Summary: extractXmlField(content, "Summary") ?? undefined,
+		Authors: extractXmlField(content, "Authors") ?? undefined,
+		ProjectUrl: extractXmlField(content, "ProjectUrl") ?? undefined,
+		PackageSourceUrl: extractXmlField(content, "PackageSourceUrl") ?? undefined,
+		Tags: extractXmlField(content, "Tags") ?? undefined,
+		DownloadCount: (() => {
+			const value = extractXmlField(content, "DownloadCount");
+			return value !== null && value !== undefined && value !== "" ? Number.parseInt(value, 10) : undefined;
+		})(),
+		VersionDownloadCount: (() => {
+			const value = extractXmlField(content, "VersionDownloadCount");
+			return value !== null && value !== undefined && value !== "" ? Number.parseInt(value, 10) : undefined;
+		})(),
+		Published: extractXmlField(content, "Published") ?? undefined,
+		LicenseUrl: extractXmlField(content, "LicenseUrl") ?? undefined,
+		ReleaseNotes: extractXmlField(content, "ReleaseNotes") ?? undefined,
+		Dependencies: extractXmlField(content, "Dependencies") ?? undefined,
+	};
+}
+
+function formatChocolateyDependencies(dependencies: string): string {
+	// Dependencies format: "id:version|id:version"
+	const deps = dependencies.split("|").filter(d => d.trim().length > 0);
+	if (deps.length === 0) return "";
+
+	let md = `\n## Dependencies\n\n`;
+	for (const dep of deps) {
+		const [depId, depVersion] = dep.split(":");
+		if (depId) {
+			md += `- ${depId}${depVersion ? `: ${depVersion}` : ""}\n`;
+		}
+	}
+	return md;
+}

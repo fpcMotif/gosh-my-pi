@@ -1,0 +1,163 @@
+id: strict-boolean-optional-method
+language: ts
+rule:
+   pattern: "$X?.$METHOD($$$ARGS)"
+   not:
+      inside:
+         any:
+            - pattern: "$MATCH === true"
+            - pattern: "$MATCH !== true"
+            - pattern: "$MATCH === false"
+            - pattern: "$MATCH !== false"
+   inside:
+      any:
+         - kind: if_statement
+         - kind: binary_expression
+         - kind: ternary_expression
+         - kind: unary_expression
+constraints:
+   METHOD:
+      regex: ^(some|every|includes|test|startsWith|endsWith|has|isAbsolute|exists|isFile|isDirectory)$
+fix: "$X?.$METHOD($$$ARGS) === true"
+---
+id: strict-boolean-negated-optional-method
+language: ts
+rule:
+   pattern: "!$X?.$METHOD($$$ARGS)"
+   not:
+      inside:
+         any:
+            - pattern: "$MATCH === true"
+            - pattern: "$MATCH !== true"
+constraints:
+   METHOD:
+      regex: ^(some|every|includes|test|startsWith|endsWith|has|isAbsolute|exists|isFile|isDirectory)$
+fix: "$X?.$METHOD($$$ARGS) !== true"
+---
+id: strict-boolean-signal-1
+language: ts
+rule:
+   pattern: "signal?.aborted"
+   not:
+      inside:
+         any:
+            - pattern: "$MATCH === true"
+            - pattern: "$MATCH !== true"
+   inside:
+      any:
+         - kind: if_statement
+         - kind: binary_expression
+         - kind: ternary_expression
+fix: "signal?.aborted === true"
+---
+id: strict-boolean-signal-2
+language: ts
+rule:
+   pattern: "options?.signal?.aborted"
+   not:
+      inside:
+         any:
+            - pattern: "$MATCH === true"
+            - pattern: "$MATCH !== true"
+   inside:
+      any:
+         - kind: if_statement
+         - kind: binary_expression
+         - kind: ternary_expression
+fix: "options?.signal?.aborted === true"
+---
+id: strict-boolean-length-truthy
+language: ts
+rule:
+   pattern: "$X.length"
+   not:
+      inside:
+         kind: binary_expression
+   inside:
+      any:
+         - kind: if_statement
+         - kind: ternary_expression
+         - kind: unary_expression
+fix: "$X.length > 0"
+---
+id: strict-boolean-length-falsy
+language: ts
+rule:
+   pattern: "!$X.length"
+   not:
+      inside:
+         kind: binary_expression
+   inside:
+      any:
+         - kind: if_statement
+         - kind: ternary_expression
+fix: "$X.length === 0"
+---
+id: strict-boolean-null-val
+language: ts
+rule:
+   any:
+      - pattern: "if ($X) { $$$BODY }"
+      - pattern: "if ($X) $STMT"
+constraints:
+   X:
+      regex: ^(agent|session|result|item|options|config|context|client|response|event|tool|provider|assistant|user|run|job|credentials|creds|storedOAuth|oauth|payload|history|story|post|issue|pr|pullRequest|repo|repository|owner|author|comment|comments|target|source|resolved|parsed|found|match|matches|metadata|data|settings|theme|template|block|segment|chunk|part|delta|thinking|reasoning|mktEntry|instReg|freshUserReg|freshProjectReg|projectReg|userReg|entry|msg|message|error|err|stderr|stdout|output|lines|line|content|text|html|md|markdown|path|filePath|fullPath|dir|dirname|tmpDir|tmpPath|resolvedPath|resolvedUrl|originUrl|cloneUrl|url|uri|href|shouldTriggerFileCompletion)$
+fix: "if ($X !== undefined && $X !== null) $STMT"
+---
+id: strict-boolean-negated-null-val
+language: ts
+rule:
+   any:
+      - pattern: "if (!$X) { $$$BODY }"
+      - pattern: "if (!$X) $STMT"
+constraints:
+   X:
+      regex: ^(agent|session|result|item|options|config|context|client|response|event|tool|provider|assistant|user|run|job|credentials|creds|storedOAuth|oauth|payload|history|story|post|issue|pr|pullRequest|repo|repository|owner|author|comment|comments|target|source|resolved|parsed|found|match|matches|metadata|data|settings|theme|template|block|segment|chunk|part|delta|thinking|reasoning|mktEntry|instReg|freshUserReg|freshProjectReg|projectReg|userReg|entry|msg|message|error|err|stderr|stdout|output|lines|line|content|text|html|md|markdown|path|filePath|fullPath|dir|dirname|tmpDir|tmpPath|resolvedPath|resolvedUrl|originUrl|cloneUrl|url|uri|href|shouldTriggerFileCompletion)$
+fix: "if ($X === undefined || $X === null) $STMT"
+---
+id: strict-boolean-string-fallback
+language: ts
+rule:
+   pattern: "$A || $B"
+   kind: binary_expression
+   not:
+      inside:
+         kind: binary_expression
+constraints:
+   A:
+      regex: ^(apiKey|effectiveApiKey|token|url|path|name|id|text|body|content|turnState|modelsEtag|delta|thinking|refreshToken|catalogVersion|installedVersion|version)$
+fix: "($A ?? $B)"
+---
+id: strict-boolean-string-val
+language: ts
+rule:
+   any:
+      - pattern: "if ($X) { $$$BODY }"
+      - pattern: "if ($X) $STMT"
+constraints:
+   X:
+      regex: ^(apiKey|effectiveApiKey|token|url|path|name|id|text|body|content|turnState|modelsEtag|delta|thinking|refreshToken|value|catalogVersion|installedVersion|version)$
+fix: 'if ($X !== undefined && $X !== null && $X !== "") $STMT'
+---
+id: strict-boolean-negated-string-val
+language: ts
+rule:
+   any:
+      - pattern: "if (!$X) { $$$BODY }"
+      - pattern: "if (!$X) $STMT"
+constraints:
+   X:
+      regex: ^(apiKey|effectiveApiKey|token|url|path|name|id|text|body|content|turnState|modelsEtag|delta|thinking|refreshToken|value|catalogVersion|installedVersion|version)$
+fix: 'if ($X === undefined || $X === null || $X === "") $STMT'
+---
+id: strict-boolean-logical-or-any
+language: ts
+rule:
+   pattern: "$X || $Y"
+   kind: binary_expression
+   inside:
+      kind: if_statement
+constraints:
+   X:
+      regex: ^(shouldReplayNativeHistory)$
+fix: "($X === true) || $Y"

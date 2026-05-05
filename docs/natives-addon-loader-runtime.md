@@ -28,19 +28,19 @@ At module initialization, `native/index.js` computes:
 - **Platform tag**: `${process.platform}-${process.arch}` (for example `darwin-arm64`).
 - **Package version**: from `packages/natives/package.json`.
 - **Core directories**:
-  - `nativeDir`: package-local `packages/natives/native`.
-  - `execDir`: directory containing `process.execPath`.
-  - `versionedDir`: `<getNativesDir()>/<packageVersion>`.
-  - `userDataDir` fallback:
-    - Windows: `%LOCALAPPDATA%/omp` or `%USERPROFILE%/AppData/Local/omp`.
-    - Non-Windows: `~/.local/bin`.
+   - `nativeDir`: package-local `packages/natives/native`.
+   - `execDir`: directory containing `process.execPath`.
+   - `versionedDir`: `<getNativesDir()>/<packageVersion>`.
+   - `userDataDir` fallback:
+      - Windows: `%LOCALAPPDATA%/omp` or `%USERPROFILE%/AppData/Local/omp`.
+      - Non-Windows: `~/.local/bin`.
 - **Natives cache root** (`getNativesDir()`):
-  - if `$XDG_DATA_HOME/omp` exists, `$XDG_DATA_HOME/omp/natives`;
-  - otherwise `~/.omp/natives`.
+   - if `$XDG_DATA_HOME/omp` exists, `$XDG_DATA_HOME/omp/natives`;
+   - otherwise `~/.omp/natives`.
 - **Compiled-binary mode** (`detectCompiledBinary`): true if any of:
-  - embedded-addon manifest is non-null,
-  - `PI_COMPILED` env var is set,
-  - `import.meta.url` contains Bun embedded markers (`$bunfs`, `~BUN`, `%7EBUN`).
+   - embedded-addon manifest is non-null,
+   - `PI_COMPILED` env var is set,
+   - `import.meta.url` contains Bun embedded markers (`$bunfs`, `~BUN`, `%7EBUN`).
 - **Variant override**: `PI_NATIVE_VARIANT` (`modern`/`baseline` only; invalid values ignored).
 - **Selected variant**: explicit override, otherwise runtime AVX2 detection on x64 (`modern` if AVX2, else `baseline`).
 
@@ -77,12 +77,12 @@ No variant suffix is used; the filename is `pi_natives.<platform>-<arch>.node`.
 
 - Non-x64 or no variant: `pi_natives.<tag>.node`
 - x64 + `modern`:
-  1. `pi_natives.<tag>-modern.node`
-  2. `pi_natives.<tag>-baseline.node`
-  3. `pi_natives.<tag>.node`
+   1. `pi_natives.<tag>-modern.node`
+   2. `pi_natives.<tag>-baseline.node`
+   3. `pi_natives.<tag>.node`
 - x64 + `baseline`:
-  1. `pi_natives.<tag>-baseline.node`
-  2. `pi_natives.<tag>.node`
+   1. `pi_natives.<tag>-baseline.node`
+   2. `pi_natives.<tag>.node`
 
 The default unsuffixed fallback remains part of the x64 candidate list.
 

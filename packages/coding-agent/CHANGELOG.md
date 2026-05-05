@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Changed
 
 - Refreshed the default coding-agent TUI with the pi-vivid theme, compact status/tool chrome, conversation rails, and a lower-noise welcome surface.
@@ -11,8 +12,8 @@
 - Fixed vivid `RowSplit` layouts so an explicit empty separator omits the default vertical rule.
 - Kept vivid sidebar and minimized welcome chrome in sync after session, cwd, model, and thinking-level changes.
 
-
 ## [14.5.11] - 2026-04-30
+
 ### Breaking Changes
 
 - `todo_write`: renamed `replace` op to `init` and reshaped its input to `list: [{phase: string, items: string[]}]`. Tasks no longer accept a `status` field; all start `pending` and the first auto-promotes to `in_progress`. The `append` op's `items` is now `string[]` (was `{id, label}[]`)
@@ -84,6 +85,7 @@
 - Fixed hash mismatch errors to include likely-shifted anchor hints when a unique matching line is found elsewhere in the file
 
 ## [14.5.8] - 2026-04-29
+
 ### Breaking Changes
 
 - Changed the task runner toggle from `just.enabled` to `runCommand.enabled`, so existing configurations using `just.enabled` must be migrated
@@ -109,12 +111,15 @@
 ### Fixed
 
 - Fixed hook editors to recognize Ctrl+Enter when terminals include NumLock or keypad Enter metadata.
+
 ## [14.5.6] - 2026-04-29
+
 ### Changed
 
 - Removed the atom edit mode's multi-anchor auto-rebase rejection so stale-but-uniquely-rebasable block edits apply with warnings instead of failing.
 
 ## [14.5.5] - 2026-04-29
+
 ### Breaking Changes
 
 - Rejected atom diffs with unrecognized operations (including lone '-' lines) by throwing parse errors instead of treating them as inserts
@@ -133,6 +138,7 @@
 - Fixed bracket-corruption caused by botched block rewrites by automatically removing a newly introduced duplicate adjacent line when removing it restores the original `{}`, `()`, and `[]` balance and by warning when automatic removal is unsafe
 
 ## [14.5.4] - 2026-04-28
+
 ### Breaking Changes
 
 - Changed the `atom` edit mode from JSON `{ path, edits }` calls to the compact file-oriented `input` patch language that was previously exposed as `atomd`; `atomd` is no longer a separate edit variant
@@ -186,6 +192,7 @@
 - Fixed `splice_block` for same-line `(` bodies so inline call sites like `int(port)` can be replaced correctly
 
 ## [14.5.2] - 2026-04-26
+
 ### Breaking Changes
 
 - Removed support for sed-style string expressions and required `sed` to be specified as an object with `pat` and `rep` (and optional `g`, `F`, `i` flags)
@@ -210,6 +217,7 @@
 - Removed the hand-rolled JSON unescape fallback in the streaming edit-arg renderer; partial fragments that fail `JSON.parse` are now surfaced raw rather than partially decoded with a non-spec-compliant unescaper that mishandled lone surrogates
 
 ## [14.4.3] - 2026-04-26
+
 ### Added
 
 - Added `irc` tool for agent-to-agent messaging with `list` and `send` operations, including optional broadcast to `all` and optional suppression of reply waits
@@ -229,6 +237,7 @@
 - Fixed `/btw` request replacement so issuing a new query cleanly aborts the previous active request
 
 ## [14.4.2] - 2026-04-26
+
 ### Breaking Changes
 
 - Changed `/todo append` from JSON payload input to `/todo append [<phase>] <task...>` with optional quoted tokens and automatic phase creation
@@ -266,6 +275,7 @@
 - Fixed `poll` wait duration parsing to fall back to `30s` when the provided value is an empty string
 
 ## [14.4.1] - 2026-04-26
+
 ### Breaking Changes
 
 - Replaced the legacy `gh_repo_view`, `gh_issue_view`, `gh_pr_view`, `gh_pr_diff`, `gh_pr_checkout`, `gh_pr_push`, `gh_run_watch`, `gh_search_issues`, and `gh_search_prs` tool names with only `github`, which requires updating existing callers that invoked the old `gh_*` tools
@@ -467,6 +477,7 @@
 
 - Fixed task calls in `schema-free` and `independent` modes to return clear mode-specific errors when disallowed `context` or `schema` inputs are provided
 - Fixed newly generated session IDs to use UUIDv7 for new, forked, and branched sessions while preserving resumed session IDs
+
 ## [14.1.1] - 2026-04-14
 
 ### Breaking Changes
@@ -508,7 +519,7 @@
 - Changed Vim page-scroll commands `C-f`, `C-b`, `C-u`, and `C-d` to move in viewport-height based increments instead of fixed constants
 - Changed `z` command behavior so `zt`, `zb`, and `z.` now align cursor movement to first non-blank in the line
 - Changed `:g`/`:v` global command handling to process matching lines safely by working in reverse order and preserving file structure
-- Changed vim tab breadcrumb rendering from ` → ` to `→` in the editor view
+- Changed vim tab breadcrumb rendering from `→` to `→` in the editor view
 - Changed custom tool and task execution contexts to no longer expose a shared `searchDb` accessor, removing direct access to native grep/glob/fuzzyFind search backends from extension callbacks
 - Changed the `task` tool `schema` field to require JSON-encoded JTD schema text instead of a schema object, matching prompt guidance and task-subagent invocation
 - Changed chunk edit payloads to encode selectors as `path: "file:selector"` and updated chunk tool guidance and examples to match
@@ -542,6 +553,7 @@
 - Fixed retained Python kernel ownership so `AgentSession.dispose()` only shuts down kernels owned by that session, including warmup-created kernels
 
 ## [14.1.0] - 2026-04-11
+
 ### Added
 
 - Added richer tool rendering details in session export HTML, including metadata badges, argument formatting, and todo task tree styling for exported tool and workflow messages
@@ -583,6 +595,7 @@
 - Blocked destructive SQL execution in read-mode SQLite access by using read-only connections and rejecting bound-parameter raw SQL
 
 ## [14.0.5] - 2026-04-11
+
 ### Added
 
 - Added `designer` model role for UI/UX design tasks with Gemini 3.1 Pro as default model
@@ -629,6 +642,7 @@
 - Fixed MCP config docs and schema to use `~/.omp/agent/mcp.json` for user-scoped OMP-native MCP config while keeping project config at `<cwd>/.omp/mcp.json`
 
 ## [14.0.4] - 2026-04-10
+
 ### Added
 
 - Added `PI_CHUNK_AUTOINDENT` environment variable to control whether chunk read/edit tools normalize indentation to canonical tabs or preserve literal file whitespace
@@ -655,6 +669,7 @@
 - Fixed cached Ollama discovery rows so upgraded installs switch to the OpenAI Responses transport instead of staying on the old completions transport
 
 ## [14.0.2] - 2026-04-09
+
 ### Added
 
 - Added `/force` slash command to force the next agent turn to use a specific tool
@@ -4331,12 +4346,12 @@
 ### Added
 
 - Added `/debug` command with interactive menu for bug report generation:
-  - `Report: performance issue` - CPU profiling with reproduction flow
-  - `Report: dump session` - Immediate session bundle creation
-  - `Report: memory issue` - Heap snapshot with bundle
-  - `View: recent logs` - Display last 50 log entries
-  - `View: system info` - Show environment details
-  - `Clear: artifact cache` - Remove old session artifacts
+   - `Report: performance issue` - CPU profiling with reproduction flow
+   - `Report: dump session` - Immediate session bundle creation
+   - `Report: memory issue` - Heap snapshot with bundle
+   - `View: recent logs` - Display last 50 log entries
+   - `View: system info` - Show environment details
+   - `Clear: artifact cache` - Remove old session artifacts
 
 ### Fixed
 
@@ -6660,14 +6675,14 @@ Total color count increased from 46 to 50. See [docs/theme.md](docs/theme.md) fo
 - **Credential storage refactored**: API keys and OAuth tokens are now stored in `~/.omp/agent/auth.json` instead of `oauth.json` and `settings.json`. Existing credentials are automatically migrated on first run. ([#296](https://github.com/badlogic/pi-mono/issues/296))
 
 - **SDK API changes** ([#296](https://github.com/badlogic/pi-mono/issues/296)):
-  - Added `AuthStorage` class for credential management (API keys and OAuth tokens)
-  - Added `ModelRegistry` class for model discovery and API key resolution
-  - Added `discoverAuthStorage()` and `discoverModels()` discovery functions
-  - `createAgentSession()` now accepts `authStorage` and `modelRegistry` options
-  - Removed `configureOAuthStorage()`, `defaultGetApiKey()`, `findModel()`, `discoverAvailableModels()`
-  - Removed `getApiKey` callback option (use `AuthStorage.setRuntimeApiKey()` for runtime overrides)
-  - Use `getModel()` from `@oh-my-pi/pi-ai` for built-in models, `modelRegistry.find()` for custom models + built-in models
-  - See updated [SDK documentation](docs/sdk.md) and [README](README.md)
+   - Added `AuthStorage` class for credential management (API keys and OAuth tokens)
+   - Added `ModelRegistry` class for model discovery and API key resolution
+   - Added `discoverAuthStorage()` and `discoverModels()` discovery functions
+   - `createAgentSession()` now accepts `authStorage` and `modelRegistry` options
+   - Removed `configureOAuthStorage()`, `defaultGetApiKey()`, `findModel()`, `discoverAvailableModels()`
+   - Removed `getApiKey` callback option (use `AuthStorage.setRuntimeApiKey()` for runtime overrides)
+   - Use `getModel()` from `@oh-my-pi/pi-ai` for built-in models, `modelRegistry.find()` for custom models + built-in models
+   - See updated [SDK documentation](docs/sdk.md) and [README](README.md)
 
 - **Settings changes**: Removed `apiKeys` from `settings.json`. Use `auth.json` instead. ([#296](https://github.com/badlogic/pi-mono/issues/296))
 
@@ -6698,15 +6713,15 @@ Total color count increased from 46 to 50. See [docs/theme.md](docs/theme.md) fo
 ### Added
 
 - **Compaction hook improvements**: The `before_compact` session event now includes:
-  - `previousSummary`: Summary from the last compaction (if any), so hooks can preserve accumulated context
-  - `messagesToKeep`: Messages that will be kept after the summary (recent turns), in addition to `messagesToSummarize`
-  - `resolveApiKey`: Function to resolve API keys for any model (checks settings, OAuth, env vars)
-  - Removed `apiKey` string in favor of `resolveApiKey` for more flexibility
+   - `previousSummary`: Summary from the last compaction (if any), so hooks can preserve accumulated context
+   - `messagesToKeep`: Messages that will be kept after the summary (recent turns), in addition to `messagesToSummarize`
+   - `resolveApiKey`: Function to resolve API keys for any model (checks settings, OAuth, env vars)
+   - Removed `apiKey` string in favor of `resolveApiKey` for more flexibility
 
 - **SessionManager API cleanup**:
-  - Renamed `loadSessionFromEntries()` to `buildSessionContext()` (builds LLM context from entries, handling compaction)
-  - Renamed `loadEntries()` to `getEntries()` (returns defensive copy of all session entries)
-  - Added `buildSessionContext()` method to SessionManager
+   - Renamed `loadSessionFromEntries()` to `buildSessionContext()` (builds LLM context from entries, handling compaction)
+   - Renamed `loadEntries()` to `getEntries()` (returns defensive copy of all session entries)
+   - Added `buildSessionContext()` method to SessionManager
 
 ## [0.27.5] - 2025-12-24
 
@@ -6925,13 +6940,13 @@ Total color count increased from 46 to 50. See [docs/theme.md](docs/theme.md) fo
 - **Custom tools now require `index.ts` entry point**: Auto-discovered custom tools must be in a subdirectory with an `index.ts` file. The old pattern `~/.omp/agent/tools/mytool.ts` must become `~/.omp/agent/tools/mytool/index.ts`. This allows multi-file tools to import helper modules. Explicit paths via `--tool` or `settings.json` still work with any `.ts` file.
 
 - **Hook `tool_result` event restructured**: The `ToolResultEvent` now exposes full tool result data instead of just text. ([#233](https://github.com/badlogic/pi-mono/pull/233))
-  - Removed: `result: string` field
-  - Added: `content: (TextContent | ImageContent)[]` - full content array
-  - Added: `details: unknown` - tool-specific details (typed per tool via discriminated union on `toolName`)
-  - `ToolResultEventResult.result` renamed to `ToolResultEventResult.text` (removed), use `content` instead
-  - Hook handlers returning `{ result: "..." }` must change to `{ content: [{ type: "text", text: "..." }] }`
-  - Built-in tool details types exported: `BashToolDetails`, `ReadToolDetails`, `GrepToolDetails`, `FindToolDetails`, `LsToolDetails`, `TruncationResult`
-  - Type guards exported for narrowing: `isBashToolResult`, `isReadToolResult`, `isEditToolResult`, `isWriteToolResult`, `isGrepToolResult`, `isFindToolResult`, `isLsToolResult`
+   - Removed: `result: string` field
+   - Added: `content: (TextContent | ImageContent)[]` - full content array
+   - Added: `details: unknown` - tool-specific details (typed per tool via discriminated union on `toolName`)
+   - `ToolResultEventResult.result` renamed to `ToolResultEventResult.text` (removed), use `content` instead
+   - Hook handlers returning `{ result: "..." }` must change to `{ content: [{ type: "text", text: "..." }] }`
+   - Built-in tool details types exported: `BashToolDetails`, `ReadToolDetails`, `GrepToolDetails`, `FindToolDetails`, `LsToolDetails`, `TruncationResult`
+   - Type guards exported for narrowing: `isBashToolResult`, `isReadToolResult`, `isEditToolResult`, `isWriteToolResult`, `isGrepToolResult`, `isFindToolResult`, `isLsToolResult`
 
 ## [0.23.4] - 2025-12-18
 
@@ -6960,12 +6975,12 @@ Total color count increased from 46 to 50. See [docs/theme.md](docs/theme.md) fo
 - Improved system prompt documentation section with clearer pointers to specific doc files for custom models, themes, skills, hooks, custom tools, and RPC.
 
 - Cleaned up documentation:
-  - `theme.md`: Added missing color tokens (`thinkingXhigh`, `bashMode`)
-  - `skills.md`: Rewrote with better framing and examples
-  - `hooks.md`: Fixed timeout/error handling docs, added import aliases section
-  - `custom-tools.md`: Added intro with use cases and comparison table
-  - `rpc.md`: Added missing `hook_error` event documentation
-  - `README.md`: Complete settings table, condensed philosophy section, standardized OAuth docs
+   - `theme.md`: Added missing color tokens (`thinkingXhigh`, `bashMode`)
+   - `skills.md`: Rewrote with better framing and examples
+   - `hooks.md`: Fixed timeout/error handling docs, added import aliases section
+   - `custom-tools.md`: Added intro with use cases and comparison table
+   - `rpc.md`: Added missing `hook_error` event documentation
+   - `README.md`: Complete settings table, condensed philosophy section, standardized OAuth docs
 
 - Hooks loader now supports same import aliases as custom tools (`@sinclair/typebox`, `@oh-my-pi/pi-ai`, `@oh-my-pi/pi-tui`, `@oh-my-pi/pi-coding-agent`).
 
@@ -7222,12 +7237,12 @@ _Dedicated to Peter's shoulder ([@steipete](https://twitter.com/steipete))_
 ### Changed
 
 - **Tool output truncation**: All tools now enforce consistent truncation limits with actionable notices for the LLM. ([#134](https://github.com/badlogic/pi-mono/issues/134))
-  - **Limits**: 2000 lines OR 50KB (whichever hits first), never partial lines
-  - **read**: Shows `[Showing lines X-Y of Z. Use offset=N to continue]`. If first line exceeds 50KB, suggests bash command
-  - **bash**: Tail truncation with temp file. Shows `[Showing lines X-Y of Z. Full output: /tmp/...]`
-  - **grep**: Pre-truncates match lines to 500 chars. Shows match limit and line truncation notices
-  - **find/ls**: Shows result/entry limit notices
-  - TUI displays truncation warnings in yellow at bottom of tool output (visible even when collapsed)
+   - **Limits**: 2000 lines OR 50KB (whichever hits first), never partial lines
+   - **read**: Shows `[Showing lines X-Y of Z. Use offset=N to continue]`. If first line exceeds 50KB, suggests bash command
+   - **bash**: Tail truncation with temp file. Shows `[Showing lines X-Y of Z. Full output: /tmp/...]`
+   - **grep**: Pre-truncates match lines to 500 chars. Shows match limit and line truncation notices
+   - **find/ls**: Shows result/entry limit notices
+   - TUI displays truncation warnings in yellow at bottom of tool output (visible even when collapsed)
 
 ## [0.13.1] - 2025-12-06
 
@@ -7314,13 +7329,13 @@ _Dedicated to Peter's shoulder ([@steipete](https://twitter.com/steipete))_
 ### Added
 
 - **Context Compaction**: Long sessions can now be compacted to reduce context usage while preserving recent conversation history. ([#92](https://github.com/badlogic/pi-mono/issues/92), [docs](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/README.md#context-compaction))
-  - `/compact [instructions]`: Manually compact context with optional custom instructions for the summary
-  - `/autocompact`: Toggle automatic compaction when context exceeds threshold
-  - Compaction summarizes older messages while keeping recent messages (default 20k tokens) verbatim
-  - Auto-compaction triggers when context reaches `contextWindow - reserveTokens` (default 16k reserve)
-  - Compacted sessions show a collapsible summary in the TUI (toggle with `o` key)
-  - HTML exports include compaction summaries as collapsible sections
-  - RPC mode supports `{"type":"compact"}` command and auto-compaction (emits compaction events)
+   - `/compact [instructions]`: Manually compact context with optional custom instructions for the summary
+   - `/autocompact`: Toggle automatic compaction when context exceeds threshold
+   - Compaction summarizes older messages while keeping recent messages (default 20k tokens) verbatim
+   - Auto-compaction triggers when context reaches `contextWindow - reserveTokens` (default 16k reserve)
+   - Compacted sessions show a collapsible summary in the TUI (toggle with `o` key)
+   - HTML exports include compaction summaries as collapsible sections
+   - RPC mode supports `{"type":"compact"}` command and auto-compaction (emits compaction events)
 - **Branch Source Tracking**: Branched sessions now store `branchedFrom` in the session header, containing the path to the original session file. Useful for tracing session lineage.
 
 ## [0.12.5] - 2025-12-03
@@ -7357,11 +7372,11 @@ _Dedicated to Peter's shoulder ([@steipete](https://twitter.com/steipete))_
 ### Added
 
 - **Models**: Added support for OpenAI's new models:
-  - `gpt-4.1` (128K context)
-  - `gpt-4.1-mini` (128K context)
-  - `gpt-4.1-nano` (128K context)
-  - `o3` (200K context, reasoning model)
-  - `o4-mini` (200K context, reasoning model)
+   - `gpt-4.1` (128K context)
+   - `gpt-4.1-mini` (128K context)
+   - `gpt-4.1-nano` (128K context)
+   - `o3` (200K context, reasoning model)
+   - `o4-mini` (200K context, reasoning model)
 
 ## [0.12.0] - 2025-12-02
 

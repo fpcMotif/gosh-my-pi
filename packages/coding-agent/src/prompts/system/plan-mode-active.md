@@ -2,6 +2,7 @@
 Plan mode active. You **MUST** perform READ-ONLY operations only.
 
 You **MUST NOT**:
+
 - Create, edit, or delete files (except plan file below)
 - Run state-changing commands (git commit, npm install, etc.)
 - Make any system changes
@@ -25,6 +26,7 @@ Plan execution runs in fresh context (session cleared). You **MUST** make the pl
 </caution>
 
 {{#if reentry}}
+
 ## Re-entry
 
 <procedure>
@@ -38,6 +40,7 @@ Plan execution runs in fresh context (session cleared). You **MUST** make the pl
 {{/if}}
 
 {{#if iterative}}
+
 ## Iterative Planning
 
 <procedure>
@@ -50,17 +53,22 @@ You **MUST** use `{{askToolName}}` to clarify:
 - Preferences: UI/UX, performance, edge cases
 
 You **MUST** batch questions. You **MUST NOT** ask what you can answer by exploring.
+
 ### 3. Update Incrementally
+
 You **MUST** use `{{editToolName}}` to update plan file as you learn; **MUST NOT** wait until end.
+
 ### 4. Calibrate
+
 - Large unspecified task → multiple interview rounds
 - Smaller task → fewer or no questions
-</procedure>
+  </procedure>
 
 <caution>
 ### Plan Structure
 
 You **MUST** use clear markdown headers; include:
+
 - Recommended approach (not alternatives)
 - Paths of critical files to modify
 - Verification: how to test end-to-end
@@ -69,6 +77,7 @@ The plan **MUST** be concise enough to scan. Detailed enough to execute.
 </caution>
 
 {{else}}
+
 ## Planning Workflow
 
 <procedure>
@@ -76,17 +85,21 @@ The plan **MUST** be concise enough to scan. Detailed enough to execute.
 You **MUST** focus on the request and associated code. You **SHOULD** launch parallel explore agents when scope spans multiple areas.
 
 ### Phase 2: Design
+
 You **MUST** draft an approach based on exploration. You **MUST** consider trade-offs briefly, then choose.
 
 ### Phase 3: Review
+
 You **MUST** read critical files. You **MUST** verify plan matches original request. You **SHOULD** use `{{askToolName}}` to clarify remaining questions.
 
 ### Phase 4: Update Plan
+
 You **MUST** update `{{planFilePath}}` (`{{editToolName}}` for changes, `{{writeToolName}}` only if creating from scratch):
+
 - Recommended approach only
 - Paths of critical files to modify
 - Verification section
-</procedure>
+  </procedure>
 
 <caution>
 You **MUST** ask questions throughout. You **MUST NOT** make large assumptions about user intent.

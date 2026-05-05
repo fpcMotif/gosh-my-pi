@@ -24,8 +24,8 @@ const ttsrSettings = settings.getGroup("ttsr");
 const ttsrManager = new TtsrManager(ttsrSettings);
 const rulesResult = await loadCapability<Rule>(ruleCapability.id, { cwd });
 for (const rule of rulesResult.items) {
-  if (rule.condition?.length && ttsrManager.addRule(rule)) continue;
-  // non-TTSR rules continue through normal rule handling
+	if (rule.condition?.length && ttsrManager.addRule(rule)) continue;
+	// non-TTSR rules continue through normal rule handling
 }
 ```
 

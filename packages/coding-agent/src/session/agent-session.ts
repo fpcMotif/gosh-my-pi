@@ -4079,9 +4079,9 @@ export class AgentSession {
 		let handoffText: string | undefined;
 		const { promise: completionPromise, resolve: resolveCompletion } = Promise.withResolvers<void>();
 		let handoffCancelled = false;
-		let unsubscribe: (() => void) | undefined;
+		const unsubscribeRef: { fn: (() => void) | undefined } = { fn: undefined };
 		const onCompletionAbort = () => {
-			unsubscribe?.();
+			unsubscribeRef.fn?.();
 			handoffCancelled = true;
 			resolveCompletion();
 		};
@@ -4090,9 +4090,9 @@ export class AgentSession {
 		} else {
 			handoffSignal.addEventListener("abort", onCompletionAbort, { once: true });
 		}
-		unsubscribe = this.subscribe(event => {
+		unsubscribeRef.fn = this.subscribe(event => {
 			if (event.type === "agent_end") {
-				unsubscribe?.();
+				unsubscribeRef.fn?.();
 				handoffSignal.removeEventListener("abort", onCompletionAbort);
 				// Extract text from the last assistant message
 				const messages = this.agent.state.messages;

@@ -1,0 +1,41 @@
+id: no-lonely-if
+language: ts
+rule:
+   kind: if_statement
+   pattern: |
+      if ($A) {
+        $$$B
+      } else {
+        if ($C) {
+          $$$D
+        }
+      }
+fix: |
+   if ($A) {
+     $$$B
+   } else if ($C) {
+     $$$D
+   }
+---
+id: no-lonely-if-with-else
+language: ts
+rule:
+   kind: if_statement
+   pattern: |
+      if ($A) {
+        $$$B
+      } else {
+        if ($C) {
+          $$$D
+        } else {
+          $$$E
+        }
+      }
+fix: |
+   if ($A) {
+     $$$B
+   } else if ($C) {
+     $$$D
+   } else {
+     $$$E
+   }

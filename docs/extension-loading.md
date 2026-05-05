@@ -68,13 +68,13 @@ Examples:
 ```yaml
 # ~/.omp/agent/config.yml
 extensions:
-  - ~/my-exts/safety.ts
-  - ./local/ext-pack
+   - ~/my-exts/safety.ts
+   - ./local/ext-pack
 ```
 
 ```json
 {
-  "extensions": ["./.omp/extensions/my-extra"]
+	"extensions": ["./.omp/extensions/my-extra"]
 }
 ```
 
@@ -107,7 +107,7 @@ Example:
 
 ```yaml
 disabledExtensions:
-  - extension-module:foo
+   - extension-module:foo
 ```
 
 ---
@@ -243,9 +243,9 @@ When events run through `ExtensionRunner`, handler exceptions are caught and emi
 
 ```json
 {
-  "omp": {
-    "extensions": ["./src/check-a.ts", "./src/check-b.js"]
-  }
+	"omp": {
+		"extensions": ["./src/check-a.ts", "./src/check-b.js"]
+	}
 }
 ```
 
@@ -253,8 +253,8 @@ Legacy manifest key still accepted:
 
 ```json
 {
-  "pi": {
-    "extensions": ["./index.ts"]
-  }
+	"pi": {
+		"extensions": ["./index.ts"]
+	}
 }
 ```

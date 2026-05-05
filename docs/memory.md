@@ -6,7 +6,7 @@ Disabled by default. Enable via `/settings` or `config.yml`:
 
 ```yaml
 memories:
-  enabled: true
+   enabled: true
 ```
 
 ## Usage

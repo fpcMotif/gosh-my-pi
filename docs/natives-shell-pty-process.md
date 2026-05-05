@@ -76,8 +76,8 @@ One-shot shell (`executeShell`) always creates and drops a fresh session per cal
 - `CancelToken` is constructed from `timeoutMs` and optional `AbortSignal`.
 - On cancellation/timeout, shell cancellation token is triggered, then task gets a 2-second graceful window before forced abort.
 - Structured result flags are used:
-  - timeout -> `exitCode` omitted, `timedOut: true`.
-  - abort signal / `Shell.abort()` -> `exitCode` omitted, `cancelled: true`.
+   - timeout -> `exitCode` omitted, `timedOut: true`.
+   - abort signal / `Shell.abort()` -> `exitCode` omitted, `cancelled: true`.
 
 `Shell.abort()` behavior:
 

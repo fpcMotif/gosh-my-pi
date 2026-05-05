@@ -14,6 +14,7 @@ import { calculateCost } from "../models";
 import type {
 	Api,
 	AssistantMessage,
+	Context,
 	ImageContent,
 	Model,
 	ProviderSessionState,

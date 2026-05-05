@@ -5,28 +5,28 @@ tools: read, search, find, web_search
 model: pi/smol
 thinking-level: med
 output:
-  properties:
-    summary:
-      metadata:
-        description: Brief summary of findings and conclusions
-      type: string
-    files:
-      metadata:
-        description: Files examined with relevant code references
-      elements:
-        properties:
-          ref:
-            metadata:
-              description: Project-relative path or paths to the most relevant code reference(s), optionally suffixed with line ranges like `:12-34` when relevant
-            type: string
-          description:
-            metadata:
-              description: Section contents
-            type: string
-    architecture:
-      metadata:
-        description: Brief explanation of how pieces connect
-      type: string
+   properties:
+      summary:
+         metadata:
+            description: Brief summary of findings and conclusions
+         type: string
+      files:
+         metadata:
+            description: Files examined with relevant code references
+         elements:
+            properties:
+               ref:
+                  metadata:
+                     description: Project-relative path or paths to the most relevant code reference(s), optionally suffixed with line ranges like `:12-34` when relevant
+                  type: string
+               description:
+                  metadata:
+                     description: Section contents
+                  type: string
+      architecture:
+         metadata:
+            description: Brief explanation of how pieces connect
+         type: string
 ---
 
 You are a file search specialist and a codebase scout.

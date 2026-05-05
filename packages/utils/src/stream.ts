@@ -1,4 +1,5 @@
 import { createAbortableStream } from "./abortable";
+import { isAborted } from "./async";
 
 const LF = 0x0a;
 type JsonlChunkResult = {
@@ -39,7 +40,7 @@ export async function* readLines(stream: ReadableStream<Uint8Array>, signal?: Ab
 		}
 	} catch (error) {
 		// Abort errors are expected — just stop the generator.
-		if (signal !== undefined && signal.aborted) return;
+		if (isAborted(signal)) return;
 		throw error;
 	}
 }
@@ -67,7 +68,7 @@ export async function* readJsonl<T>(stream: ReadableStream<Uint8Array>, signal?:
 		}
 	} catch (error) {
 		// Abort errors are expected — just stop the generator.
-		if (signal !== undefined && signal.aborted) return;
+		if (isAborted(signal)) return;
 		throw error;
 	}
 }
@@ -270,7 +271,7 @@ export async function* readSseJson<T>(stream: ReadableStream<Uint8Array>, signal
 	} catch (error) {
 		if (error === kDoneError) return;
 		// Abort errors are expected — just stop the generator.
-		if (signal !== undefined && signal.aborted) return;
+		if (isAborted(signal)) return;
 		throw error;
 	}
 	if (!jsonBuffer.isEmpty) {

@@ -34,7 +34,7 @@
 <a href="https://repology.org/project/brush/versions">
 </a>
 
-</p> 
+</p>
 
 <hr/>
 
@@ -86,6 +86,7 @@ After downloading the archive for your platform, you may verify its authenticity
 ```bash
 gh attestation verify brush-x86_64-unknown-linux-gnu.tar.gz --repo reubeno/brush
 ```
+
 </details>
 
 <details open>
@@ -107,6 +108,7 @@ To build from sources, first install a working (and recent) `rust` toolchain; we
 ```bash
 cargo install --locked brush-shell
 ```
+
 </details>
 
 <details>
@@ -117,6 +119,7 @@ If you are a Nix user, you can use the registered version:
 ```bash
 nix run 'github:NixOS/nixpkgs/nixpkgs-unstable#brush' -- --version
 ```
+
 </details>
 
 <details>
@@ -127,6 +130,7 @@ Arch Linux users can install `brush` from the official [extra repository](https:
 ```bash
 pacman -S brush
 ```
+
 </details>
 
 <details>
@@ -137,6 +141,7 @@ Homebrew users can install using [the `brush` formula](https://formulae.brew.sh/
 ```bash
 brew install brush
 ```
+
 </details>
 
 ## 👥 Community
@@ -147,7 +152,7 @@ brew install brush
 
 There are some known gaps in compatibility. Most notably:
 
-* **Some `set` and `shopt` options.**
+- **Some `set` and `shopt` options.**
   The `set` builtin is implemented, as is `set -x` and many frequently used `set`/`shopt` options, but a number aren't fully implemented. For example, `set -e` will execute but its semantics aren't applied across execution.
 
 If you're interested, we'd love contributions to improve compatibility, broaden test coverage, or really any other opportunities you can find to help us make this project better.
@@ -162,26 +167,26 @@ For more details, please consult the [reference documentation on integration tes
 
 There's a long list of OSS crates whose shoulders this project rests on. Notably, the following crates are directly relied on for major portions of shell functionality:
 
-* [`reedline`](https://github.com/nushell/reedline) - for readline-like input and interactive usage
-* [`clap`](https://github.com/clap-rs/clap) - command-line parsing, used both by the top-level brush CLI as well as built-in commands
-* [`fancy-regex`](https://github.com/fancy-regex/fancy-regex) - relied on for everything regex
-* [`tokio`](https://github.com/tokio-rs/tokio) - async, well, everything
-* [`nix` rust crate](https://github.com/nix-rust/nix) - higher-level APIs for Unix/POSIX system APIs
+- [`reedline`](https://github.com/nushell/reedline) - for readline-like input and interactive usage
+- [`clap`](https://github.com/clap-rs/clap) - command-line parsing, used both by the top-level brush CLI as well as built-in commands
+- [`fancy-regex`](https://github.com/fancy-regex/fancy-regex) - relied on for everything regex
+- [`tokio`](https://github.com/tokio-rs/tokio) - async, well, everything
+- [`nix` rust crate](https://github.com/nix-rust/nix) - higher-level APIs for Unix/POSIX system APIs
 
 For testing, performance benchmarking, and other important engineering support, we use and love:
 
-* [`pprof-rs`](https://github.com/tikv/pprof-rs) - for sampling-based CPU profiling
-* [`criterion.rs`](https://github.com/bheisler/criterion.rs) - for statistics-based benchmarking
-* [`bash-completion`](https://github.com/scop/bash-completion) - for its completion test suite and general completion support!
+- [`pprof-rs`](https://github.com/tikv/pprof-rs) - for sampling-based CPU profiling
+- [`criterion.rs`](https://github.com/bheisler/criterion.rs) - for statistics-based benchmarking
+- [`bash-completion`](https://github.com/scop/bash-completion) - for its completion test suite and general completion support!
 
 ## 🔗 Links: other shell implementations
 
 There are a number of other POSIX-ish shells implemented in a non-C/C++ implementation language. Some inspirational examples include:
 
-* [`nushell`](https://www.nushell.sh/) - modern Rust-implemented shell (which also provides the `reedline` crate we use!)
-* [`rusty_bash`](https://github.com/shellgei/rusty_bash)
-* [`mvdan/sh`](https://github.com/mvdan/sh)
-* [`Oils`](https://github.com/oils-for-unix/oils)
-* [`fish`](https://fishshell.com) ([as of 4.0](https://fishshell.com/blog/rustport/))
+- [`nushell`](https://www.nushell.sh/) - modern Rust-implemented shell (which also provides the `reedline` crate we use!)
+- [`rusty_bash`](https://github.com/shellgei/rusty_bash)
+- [`mvdan/sh`](https://github.com/mvdan/sh)
+- [`Oils`](https://github.com/oils-for-unix/oils)
+- [`fish`](https://fishshell.com) ([as of 4.0](https://fishshell.com/blog/rustport/))
 
 We're sure there are plenty more; we're happy to include links to them as well.

@@ -6,15 +6,8 @@ description = "Compact dotnet build output — short-circuit on success, strip b
 match_command = "^dotnet$"
 match_subcommand = "^build$"
 strip_ansi = true
-strip_lines_matching = [
-  "^\\s*$",
-  "^Microsoft \\(R\\)",
-  "^Copyright \\(C\\)",
-  "^  Determining projects",
-]
-match_output = [
-  { pattern = "0 Warning\\(s\\)\\n\\s+0 Error\\(s\\)", message = "ok (build succeeded)" },
-]
+strip_lines_matching = ["^\\s*$", "^Microsoft \\(R\\)", "^Copyright \\(C\\)", "^  Determining projects"]
+match_output = [{ pattern = "0 Warning\\(s\\)\\n\\s+0 Error\\(s\\)", message = "ok (build succeeded)" }]
 max_lines = 40
 
 [[tests.dotnet-build]]

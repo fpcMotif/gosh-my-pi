@@ -23,6 +23,8 @@ import type {
 	ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
 import type * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
+import type * as PiUtils from "@oh-my-pi/pi-utils";
+import type * as TypeboxNs from "@sinclair/typebox";
 import type { AutocompleteItem, Component, EditorComponent, EditorTheme, KeyId, TUI } from "@oh-my-pi/pi-tui";
 import type { Static, TSchema } from "@sinclair/typebox";
 import type { Rule } from "../../capability/rule";
@@ -949,10 +951,10 @@ export interface ExtensionAPI {
 	// =========================================================================
 
 	/** File logger for error/warning/debug messages */
-	logger: typeof import("@oh-my-pi/pi-utils").logger;
+	logger: typeof PiUtils.logger;
 
 	/** Injected @sinclair/typebox module for defining tool parameters */
-	typebox: typeof import("@sinclair/typebox");
+	typebox: typeof TypeboxNs;
 
 	/** Injected pi-coding-agent exports for accessing SDK utilities */
 	pi: typeof piCodingAgent;

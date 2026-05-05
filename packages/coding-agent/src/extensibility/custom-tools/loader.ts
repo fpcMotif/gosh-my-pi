@@ -5,6 +5,7 @@
  * to avoid import resolution issues with custom tools loaded from user directories.
  */
 import * as path from "node:path";
+import type * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import type { AgentToolResult } from "@oh-my-pi/pi-agent-core";
 import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
@@ -85,7 +86,7 @@ export class CustomToolLoader {
 	#seenNames: Set<string>;
 
 	constructor(
-		pi: typeof import("@oh-my-pi/pi-coding-agent"),
+		pi: typeof piCodingAgent,
 		cwd: string,
 		builtInToolNames: string[],
 		pushPendingAction?: (action: {

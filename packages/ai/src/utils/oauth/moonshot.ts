@@ -1,5 +1,6 @@
 /** Moonshot login flow (API key paste against https://api.moonshot.ai/v1). */
 import { createApiKeyLogin } from "./api-key-login";
+import type { OAuthCredentials } from "./types";
 
 export const loginMoonshot = createApiKeyLogin({
 	providerLabel: "Moonshot",
@@ -14,3 +15,8 @@ export const loginMoonshot = createApiKeyLogin({
 		model: "kimi-k2.5",
 	},
 });
+
+/** Moonshot uses API keys — token refresh is not supported. */
+export function refreshMoonshotToken(_refreshToken: string): Promise<OAuthCredentials> {
+	return Promise.reject(new Error("Moonshot does not support token refresh"));
+}

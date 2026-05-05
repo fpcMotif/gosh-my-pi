@@ -58,29 +58,29 @@ Terminology follows `docs/natives-architecture.md`:
 ### Execution branches
 
 - **In-memory branch**
-  - `search` -> `search_sync` / search helpers over provided content bytes.
-  - `hasMatch` compiles/checks pattern against provided content and returns a boolean.
-  - No filesystem scan, no `fs_cache`.
+   - `search` -> `search_sync` / search helpers over provided content bytes.
+   - `hasMatch` compiles/checks pattern against provided content and returns a boolean.
+   - No filesystem scan, no `fs_cache`.
 - **Single-file branch**
-  - `grep` resolves path, checks metadata is file, and searches that file.
+   - `grep` resolves path, checks metadata is file, and searches that file.
 - **Directory branch**
-  - Optional cache lookup via `fs_cache::get_or_scan` when `cache: true`.
-  - Fresh scan via `fs_cache::force_rescan` when `cache: false`.
-  - Optional empty-result recheck when cached results are older than the empty-result recheck threshold.
-  - Entry filtering: file-only + optional glob filter (`glob_util`) + optional type filter mapping (`js`, `ts`, `rust`, etc.).
+   - Optional cache lookup via `fs_cache::get_or_scan` when `cache: true`.
+   - Fresh scan via `fs_cache::force_rescan` when `cache: false`.
+   - Optional empty-result recheck when cached results are older than the empty-result recheck threshold.
+   - Entry filtering: file-only + optional glob filter (`glob_util`) + optional type filter mapping (`js`, `ts`, `rust`, etc.).
 
 ### Search/collection semantics
 
 - Regex engine: `grep_regex::RegexMatcherBuilder` with `ignoreCase` and `multiline`.
 - Context resolution:
-  - `contextBefore/contextAfter` override legacy `context`.
-  - Non-content modes do not collect context.
+   - `contextBefore/contextAfter` override legacy `context`.
+   - Non-content modes do not collect context.
 - Output modes:
-  - `content` -> one `GrepMatch` per hit.
-  - `count` and `filesWithMatches` map to count-style entries (`lineNumber=0`, `line=""`, `matchCount` set).
+   - `content` -> one `GrepMatch` per hit.
+   - `count` and `filesWithMatches` map to count-style entries (`lineNumber=0`, `line=""`, `matchCount` set).
 - Limits:
-  - Global `offset` and `maxCount` apply across files.
-  - Parallel path is used only when `maxCount` is unset and `offset == 0`; otherwise sequential path preserves deterministic global offset/limit semantics.
+   - Global `offset` and `maxCount` apply across files.
+   - Parallel path is used only when `maxCount` is unset and `offset == 0`; otherwise sequential path preserves deterministic global offset/limit semantics.
 
 ### Result shaping back to JS
 
@@ -175,8 +175,8 @@ These exports are direct native APIs used by tooling; they are not mediated by a
    - If query yields zero matches and cache age exceeds the empty-result threshold, force one rescan.
 4. **Invalidation**
    - `invalidateFsScanCache(path?)`:
-     - no arg: clear all keys;
-     - path arg: remove keys for roots affected by that path.
+      - no arg: clear all keys;
+      - path arg: remove keys for roots affected by that path.
 
 ### Stale-result tradeoff
 
@@ -192,13 +192,13 @@ These are pure, in-memory utilities.
 ### Boundaries and responsibilities
 
 - `text.rs` owns terminal-cell semantics:
-  - ANSI sequence parsing,
-  - grapheme-aware width and slicing,
-  - wrap/truncate/sanitize behavior,
-  - explicit tab-width parameter on width-sensitive APIs.
+   - ANSI sequence parsing,
+   - grapheme-aware width and slicing,
+   - wrap/truncate/sanitize behavior,
+   - explicit tab-width parameter on width-sensitive APIs.
 - `grep.rs` line truncation (`maxColumns`) is separate:
-  - simple character-boundary truncation of matched lines with `...`,
-  - not ANSI-state-preserving and not terminal-cell width aware.
+   - simple character-boundary truncation of matched lines with `...`,
+   - not ANSI-state-preserving and not terminal-cell width aware.
 
 ### Key behaviors
 

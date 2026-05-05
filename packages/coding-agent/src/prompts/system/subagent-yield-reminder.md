@@ -2,6 +2,7 @@
 You stopped without calling yield. This is reminder {{retryCount}} of {{maxRetries}}.
 
 You **MUST** call yield as your only action now. Choose one:
+
 - If task is complete: call yield with your result in `result.data`
 - If task failed: call yield with `result.error` describing what happened
 

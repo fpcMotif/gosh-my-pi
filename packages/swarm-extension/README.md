@@ -76,24 +76,24 @@ Every swarm is a single YAML file with a top-level `swarm` key:
 
 ```yaml
 swarm:
-  name: my-pipeline # Identifier (state stored in .swarm_<name>/)
-  workspace: ./workspace # Working directory (relative to YAML file location)
-  mode: pipeline # pipeline | parallel | sequential
-  target_count: 10 # Iterations (pipeline mode only, default: 1)
-  model: claude-opus-4-6 # Default model for agents without an override (optional)
+   name: my-pipeline # Identifier (state stored in .swarm_<name>/)
+   workspace: ./workspace # Working directory (relative to YAML file location)
+   mode: pipeline # pipeline | parallel | sequential
+   target_count: 10 # Iterations (pipeline mode only, default: 1)
+   model: claude-opus-4-6 # Default model for agents without an override (optional)
 
-  agents:
-    first_agent:
-      role: short-role-name
-      task: |
-        Full instructions for this agent.
-      extra_context: |
-        Optional additional system prompt text.
-      reports_to:
-        - downstream_agent
-      waits_for:
-        - upstream_agent
-      model: claude-sonnet-4-5 # Optional per-agent override
+   agents:
+      first_agent:
+         role: short-role-name
+         task: |
+            Full instructions for this agent.
+         extra_context: |
+            Optional additional system prompt text.
+         reports_to:
+            - downstream_agent
+         waits_for:
+            - upstream_agent
+         model: claude-sonnet-4-5 # Optional per-agent override
 ```
 
 ### Top-Level Fields
@@ -104,7 +104,7 @@ swarm:
 | `workspace`    | yes      | —               | Shared working directory. Relative paths resolve from YAML file location       |
 | `mode`         | no       | `sequential`    | Execution mode (see below)                                                     |
 | `target_count` | no       | `1`             | How many times to repeat the full pipeline. Only meaningful in `pipeline` mode |
-| `model`        | no       | session default | Default model for agents that do not set `agents.<name>.model`                |
+| `model`        | no       | session default | Default model for agents that do not set `agents.<name>.model`                 |
 
 ### Agent Fields
 
@@ -145,38 +145,38 @@ Run the same agent chain N times. Each iteration builds on the previous one's ou
 
 ```yaml
 swarm:
-  name: research-collector
-  workspace: ./workspace
-  mode: pipeline
-  target_count: 25
-  model: claude-opus-4-6
+   name: research-collector
+   workspace: ./workspace
+   mode: pipeline
+   target_count: 25
+   model: claude-opus-4-6
 
-  agents:
-    finder:
-      role: researcher
-      task: |
-        Find ONE new source on the topic defined in workspace/topic.md.
+   agents:
+      finder:
+         role: researcher
+         task: |
+            Find ONE new source on the topic defined in workspace/topic.md.
 
-        1. Read processed.txt to see what's already been found
-        2. Use web_search to find a new, high-quality source
-        3. Append the URL to processed.txt
-        4. Write the URL to signals/finder_out.txt: FOUND:<url>
+            1. Read processed.txt to see what's already been found
+            2. Use web_search to find a new, high-quality source
+            3. Append the URL to processed.txt
+            4. Write the URL to signals/finder_out.txt: FOUND:<url>
 
-    analyzer:
-      role: analyst
-      task: |
-        Read signals/finder_out.txt for the URL.
-        Fetch the page and extract key findings.
-        Read tracking/count.txt, increment it, write back.
-        Write analysis to analyzed/item_<N>.md
-        Write to signals/analyzer_out.txt: DONE:<N>
+      analyzer:
+         role: analyst
+         task: |
+            Read signals/finder_out.txt for the URL.
+            Fetch the page and extract key findings.
+            Read tracking/count.txt, increment it, write back.
+            Write analysis to analyzed/item_<N>.md
+            Write to signals/analyzer_out.txt: DONE:<N>
 
-    compiler:
-      role: technical-writer
-      task: |
-        Read signals/analyzer_out.txt for the item number.
-        Read analyzed/item_<N>.md.
-        Append a summary to output/report.md under a new section.
+      compiler:
+         role: technical-writer
+         task: |
+            Read signals/analyzer_out.txt for the item number.
+            Read analyzed/item_<N>.md.
+            Append a summary to output/report.md under a new section.
 ```
 
 After 25 iterations: 25 sources found, analyzed, and compiled into a single report.
@@ -187,44 +187,44 @@ Multiple agents work independently, one synthesizer combines results. Good for: 
 
 ```yaml
 swarm:
-  name: codebase-audit
-  workspace: ./workspace
+   name: codebase-audit
+   workspace: ./workspace
 
-  agents:
-    security:
-      role: security-auditor
-      task: |
-        Audit all code in src/ for security vulnerabilities.
-        Write findings to reports/security.md with severity ratings.
-      reports_to:
-        - lead
+   agents:
+      security:
+         role: security-auditor
+         task: |
+            Audit all code in src/ for security vulnerabilities.
+            Write findings to reports/security.md with severity ratings.
+         reports_to:
+            - lead
 
-    performance:
-      role: performance-analyst
-      task: |
-        Profile and analyze src/ for performance bottlenecks.
-        Write findings to reports/performance.md with benchmarks.
-      reports_to:
-        - lead
+      performance:
+         role: performance-analyst
+         task: |
+            Profile and analyze src/ for performance bottlenecks.
+            Write findings to reports/performance.md with benchmarks.
+         reports_to:
+            - lead
 
-    architecture:
-      role: architecture-reviewer
-      task: |
-        Review src/ for architectural issues, coupling, and tech debt.
-        Write findings to reports/architecture.md with refactoring suggestions.
-      reports_to:
-        - lead
+      architecture:
+         role: architecture-reviewer
+         task: |
+            Review src/ for architectural issues, coupling, and tech debt.
+            Write findings to reports/architecture.md with refactoring suggestions.
+         reports_to:
+            - lead
 
-    lead:
-      role: engineering-lead
-      task: |
-        Read all reports in reports/.
-        Create a prioritized action plan in output/action_plan.md.
-        Rank issues by impact and effort.
-      waits_for:
-        - security
-        - performance
-        - architecture
+      lead:
+         role: engineering-lead
+         task: |
+            Read all reports in reports/.
+            Create a prioritized action plan in output/action_plan.md.
+            Rank issues by impact and effort.
+         waits_for:
+            - security
+            - performance
+            - architecture
 ```
 
 Execution: security + performance + architecture run in parallel (wave 1), lead starts after all three complete (wave 2).
@@ -235,38 +235,38 @@ Linear progression through distinct phases. Good for: content pipelines, multi-s
 
 ```yaml
 swarm:
-  name: blog-post
-  workspace: ./workspace
-  mode: sequential
+   name: blog-post
+   workspace: ./workspace
+   mode: sequential
 
-  agents:
-    researcher:
-      role: researcher
-      task: |
-        Research the topic in topic.md using web_search.
-        Write raw findings and source links to research/notes.md
+   agents:
+      researcher:
+         role: researcher
+         task: |
+            Research the topic in topic.md using web_search.
+            Write raw findings and source links to research/notes.md
 
-    writer:
-      role: technical-writer
-      task: |
-        Read research/notes.md.
-        Write a complete blog post draft to drafts/post.md.
-        Include code examples where relevant.
+      writer:
+         role: technical-writer
+         task: |
+            Read research/notes.md.
+            Write a complete blog post draft to drafts/post.md.
+            Include code examples where relevant.
 
-    editor:
-      role: editor
-      task: |
-        Read drafts/post.md.
-        Fix grammar, improve flow, tighten prose.
-        Rewrite to drafts/post.md.
+      editor:
+         role: editor
+         task: |
+            Read drafts/post.md.
+            Fix grammar, improve flow, tighten prose.
+            Rewrite to drafts/post.md.
 
-    reviewer:
-      role: senior-reviewer
-      task: |
-        Read drafts/post.md.
-        Check technical accuracy against research/notes.md.
-        Add an editorial note at top if issues found, otherwise
-        copy to output/final.md.
+      reviewer:
+         role: senior-reviewer
+         task: |
+            Read drafts/post.md.
+            Check technical accuracy against research/notes.md.
+            Add an editorial note at top if issues found, otherwise
+            copy to output/final.md.
 ```
 
 Execution: researcher -> writer -> editor -> reviewer, one after another.
@@ -277,52 +277,52 @@ One planner, parallel workers, one integrator. Good for: divide-and-conquer, mod
 
 ```yaml
 swarm:
-  name: feature-implementation
-  workspace: ./workspace
+   name: feature-implementation
+   workspace: ./workspace
 
-  agents:
-    planner:
-      role: architect
-      task: |
-        Read the feature spec in spec.md.
-        Break it into independent implementation tasks.
-        Write the plan to plan.md with file assignments.
-      reports_to:
-        - api
-        - ui
-        - tests
+   agents:
+      planner:
+         role: architect
+         task: |
+            Read the feature spec in spec.md.
+            Break it into independent implementation tasks.
+            Write the plan to plan.md with file assignments.
+         reports_to:
+            - api
+            - ui
+            - tests
 
-    api:
-      role: backend-developer
-      task: |
-        Read plan.md for your assigned files.
-        Implement the API layer. Write to src/api/.
-      reports_to:
-        - integrator
+      api:
+         role: backend-developer
+         task: |
+            Read plan.md for your assigned files.
+            Implement the API layer. Write to src/api/.
+         reports_to:
+            - integrator
 
-    ui:
-      role: frontend-developer
-      task: |
-        Read plan.md for your assigned files.
-        Implement the UI components. Write to src/ui/.
-      reports_to:
-        - integrator
+      ui:
+         role: frontend-developer
+         task: |
+            Read plan.md for your assigned files.
+            Implement the UI components. Write to src/ui/.
+         reports_to:
+            - integrator
 
-    tests:
-      role: test-engineer
-      task: |
-        Read plan.md for the full feature scope.
-        Write integration tests to tests/.
-      reports_to:
-        - integrator
+      tests:
+         role: test-engineer
+         task: |
+            Read plan.md for the full feature scope.
+            Write integration tests to tests/.
+         reports_to:
+            - integrator
 
-    integrator:
-      role: tech-lead
-      task: |
-        Read plan.md and review all code in src/ and tests/.
-        Wire everything together. Fix any integration issues.
-        Run the tests and fix failures.
-        Write status to output/done.md.
+      integrator:
+         role: tech-lead
+         task: |
+            Read plan.md and review all code in src/ and tests/.
+            Wire everything together. Fix any integration issues.
+            Run the tests and fix failures.
+            Write status to output/done.md.
 ```
 
 Execution: planner (wave 1) -> api + ui + tests in parallel (wave 2) -> integrator (wave 3).
@@ -333,47 +333,47 @@ Any DAG is valid. Combine patterns freely.
 
 ```yaml
 swarm:
-  name: data-pipeline
-  workspace: ./workspace
-  mode: pipeline
-  target_count: 10
+   name: data-pipeline
+   workspace: ./workspace
+   mode: pipeline
+   target_count: 10
 
-  agents:
-    scraper_a:
-      role: web-scraper
-      task: |
-        Scrape data source A. Write to raw/source_a.json
-      reports_to:
-        - transformer
+   agents:
+      scraper_a:
+         role: web-scraper
+         task: |
+            Scrape data source A. Write to raw/source_a.json
+         reports_to:
+            - transformer
 
-    scraper_b:
-      role: web-scraper
-      task: |
-        Scrape data source B. Write to raw/source_b.json
-      reports_to:
-        - transformer
+      scraper_b:
+         role: web-scraper
+         task: |
+            Scrape data source B. Write to raw/source_b.json
+         reports_to:
+            - transformer
 
-    transformer:
-      role: data-engineer
-      task: |
-        Read raw/source_a.json and raw/source_b.json.
-        Clean, normalize, merge. Write to processed/merged.json
-      reports_to:
-        - loader
-        - validator
+      transformer:
+         role: data-engineer
+         task: |
+            Read raw/source_a.json and raw/source_b.json.
+            Clean, normalize, merge. Write to processed/merged.json
+         reports_to:
+            - loader
+            - validator
 
-    validator:
-      role: qa-analyst
-      task: |
-        Read processed/merged.json.
-        Validate schema, check for anomalies.
-        Write report to qa/validation.md
+      validator:
+         role: qa-analyst
+         task: |
+            Read processed/merged.json.
+            Validate schema, check for anomalies.
+            Write report to qa/validation.md
 
-    loader:
-      role: data-engineer
-      task: |
-        Read processed/merged.json.
-        Append to output/dataset.jsonl
+      loader:
+         role: data-engineer
+         task: |
+            Read processed/merged.json.
+            Append to output/dataset.jsonl
 ```
 
 Execution per iteration: scraper_a + scraper_b (wave 1) -> transformer (wave 2) -> loader + validator (wave 3).
@@ -440,17 +440,17 @@ Any model configured in omp works. Set a swarm default and optionally override p
 
 ```yaml
 swarm:
-  model: claude-opus-4-6
-  agents:
-    writer:
-      role: technical-writer
-      task: |
-        Write the draft.
-    reviewer:
-      role: reviewer
-      model: claude-sonnet-4-5
-      task: |
-        Review the draft.
+   model: claude-opus-4-6
+   agents:
+      writer:
+         role: technical-writer
+         task: |
+            Write the draft.
+      reviewer:
+         role: reviewer
+         model: claude-sonnet-4-5
+         task: |
+            Review the draft.
 ```
 
 Precedence: `agents.<name>.model` → `swarm.model` → session default. Check `packages/ai/src/models.json` for available model IDs.

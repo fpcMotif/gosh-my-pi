@@ -71,72 +71,69 @@ function normalizeRuleField(value: unknown): string[] | undefined {
 	return Array.from(new Set(tokens));
 }
 
+interface SplitState {
+	parenDepth: number;
+	bracketDepth: number;
+	braceDepth: number;
+	quote: '"' | "'" | undefined;
+}
+
+function updateSplitState(char: string, prevChar: string | undefined, state: SplitState): boolean {
+	if (state.quote) {
+		if (char === state.quote && prevChar !== "\\") state.quote = undefined;
+		return true;
+	}
+
+	switch (char) {
+		case '"':
+		case "'":
+			state.quote = char;
+			break;
+		case "(":
+			state.parenDepth += 1;
+			break;
+		case ")":
+			state.parenDepth = Math.max(0, state.parenDepth - 1);
+			break;
+		case "[":
+			state.bracketDepth += 1;
+			break;
+		case "]":
+			state.bracketDepth = Math.max(0, state.bracketDepth - 1);
+			break;
+		case "{":
+			state.braceDepth += 1;
+			break;
+		case "}":
+			state.braceDepth = Math.max(0, state.braceDepth - 1);
+			break;
+		case ",":
+			if (state.parenDepth === 0 && state.bracketDepth === 0 && state.braceDepth === 0) return false;
+			break;
+	}
+	return true;
+}
+
 function splitScopeTokens(value: string): string[] {
 	const tokens: string[] = [];
 	let current = "";
-	let parenDepth = 0;
-	let bracketDepth = 0;
-	let braceDepth = 0;
-	let quote: '"' | "'" | undefined;
-	for (let i = 0; i < value.length; i++) {
+	const state: SplitState = { parenDepth: 0, bracketDepth: 0, braceDepth: 0, quote: undefined };
+
+	for (let i = 0; i < value.length; i += 1) {
 		const char = value[i];
-		if (quote) {
+		const shouldAppend = updateSplitState(char, value[i - 1], state);
+
+		if (shouldAppend) {
 			current += char;
-			if (char === quote && value[i - 1] !== "\\") {
-				quote = undefined;
-			}
-			continue;
-		}
-		if (char === '"' || char === "'") {
-			quote = char;
-			current += char;
-			continue;
-		}
-		if (char === "(") {
-			parenDepth++;
-			current += char;
-			continue;
-		}
-		if (char === ")") {
-			parenDepth = Math.max(0, parenDepth - 1);
-			current += char;
-			continue;
-		}
-		if (char === "[") {
-			bracketDepth++;
-			current += char;
-			continue;
-		}
-		if (char === "]") {
-			bracketDepth = Math.max(0, bracketDepth - 1);
-			current += char;
-			continue;
-		}
-		if (char === "{") {
-			braceDepth++;
-			current += char;
-			continue;
-		}
-		if (char === "}") {
-			braceDepth = Math.max(0, braceDepth - 1);
-			current += char;
-			continue;
-		}
-		if (char === "," && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
+		} else {
 			const token = current.trim();
-			if (token.length > 0) {
-				tokens.push(token);
-			}
+			if (token.length > 0) tokens.push(token);
 			current = "";
-			continue;
 		}
-		current += char;
 	}
 
 	const tail = current.trim();
-	if (tail.length > 0) {
-		tokens.push(tail);
-	}
+	if (tail.length > 0) tokens.push(tail);
 
 	return tokens;
 }

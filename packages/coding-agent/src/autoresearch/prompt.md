@@ -33,22 +33,23 @@ Use it as a repo-local strategy overlay for this session. `autoresearch.md` rema
 
 - segment: `{{current_segment}}`
 - runs in current segment: `{{current_segment_run_count}}`
-{{#if has_baseline_metric}}
+  {{#if has_baseline_metric}}
 - baseline `{{metric_name}}`: `{{baseline_metric_display}}`
-{{/if}}
-{{#if has_best_result}}
+  {{/if}}
+  {{#if has_best_result}}
 - best kept `{{metric_name}}`: `{{best_metric_display}}`{{#if best_run_number}} from run `#{{best_run_number}}`{{/if}}
-{{/if}}
+  {{/if}}
 
 Recent runs:
 {{#each recent_results}}
+
 - run `#{{run_number}}`: `{{status}}` `{{metric_display}}` — {{description}}
-{{#if has_asi_summary}}
+  {{#if has_asi_summary}}
   ASI: {{asi_summary}}
-{{/if}}
-{{/each}}
-{{/if}}
-{{#if has_pending_run}}
+  {{/if}}
+  {{/each}}
+  {{/if}}
+  {{#if has_pending_run}}
 
 ### Pending Run
 
@@ -56,12 +57,12 @@ An unlogged run artifact exists at `{{pending_run_directory}}`.
 
 - run: `#{{pending_run_number}}`
 - command: `{{pending_run_command}}`
-{{#if has_pending_run_metric}}
+  {{#if has_pending_run_metric}}
 - parsed `{{metric_name}}`: `{{pending_run_metric_display}}`
-{{/if}}
+  {{/if}}
 - result status: {{#if pending_run_passed}}passed{{else}}failed{{/if}}
 - finish the `log_experiment` step before starting another benchmark
-{{/if}}
+  {{/if}}
 
 ### Available tools
 
@@ -113,10 +114,10 @@ An unlogged run artifact exists at `{{pending_run_directory}}`.
    - Keep equal or near-equal results when they materially simplify the implementation.
    - Do not keep ugly complexity for tiny gains unless the payoff is clearly worth it.
    - Do not thrash between unrelated ideas without writing down the conclusion.
-10. When confidence is low, confirm.
-    - The dashboard confidence score compares the best observed improvement against the observed noise floor.
-    - Below `1.0x` usually means the improvement is within noise.
-    - Re-run promising changes when needed before keeping them.
+10.   When confidence is low, confirm.
+      - The dashboard confidence score compares the best observed improvement against the observed noise floor.
+      - Below `1.0x` usually means the improvement is within noise.
+      - Re-run promising changes when needed before keeping them.
 
 ### Benchmark harness guidance
 
@@ -142,41 +143,50 @@ Suggested structure:
 # Autoresearch
 
 ## Goal
+
 {{#if has_goal}}
+
 - {{goal}}
-{{else}}
-{{#if has_autoresearch_md}}
+  {{else}}
+  {{#if has_autoresearch_md}}
 - document the active target here before the first benchmark
-{{else}}
+  {{else}}
 - (derive from the user's messages, then record here)
-{{/if}}
-{{/if}}
+  {{/if}}
+  {{/if}}
 
 ## Benchmark
- - command:
- - primary metric:
- - metric unit:
- - direction:
- - secondary metrics: memory_mb, rss_mb
+
+- command:
+- primary metric:
+- metric unit:
+- direction:
+- secondary metrics: memory_mb, rss_mb
 
 ## Files in Scope
+
 - path:
 
 ## Off Limits
+
 - path:
 
 ## Constraints
+
 - rule:
 
 ## Baseline
+
 - metric:
 - notes:
 
 ## Current best
+
 - metric:
 - why it won:
 
 ## What's Been Tried
+
 - experiment:
 - lesson:
 ```
@@ -192,6 +202,7 @@ Suggested structure:
 - If the user sends another message while a run is in progress, finish the current run and logging cycle first, then address the new input in the next iteration.
 
 {{#if has_autoresearch_md}}
+
 ### Resume mode
 
 `autoresearch.md` already exists at `{{autoresearch_md_path}}`.
@@ -204,6 +215,7 @@ Resume from the existing notes:
 - continue from the most promising unfinished direction on the current protected branch
 
 {{else}}
+
 ### Initial setup
 
 `autoresearch.md` does not exist yet. You decide the benchmark contract, harness, and scope from the user's messages and the repository—do not ask the user to re-type benchmark commands or metric names in a separate UI prompt.
@@ -223,6 +235,7 @@ Until `init_experiment` succeeds, only autoresearch control files (`autoresearch
 
 {{/if}}
 {{#if has_checks}}
+
 ### Backpressure checks
 
 `autoresearch.checks.sh` exists at `{{checks_path}}` and runs automatically after passing benchmark runs.
@@ -235,6 +248,7 @@ Treat failing checks as a failed experiment:
 
 {{/if}}
 {{#if has_ideas}}
+
 ### Ideas backlog
 
 `autoresearch.ideas.md` exists at `{{ideas_path}}`.

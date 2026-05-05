@@ -17,7 +17,7 @@ Restart `omp`. You will see the startup notification immediately.
 ```yaml
 # ~/.omp/agent/config.yml
 extensions:
-  - /path/to/hello-extension
+   - /path/to/hello-extension
 ```
 
 **Option C — load once via CLI flag:**

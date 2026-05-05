@@ -66,9 +66,7 @@ function buildAlphanumericSwapQueries(queryLower: string): string[] {
 	for (let i = 0; i < queryLower.length - 1; i++) {
 		const current = queryLower[i];
 		const next = queryLower[i + 1];
-		const isAlphaNumSwap =
-			(current && /[a-z]/.test(current) && next && /\d/.test(next)) ||
-			(current && /\d/.test(current) && next && /[a-z]/.test(next));
+		const isAlphaNumSwap = (/[a-z]/.test(current) && /\d/.test(next)) || (/\d/.test(current) && /[a-z]/.test(next));
 		if (!isAlphaNumSwap) continue;
 		const swapped = queryLower.slice(0, i) + next + current + queryLower.slice(i + 2);
 		variants.add(swapped);

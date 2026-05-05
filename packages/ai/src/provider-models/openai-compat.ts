@@ -35,8 +35,8 @@ export interface ModelsDevProviderDescriptor {
 	resolveApi?: (modelId: string, model: ModelsDevModel) => { api: Api; baseUrl: string } | null;
 }
 
-const UNK_CONTEXT_WINDOW = 0;
-const UNK_MAX_TOKENS = 0;
+export const UNK_CONTEXT_WINDOW = 0;
+export const UNK_MAX_TOKENS = 0;
 
 /** Generic mapper that converts models.dev data using provider descriptors. */
 export function mapModelsDevToModels(
@@ -124,7 +124,7 @@ function toNumber(v: unknown): number | undefined {
 import { fetchOpenAICompatibleModels } from "../utils/discovery/openai-compatible";
 import type { ModelManagerOptions } from "../model-manager";
 import type {
-	OpenAICompatibleModelRecord,
+	OpenAICompatibleModelEntry as OpenAICompatibleModelRecord,
 	OpenAICompatibleModelMapperContext,
 } from "../utils/discovery/openai-compatible";
 

@@ -21,7 +21,7 @@ const agent = new Agent({
 	},
 });
 
-agent.subscribe((event) => {
+agent.subscribe(event => {
 	if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
 		// Stream just the new text chunk
 		process.stdout.write(event.assistantMessageEvent.delta);
@@ -218,7 +218,7 @@ await agent.waitForIdle(); // Wait for completion
 ### Events
 
 ```typescript
-const unsubscribe = agent.subscribe((event) => {
+const unsubscribe = agent.subscribe(event => {
 	console.log(event.type);
 });
 unsubscribe();
@@ -269,8 +269,8 @@ Handle custom types in `convertToLlm`:
 
 ```typescript
 const agent = new Agent({
-	convertToLlm: (messages) =>
-		messages.flatMap((m) => {
+	convertToLlm: messages =>
+		messages.flatMap(m => {
 			if (m.role === "notification") return []; // Filter out
 			return [m];
 		}),
@@ -355,7 +355,7 @@ const context: AgentContext = {
 
 const config: AgentLoopConfig = {
 	model: getModel("openai", "gpt-4o"),
-	convertToLlm: (msgs) => msgs.filter((m) => ["user", "assistant", "toolResult"].includes(m.role)),
+	convertToLlm: msgs => msgs.filter(m => ["user", "assistant", "toolResult"].includes(m.role)),
 };
 
 const userMessage = { role: "user", content: "Hello", timestamp: Date.now() };

@@ -61,8 +61,8 @@ Current runtime behavior:
 
 - `name` defaults to the skill directory name
 - `description` is required for:
-  - native `.omp` provider skill discovery (`requireDescription: true`)
-  - `skills.customDirectories` scans via `scanSkillsFromDir` in `src/discovery/helpers.ts` (non-recursive)
+   - native `.omp` provider skill discovery (`requireDescription: true`)
+   - `skills.customDirectories` scans via `scanSkillsFromDir` in `src/discovery/helpers.ts` (non-recursive)
 - non-native providers can load skills without description
 
 ## Discovery pipeline
@@ -110,9 +110,9 @@ Filter order is:
 
 - Capability dedup already keeps first skill per name (highest-precedence provider)
 - `extensibility/skills.ts` additionally:
-  - de-duplicates identical files by `realpath` (symlink-safe)
-  - emits collision warnings when a later skill name conflicts
-  - keeps the convenience `discoverSkillsFromDir({ dir, source })` API as a thin adapter over `scanSkillsFromDir`
+   - de-duplicates identical files by `realpath` (symlink-safe)
+   - emits collision warnings when a later skill name conflicts
+   - keeps the convenience `discoverSkillsFromDir({ dir, source })` API as a thin adapter over `scanSkillsFromDir`
 - Custom-directory skills are merged after provider skills and follow the same collision behavior
 
 ## Runtime usage behavior
@@ -122,9 +122,9 @@ Filter order is:
 System prompt construction (`src/system-prompt.ts`) uses discovered skills as follows:
 
 - if `read` tool is available:
-  - include discovered skills list in prompt
+   - include discovered skills list in prompt
 - otherwise:
-  - omit discovered list
+   - omit discovered list
 
 Task tool subagents receive the session's discovered/provided skills list via normal session creation; there is no per-task skill pinning override.
 

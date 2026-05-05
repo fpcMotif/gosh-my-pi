@@ -354,7 +354,8 @@ export async function generateFileMentionMessages(
 			}
 
 			const content = await Bun.file(absolutePath).text();
-			let { output, lineCount } = buildTextOutput(content);
+			const { output: outputRaw, lineCount } = buildTextOutput(content);
+			let output = outputRaw;
 			if (options?.useHashLines === true) {
 				output = formatHashLines(output);
 			}

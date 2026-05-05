@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Effect } from "effect";
 import { CODEX_BASE_URL, OPENAI_HEADER_VALUES, OPENAI_HEADERS } from "../../providers/openai-codex/constants";
 import type { Model } from "../../types";
 import { isRecord } from "../../utils";
@@ -87,46 +88,41 @@ export async function fetchCodexModels(options: CodexModelDiscoveryOptions): Pro
 	const baseUrl = normalizeBaseUrl(options.baseUrl);
 	const paths = normalizePaths(options.paths);
 	const headers = buildCodexHeaders(options);
-	const clientVersion = await resolveCodexClientVersion(
-		options.clientVersion,
-		options.registryFetchFn ?? fetchFn,
-		options.signal,
-	);
 
-	let sawSuccessfulResponse = false;
-	for (const path of paths) {
-		const requestUrl = buildModelsUrl(baseUrl, path, clientVersion);
-		let response: Response;
-		try {
-			response = await fetchFn(requestUrl, {
-				method: "GET",
-				headers,
-				signal: options.signal,
+	const program = Effect.gen(function* () {
+		const clientVersion = yield* Effect.promise(() =>
+			resolveCodexClientVersion(options.clientVersion, options.registryFetchFn ?? fetchFn, options.signal),
+		);
+
+		let sawSuccessfulResponse = false;
+
+		// Sequential fallback over candidate paths; return on the first success.
+		// `Effect.forEach` would lose this short-circuit, so use a generator loop.
+		for (const path of paths) {
+			const requestUrl = buildModelsUrl(baseUrl, path, clientVersion);
+			const result = yield* Effect.promise(async () => {
+				try {
+					const response = await fetchFn(requestUrl, { method: "GET", headers, signal: options.signal });
+					if (!response.ok) return null;
+					const payload = await response.json();
+					const models = normalizeCodexModels(payload, baseUrl);
+					if (models === null) return null;
+					const etag = getResponseEtag(response.headers);
+					return etag !== null && etag !== undefined && etag !== "" ? { models, etag } : { models };
+				} catch {
+					return null;
+				}
 			});
-		} catch {
-			continue;
+			if (result !== null) {
+				sawSuccessfulResponse = true;
+				return result;
+			}
 		}
 
-		if (!response.ok) {
-			continue;
-		}
+		return sawSuccessfulResponse ? { models: [] } : null;
+	});
 
-		let payload: unknown;
-		try {
-			payload = await response.json();
-		} catch {
-			continue;
-		}
-
-		const models = normalizeCodexModels(payload, baseUrl);
-		if (models === null) {
-			continue;
-		}
-		sawSuccessfulResponse = true;
-		const etag = getResponseEtag(response.headers);
-		return etag !== null && etag !== undefined && etag !== "" ? { models, etag } : { models };
-	}
-	return sawSuccessfulResponse ? { models: [] } : null;
+	return Effect.runPromise(program, { signal: options.signal });
 }
 
 function normalizeBaseUrl(baseUrl: string | undefined): string {

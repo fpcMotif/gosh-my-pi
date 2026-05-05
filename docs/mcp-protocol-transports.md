@@ -32,10 +32,10 @@ Does not cover extension authoring UX or command UI.
 
 - Message shapes are defined in `types.ts` (`JsonRpcRequest`, `JsonRpcNotification`, `JsonRpcResponse`, `JsonRpcMessage`).
 - MCP client logic (`client.ts`) decides method order and session handshake:
-  1. `initialize` request
-  2. for HTTP/SSE transports, start the optional background SSE listener after the initialize response has established any session id
-  3. `notifications/initialized` notification
-  4. method calls like `tools/list`, `tools/call`
+   1. `initialize` request
+   2. for HTTP/SSE transports, start the optional background SSE listener after the initialize response has established any session id
+   3. `notifications/initialized` notification
+   4. method calls like `tools/list`, `tools/call`
 
 ### Transport layer (`MCPTransport`)
 
@@ -107,16 +107,16 @@ Server-initiated notifications are surfaced through transport `onNotification`; 
 
 - Initial: `connected=false`, `process=null`, pending map empty
 - `connect()`:
-  - spawn subprocess with configured command/args/env/cwd
-  - mark connected
-  - start stdout read loop (`readJsonl`)
-  - start stderr loop (read/discard; currently silent)
+   - spawn subprocess with configured command/args/env/cwd
+   - mark connected
+   - start stdout read loop (`readJsonl`)
+   - start stderr loop (read/discard; currently silent)
 - `close()`:
-  - mark disconnected
-  - reject all pending requests (`Transport closed`)
-  - kill subprocess
-  - await read loop shutdown
-  - emit `onClose`
+   - mark disconnected
+   - reject all pending requests (`Transport closed`)
+   - kill subprocess
+   - await read loop shutdown
+   - emit `onClose`
 
 If read loop exits unexpectedly, `finally` triggers `#handleClose()` which performs the same pending-request rejection and close callback.
 

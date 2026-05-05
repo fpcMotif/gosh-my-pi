@@ -1,18 +1,20 @@
 import type { AssistantMessage, AssistantMessageEvent } from "../../types";
 import { EventStream } from "./base";
 
-type DeltaEvent = Extract<
-	AssistantMessageEvent,
-	{ type: "text_delta" | "thinking_delta" | "toolcall_delta" | "redacted_thinking_delta" }
->;
+type DeltaEvent = Extract<AssistantMessageEvent, { type: "text_delta" | "thinking_delta" | "toolcall_delta" }>;
 
 function isDeltaEvent(event: AssistantMessageEvent): event is DeltaEvent {
-	return (
-		event.type === "text_delta" ||
-		event.type === "thinking_delta" ||
-		event.type === "toolcall_delta" ||
-		event.type === "redacted_thinking_delta"
-	);
+	return event.type === "text_delta" || event.type === "thinking_delta" || event.type === "toolcall_delta";
+}
+
+function isFinalEvent(event: AssistantMessageEvent): boolean {
+	return event.type === "done" || event.type === "error";
+}
+
+function extractFinalResult(event: AssistantMessageEvent): AssistantMessage {
+	if (event.type === "done") return event.message;
+	if (event.type === "error") return event.error;
+	throw new Error("Unexpected event type for final result");
 }
 
 /**
@@ -29,27 +31,17 @@ export class AssistantMessageEventStream extends EventStream<AssistantMessageEve
 	readonly #throttleMs = 50; // 20 updates/sec
 
 	constructor() {
-		super(
-			event => event.type === "done" || event.type === "error",
-			event => {
-				if (event.type === "done") {
-					return event.message;
-				} else if (event.type === "error") {
-					return event.error;
-				}
-				throw new Error("Unexpected event type for final result");
-			},
-		);
+		super(isFinalEvent, extractFinalResult);
 	}
 
 	override push(event: AssistantMessageEvent): void {
 		if (this.done) return;
 
 		// Check for completion first
-		if (this.isComplete(event)) {
+		if (isFinalEvent(event)) {
 			this.#flushDeltas(); // Flush any pending deltas before completing
 			this.done = true;
-			this.resolveFinalResult(this.extractResult(event));
+			this.resolveFinalResult(extractFinalResult(event));
 		}
 
 		// Delta events get batched and throttled
@@ -106,15 +98,5 @@ export class AssistantMessageEventStream extends EventStream<AssistantMessageEve
 		for (const delta of deltas) {
 			this.deliver(delta);
 		}
-	}
-
-	private isComplete(event: AssistantMessageEvent): boolean {
-		return event.type === "done" || event.type === "error";
-	}
-
-	private extractResult(event: AssistantMessageEvent): AssistantMessage {
-		if (event.type === "done") return event.message;
-		if (event.type === "error") return event.error;
-		throw new Error("Unexpected event type for final result");
 	}
 }

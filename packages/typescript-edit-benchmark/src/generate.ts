@@ -120,7 +120,7 @@ async function ensureSourceRepo(typescriptDir: string): Promise<void> {
 	const result = await $`git clone --depth 1 ${DEFAULT_SOURCE_REPO_URL} ${typescriptDir}`.quiet().nothrow();
 	if (result.exitCode !== 0) {
 		const decoder = new TextDecoder();
-		const stderr = result.stderr ? decoder.decode(result.stderr) : "";
+		const stderr = result.stderr !== undefined ? decoder.decode(result.stderr) : "";
 		throw new Error(`Failed to clone pi-mono: ${stderr.trim()}`);
 	}
 	console.log("Clone complete.");

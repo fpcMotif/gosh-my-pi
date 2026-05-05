@@ -106,11 +106,7 @@ async function handleModuleUrl(
 	fetchedAt: string,
 ): Promise<RenderResult | null> {
 	const apiUrl = `https://registry.terraform.io/v1/modules/${namespace}/${name}/${provider}`;
-	const result = await loadPage(apiUrl, {
-		timeout,
-		signal,
-		headers: { Accept: "application/json" },
-	});
+	const result = await loadPage(apiUrl, { timeout, signal, headers: { Accept: "application/json" } });
 
 	if (!result.ok) return null;
 
@@ -118,100 +114,74 @@ async function handleModuleUrl(
 	if (!mod) return null;
 
 	let md = `# ${mod.namespace}/${mod.name}/${mod.provider}\n\n`;
-
 	if (mod.description !== null && mod.description !== undefined && mod.description !== "")
 		md += `${mod.description}\n\n`;
 
-	// Metadata line
-	md += `**Version:** ${mod.version}`;
-	if (mod.verified === true) md += " ✓ Verified";
-	md += `\n`;
+	md += `**Version:** ${mod.version}${mod.verified === true ? " ✓ Verified" : ""}\n`;
 	md += `**Downloads:** ${formatNumber(mod.downloads)}\n`;
-	if (mod.published_at !== null && mod.published_at !== undefined && mod.published_at !== "") {
-		md += `**Published:** ${new Date(mod.published_at).toLocaleDateString()}\n`;
-	}
-	if (mod.source !== null && mod.source !== undefined && mod.source !== "") {
-		md += `**Source:** ${mod.source}\n`;
-	}
+	if (mod.published_at) md += `**Published:** ${new Date(mod.published_at).toLocaleDateString()}\n`;
+	if (mod.source) md += `**Source:** ${mod.source}\n`;
 	md += "\n";
 
-	// Usage example
 	md += `## Usage\n\n\`\`\`hcl\nmodule "${mod.name}" {\n  source  = "${mod.namespace}/${mod.name}/${mod.provider}"\n  version = "${mod.version}"\n}\n\`\`\`\n\n`;
 
-	// Inputs
-	const inputs = mod.root?.inputs;
-	if (inputs && inputs.length > 0) {
-		md += `## Inputs (${inputs.length})\n\n`;
-		md += "| Name | Type | Required | Description |\n";
-		md += "|------|------|----------|-------------|\n";
-		for (const input of inputs.slice(0, 30)) {
-			const required = (input.required ?? input.default === undefined) ? "Yes" : "No";
-			const type = input.type ?? "any";
-			const desc = (input.description ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ").slice(0, 80);
-			md += `| ${input.name} | \`${type}\` | ${required} | ${desc} |\n`;
-		}
-		if (inputs.length > 30) {
-			md += `\n*... and ${inputs.length - 30} more inputs*\n`;
-		}
-		md += "\n";
-	}
-
-	// Outputs
-	const outputs = mod.root?.outputs;
-	if (outputs && outputs.length > 0) {
-		md += `## Outputs (${outputs.length})\n\n`;
-		for (const output of outputs.slice(0, 20)) {
-			md += `- **${output.name}**`;
-			if (output.description !== null && output.description !== undefined && output.description !== "")
-				md += `: ${output.description.replace(/\n/g, " ").slice(0, 100)}`;
-			md += "\n";
-		}
-		if (outputs.length > 20) {
-			md += `\n*... and ${outputs.length - 20} more outputs*\n`;
-		}
-		md += "\n";
-	}
-
-	// Dependencies
-	const deps = mod.root?.dependencies;
-	if (deps && deps.length > 0) {
-		md += `## Dependencies (${deps.length})\n\n`;
-		for (const dep of deps.slice(0, 15)) {
-			md += `- **${dep.name}**: ${dep.source}`;
-			if (dep.version !== null && dep.version !== undefined && dep.version !== "") md += ` (${dep.version})`;
-			md += "\n";
-		}
-		if (deps.length > 15) {
-			md += `\n*... and ${deps.length - 15} more dependencies*\n`;
-		}
-		md += "\n";
-	}
-
-	// Resources
-	const resources = mod.root?.resources;
-	if (resources && resources.length > 0) {
-		md += `## Resources (${resources.length})\n\n`;
-		for (const res of resources.slice(0, 20)) {
-			md += `- \`${res.type}\` (${res.name})\n`;
-		}
-		if (resources.length > 20) {
-			md += `\n*... and ${resources.length - 20} more resources*\n`;
-		}
-		md += "\n";
-	}
-
-	// Submodules
-	if (mod.submodules && mod.submodules.length > 0) {
-		md += `## Submodules (${mod.submodules.length})\n\n`;
-		for (const sub of mod.submodules.slice(0, 10)) {
-			md += `- **${sub.name}**: \`${sub.path}\`\n`;
-		}
-		if (mod.submodules.length > 10) {
-			md += `\n*... and ${mod.submodules.length - 10} more submodules*\n`;
-		}
-	}
+	md += formatModuleInputs(mod.root?.inputs);
+	md += formatModuleOutputs(mod.root?.outputs);
+	md += formatModuleDependencies(mod.root?.dependencies);
+	md += formatModuleResources(mod.root?.resources);
+	md += formatModuleSubmodules(mod.submodules);
 
 	return buildResult(md, { url, method: "terraform", fetchedAt, notes: ["Fetched via Terraform Registry API"] });
+}
+
+function formatModuleInputs(inputs?: TerraformModule["root"]["inputs"]): string {
+	if (!inputs || inputs.length === 0) return "";
+	let md = `## Inputs (${inputs.length})\n\n| Name | Type | Required | Description |\n|------|------|----------|-------------|\n`;
+	for (const input of inputs.slice(0, 30)) {
+		const required = (input.required ?? input.default === undefined) ? "Yes" : "No";
+		const desc = (input.description ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ").slice(0, 80);
+		md += `| ${input.name} | \`${input.type ?? "any"}\` | ${required} | ${desc} |\n`;
+	}
+	if (inputs.length > 30) md += `\n*... and ${inputs.length - 30} more inputs*\n`;
+	return `${md}\n`;
+}
+
+function formatModuleOutputs(outputs?: TerraformModule["root"]["outputs"]): string {
+	if (!outputs || outputs.length === 0) return "";
+	let md = `## Outputs (${outputs.length})\n\n`;
+	for (const output of outputs.slice(0, 20)) {
+		md += `- **${output.name}**`;
+		if (output.description) md += `: ${output.description.replace(/\n/g, " ").slice(0, 100)}`;
+		md += "\n";
+	}
+	if (outputs.length > 20) md += `\n*... and ${outputs.length - 20} more outputs*\n`;
+	return `${md}\n`;
+}
+
+function formatModuleDependencies(deps?: TerraformModule["root"]["dependencies"]): string {
+	if (!deps || deps.length === 0) return "";
+	let md = `## Dependencies (${deps.length})\n\n`;
+	for (const dep of deps.slice(0, 15)) {
+		md += `- **${dep.name}**: ${dep.source}${dep.version ? ` (${dep.version})` : ""}\n`;
+	}
+	if (deps.length > 15) md += `\n*... and ${deps.length - 15} more dependencies*\n`;
+	return `${md}\n`;
+}
+
+function formatModuleResources(resources?: TerraformModule["root"]["resources"]): string {
+	if (!resources || resources.length === 0) return "";
+	let md = `## Resources (${resources.length})\n\n`;
+	for (const res of resources.slice(0, 20)) md += `- \`${res.type}\` (${res.name})\n`;
+	if (resources.length > 20) md += `\n*... and ${resources.length - 20} more resources*\n`;
+	return `${md}\n`;
+}
+
+function formatModuleSubmodules(submodules?: TerraformModule["submodules"]): string {
+	if (!submodules || submodules.length === 0) return "";
+	let md = `## Submodules (${submodules.length})\n\n`;
+	for (const sub of submodules.slice(0, 10)) md += `- **${sub.name}**: \`${sub.path}\`\n`;
+	if (submodules.length > 10) md += `\n*... and ${submodules.length - 10} more submodules*\n`;
+	return md;
 }
 
 async function handleProviderUrl(
@@ -223,11 +193,7 @@ async function handleProviderUrl(
 	fetchedAt: string,
 ): Promise<RenderResult | null> {
 	const apiUrl = `https://registry.terraform.io/v1/providers/${namespace}/${type}`;
-	const result = await loadPage(apiUrl, {
-		timeout,
-		signal,
-		headers: { Accept: "application/json" },
-	});
+	const result = await loadPage(apiUrl, { timeout, signal, headers: { Accept: "application/json" } });
 
 	if (!result.ok) return null;
 
@@ -235,47 +201,39 @@ async function handleProviderUrl(
 	if (!provider) return null;
 
 	let md = `# ${provider.namespace}/${provider.name}\n\n`;
+	if (provider.description) md += `${provider.description}\n\n`;
 
-	if (provider.description !== null && provider.description !== undefined && provider.description !== "")
-		md += `${provider.description}\n\n`;
-
-	// Metadata
 	md += `**Version:** ${provider.version}\n`;
-	if (provider.tier !== null && provider.tier !== undefined && provider.tier !== "")
-		md += `**Tier:** ${provider.tier}\n`;
+	if (provider.tier) md += `**Tier:** ${provider.tier}\n`;
 	md += `**Downloads:** ${formatNumber(provider.downloads)}\n`;
-	if (provider.published_at !== null && provider.published_at !== undefined && provider.published_at !== "") {
-		md += `**Published:** ${new Date(provider.published_at).toLocaleDateString()}\n`;
-	}
-	if (provider.source !== null && provider.source !== undefined && provider.source !== "") {
-		md += `**Source:** ${provider.source}\n`;
-	}
-	md += "\n";
+	if (provider.published_at) md += `**Published:** ${new Date(provider.published_at).toLocaleDateString()}\n`;
+	if (provider.source) md += `**Source:** ${provider.source}\n\n`;
 
-	// Usage example
 	md += `## Usage\n\n\`\`\`hcl\nterraform {\n  required_providers {\n    ${provider.name} = {\n      source  = "${provider.namespace}/${provider.name}"\n      version = "~> ${provider.version}"\n    }\n  }\n}\n\nprovider "${provider.name}" {\n  # Configuration options\n}\n\`\`\`\n\n`;
 
-	// Documentation summary
 	if (provider.docs && provider.docs.length > 0) {
-		const categories = new Map<string, typeof provider.docs>();
-		for (const doc of provider.docs) {
-			const cat = doc.category || "other";
-			if (!categories.has(cat)) categories.set(cat, []);
-			categories.get(cat)!.push(doc);
-		}
-
-		md += `## Documentation\n\n`;
-		for (const [category, docs] of categories) {
-			md += `### ${category.charAt(0).toUpperCase() + category.slice(1)} (${docs.length})\n\n`;
-			for (const doc of docs.slice(0, 15)) {
-				md += `- [${doc.title}](https://registry.terraform.io/providers/${namespace}/${type}/latest/docs/${doc.category}/${doc.slug})\n`;
-			}
-			if (docs.length > 15) {
-				md += `\n*... and ${docs.length - 15} more*\n`;
-			}
-			md += "\n";
-		}
+		md += formatProviderDocs(provider.docs, namespace, type);
 	}
 
 	return buildResult(md, { url, method: "terraform", fetchedAt, notes: ["Fetched via Terraform Registry API"] });
+}
+
+function formatProviderDocs(docs: TerraformProvider["docs"] & any[], namespace: string, type: string): string {
+	const categories = new Map<string, any[]>();
+	for (const doc of docs) {
+		const cat = doc.category || "other";
+		if (!categories.has(cat)) categories.set(cat, []);
+		categories.get(cat)!.push(doc);
+	}
+
+	let md = `## Documentation\n\n`;
+	for (const [category, catDocs] of categories) {
+		md += `### ${category.charAt(0).toUpperCase() + category.slice(1)} (${catDocs.length})\n\n`;
+		for (const doc of catDocs.slice(0, 15)) {
+			md += `- [${doc.title}](https://registry.terraform.io/providers/${namespace}/${type}/latest/docs/${doc.category}/${doc.slug})\n`;
+		}
+		if (catDocs.length > 15) md += `\n*... and ${catDocs.length - 15} more*\n`;
+		md += "\n";
+	}
+	return md;
 }

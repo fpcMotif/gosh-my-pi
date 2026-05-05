@@ -4,15 +4,8 @@
  * Allows extensions to register streaming functions for custom API types
  * (e.g., "vertex-claude-api") that are not built into stream.ts.
  */
-import type {
-	Api,
-	AssistantMessageEventStream,
-	Context,
-	KnownApi,
-	Model,
-	SimpleStreamOptions,
-	StreamOptions,
-} from "./types";
+import type { AssistantMessageEventStream } from "./utils/event-stream";
+import type { Api, Context, KnownApi, Model, SimpleStreamOptions, StreamOptions } from "./types";
 
 const BUILTIN_APIS = new Set<KnownApi>(["openai-completions", "openai-responses", "openai-codex-responses"]);
 

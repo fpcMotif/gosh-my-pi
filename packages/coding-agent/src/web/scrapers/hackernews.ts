@@ -65,50 +65,59 @@ function formatTimestamp(unixTime: number): string {
 	return `${minutes}m ago`;
 }
 
-async function renderStory(item: HNItem, timeout: number, depth = 0, signal?: AbortSignal): Promise<string> {
-	let output = "";
-
-	if (depth === 0) {
-		output += `# ${item.title}\n\n`;
-		if (item.url !== null && item.url !== undefined && item.url !== "") {
-			output += `**URL:** ${item.url}\n\n`;
-		}
-		output += `**Posted by:** ${item.by} | **Score:** ${item.score ?? 0} | **Time:** ${formatTimestamp(item.time ?? 0)}`;
-		if (item.descendants !== null && item.descendants !== undefined && item.descendants !== 0) {
-			output += ` | **Comments:** ${item.descendants}`;
-		}
-		output += "\n\n";
+function renderStoryHeader(item: HNItem): string {
+	let output = `# ${item.title}\n\n`;
+	if (item.url !== null && item.url !== undefined && item.url !== "") {
+		output += `**URL:** ${item.url}\n\n`;
 	}
+	output += `**Posted by:** ${item.by} | **Score:** ${item.score ?? 0} | **Time:** ${formatTimestamp(item.time ?? 0)}`;
+	if (item.descendants !== null && item.descendants !== undefined && item.descendants !== 0) {
+		output += ` | **Comments:** ${item.descendants}`;
+	}
+	output += "\n\n";
+	return output;
+}
+
+function renderComment(comment: HNItem, depth: number): string {
+	const indent = "  ".repeat(depth);
+	let output = `${indent}**${comment.by}** (${formatTimestamp(comment.time ?? 0)})`;
+	if (comment.score !== undefined) output += ` [${comment.score}]`;
+	output += "\n";
+	if (comment.text !== null && comment.text !== undefined && comment.text !== "") {
+		const text = decodeHNText(comment.text);
+		output += `${text
+			.split("\n")
+			.map(line => `${indent}${line}`)
+			.join("\n")}\n\n`;
+	}
+	return output;
+}
+
+async function renderComments(item: HNItem, timeout: number, depth: number, signal?: AbortSignal): Promise<string> {
+	if (!item.kids || item.kids.length === 0 || depth >= 2) return "";
+
+	const topComments = item.kids.slice(0, depth === 0 ? 20 : 10);
+	const comments = await fetchItems(topComments, timeout, topComments.length, signal);
+	if (comments.length === 0) return "";
+
+	let output = depth === 0 ? "---\n\n## Comments\n\n" : "";
+	for (const comment of comments) {
+		output += renderComment(comment, depth);
+		if (comment.kids && comment.kids.length > 0 && depth < 1) {
+			output += await renderStory(comment, timeout, depth + 1, signal);
+		}
+	}
+	return output;
+}
+
+async function renderStory(item: HNItem, timeout: number, depth = 0, signal?: AbortSignal): Promise<string> {
+	let output = depth === 0 ? renderStoryHeader(item) : "";
 
 	if (item.text !== null && item.text !== undefined && item.text !== "") {
 		output += `${decodeHNText(item.text)}\n\n`;
 	}
 
-	if (item.kids && item.kids.length > 0 && depth < 2) {
-		const topComments = item.kids.slice(0, depth === 0 ? 20 : 10);
-		const comments = await fetchItems(topComments, timeout, topComments.length, signal);
-
-		if (comments.length > 0) {
-			if (depth === 0) output += "---\n\n## Comments\n\n";
-
-			for (const comment of comments) {
-				const indent = "  ".repeat(depth);
-				output += `${indent}**${comment.by}** (${formatTimestamp(comment.time ?? 0)})`;
-				if (comment.score !== undefined) output += ` [${comment.score}]`;
-				output += "\n";
-				if (comment.text !== null && comment.text !== undefined && comment.text !== "") {
-					const text = decodeHNText(comment.text);
-					const lines = text.split("\n");
-					output += `${lines.map(line => `${indent}${line}`).join("\n")}\n\n`;
-				}
-
-				if (comment.kids && comment.kids.length > 0 && depth < 1) {
-					const childOutput = await renderStory(comment, timeout, depth + 1, signal);
-					output += childOutput;
-				}
-			}
-		}
-	}
+	output += await renderComments(item, timeout, depth, signal);
 
 	return output;
 }

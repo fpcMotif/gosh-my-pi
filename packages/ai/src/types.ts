@@ -4,8 +4,6 @@ import type { OpenAICompletionsOptions } from "./providers/openai-completions";
 import type { OpenAIResponsesOptions } from "./providers/openai-responses";
 import type { AssistantMessageEventStream } from "./utils/event-stream";
 
-export type { AssistantMessageEventStream } from "./utils/event-stream";
-
 export type KnownApi = "openai-completions" | "openai-responses" | "openai-codex-responses";
 export type Api = KnownApi | (string & {});
 export interface ApiOptionsMap {
@@ -164,8 +162,8 @@ export interface SimpleStreamOptions extends StreamOptions {
 	toolChoice?: ToolChoice;
 	/** OpenAI service tier for processing priority/cost control. Ignored by non-OpenAI providers. */
 	serviceTier?: ServiceTier;
-	/** API format for Kimi Code provider: "openai" or "anthropic" (default: "anthropic") */
-	kimiApiFormat?: "openai" | "anthropic";
+	/** API format for Kimi Code provider. Currently only `"openai"` is supported. */
+	kimiApiFormat?: "openai";
 	/** API format for Synthetic provider: "openai" or "anthropic" (default: "openai") */
 	syntheticApiFormat?: "openai" | "anthropic";
 	/** Hint that websocket transport should be preferred when supported by the provider implementation. */

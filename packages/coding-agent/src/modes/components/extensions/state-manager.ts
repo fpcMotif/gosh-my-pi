@@ -47,101 +47,141 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 	const extensions: Extension[] = [];
 	const disabledExtensions = new Set<string>(disabledIds ?? []);
 
-	// Helper to convert capability items to extensions
-	function addItems<T extends { name: string; path: string; _source: SourceMeta }>(
-		items: T[],
-		kind: ExtensionKind,
-		opts?: {
-			getDescription?: (item: T) => string | undefined;
-			getTrigger?: (item: T) => string | undefined;
-			getShadowedBy?: (item: T) => string | undefined;
-		},
-	): void {
-		for (const item of items) {
-			const id = makeExtensionId(kind, item.name);
-			const isDisabled = disabledExtensions.has(id);
-			const isShadowed = (item as { _shadowed?: boolean })._shadowed;
-			const providerEnabled = isProviderEnabled(item._source.provider);
-
-			let state: ExtensionState;
-			let disabledReason: "shadowed" | "provider-disabled" | "item-disabled" | undefined;
-
-			// Item-disabled takes precedence over shadowed
-			if (isDisabled) {
-				state = "disabled";
-				disabledReason = "item-disabled";
-			} else if (isShadowed === true) {
-				state = "shadowed";
-				disabledReason = "shadowed";
-			} else if (!providerEnabled) {
-				state = "disabled";
-				disabledReason = "provider-disabled";
-			} else {
-				state = "active";
-			}
-
-			extensions.push({
-				id,
-				kind,
-				name: item.name,
-				displayName: item.name,
-				description: opts?.getDescription?.(item),
-				trigger: opts?.getTrigger?.(item),
-				path: item.path,
-				source: sourceFromMeta(item._source),
-				state,
-				disabledReason,
-				shadowedBy: opts?.getShadowedBy?.(item),
-				raw: item,
-			});
-		}
-	}
-
 	const loadOpts =
 		cwd !== null && cwd !== undefined && cwd !== "" ? { cwd, includeDisabled: true } : { includeDisabled: true };
 
-	// Load skills
+	// Load all capability types sequentially
+	await loadSkills(extensions, disabledExtensions, loadOpts);
+	await loadRules(extensions, disabledExtensions, loadOpts);
+	await loadTools(extensions, disabledExtensions, loadOpts);
+	await loadExtensionModules(extensions, disabledExtensions, loadOpts);
+	await loadMCPServers(extensions, disabledExtensions, loadOpts);
+	await loadPrompts(extensions, disabledExtensions, loadOpts);
+	await loadSlashCommands(extensions, disabledExtensions, loadOpts);
+	await loadHooks(extensions, disabledExtensions, loadOpts);
+	await loadContextFiles(extensions, disabledExtensions, loadOpts);
+
+	return extensions;
+}
+
+/** Helper to convert capability items to extensions */
+function addItems<T extends { name: string; path: string; _source: SourceMeta }>(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	items: T[],
+	kind: ExtensionKind,
+	opts?: {
+		getDescription?: (item: T) => string | undefined;
+		getTrigger?: (item: T) => string | undefined;
+		getShadowedBy?: (item: T) => string | undefined;
+	},
+): void {
+	for (const item of items) {
+		const id = makeExtensionId(kind, item.name);
+		const isDisabled = disabledExtensions.has(id);
+		const isShadowed = (item as { _shadowed?: boolean })._shadowed;
+		const providerEnabled = isProviderEnabled(item._source.provider);
+
+		let state: ExtensionState;
+		let disabledReason: "shadowed" | "provider-disabled" | "item-disabled" | undefined;
+
+		// Item-disabled takes precedence over shadowed
+		if (isDisabled) {
+			state = "disabled";
+			disabledReason = "item-disabled";
+		} else if (isShadowed === true) {
+			state = "shadowed";
+			disabledReason = "shadowed";
+		} else if (!providerEnabled) {
+			state = "disabled";
+			disabledReason = "provider-disabled";
+		} else {
+			state = "active";
+		}
+
+		extensions.push({
+			id,
+			kind,
+			name: item.name,
+			displayName: item.name,
+			description: opts?.getDescription?.(item),
+			trigger: opts?.getTrigger?.(item),
+			path: item.path,
+			source: sourceFromMeta(item._source),
+			state,
+			disabledReason,
+			shadowedBy: opts?.getShadowedBy?.(item),
+			raw: item,
+		});
+	}
+}
+
+async function loadSkills(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	loadOpts: { cwd?: string; includeDisabled: boolean },
+): Promise<void> {
 	try {
 		const skills = await loadCapability<Skill>("skills", loadOpts);
-		addItems(skills.all, "skill", {
+		addItems(extensions, disabledExtensions, skills.all, "skill", {
 			getDescription: s => s.frontmatter?.description,
 			getTrigger: s => s.frontmatter?.globs?.join(", "),
 		});
 	} catch (error) {
 		logger.warn("Failed to load skills capability", { error: String(error) });
 	}
+}
 
-	// Load rules
+async function loadRules(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	loadOpts: { cwd?: string; includeDisabled: boolean },
+): Promise<void> {
 	try {
 		const rules = await loadCapability<Rule>("rules", loadOpts);
-		addItems(rules.all, "rule", {
+		addItems(extensions, disabledExtensions, rules.all, "rule", {
 			getDescription: r => r.description,
 			getTrigger: r => r.globs?.join(", ") ?? (r.alwaysApply === true ? "always" : undefined),
 		});
 	} catch (error) {
 		logger.warn("Failed to load rules capability", { error: String(error) });
 	}
+}
 
-	// Load custom tools
+async function loadTools(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	loadOpts: { cwd?: string; includeDisabled: boolean },
+): Promise<void> {
 	try {
 		const tools = await loadCapability<CustomTool>("tools", loadOpts);
-		addItems(tools.all, "tool", {
+		addItems(extensions, disabledExtensions, tools.all, "tool", {
 			getDescription: t => t.description,
 		});
 	} catch (error) {
 		logger.warn("Failed to load tools capability", { error: String(error) });
 	}
+}
 
-	// Load extension modules
+async function loadExtensionModules(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	loadOpts: { cwd?: string; includeDisabled: boolean },
+): Promise<void> {
 	try {
 		const modules = await loadCapability<ExtensionModule>("extension-modules", loadOpts);
 		const nativeModules = modules.all.filter(module => module._source.provider === "native");
-		addItems(nativeModules, "extension-module");
+		addItems(extensions, disabledExtensions, nativeModules, "extension-module");
 	} catch (error) {
 		logger.warn("Failed to load extension-modules capability", { error: String(error) });
 	}
+}
 
-	// Load MCP servers
+async function loadMCPServers(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	loadOpts: { cwd?: string; includeDisabled: boolean },
+): Promise<void> {
 	try {
 		const mcps = await loadCapability<MCPServer>("mcps", loadOpts);
 		for (const server of mcps.all) {
@@ -183,30 +223,45 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 	} catch (error) {
 		logger.warn("Failed to load mcps capability", { error: String(error) });
 	}
+}
 
-	// Load prompts
+async function loadPrompts(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	loadOpts: { cwd?: string; includeDisabled: boolean },
+): Promise<void> {
 	try {
 		const prompts = await loadCapability<Prompt>("prompts", loadOpts);
-		addItems(prompts.all, "prompt", {
+		addItems(extensions, disabledExtensions, prompts.all, "prompt", {
 			getDescription: () => undefined,
 			getTrigger: p => `/prompts:${p.name}`,
 		});
 	} catch (error) {
 		logger.warn("Failed to load prompts capability", { error: String(error) });
 	}
+}
 
-	// Load slash commands
+async function loadSlashCommands(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	loadOpts: { cwd?: string; includeDisabled: boolean },
+): Promise<void> {
 	try {
 		const commands = await loadCapability<SlashCommand>("slash-commands", loadOpts);
-		addItems(commands.all, "slash-command", {
+		addItems(extensions, disabledExtensions, commands.all, "slash-command", {
 			getDescription: () => undefined,
 			getTrigger: c => `/${c.name}`,
 		});
 	} catch (error) {
 		logger.warn("Failed to load slash-commands capability", { error: String(error) });
 	}
+}
 
-	// Load hooks
+async function loadHooks(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	loadOpts: { cwd?: string; includeDisabled: boolean },
+): Promise<void> {
 	try {
 		const hooks = await loadCapability<Hook>("hooks", loadOpts);
 		for (const hook of hooks.all) {
@@ -248,8 +303,13 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 	} catch (error) {
 		logger.warn("Failed to load hooks capability", { error: String(error) });
 	}
+}
 
-	// Load context files
+async function loadContextFiles(
+	extensions: Extension[],
+	disabledExtensions: Set<string>,
+	loadOpts: { cwd?: string; includeDisabled: boolean },
+): Promise<void> {
 	try {
 		const contextFiles = await loadCapability<ContextFile>("context-files", loadOpts);
 		for (const file of contextFiles.all) {
@@ -293,8 +353,6 @@ export async function loadAllExtensions(cwd?: string, disabledIds?: string[]): P
 	} catch (error) {
 		logger.warn("Failed to load context-files capability", { error: String(error) });
 	}
-
-	return extensions;
 }
 
 /**

@@ -48,10 +48,19 @@
 			}
 		}
 	},
+	"tsgo": {
+		"command": "tsgo",
+		"args": ["--lsp", "--stdio"],
+		"fileTypes": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+		"rootMarkers": ["tsconfig.json", "jsconfig.json", "package.json"],
+		"initOptions": {
+			"hostInfo": "omp-coding-agent"
+		}
+	},
 	"typescript-language-server": {
 		"command": "typescript-language-server",
 		"args": ["--stdio"],
-		"fileTypes": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+		"fileTypes": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
 		"rootMarkers": ["package.json", "tsconfig.json", "jsconfig.json"],
 		"initOptions": {
 			"hostInfo": "omp-coding-agent",
@@ -61,6 +70,14 @@
 				"includeInlayFunctionParameterTypeHints": true
 			}
 		}
+	},
+	"effect-language-service": {
+		"command": "effect-language-service",
+		"args": ["diagnostics", "--format", "json"],
+		"fileTypes": [".ts", ".tsx", ".mts", ".cts"],
+		"rootMarkers": ["tsconfig.json", "package.json"],
+		"isLinter": true,
+		"disabled": true
 	},
 	"biome": {
 		"command": "biome",

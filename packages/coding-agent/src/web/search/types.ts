@@ -5,39 +5,10 @@
  */
 
 /** Supported web search providers */
-export type SearchProviderId =
-	| "exa"
-	| "brave"
-	| "jina"
-	| "kimi"
-	| "zai"
-	| "anthropic"
-	| "perplexity"
-	| "gemini"
-	| "codex"
-	| "tavily"
-	| "parallel"
-	| "kagi"
-	| "synthetic"
-	| "searxng";
+export type SearchProviderId = "kimi" | "zai" | "codex";
 
 export function isSearchProviderId(value: string): value is SearchProviderId {
-	return [
-		"exa",
-		"brave",
-		"jina",
-		"kimi",
-		"zai",
-		"anthropic",
-		"perplexity",
-		"gemini",
-		"codex",
-		"tavily",
-		"parallel",
-		"kagi",
-		"synthetic",
-		"searxng",
-	].includes(value);
+	return ["kimi", "zai", "codex"].includes(value);
 }
 
 export function isSearchProviderPreference(value: string): value is SearchProviderId | "auto" {

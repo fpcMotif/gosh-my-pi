@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { type AssistantMessage, Effort } from "@oh-my-pi/pi-ai";
+import type { ModelRegistry } from "../../src/config/model-registry";
 import { Settings } from "../../src/config/settings";
 import type { LoadExtensionsResult } from "../../src/extensibility/extensions/types";
 import type { CreateAgentSessionResult } from "../../src/sdk";
@@ -235,7 +236,7 @@ describe("runSubprocess yield reminders", () => {
 		const modelRegistry = {
 			refresh: async () => {},
 			getAvailable: () => [{ provider: "openai", id: "gpt-4o", name: "GPT-4o" }],
-		} as unknown as import("../../src/config/model-registry").ModelRegistry;
+		} as unknown as ModelRegistry;
 
 		await runSubprocess({
 			...baseOptions,
@@ -254,7 +255,7 @@ describe("runSubprocess yield reminders", () => {
 		const modelRegistry = {
 			refresh: async () => {},
 			getAvailable: () => [{ provider: "openai", id: "gpt-4o", name: "GPT-4o" }],
-		} as unknown as import("../../src/config/model-registry").ModelRegistry;
+		} as unknown as ModelRegistry;
 
 		const cases = [
 			{ modelOverride: "openai/gpt-4o:low", expectedThinkingLevel: Effort.Low },

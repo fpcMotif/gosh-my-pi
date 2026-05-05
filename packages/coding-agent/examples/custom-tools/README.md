@@ -52,7 +52,7 @@ import { StringEnum } from "@oh-my-pi/pi-ai";
 import { Text } from "@oh-my-pi/pi-tui";
 import type { CustomToolFactory } from "@oh-my-pi/pi-coding-agent";
 
-const factory: CustomToolFactory = (pi) => ({
+const factory: CustomToolFactory = pi => ({
 	name: "my_tool",
 	label: "My Tool",
 	description: "Tool description for LLM",

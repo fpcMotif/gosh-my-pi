@@ -59,14 +59,14 @@ Session files are JSONL: one JSON object per line.
 
 ```json
 {
-  "type": "session",
-  "version": 3,
-  "id": "1f9d2a6b9c0d1234",
-  "timestamp": "2026-02-16T10:20:30.000Z",
-  "cwd": "/work/pi",
-  "title": "optional session title",
-  "titleSource": "auto",
-  "parentSession": "optional lineage marker"
+	"type": "session",
+	"version": 3,
+	"id": "1f9d2a6b9c0d1234",
+	"timestamp": "2026-02-16T10:20:30.000Z",
+	"cwd": "/work/pi",
+	"title": "optional session title",
+	"titleSource": "auto",
+	"parentSession": "optional lineage marker"
 }
 ```
 
@@ -81,10 +81,10 @@ All non-header entries include:
 
 ```json
 {
-  "type": "...",
-  "id": "8-char-id",
-  "parentId": "previous-or-branch-parent",
-  "timestamp": "2026-02-16T10:20:30.000Z"
+	"type": "...",
+	"id": "8-char-id",
+	"parentId": "previous-or-branch-parent",
+	"timestamp": "2026-02-16T10:20:30.000Z"
 }
 ```
 
@@ -113,30 +113,30 @@ Stores an `AgentMessage` directly.
 
 ```json
 {
-  "type": "message",
-  "id": "a1b2c3d4",
-  "parentId": null,
-  "timestamp": "2026-02-16T10:21:00.000Z",
-  "message": {
-    "role": "assistant",
-    "provider": "anthropic",
-    "model": "claude-sonnet-4-5",
-    "content": [{ "type": "text", "text": "Done." }],
-    "usage": {
-      "input": 100,
-      "output": 20,
-      "cacheRead": 0,
-      "cacheWrite": 0,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0,
-        "total": 0
-      }
-    },
-    "timestamp": 1760000000000
-  }
+	"type": "message",
+	"id": "a1b2c3d4",
+	"parentId": null,
+	"timestamp": "2026-02-16T10:21:00.000Z",
+	"message": {
+		"role": "assistant",
+		"provider": "anthropic",
+		"model": "claude-sonnet-4-5",
+		"content": [{ "type": "text", "text": "Done." }],
+		"usage": {
+			"input": 100,
+			"output": 20,
+			"cacheRead": 0,
+			"cacheWrite": 0,
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"total": 0
+			}
+		},
+		"timestamp": 1760000000000
+	}
 }
 ```
 
@@ -144,12 +144,12 @@ Stores an `AgentMessage` directly.
 
 ```json
 {
-  "type": "model_change",
-  "id": "b1c2d3e4",
-  "parentId": "a1b2c3d4",
-  "timestamp": "2026-02-16T10:21:30.000Z",
-  "model": "openai/gpt-4o",
-  "role": "default"
+	"type": "model_change",
+	"id": "b1c2d3e4",
+	"parentId": "a1b2c3d4",
+	"timestamp": "2026-02-16T10:21:30.000Z",
+	"model": "openai/gpt-4o",
+	"role": "default"
 }
 ```
 
@@ -159,11 +159,11 @@ Stores an `AgentMessage` directly.
 
 ```json
 {
-  "type": "service_tier_change",
-  "id": "c1d2e3f4",
-  "parentId": "b1c2d3e4",
-  "timestamp": "2026-02-16T10:21:45.000Z",
-  "serviceTier": "flex"
+	"type": "service_tier_change",
+	"id": "c1d2e3f4",
+	"parentId": "b1c2d3e4",
+	"timestamp": "2026-02-16T10:21:45.000Z",
+	"serviceTier": "flex"
 }
 ```
 
@@ -173,11 +173,11 @@ Stores an `AgentMessage` directly.
 
 ```json
 {
-  "type": "thinking_level_change",
-  "id": "c1d2e3f4",
-  "parentId": "b1c2d3e4",
-  "timestamp": "2026-02-16T10:22:00.000Z",
-  "thinkingLevel": "high"
+	"type": "thinking_level_change",
+	"id": "c1d2e3f4",
+	"parentId": "b1c2d3e4",
+	"timestamp": "2026-02-16T10:22:00.000Z",
+	"thinkingLevel": "high"
 }
 ```
 
@@ -185,17 +185,17 @@ Stores an `AgentMessage` directly.
 
 ```json
 {
-  "type": "compaction",
-  "id": "d1e2f3a4",
-  "parentId": "c1d2e3f4",
-  "timestamp": "2026-02-16T10:23:00.000Z",
-  "summary": "Conversation summary",
-  "shortSummary": "Short recap",
-  "firstKeptEntryId": "a1b2c3d4",
-  "tokensBefore": 42000,
-  "details": { "readFiles": ["src/a.ts"] },
-  "preserveData": { "hookState": true },
-  "fromExtension": false
+	"type": "compaction",
+	"id": "d1e2f3a4",
+	"parentId": "c1d2e3f4",
+	"timestamp": "2026-02-16T10:23:00.000Z",
+	"summary": "Conversation summary",
+	"shortSummary": "Short recap",
+	"firstKeptEntryId": "a1b2c3d4",
+	"tokensBefore": 42000,
+	"details": { "readFiles": ["src/a.ts"] },
+	"preserveData": { "hookState": true },
+	"fromExtension": false
 }
 ```
 
@@ -203,14 +203,14 @@ Stores an `AgentMessage` directly.
 
 ```json
 {
-  "type": "branch_summary",
-  "id": "e1f2a3b4",
-  "parentId": "a1b2c3d4",
-  "timestamp": "2026-02-16T10:24:00.000Z",
-  "fromId": "a1b2c3d4",
-  "summary": "Summary of abandoned path",
-  "details": { "note": "optional" },
-  "fromExtension": true
+	"type": "branch_summary",
+	"id": "e1f2a3b4",
+	"parentId": "a1b2c3d4",
+	"timestamp": "2026-02-16T10:24:00.000Z",
+	"fromId": "a1b2c3d4",
+	"summary": "Summary of abandoned path",
+	"details": { "note": "optional" },
+	"fromExtension": true
 }
 ```
 
@@ -222,12 +222,12 @@ Extension state persistence; ignored by `buildSessionContext`.
 
 ```json
 {
-  "type": "custom",
-  "id": "f1a2b3c4",
-  "parentId": "e1f2a3b4",
-  "timestamp": "2026-02-16T10:25:00.000Z",
-  "customType": "my-extension",
-  "data": { "state": 1 }
+	"type": "custom",
+	"id": "f1a2b3c4",
+	"parentId": "e1f2a3b4",
+	"timestamp": "2026-02-16T10:25:00.000Z",
+	"customType": "my-extension",
+	"data": { "state": 1 }
 }
 ```
 
@@ -237,15 +237,15 @@ Extension-provided message that does participate in LLM context. `content` can b
 
 ```json
 {
-  "type": "custom_message",
-  "id": "a2b3c4d5",
-  "parentId": "f1a2b3c4",
-  "timestamp": "2026-02-16T10:26:00.000Z",
-  "customType": "my-extension",
-  "content": "Injected context",
-  "display": true,
-  "details": { "debug": false },
-  "attribution": "agent"
+	"type": "custom_message",
+	"id": "a2b3c4d5",
+	"parentId": "f1a2b3c4",
+	"timestamp": "2026-02-16T10:26:00.000Z",
+	"customType": "my-extension",
+	"content": "Injected context",
+	"display": true,
+	"details": { "debug": false },
+	"attribution": "agent"
 }
 ```
 
@@ -253,12 +253,12 @@ Extension-provided message that does participate in LLM context. `content` can b
 
 ```json
 {
-  "type": "label",
-  "id": "b2c3d4e5",
-  "parentId": "a2b3c4d5",
-  "timestamp": "2026-02-16T10:27:00.000Z",
-  "targetId": "a1b2c3d4",
-  "label": "checkpoint"
+	"type": "label",
+	"id": "b2c3d4e5",
+	"parentId": "a2b3c4d5",
+	"timestamp": "2026-02-16T10:27:00.000Z",
+	"targetId": "a1b2c3d4",
+	"label": "checkpoint"
 }
 ```
 
@@ -268,11 +268,11 @@ Extension-provided message that does participate in LLM context. `content` can b
 
 ```json
 {
-  "type": "ttsr_injection",
-  "id": "c2d3e4f5",
-  "parentId": "b2c3d4e5",
-  "timestamp": "2026-02-16T10:28:00.000Z",
-  "injectedRules": ["ruleA", "ruleB"]
+	"type": "ttsr_injection",
+	"id": "c2d3e4f5",
+	"parentId": "b2c3d4e5",
+	"timestamp": "2026-02-16T10:28:00.000Z",
+	"injectedRules": ["ruleA", "ruleB"]
 }
 ```
 
@@ -280,11 +280,11 @@ Extension-provided message that does participate in LLM context. `content` can b
 
 ```json
 {
-  "type": "mcp_tool_selection",
-  "id": "d2e3f4a5",
-  "parentId": "c2d3e4f5",
-  "timestamp": "2026-02-16T10:28:30.000Z",
-  "selectedToolNames": ["server.tool"]
+	"type": "mcp_tool_selection",
+	"id": "d2e3f4a5",
+	"parentId": "c2d3e4f5",
+	"timestamp": "2026-02-16T10:28:30.000Z",
+	"selectedToolNames": ["server.tool"]
 }
 ```
 
@@ -292,14 +292,14 @@ Extension-provided message that does participate in LLM context. `content` can b
 
 ```json
 {
-  "type": "session_init",
-  "id": "d2e3f4a5",
-  "parentId": "c2d3e4f5",
-  "timestamp": "2026-02-16T10:29:00.000Z",
-  "systemPrompt": "...",
-  "task": "...",
-  "tools": ["read", "edit"],
-  "outputSchema": { "type": "object" }
+	"type": "session_init",
+	"id": "d2e3f4a5",
+	"parentId": "c2d3e4f5",
+	"timestamp": "2026-02-16T10:29:00.000Z",
+	"systemPrompt": "...",
+	"task": "...",
+	"tools": ["read", "edit"],
+	"outputSchema": { "type": "object" }
 }
 ```
 
@@ -307,12 +307,12 @@ Extension-provided message that does participate in LLM context. `content` can b
 
 ```json
 {
-  "type": "mode_change",
-  "id": "e2f3a4b5",
-  "parentId": "d2e3f4a5",
-  "timestamp": "2026-02-16T10:30:00.000Z",
-  "mode": "plan",
-  "data": { "planFile": "/tmp/plan.md" }
+	"type": "mode_change",
+	"id": "e2f3a4b5",
+	"parentId": "d2e3f4a5",
+	"timestamp": "2026-02-16T10:30:00.000Z",
+	"mode": "plan",
+	"data": { "planFile": "/tmp/plan.md" }
 }
 ```
 
@@ -391,9 +391,9 @@ Algorithm:
    - `custom_message` entries become `custom` AgentMessages via `createCustomMessage`
    - `branch_summary` entries become `branchSummary` AgentMessages via `createBranchSummaryMessage`
    - if a `compaction` exists on path:
-     - emit compaction summary first (`createCompactionSummaryMessage`)
-     - emit path entries starting at `firstKeptEntryId` up to the compaction boundary
-     - emit entries after the compaction boundary
+      - emit compaction summary first (`createCompactionSummaryMessage`)
+      - emit path entries starting at `firstKeptEntryId` up to the compaction boundary
+      - emit entries after the compaction boundary
 
 `custom`, `session_init`, `service_tier_change`, `mcp_tool_selection`, and `ttsr_injection` entries do not inject model context directly.
 
@@ -410,9 +410,9 @@ Writes are serialized through an internal promise chain (`#persistChain`) and `N
 
 - `append*` updates in-memory state immediately.
 - Persistence is deferred until at least one assistant message exists.
-  - Before first assistant: entries are retained in memory; no file append occurs.
-  - When first assistant exists: full in-memory session is flushed to file.
-  - Afterwards: new entries append incrementally.
+   - Before first assistant: entries are retained in memory; no file append occurs.
+   - When first assistant exists: full in-memory session is flushed to file.
+   - Afterwards: new entries append incrementally.
 
 Rationale in code: avoid persisting sessions that never produced an assistant response.
 
@@ -433,12 +433,12 @@ Rationale in code: avoid persisting sessions that never produced an assistant re
 Before persisting entries:
 
 - Large strings are truncated to `MAX_PERSIST_CHARS` (500,000 chars) with notice:
-  - `"[Session persistence truncated large content]"`
+   - `"[Session persistence truncated large content]"`
 - Transient fields `partialJson` and `jsonlEvents` are removed.
 - If object has both `content` and `lineCount`, line count is recomputed after truncation.
 - Image blocks in `content` arrays with base64 length >= 1024 are externalized to blob refs:
-  - stored as `blob:sha256:<hash>`
-  - raw bytes written to blob store (`BlobStore.put`)
+   - stored as `blob:sha256:<hash>`
+   - raw bytes written to blob store (`BlobStore.put`)
 
 On load, blob refs are resolved back to base64 for message/custom_message image blocks.
 

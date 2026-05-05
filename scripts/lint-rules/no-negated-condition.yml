@@ -1,0 +1,59 @@
+id: no-negated-condition
+language: ts
+rule:
+   kind: if_statement
+   pattern: |
+      if (!$COND) {
+        $$$THEN
+      } else {
+        $$$ELSE
+      }
+   not:
+      inside:
+         kind: ternary_expression
+fix: |
+   if ($COND) {
+     $$$ELSE
+   } else {
+     $$$THEN
+   }
+---
+id: no-negated-condition-neq
+language: ts
+rule:
+   kind: if_statement
+   pattern: |
+      if ($A !== $B) {
+        $$$THEN
+      } else {
+        $$$ELSE
+      }
+   not:
+      inside:
+         kind: ternary_expression
+fix: |
+   if ($A === $B) {
+     $$$ELSE
+   } else {
+     $$$THEN
+   }
+---
+id: no-negated-condition-neq-loose
+language: ts
+rule:
+   kind: if_statement
+   pattern: |
+      if ($A != $B) {
+        $$$THEN
+      } else {
+        $$$ELSE
+      }
+   not:
+      inside:
+         kind: ternary_expression
+fix: |
+   if ($A == $B) {
+     $$$ELSE
+   } else {
+     $$$THEN
+   }
