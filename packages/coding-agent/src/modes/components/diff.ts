@@ -9,6 +9,13 @@ const DIM = "\x1b[2m";
 const DIM_OFF = "\x1b[22m";
 
 /**
+ * Upper bound on the line-number gutter width. 9,999,999 lines covers every
+ * realistic source file; values longer than this are clamped so the gutter
+ * cannot starve the content column on narrow terminals.
+ */
+const MAX_LINE_NUMBER_WIDTH = 7;
+
+/**
  * Visualize leading whitespace (indentation) with dim glyphs.
  * Tabs become ` → ` and spaces become `·`. Only affects whitespace
  * before the first non-whitespace character; remaining tabs in code
@@ -158,10 +165,14 @@ export function renderDiff(diffText: string, options: RenderDiffOptions = {}): s
 	const lines = sanitizeText(diffText).split("\n");
 	const result: string[] = [];
 	const parsedLines = lines.map(parseDiffLine);
-	const lineNumberWidth = parsedLines.reduce((width, parsed) => {
+	const rawMaxLineNumberWidth = parsedLines.reduce((width, parsed) => {
 		const lineNumber = parsed?.lineNum.trim() ?? "";
 		return Math.max(width, lineNumber.length);
 	}, 0);
+	// Clamp the gutter so absurd line numbers (>10M lines, hashes accidentally
+	// emitted as line numbers) cannot monopolise the row and starve the content
+	// column. 7 digits comfortably covers any realistic source file.
+	const lineNumberWidth = Math.min(rawMaxLineNumberWidth, MAX_LINE_NUMBER_WIDTH);
 
 	// Track the line number rendered on the previous emitted line so we can
 	// blank out duplicate gutters. Two cases trigger this:
@@ -175,7 +186,12 @@ export function renderDiff(diffText: string, options: RenderDiffOptions = {}): s
 			return `${prefix}${content}`;
 		}
 		const trimmed = lineNum.trim();
-		const displayNum = trimmed === prevLineNum ? "" : trimmed;
+		let displayNum = trimmed === prevLineNum ? "" : trimmed;
+		// Truncate over-long line numbers to the clamp width so the rendered
+		// gutter cannot exceed lineNumberWidth + sign + padding.
+		if (displayNum.length > MAX_LINE_NUMBER_WIDTH) {
+			displayNum = displayNum.slice(0, MAX_LINE_NUMBER_WIDTH);
+		}
 		prevLineNum = trimmed;
 		return formatCodeFrameLine(prefix, displayNum, content, lineNumberWidth);
 	};
