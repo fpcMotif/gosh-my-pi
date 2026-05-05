@@ -24,7 +24,21 @@ export async function streamAssistantResponse(
 ): Promise<AssistantMessage> {
 	let messages = context.messages;
 	if (config.transformContext) {
-		messages = await config.transformContext(messages, signal);
+		try {
+			messages = await config.transformContext(messages, signal);
+		} catch (error) {
+			// Compaction failure: synthesise a terminal error message instead
+			// of propagating an unhandled rejection. The agent loop's
+			// checkTerminalResponse will see stopReason "error" and finalize
+			// the turn cleanly.
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			return finishPartialMessage(
+				buildTerminalStreamMessage(config, null, `Context compaction failed: ${errorMessage}`),
+				false,
+				context,
+				stream,
+			);
+		}
 	}
 
 	const llmMessages = await config.convertToLlm(messages);
@@ -64,37 +78,90 @@ async function processAssistantStream(
 ): Promise<AssistantMessage> {
 	let partialMessage: AssistantMessage | null = null;
 	let addedPartial = false;
+	const iterator = response[Symbol.asyncIterator]();
 
-	for await (const event of response) {
-		if (signal !== undefined && signal.aborted) {
-			return handleAbortedStream(config, partialMessage, addedPartial, context, stream);
-		}
+	try {
+		while (true) {
+			if (signal?.aborted) {
+				return handleAbortedStream(config, partialMessage, addedPartial, context, stream);
+			}
 
-		switch (event.type) {
-			case "start":
-				partialMessage = event.partial;
-				break;
+			// Race iterator.next() against the abort signal so a hung provider
+			// (no events arriving) still terminates within bounded time when
+			// the caller aborts mid-flight.
+			const result = await raceWithAbort(iterator.next(), signal);
 
-			case "done":
-				return finishPartialMessage(event.message, addedPartial, context, stream);
+			if (signal?.aborted) {
+				return handleAbortedStream(config, partialMessage, addedPartial, context, stream);
+			}
 
-			case "error":
-				return finishPartialMessage(event.error, addedPartial, context, stream);
+			if (result.done) break;
 
-			default:
-				if (partialMessage) {
-					if (!addedPartial) {
-						context.messages.push(partialMessage);
-						stream.push({ type: "message_start", message: partialMessage });
-						addedPartial = true;
+			const event = result.value;
+			switch (event.type) {
+				case "start":
+					partialMessage = event.partial;
+					break;
+
+				case "done":
+					return finishPartialMessage(event.message, addedPartial, context, stream);
+
+				case "error":
+					return finishPartialMessage(event.error, addedPartial, context, stream);
+
+				default:
+					if (partialMessage) {
+						if (!addedPartial) {
+							context.messages.push(partialMessage);
+							stream.push({ type: "message_start", message: partialMessage });
+							addedPartial = true;
+						}
+						stream.push({ type: "message_update", message: partialMessage, assistantMessageEvent: event });
 					}
-					stream.push({ type: "message_update", message: partialMessage, assistantMessageEvent: event });
-				}
-				break;
+					break;
+			}
 		}
+	} catch (error) {
+		// Iterator threw mid-stream (network error, malformed payload, etc.).
+		// Rather than propagate as unhandled, finalise as an error message.
+		const message = error instanceof Error ? error.message : String(error);
+		return finishPartialMessage(
+			buildTerminalStreamMessage(config, partialMessage, `Provider stream failed: ${message}`),
+			addedPartial,
+			context,
+			stream,
+		);
 	}
 
-	throw new Error("Stream ended without done or error event");
+	// Stream iterator returned without emitting `done` or `error`. Treat as
+	// an error so the loop terminates cleanly via checkTerminalResponse.
+	return finishPartialMessage(
+		buildTerminalStreamMessage(config, partialMessage, "Provider stream ended without done or error event"),
+		addedPartial,
+		context,
+		stream,
+	);
+}
+
+/**
+ * Await `next` but resolve early as `{done: true}` when `signal` aborts.
+ * Used to break out of provider streams that don't emit on abort.
+ */
+async function raceWithAbort<T>(
+	next: Promise<IteratorResult<T>>,
+	signal: AbortSignal | undefined,
+): Promise<IteratorResult<T>> {
+	if (!signal) return next;
+	if (signal.aborted) return { done: true, value: undefined as never };
+
+	const { promise: abortPromise, resolve } = Promise.withResolvers<IteratorResult<T>>();
+	const onAbort = (): void => resolve({ done: true, value: undefined as never });
+	signal.addEventListener("abort", onAbort, { once: true });
+	try {
+		return await Promise.race([next, abortPromise]);
+	} finally {
+		signal.removeEventListener("abort", onAbort);
+	}
 }
 
 function finishPartialMessage(
@@ -120,28 +187,46 @@ function handleAbortedStream(
 	context: AgentContext,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 ): AssistantMessage {
-	const errorMessage = "Request was aborted";
-	const abortedMessage: AssistantMessage = partialMessage
-		? { ...partialMessage, stopReason: "aborted", errorMessage }
-		: {
-				role: "assistant",
-				content: [],
-				api: config.model.api,
-				provider: config.model.provider,
-				model: config.model.id,
-				usage: {
-					input: 0,
-					output: 0,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 0,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-				},
-				stopReason: "aborted",
-				errorMessage,
-				timestamp: Date.now(),
-			};
-	return finishPartialMessage(abortedMessage, addedPartial, context, stream);
+	return finishPartialMessage(
+		buildTerminalStreamMessage(config, partialMessage, "Request was aborted", "aborted"),
+		addedPartial,
+		context,
+		stream,
+	);
+}
+
+/**
+ * Construct a terminal AssistantMessage for compaction failures, iterator
+ * throws, missing-final-event, and aborts. Centralises the shape so the four
+ * paths can't drift against each other.
+ */
+function buildTerminalStreamMessage(
+	config: AgentLoopConfig,
+	partialMessage: AssistantMessage | null,
+	errorMessage: string,
+	stopReason: Extract<AssistantMessage["stopReason"], "aborted" | "error"> = "error",
+): AssistantMessage {
+	if (partialMessage) {
+		return { ...partialMessage, stopReason, errorMessage };
+	}
+	return {
+		role: "assistant",
+		content: [],
+		api: config.model.api,
+		provider: config.model.provider,
+		model: config.model.id,
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason,
+		errorMessage,
+		timestamp: Date.now(),
+	};
 }
 
 function normalizeTools(tools: AnyAgentTool[], tracing: boolean): Tool[] {
@@ -153,7 +238,7 @@ function normalizeTools(tools: AnyAgentTool[], tracing: boolean): Tool[] {
 			strict: t.strict,
 		};
 
-		if (tracing && t.intent !== undefined && t.intent !== null) {
+		if (tracing) {
 			const mode = resolveIntentMode(t.intent);
 			if (mode !== "omit") {
 				const params = { ...t.parameters };
