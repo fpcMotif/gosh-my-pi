@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import { isEnoent, prompt } from "@oh-my-pi/pi-utils";
 import { type LocalProtocolOptions, resolveLocalUrlToPath } from "../internal-urls";
 import type { PlanModeState } from "../plan-mode/state";
@@ -6,6 +5,8 @@ import planModeActivePrompt from "../prompts/system/plan-mode-active.md" with { 
 import planModeReferencePrompt from "../prompts/system/plan-mode-reference.md" with { type: "text" };
 import { normalizeLocalScheme, resolveToCwd } from "../tools/path-utils";
 import type { CustomMessage } from "./messages";
+
+const DEFAULT_PLAN_URL = "local://PLAN.md";
 
 /**
  * Dependencies the {@link PlanModeController} needs from its owning session.
@@ -21,16 +22,11 @@ export interface PlanModeControllerContext {
  * message has been sent, and the path to the plan file. Builds the two
  * plan-mode custom messages (`plan-mode-active`, `plan-mode-reference`)
  * that the session injects into the conversation.
- *
- * Extracted from `AgentSession` so the state holder + message builders
- * live behind one field. The two orchestrators that *consume* the state
- * (`sendPlanModeContext`, the tool-decision enforcer) stay on the session
- * because they call `prompt()` and `sendCustomMessage`.
  */
 export class PlanModeController {
 	#state: PlanModeState | undefined;
 	#referenceSent = false;
-	#referencePath = "local://PLAN.md";
+	#referencePath = DEFAULT_PLAN_URL;
 	#ctx: PlanModeControllerContext;
 
 	constructor(ctx: PlanModeControllerContext) {
@@ -65,7 +61,7 @@ export class PlanModeController {
 	/** Reset reference-sent + reference-path defaults. Called on session switch. */
 	reset(): void {
 		this.#referenceSent = false;
-		this.#referencePath = "local://PLAN.md";
+		this.#referencePath = DEFAULT_PLAN_URL;
 	}
 
 	/**
@@ -114,17 +110,16 @@ export class PlanModeController {
 	async buildActiveMessage(): Promise<CustomMessage | null> {
 		const state = this.#state;
 		if (state?.enabled !== true) return null;
-		const sessionPlanUrl = "local://PLAN.md";
 		const resolvedPlanPath = state.planFilePath.startsWith("local:")
 			? resolveLocalUrlToPath(normalizeLocalScheme(state.planFilePath), this.#ctx.getLocalProtocolOptions())
 			: resolveToCwd(state.planFilePath, this.#ctx.getCwd());
-		const resolvedSessionPlan = resolveLocalUrlToPath(sessionPlanUrl, this.#ctx.getLocalProtocolOptions());
+		const resolvedSessionPlan = resolveLocalUrlToPath(DEFAULT_PLAN_URL, this.#ctx.getLocalProtocolOptions());
 		const displayPlanPath =
 			state.planFilePath.startsWith("local:") || resolvedPlanPath !== resolvedSessionPlan
 				? state.planFilePath
-				: sessionPlanUrl;
+				: DEFAULT_PLAN_URL;
 
-		const planExists = fs.existsSync(resolvedPlanPath);
+		const planExists = await Bun.file(resolvedPlanPath).exists();
 		const content = prompt.render(planModeActivePrompt, {
 			planFilePath: displayPlanPath,
 			planExists,

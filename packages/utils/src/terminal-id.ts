@@ -1,12 +1,3 @@
-/**
- * Stable terminal identification — moved from `@oh-my-pi/pi-tui` as part of
- * the pi-tui deprecation (candidate #3). These are environment / FFI lookups,
- * not TUI rendering — they belong with the other process / OS utilities.
- *
- * pi-tui still re-exports `getTerminalId` and `getTtyPath` for backward
- * compatibility; new code should import from `@oh-my-pi/pi-utils` directly.
- */
-
 import { CString, dlopen, FFIType } from "bun:ffi";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -59,19 +50,16 @@ export function getTerminalId(): string | null {
 		} catch {}
 	}
 
-	// Fallback to terminal-specific env vars
-	const kittyId = process.env.KITTY_WINDOW_ID;
-	if (kittyId !== null && kittyId !== undefined && kittyId !== "") return `kitty-${kittyId}`;
-
-	const tmuxPane = process.env.TMUX_PANE;
-	if (tmuxPane !== null && tmuxPane !== undefined && tmuxPane !== "") return `tmux-${tmuxPane}`;
-
-	const terminalSessionId = process.env.TERM_SESSION_ID; // macOS Terminal.app
-	if (terminalSessionId !== null && terminalSessionId !== undefined && terminalSessionId !== "")
-		return `apple-${terminalSessionId}`;
-
-	const wtSession = process.env.WT_SESSION; // Windows Terminal
-	if (wtSession !== null && wtSession !== undefined && wtSession !== "") return `wt-${wtSession}`;
+	const envFallbacks: ReadonlyArray<readonly [string, string]> = [
+		["KITTY_WINDOW_ID", "kitty"],
+		["TMUX_PANE", "tmux"],
+		["TERM_SESSION_ID", "apple"],
+		["WT_SESSION", "wt"],
+	];
+	for (const [envVar, prefix] of envFallbacks) {
+		const value = process.env[envVar];
+		if (value) return `${prefix}-${value}`;
+	}
 
 	return null;
 }

@@ -1,14 +1,6 @@
 /**
  * Pure text-display utilities — no pi-natives dependency.
  *
- * These were originally in `@oh-my-pi/pi-tui` but they're not TUI-specific
- * and don't need the native addon. Anything that needs to compute display
- * widths, expand tabs, or pad strings can use them. Moved here as part of
- * the pi-tui deprecation (candidate #3).
- *
- * pi-tui still re-exports these names for backward compatibility; new
- * code should import from `@oh-my-pi/pi-utils` directly.
- *
  * The native-addon-coupled utilities (`truncateToWidth`, `wrapTextWithAnsi`,
  * `Ellipsis`) stay in pi-tui — moving them here would force every pi-utils
  * consumer to load pi-natives at module-init time, which breaks dev
@@ -17,12 +9,8 @@
 
 import { getDefaultTabWidth, getIndentation } from "./tab-spacing";
 
-// Pre-allocated space buffer for padding
 const SPACE_BUFFER = " ".repeat(512);
 
-/**
- * Replace tabs with configured spacing for consistent rendering.
- */
 export function replaceTabs(text: string, file?: string): string {
 	return text.replaceAll("\t", " ".repeat(getIndentation(file)));
 }

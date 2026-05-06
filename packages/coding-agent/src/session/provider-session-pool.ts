@@ -9,7 +9,6 @@ import { logger } from "@oh-my-pi/pi-utils";
  * patterns: close all on dispose / new session, close model-affected ones
  * on model switch, close the Codex-only ones on history-rewrite operations.
  *
- * Extracted from `AgentSession` to give the cluster a deletion-test seam.
  * The {@link state} map is shared with `Agent.providerSessionState` so
  * providers can read/write directly.
  */

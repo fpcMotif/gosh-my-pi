@@ -36,9 +36,6 @@ export interface RetryControllerContext {
  * backoff sleep. On a retryable error, decides whether to retry, runs
  * credential / model fallback, sleeps with exponential backoff, then
  * schedules a continue.
- *
- * Extracted from `AgentSession` to give the cluster a deletion-test seam
- * and to keep the `errorKind`-driven retry decisions in one place.
  */
 export class RetryController {
 	#attempt = 0;
@@ -129,11 +126,7 @@ export class RetryController {
 
 		const errorMessage = message.errorMessage ?? "Unknown error";
 		const parsedRetryAfterMs =
-			errorKind?.kind === "usage_limit"
-				? errorKind.retryAfterMs
-				: errorKind?.kind === "transient"
-					? errorKind.retryAfterMs
-					: undefined;
+			errorKind?.kind === "usage_limit" || errorKind?.kind === "transient" ? errorKind.retryAfterMs : undefined;
 		let delayMs = retrySettings.baseDelayMs * 2 ** (this.#attempt - 1);
 		let switchedCredential = false;
 		let switchedModel = false;

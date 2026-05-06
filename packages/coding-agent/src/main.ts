@@ -14,6 +14,7 @@ import type { ImageContent } from "@oh-my-pi/pi-ai";
 import { $env, $which, getProjectDir, logger, postmortem, setProjectDir, VERSION } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 
+import { runCli } from "./cli";
 import { expandInlineFlagValues, type Args } from "./cli/args";
 import { processFileArguments } from "./cli/file-processor";
 import { buildInitialMessage } from "./cli/initial-message";
@@ -144,11 +145,6 @@ export async function submitInteractiveInput(
  *
  * Returns the child process exit code when tui-go was spawned, or `null`
  * when the caller should fall through to the legacy interactive mode.
- *
- * Architectural note: this is candidate #3, phase T1. tui-go is the
- * intended frontend; the legacy in-process TUI (`InteractiveMode`) is on
- * the deletion path. Auto-spawn lets users opt in incrementally without
- * forcing a flag-day migration. See `.claude/plans/delete-pi-tui-design.md`.
  */
 async function tryAutoSpawnTuiGo(): Promise<number | null> {
 	const opt = process.env.OMP_TUI?.toLowerCase();
@@ -894,9 +890,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	} else if (mode === "acp") {
 		await runAcpMode(session, createAcpSession);
 	} else if (isInteractive) {
-		// Candidate #3 / phase T1: auto-spawn the Go TUI frontend when the
-		// user opts in via `OMP_TUI=go`. Falls through to legacy in-process
-		// TUI when not opted in or when the binary isn't found.
 		const tuiGoExitCode = await tryAutoSpawnTuiGo();
 		if (tuiGoExitCode !== null) {
 			await session.dispose();
@@ -913,7 +906,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		if (scopedModelsForDisplay.length > 0) {
 			const modelList = scopedModelsForDisplay
 				.map(scopedModel => {
-					const thinkingStr = scopedModel.thinkingLevel === undefined ? `:${scopedModel.thinkingLevel}` : "";
+					const thinkingStr = scopedModel.thinkingLevel !== undefined ? `:${scopedModel.thinkingLevel}` : "";
 					return `${scopedModel.model.id}${thinkingStr}`;
 				})
 				.join(", ");
@@ -956,6 +949,5 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 }
 
 export async function main(args: string[]): Promise<void> {
-	const { runCli } = await import("./cli");
 	await runCli(args.length === 0 ? ["launch"] : args);
 }

@@ -4,23 +4,15 @@ import { Snowflake } from "@oh-my-pi/pi-utils";
  * Generic id-correlated request/response primitive shared by the two
  * bidirectional RPC channels (extension UI dialogs + host tool calls).
  *
- * Replaces two bespoke `Map<string, {resolve, reject}>` patterns with one
- * tested implementation. Wire shape is unchanged — only the correlation
- * logic is shared (decision 8, interpretation B).
- *
  * Lifecycle for one request:
  *   1. caller invokes `register(opts)` to get an id + promise
  *   2. caller emits a frame with the id (e.g. `host_tool_call` or `extension_ui_request`)
  *   3. response frame arrives; caller invokes `resolve(id, value)`
  *   4. promise settles; correlator state is cleaned up
  *
- * Failure modes the correlator handles:
- *   - timeout (caller-supplied; default = no timeout)
- *   - abort signal (caller-supplied)
- *   - explicit cancel (e.g. session shutdown)
- *
- * Calling `resolve`/`reject`/`cancel` on an unknown id returns `false`
- * (no-op); this lets callers safely respond to stale frames.
+ * Failure modes: caller-supplied timeout, caller-supplied abort signal, and
+ * explicit `cancel(id)`. Calling `resolve`/`reject`/`cancel` on an unknown id
+ * returns `false` (no-op), so callers can safely respond to stale frames.
  */
 
 export interface RegisterOptions<T> {
@@ -79,7 +71,7 @@ export class RequestCorrelator {
 		}
 
 		const { promise, resolve, reject } = Promise.withResolvers<T>();
-		let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+		let timeoutHandle: NodeJS.Timeout | undefined;
 
 		const cleanup = (): void => {
 			if (timeoutHandle !== undefined) {

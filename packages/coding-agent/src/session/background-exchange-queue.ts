@@ -15,11 +15,6 @@ export interface BackgroundExchangeQueueContext {
  * auto-reply) is held until the session goes idle, then emitted via
  * {@link BackgroundExchangeQueueContext.emitMessageEvent} so listeners append
  * to history and persist.
- *
- * Extracted from `AgentSession` to give the cluster a deletion-test seam.
- * Cluster shape: a `setTimeout`-based polling flush that re-checks
- * `isStreaming()` every 50 ms until idle. Disabling the queue is a one-line
- * change.
  */
 export class BackgroundExchangeQueue {
 	#ctx: BackgroundExchangeQueueContext;

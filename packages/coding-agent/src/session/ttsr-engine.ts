@@ -22,19 +22,6 @@ export interface TtsrEngineContext {
  * the abort-pending flag the message_update handler flips, the retry token
  * used to invalidate stale post-prompt retries, and the TtsrManager that
  * actually evaluates rule deltas.
- *
- * Extracted from `AgentSession` for a deletion-test seam over the parts
- * that are bounded:
- * - state holders + accessors
- * - pure helpers (rule-name extraction, match-context building, path
- *   normalization, "should interrupt?" decision)
- * - small orchestrators that don't reach into agent.continue/followUp
- *
- * The dense `message_update` handler with `agent.abort()` + scheduled
- * `agent.continue()` retry stays inline on the session, as does
- * `#queueDeferredTtsrInjectionIfNeeded` (which calls `agent.followUp`).
- * Those carry cross-event coordination this seam intentionally does not
- * encapsulate.
  */
 export class TtsrEngine {
 	#ctx: TtsrEngineContext;
@@ -180,7 +167,8 @@ export class TtsrEngine {
 		for (const rule of matches) {
 			const mode = rule.interruptMode ?? globalMode;
 			if (mode === "never") continue;
-			if (mode === "prose-only" && (matchContext.source === "text" || matchContext.source === "thinking")) return true;
+			if (mode === "prose-only" && (matchContext.source === "text" || matchContext.source === "thinking"))
+				return true;
 			if (mode === "tool-only" && matchContext.source === "tool") return true;
 			if (mode === "always") return true;
 		}

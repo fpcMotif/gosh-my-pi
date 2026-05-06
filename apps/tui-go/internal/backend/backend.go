@@ -74,7 +74,7 @@ func (b *Backend) GetWorkspace(id string) (*Workspace, error) {
 
 // ListWorkspaces returns all running workspaces.
 func (b *Backend) ListWorkspaces() []proto.Workspace {
-	workspaces := []proto.Workspace{}
+	workspaces := make([]proto.Workspace, 0, b.workspaces.Len())
 	for _, ws := range b.workspaces.Seq2() {
 		workspaces = append(workspaces, workspaceToProto(ws))
 	}

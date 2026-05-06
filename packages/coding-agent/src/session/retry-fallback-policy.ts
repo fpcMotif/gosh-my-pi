@@ -114,11 +114,7 @@ export class RetryFallbackPolicy {
 
 	noteCooldown(currentSelector: string, errorKind: AgentErrorKind | undefined): void {
 		const candidate =
-			errorKind?.kind === "usage_limit"
-				? errorKind.retryAfterMs
-				: errorKind?.kind === "transient"
-					? errorKind.retryAfterMs
-					: undefined;
+			errorKind?.kind === "usage_limit" || errorKind?.kind === "transient" ? errorKind.retryAfterMs : undefined;
 		const cooldownMs = candidate !== undefined && candidate > 0 ? candidate : 5 * 60 * 1000;
 		this.options.modelRegistry.suppressSelector(currentSelector, Date.now() + cooldownMs);
 	}

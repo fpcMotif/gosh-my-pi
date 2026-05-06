@@ -1,17 +1,7 @@
-import { type ResolvedThinkingLevel, ThinkingLevel } from "@oh-my-pi/pi-agent-core/thinking";
+import { ThinkingLevel } from "@oh-my-pi/pi-agent-core/thinking";
 import { type Effort, THINKING_EFFORTS } from "@oh-my-pi/pi-ai/model-thinking";
 
-// Re-export the canonical session-level thinking surface so existing
-// `import ... from "../thinking"` callers in coding-agent keep working.
-// New session-level resolution logic (parseThinkingLevel, toReasoningEffort,
-// resolveThinkingLevelForModel) lives in pi-agent-core/thinking.ts.
-export {
-	parseThinkingLevel,
-	resolveThinkingLevelForModel,
-	type ResolvedThinkingLevel,
-	ThinkingLevel,
-	toReasoningEffort,
-} from "@oh-my-pi/pi-agent-core/thinking";
+export * from "@oh-my-pi/pi-agent-core/thinking";
 
 /**
  * Display metadata used to render thinking selector values in the

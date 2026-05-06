@@ -137,12 +137,7 @@ import {
 	shouldCompact,
 } from "./compaction";
 import { DEFAULT_PRUNE_CONFIG, pruneToolOutputs } from "./compaction/pruning";
-import {
-	type CompactionSummaryMessage,
-	type CustomMessage,
-	convertToLlm,
-	type FileMentionMessage,
-} from "./messages";
+import { type CompactionSummaryMessage, type CustomMessage, convertToLlm, type FileMentionMessage } from "./messages";
 import { ActiveRetryFallback } from "./active-retry-fallback";
 import { BackgroundExchangeQueue } from "./background-exchange-queue";
 import { BashController } from "./bash-controller";
@@ -400,50 +395,38 @@ export class AgentSession {
 	#branchSummaryAbortController: AbortController | undefined = undefined;
 	#branchSummaryCompleter: BranchSummaryCompleter | undefined = undefined;
 
-	// Handoff state
 	#handoffAbortController: AbortController | undefined = undefined;
 	#skipPostTurnMaintenanceAssistantTimestamp: number | undefined = undefined;
 
-	// Retry state — owned by the RetryController + ActiveRetryFallback subsystems
 	#retry: RetryController;
 	#activeRetryFallback: ActiveRetryFallback;
 	#retryFallbackPolicy: RetryFallbackPolicy;
-	// Todo completion reminder state
 	#todoReminderCount = 0;
 	#todoPhaseState: TodoPhaseState;
 	#toolChoiceQueue = new ToolChoiceQueue();
 
-	// Bash execution state
 	#bash: BashController;
 
-	// Python execution state — owned by PythonController
 	#python: PythonController;
 	#pythonKernelOwnerId: string;
 
-	// Background-channel IRC exchanges queued while the recipient was streaming.
-	// Drained into history (via emitExternalEvent) once the recipient becomes idle.
 	#backgroundExchanges: BackgroundExchangeQueue;
-	// Agent identity + registry for IRC relay forwarding to the main session UI.
 	#agentId: string | undefined;
 	#agentRegistry: AgentRegistry | undefined;
-	// Extension system
 	#extensionRunner: ExtensionRunner | undefined = undefined;
 	#turnIndex = 0;
 
 	#skills: Skill[];
 	#skillWarnings: SkillWarning[];
 
-	// Custom commands (TypeScript slash commands)
 	#customCommands: LoadedCustomCommand[] = [];
 	/** MCP prompt commands (updated dynamically when prompts are loaded) */
 	#mcpPromptCommands: LoadedCustomCommand[] = [];
 
 	#skillsSettings: SkillsSettings | undefined;
 
-	// Model registry for API key resolution
 	#modelRegistry: ModelRegistry;
 
-	// Tool registry and prompt builder for extensions
 	#toolRegistry: Map<string, AgentTool>;
 	#transformContext: (messages: AgentMessage[], signal?: AbortSignal) => AgentMessage[] | Promise<AgentMessage[]>;
 	#onPayload: SimpleStreamOptions["onPayload"] | undefined;
@@ -454,7 +437,6 @@ export class AgentSession {
 	#mcp: MCPSelectionStore;
 	#rpcHostToolNames = new Set<string>();
 
-	// TTSR manager for time-traveling stream rules
 	#ttsr: TtsrEngine;
 	#postPromptTasks = new Set<Promise<void>>();
 	#postPromptTasksPromise: Promise<void> | undefined = undefined;
@@ -528,8 +510,7 @@ export class AgentSession {
 			getThinkingLevel: () => this.thinkingLevel,
 			setModelWithReset: model => this.#setModelWithProviderSessionReset(model),
 			setThinkingLevel: level => this.setThinkingLevel(level),
-			emitFallbackApplied: payload =>
-				this.#emitSessionEvent({ type: "retry_fallback_applied", ...payload }),
+			emitFallbackApplied: payload => this.#emitSessionEvent({ type: "retry_fallback_applied", ...payload }),
 		});
 		this.#retry = new RetryController({
 			sessionId: this.sessionId,
@@ -539,8 +520,7 @@ export class AgentSession {
 			retryFallbackPolicy: this.#retryFallbackPolicy,
 			activeRetryFallback: this.#activeRetryFallback,
 			getModel: () => this.model,
-			getModelSelector: () =>
-				this.model ? formatRetryFallbackSelector(this.model, this.thinkingLevel) : undefined,
+			getModelSelector: () => (this.model ? formatRetryFallbackSelector(this.model, this.thinkingLevel) : undefined),
 			getPromptGeneration: () => this.#promptGeneration,
 			emitSessionEvent: event => this.#emitSessionEvent(event),
 			scheduleAgentContinue: options => this.#scheduleAgentContinue(options),
@@ -1540,7 +1520,6 @@ export class AgentSession {
 		this.#eventListeners = [];
 	}
 
-
 	// =========================================================================
 	// Read-only State Access
 	// =========================================================================
@@ -1992,7 +1971,6 @@ export class AgentSession {
 	// =========================================================================
 	// Prompting
 	// =========================================================================
-
 
 	/**
 	 * Send a prompt to the agent.
@@ -3595,7 +3573,7 @@ export class AgentSession {
 
 			return { document: handoffText, savedPath };
 		} finally {
-			unsubscribe?.();
+			unsubscribeRef.fn?.();
 			handoffSignal.removeEventListener("abort", onCompletionAbort);
 			handoffSignal.removeEventListener("abort", onHandoffAbort);
 			sourceSignal?.removeEventListener("abort", onSourceAbort);
@@ -3965,7 +3943,6 @@ export class AgentSession {
 		}
 		this.agent.setModel(model);
 	}
-
 
 	#normalizeProviderReplayValue(value: unknown): unknown {
 		if (Array.isArray(value)) {
@@ -4872,7 +4849,6 @@ export class AgentSession {
 		});
 		return messages;
 	}
-
 
 	// =========================================================================
 	// Session Management

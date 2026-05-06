@@ -85,6 +85,11 @@ export function isUsageLimitError(errorMessage: string): boolean {
 	return USAGE_LIMIT_PATTERN.test(errorMessage);
 }
 
+const RETRY_AFTER_MS_PATTERN = /retry-after-ms\s*[:=]\s*(\d+)/i;
+const RETRY_AFTER_PATTERN = /retry-after\s*[:=]\s*([^\s,;]+)/i;
+const RESET_MS_PATTERN = /x-ratelimit-reset-ms\s*[:=]\s*(\d+)/i;
+const RESET_PATTERN = /x-ratelimit-reset\s*[:=]\s*(\d+)/i;
+
 /**
  * Parse a literal Retry-After value from an error string. Recognizes:
  *   - `retry-after-ms: <ms>`
@@ -93,12 +98,12 @@ export function isUsageLimitError(errorMessage: string): boolean {
  */
 export function parseRetryAfterMsFromString(errorMessage: string): number | undefined {
 	const now = Date.now();
-	const retryAfterMsMatch = /retry-after-ms\s*[:=]\s*(\d+)/i.exec(errorMessage);
+	const retryAfterMsMatch = RETRY_AFTER_MS_PATTERN.exec(errorMessage);
 	if (retryAfterMsMatch) {
 		return Math.max(0, Number(retryAfterMsMatch[1]));
 	}
 
-	const retryAfterMatch = /retry-after\s*[:=]\s*([^\s,;]+)/i.exec(errorMessage);
+	const retryAfterMatch = RETRY_AFTER_PATTERN.exec(errorMessage);
 	if (retryAfterMatch) {
 		const value = retryAfterMatch[1];
 		const seconds = Number(value);
@@ -111,7 +116,7 @@ export function parseRetryAfterMsFromString(errorMessage: string): number | unde
 		}
 	}
 
-	const resetMsMatch = /x-ratelimit-reset-ms\s*[:=]\s*(\d+)/i.exec(errorMessage);
+	const resetMsMatch = RESET_MS_PATTERN.exec(errorMessage);
 	if (resetMsMatch) {
 		const resetMs = Number(resetMsMatch[1]);
 		if (!Number.isNaN(resetMs)) {
@@ -122,7 +127,7 @@ export function parseRetryAfterMsFromString(errorMessage: string): number | unde
 		}
 	}
 
-	const resetMatch = /x-ratelimit-reset\s*[:=]\s*(\d+)/i.exec(errorMessage);
+	const resetMatch = RESET_PATTERN.exec(errorMessage);
 	if (resetMatch) {
 		const resetSeconds = Number(resetMatch[1]);
 		if (!Number.isNaN(resetSeconds)) {

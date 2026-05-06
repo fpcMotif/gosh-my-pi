@@ -25,10 +25,6 @@ export interface BashControllerContext {
  * in-flight commands' abort controllers, queueing bash messages emitted
  * during streaming so they don't break tool_use/tool_result ordering, and
  * flushing the queue before the next prompt.
- *
- * Extracted from `AgentSession` to give the cluster a deletion-test seam:
- * five public methods + two state fields now live behind one field on the
- * session.
  */
 export class BashController {
 	#ctx: BashControllerContext;

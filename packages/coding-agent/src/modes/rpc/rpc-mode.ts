@@ -147,7 +147,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		return { id, type: "response", command, success: true, data } as RpcResponse;
 	};
 
-	const error = (id: string | undefined, command: string, message: string): RpcResponse => {
+	const errorResp = (id: string | undefined, command: string, message: string): RpcResponse => {
 		return { id, type: "response", command, success: false, error: message };
 	};
 
@@ -365,13 +365,13 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			// ExtensionActions
 			{
 				sendMessage: (message, options) => {
-					session.sendCustomMessage(message, options).catch(error => {
-						output(error(undefined, "extension_send", error.message));
+					session.sendCustomMessage(message, options).catch((error: Error) => {
+						output(errorResp(undefined, "extension_send", error.message));
 					});
 				},
 				sendUserMessage: (content, options) => {
-					session.sendUserMessage(content, options).catch(error => {
-						output(error(undefined, "extension_send_user", error.message));
+					session.sendUserMessage(content, options).catch((error: Error) => {
+						output(errorResp(undefined, "extension_send_user", error.message));
 					});
 				},
 				appendEntry: (customType, data) => {
@@ -459,10 +459,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		const id = command.id;
 
 		switch (command.type) {
-			// =================================================================
-			// Prompting
-			// =================================================================
-
 			case "prompt": {
 				// Don't await - events will stream
 				// Extension commands are executed immediately, file prompt templates are expanded
@@ -472,7 +468,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 						images: command.images,
 						streamingBehavior: command.streamingBehavior,
 					})
-					.catch(error => output(error(id, "prompt", error.message)));
+					.catch((error: Error) => output(errorResp(id, "prompt", error.message)));
 				return success(id, "prompt");
 			}
 
@@ -495,7 +491,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				await session.abort();
 				session
 					.prompt(command.message, { images: command.images })
-					.catch(error => output(error(id, "abort_and_prompt", error.message)));
+					.catch((error: Error) => output(errorResp(id, "abort_and_prompt", error.message)));
 				return success(id, "abort_and_prompt");
 			}
 
@@ -507,10 +503,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				const cancelled = !(await session.newSession(options));
 				return success(id, "new_session", { cancelled });
 			}
-
-			// =================================================================
-			// State
-			// =================================================================
 
 			case "get_state": {
 				const state: RpcSessionState = {
@@ -550,15 +542,11 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return success(id, "set_host_tools", { toolNames: tools.map(tool => tool.name) });
 			}
 
-			// =================================================================
-			// Model
-			// =================================================================
-
 			case "set_model": {
 				const models = session.getAvailableModels();
 				const model = models.find(m => m.provider === command.provider && m.id === command.modelId);
 				if (!model) {
-					return error(id, "set_model", `Model not found: ${command.provider}/${command.modelId}`);
+					return errorResp(id, "set_model", `Model not found: ${command.provider}/${command.modelId}`);
 				}
 				await session.setModel(model);
 				return success(id, "set_model", model);
@@ -577,10 +565,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return success(id, "get_available_models", { models });
 			}
 
-			// =================================================================
-			// Thinking
-			// =================================================================
-
 			case "set_thinking_level": {
 				session.setThinkingLevel(command.level);
 				return success(id, "set_thinking_level");
@@ -593,10 +577,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				}
 				return success(id, "cycle_thinking_level", { level });
 			}
-
-			// =================================================================
-			// Queue Modes
-			// =================================================================
 
 			case "set_steering_mode": {
 				session.setSteeringMode(command.mode);
@@ -613,10 +593,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return success(id, "set_interrupt_mode");
 			}
 
-			// =================================================================
-			// Compaction
-			// =================================================================
-
 			case "compact": {
 				const result = await session.compact(command.customInstructions);
 				return success(id, "compact", result);
@@ -626,10 +602,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				session.setAutoCompactionEnabled(command.enabled);
 				return success(id, "set_auto_compaction");
 			}
-
-			// =================================================================
-			// Retry
-			// =================================================================
 
 			case "set_auto_retry": {
 				session.setAutoRetryEnabled(command.enabled);
@@ -641,10 +613,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return success(id, "abort_retry");
 			}
 
-			// =================================================================
-			// Bash
-			// =================================================================
-
 			case "bash": {
 				const result = await session.executeBash(command.command);
 				return success(id, "bash", result);
@@ -654,10 +622,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				session.abortBash();
 				return success(id, "abort_bash");
 			}
-
-			// =================================================================
-			// Session
-			// =================================================================
 
 			case "get_session_stats": {
 				const stats = session.getSessionStats();
@@ -692,18 +656,14 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			case "set_session_name": {
 				const name = command.name.trim();
 				if (!name) {
-					return error(id, "set_session_name", "Session name cannot be empty");
+					return errorResp(id, "set_session_name", "Session name cannot be empty");
 				}
 				const applied = await session.setSessionName(name, "user");
 				if (!applied) {
-					return error(id, "set_session_name", "Session name cannot be empty");
+					return errorResp(id, "set_session_name", "Session name cannot be empty");
 				}
 				return success(id, "set_session_name");
 			}
-
-			// =================================================================
-			// Messages
-			// =================================================================
 
 			case "get_messages": {
 				return success(id, "get_messages", { messages: session.messages });
@@ -711,7 +671,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			default: {
 				const unknownCommand = command as { type: string };
-				return error(undefined, unknownCommand.type, `Unknown command: ${unknownCommand.type}`);
+				return errorResp(undefined, unknownCommand.type, `Unknown command: ${unknownCommand.type}`);
 			}
 		}
 	};
@@ -757,8 +717,9 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			// Check for deferred shutdown request (idle between commands)
 			await checkShutdownRequested();
-		} catch (error: any) {
-			output(error(undefined, "parse", `Failed to parse command: ${error.message}`));
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			output(errorResp(undefined, "parse", `Failed to parse command: ${message}`));
 		}
 	}
 

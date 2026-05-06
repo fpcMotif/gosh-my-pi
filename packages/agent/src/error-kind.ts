@@ -33,10 +33,7 @@ export type AgentErrorKind =
  *   3. Transient (transport / envelope / rate / capacity / 5xx)
  *   4. Fatal otherwise
  */
-export function classifyAssistantError(
-	message: AssistantMessage,
-	contextWindow?: number,
-): AgentErrorKind | undefined {
+export function classifyAssistantError(message: AssistantMessage, contextWindow?: number): AgentErrorKind | undefined {
 	if (message.stopReason !== "error") return undefined;
 	const errorMessage = message.errorMessage;
 	if (errorMessage === null || errorMessage === undefined || errorMessage === "") {
@@ -44,19 +41,16 @@ export function classifyAssistantError(
 	}
 
 	if (isContextOverflow(message, contextWindow)) {
-		const usedTokens =
-			contextWindow !== null && contextWindow !== undefined && contextWindow !== 0
-				? message.usage.input + message.usage.cacheRead + message.usage.cacheWrite
-				: undefined;
-		return usedTokens !== undefined && usedTokens > contextWindow!
-			? { kind: "context_overflow", usedTokens }
-			: { kind: "context_overflow" };
+		if (contextWindow === null || contextWindow === undefined || contextWindow === 0) {
+			return { kind: "context_overflow" };
+		}
+		const usedTokens = message.usage.input + message.usage.cacheRead + message.usage.cacheWrite;
+		return usedTokens > contextWindow ? { kind: "context_overflow", usedTokens } : { kind: "context_overflow" };
 	}
 
 	if (isUsageLimitError(errorMessage)) {
 		const retryAfterMs =
-			parseRetryAfterMsFromString(errorMessage) ??
-			calculateRateLimitBackoffMs(parseRateLimitReason(errorMessage));
+			parseRetryAfterMsFromString(errorMessage) ?? calculateRateLimitBackoffMs(parseRateLimitReason(errorMessage));
 		return { kind: "usage_limit", retryAfterMs };
 	}
 
