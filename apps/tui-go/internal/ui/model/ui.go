@@ -70,9 +70,8 @@ const (
 	compactModeHeightBreakpoint = 30
 )
 
-// Minimum terminal size below which the TUI refuses to render and shows a
-// centred "too small" banner. Tracks Q8 in
-// /Users/martinfan/.claude/plans/dd-an-apps-tui-go-2-wondrous-cookie.md.
+// Minimum terminal size below which the TUI shows a "too small" banner
+// instead of attempting to render the full layout.
 const (
 	minViewportWidth  = 60
 	minViewportHeight = 10
@@ -2281,32 +2280,14 @@ func (m *UI) View() tea.View {
 	return v
 }
 
-// trapLocalSlash intercepts a small set of slash commands that gmp-tui-go
-// owns rather than forwarding to the omp agent. Returns (cmd, true) when
-// the input was handled locally; (nil, false) when it should pass through
-// to AgentRun as ordinary prompt text.
-//
-// Trapped commands (Q5 in the plan):
-//
-//	/quit, /exit  → quit the TUI cleanly
-//	/help         → print a one-shot info banner; full palette is "/" or Ctrl+P
-//	/clear        → clear the prompt textarea (transcript state is owned by
-//	                the agent and is intentionally not reset from here)
-//	/debug        → placeholder until the Ctrl+L debug overlay lands; for
-//	                now points the operator at ~/.gmp/tui.log
-//
-// Anything else starting with "/" passes through unchanged. omp's
-// slash-command-builtin-registry handles /compact, /session, /usage,
-// /model, etc.
+// trapLocalSlash handles a small set of slash commands locally instead of
+// forwarding them to the omp agent. Returns (cmd, true) when handled.
 func (m *UI) trapLocalSlash(content string) (tea.Cmd, bool) {
 	raw := strings.TrimSpace(content)
 	if !strings.HasPrefix(raw, "/") {
 		return nil, false
 	}
-	head := raw
-	if i := strings.IndexAny(raw, " \t\n"); i >= 0 {
-		head = raw[:i]
-	}
+	head, _, _ := strings.Cut(raw, " ")
 	switch head {
 	case "/quit", "/exit":
 		return tea.Quit, true
