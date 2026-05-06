@@ -260,29 +260,32 @@ func resolveOmpBackend(cmd *cobra.Command) []string {
 }
 
 // setupOmpLogging configures slog to write to ~/.gmp/tui.log via the
-// shared crushlog rotator. When debug is true, log level is DEBUG and a
-// secondary text handler mirrors output to stderr — safe because Bubble
-// Tea owns stdout, leaving stderr free. The shared rotator uses sync.Once
-// internally so calling this twice is a no-op.
+// shared crushlog rotator and returns an io.Writer for the omp
+// subprocess's stderr (~/.gmp/omp.log). When debug is true, both
+// streams also tee to os.Stderr — safe because Bubble Tea owns stdout,
+// leaving stderr free. The shared rotator uses sync.Once internally so
+// calling this twice is a no-op.
 //
-// Falls back to no-op (caller still has slog.DiscardHandler from
-// Execute) when ~ can't be resolved.
-func setupOmpLogging(debug bool) error {
+// On failure to resolve ~ or create the log dir, returns os.Stderr as
+// the subprocess writer (better than io.Discard: panics and auth
+// failures still surface to the operator).
+func setupOmpLogging(debug bool) (io.Writer, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("resolve home dir: %w", err)
+		return os.Stderr, fmt.Errorf("resolve home dir: %w", err)
 	}
 	logDir := filepath.Join(home, ".gmp")
 	if err := os.MkdirAll(logDir, 0o700); err != nil {
-		return fmt.Errorf("create %s: %w", logDir, err)
+		return os.Stderr, fmt.Errorf("create %s: %w", logDir, err)
 	}
-	logFile := filepath.Join(logDir, "tui.log")
+	tuiLogFile := filepath.Join(logDir, "tui.log")
 	if debug {
-		crushlog.Setup(logFile, true, os.Stderr)
+		crushlog.Setup(tuiLogFile, true, os.Stderr)
 	} else {
-		crushlog.Setup(logFile, false)
+		crushlog.Setup(tuiLogFile, false)
 	}
-	return nil
+	ompLogFile := filepath.Join(logDir, "omp.log")
+	return crushlog.SubprocessWriter(ompLogFile, debug), nil
 }
 
 // siblingOmpPath returns the absolute path of an `omp` binary sitting next
@@ -309,9 +312,12 @@ func setupOmpWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) 
 		return nil, nil, err
 	}
 	debug, _ := cmd.Flags().GetBool("debug")
-	if err := setupOmpLogging(debug); err != nil {
+	ompStderr, err := setupOmpLogging(debug)
+	if err != nil {
 		// Non-fatal: log setup failures fall back to slog default. Surface
 		// to stderr so the operator sees it, but don't block the TUI.
+		// ompStderr is os.Stderr in the failure path — agent diagnostics
+		// stay visible.
 		fmt.Fprintf(os.Stderr, "gmp-tui-go: warning: log setup failed: %v\n", err)
 	}
 	sessionID, _ := cmd.Flags().GetString("session")
@@ -329,7 +335,7 @@ func setupOmpWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) 
 		Args:       args,
 		Cwd:        cwd,
 		Env:        os.Environ(),
-		Stderr:     io.Discard,
+		Stderr:     ompStderr,
 	})
 	if err != nil {
 		return nil, nil, err

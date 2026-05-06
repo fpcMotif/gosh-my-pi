@@ -63,6 +63,25 @@ func Initialized() bool {
 	return initialized.Load()
 }
 
+// SubprocessWriter returns a rotating io.Writer suitable for capturing
+// a subprocess's stderr stream. Independent of Setup — each call yields
+// its own lumberjack rotator, so callers can keep one log per child
+// process. When debug is true, output is teed to os.Stderr so the
+// operator sees diagnostics live without having to tail the file.
+func SubprocessWriter(logFile string, debug bool) io.Writer {
+	rotator := &lumberjack.Logger{
+		Filename:   logFile,
+		MaxSize:    10,
+		MaxBackups: 0,
+		MaxAge:     30,
+		Compress:   false,
+	}
+	if debug {
+		return io.MultiWriter(rotator, os.Stderr)
+	}
+	return rotator
+}
+
 func RecoverPanic(name string, cleanup func()) {
 	if r := recover(); r != nil {
 		event.Error(r, "panic", true, "name", name)
