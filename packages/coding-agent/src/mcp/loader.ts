@@ -6,7 +6,7 @@
 import { logger } from "@oh-my-pi/pi-utils";
 import type { LoadedCustomTool } from "../extensibility/custom-tools/types";
 import { AgentStorage } from "../session/agent-storage";
-import type { AuthStorage } from "../session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import { type MCPLoadResult, MCPManager } from "./manager";
 import { MCPToolCache } from "./tool-cache";
 

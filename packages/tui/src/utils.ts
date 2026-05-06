@@ -7,7 +7,18 @@ import {
 	wrapTextWithAnsi as nativeWrapTextWithAnsi,
 	type SliceResult,
 } from "@oh-my-pi/pi-natives";
-import { getDefaultTabWidth, getIndentation } from "@oh-my-pi/pi-utils";
+import { getDefaultTabWidth, getIndentation, padding, visibleWidth } from "@oh-my-pi/pi-utils";
+
+// Pure text utilities (`padding`, `replaceTabs`, `visibleWidth`) live in
+// `@oh-my-pi/pi-utils` so they can be used without dragging in the pi-natives
+// addon. Re-exported here for backward compat with the ~150 files that
+// historically imported them from pi-tui — new code should import from
+// pi-utils directly. pi-tui is being phased out (candidate #3).
+//
+// `truncateToWidth`, `wrapTextWithAnsi`, and `Ellipsis` stay in pi-tui because
+// they're native-addon-coupled — moving them to pi-utils would force every
+// pi-utils consumer to eagerly load pi-natives at module-init time.
+export { padding, replaceTabs, visibleWidth } from "@oh-my-pi/pi-utils";
 
 export { Ellipsis } from "@oh-my-pi/pi-natives";
 
@@ -45,30 +56,11 @@ export function extractSegments(
 	return nativeExtractSegments(line, beforeEnd, afterStart, afterLen, strictAfter, getDefaultTabWidth());
 }
 
-// Pre-allocated space buffer for padding
-const SPACE_BUFFER = " ".repeat(512);
-
 /**
  * Tab width in columns for `file`, using `process.cwd()` as the project root for relative paths.
  */
 export function getIndentationNoescape(file?: string): number {
 	return getIndentation(file, process.cwd());
-}
-
-/*
- * Replace tabs with configured spacing for consistent rendering.
- */
-export function replaceTabs(text: string, file?: string): string {
-	return text.replaceAll("\t", " ".repeat(getIndentation(file)));
-}
-
-/**
- * Returns a string of n spaces. Uses a pre-allocated buffer for efficiency.
- */
-export function padding(n: number): string {
-	if (n <= 0) return "";
-	if (n <= 512) return SPACE_BUFFER.slice(0, n);
-	return " ".repeat(n);
 }
 
 // Grapheme segmenter (shared instance)
@@ -102,14 +94,6 @@ export function visibleWidthRaw(str: string): number {
 		return str.length + tabLength;
 	}
 	return Bun.stringWidth(str) + tabLength;
-}
-
-/**
- * Calculate the visible width of a string in terminal columns.
- */
-export function visibleWidth(str: string): number {
-	if (!str) return 0;
-	return visibleWidthRaw(str);
 }
 
 const makeBoolArray = (chars: string): ReadonlyArray<boolean> => {

@@ -2,7 +2,7 @@ import { getOAuthProviders, type OAuthProviderInfo } from "@oh-my-pi/pi-ai";
 import { Container, matchesKey, Spacer, TruncatedText } from "@oh-my-pi/pi-tui";
 import { theme } from "../../modes/theme/theme";
 import { matchesSelectCancel } from "../../modes/utils/keybinding-matchers";
-import type { AuthStorage } from "../../session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import { DynamicBorder } from "./dynamic-border";
 /**
  * Component that renders an OAuth provider selector.

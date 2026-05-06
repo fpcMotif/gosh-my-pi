@@ -7,6 +7,7 @@ import {
 	type Tool,
 } from "@oh-my-pi/pi-ai";
 import type { EventStream } from "@oh-my-pi/pi-ai";
+import { classifyAssistantError } from "../error-kind";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, AnyAgentTool, StreamFn } from "../types";
 
 const INTENT_FIELD = "intent";
@@ -37,6 +38,7 @@ export async function streamAssistantResponse(
 				false,
 				context,
 				stream,
+				config,
 			);
 		}
 	}
@@ -104,10 +106,10 @@ async function processAssistantStream(
 					break;
 
 				case "done":
-					return finishPartialMessage(event.message, addedPartial, context, stream);
+					return finishPartialMessage(event.message, addedPartial, context, stream, config);
 
 				case "error":
-					return finishPartialMessage(event.error, addedPartial, context, stream);
+					return finishPartialMessage(event.error, addedPartial, context, stream, config);
 
 				default:
 					if (partialMessage) {
@@ -130,6 +132,7 @@ async function processAssistantStream(
 			addedPartial,
 			context,
 			stream,
+			config,
 		);
 	}
 
@@ -140,6 +143,7 @@ async function processAssistantStream(
 		addedPartial,
 		context,
 		stream,
+		config,
 	);
 }
 
@@ -169,6 +173,7 @@ function finishPartialMessage(
 	addedPartial: boolean,
 	context: AgentContext,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
+	config: AgentLoopConfig,
 ): AssistantMessage {
 	if (addedPartial) {
 		context.messages[context.messages.length - 1] = message;
@@ -176,7 +181,11 @@ function finishPartialMessage(
 		context.messages.push(message);
 		stream.push({ type: "message_start", message: { ...message } });
 	}
-	stream.push({ type: "message_end", message });
+	stream.push({
+		type: "message_end",
+		message,
+		errorKind: classifyAssistantError(message, config.model?.contextWindow),
+	});
 	return message;
 }
 
@@ -192,6 +201,7 @@ function handleAbortedStream(
 		addedPartial,
 		context,
 		stream,
+		config,
 	);
 }
 

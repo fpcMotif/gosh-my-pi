@@ -6,7 +6,7 @@ import { TempDir } from "@oh-my-pi/pi-utils";
 import { Settings } from "../src/config/settings";
 import { createAgentSession } from "../src/sdk";
 import type { AgentSession } from "../src/session/agent-session";
-import { AuthStorage } from "../src/session/auth-storage";
+import { AuthStorage } from "@oh-my-pi/pi-ai";
 import { SessionManager } from "../src/session/session-manager";
 
 function createAssistantMessage(text: string): AssistantMessage {

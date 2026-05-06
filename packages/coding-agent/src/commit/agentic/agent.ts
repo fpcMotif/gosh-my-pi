@@ -9,7 +9,7 @@ import type { Settings } from "../../config/settings";
 import { getMarkdownTheme } from "../../modes/theme/theme";
 import { createAgentSession } from "../../sdk";
 import type { AgentSessionEvent } from "../../session/agent-session";
-import type { AuthStorage } from "../../session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import agentUserPrompt from "./prompts/session-user.md" with { type: "text" };
 import agentSystemPrompt from "./prompts/system.md" with { type: "text" };
 import type { CommitAgentState } from "./state";

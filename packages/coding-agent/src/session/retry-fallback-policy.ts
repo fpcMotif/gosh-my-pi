@@ -1,5 +1,5 @@
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { calculateRateLimitBackoffMs, parseRateLimitReason, type Model } from "@oh-my-pi/pi-ai";
+import type { AgentErrorKind, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import type { Model } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { ModelRegistry } from "../config/model-registry";
 import { formatModelString, parseModelString } from "../config/model-resolver";
@@ -112,12 +112,14 @@ export class RetryFallbackPolicy {
 		return this.options.modelRegistry.isSelectorSuppressed(selector.raw);
 	}
 
-	noteCooldown(currentSelector: string, retryAfterMs: number | undefined, errorMessage: string): void {
-		let cooldownMs = retryAfterMs;
-		if (cooldownMs === null || cooldownMs === undefined || cooldownMs === 0 || cooldownMs <= 0) {
-			const reason = parseRateLimitReason(errorMessage);
-			cooldownMs = reason === "UNKNOWN" ? 5 * 60 * 1000 : calculateRateLimitBackoffMs(reason);
-		}
+	noteCooldown(currentSelector: string, errorKind: AgentErrorKind | undefined): void {
+		const candidate =
+			errorKind?.kind === "usage_limit"
+				? errorKind.retryAfterMs
+				: errorKind?.kind === "transient"
+					? errorKind.retryAfterMs
+					: undefined;
+		const cooldownMs = candidate !== undefined && candidate > 0 ? candidate : 5 * 60 * 1000;
 		this.options.modelRegistry.suppressSelector(currentSelector, Date.now() + cooldownMs);
 	}
 

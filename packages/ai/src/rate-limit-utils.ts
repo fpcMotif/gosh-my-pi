@@ -3,6 +3,8 @@
  * Ported from opencode-antigravity-auth plugin for consistency.
  */
 
+import { isUnexpectedSocketCloseMessage } from "./utils/retry";
+
 export type RateLimitReason =
 	| "QUOTA_EXHAUSTED"
 	| "RATE_LIMIT_EXCEEDED"
@@ -81,4 +83,96 @@ const USAGE_LIMIT_PATTERN =
 
 export function isUsageLimitError(errorMessage: string): boolean {
 	return USAGE_LIMIT_PATTERN.test(errorMessage);
+}
+
+/**
+ * Parse a literal Retry-After value from an error string. Recognizes:
+ *   - `retry-after-ms: <ms>`
+ *   - `retry-after: <seconds>` or `retry-after: <http-date>`
+ *   - `x-ratelimit-reset-ms: <ms>` or `x-ratelimit-reset: <seconds>` (epoch or relative)
+ */
+export function parseRetryAfterMsFromString(errorMessage: string): number | undefined {
+	const now = Date.now();
+	const retryAfterMsMatch = /retry-after-ms\s*[:=]\s*(\d+)/i.exec(errorMessage);
+	if (retryAfterMsMatch) {
+		return Math.max(0, Number(retryAfterMsMatch[1]));
+	}
+
+	const retryAfterMatch = /retry-after\s*[:=]\s*([^\s,;]+)/i.exec(errorMessage);
+	if (retryAfterMatch) {
+		const value = retryAfterMatch[1];
+		const seconds = Number(value);
+		if (!Number.isNaN(seconds)) {
+			return Math.max(0, seconds * 1000);
+		}
+		const dateMs = Date.parse(value);
+		if (!Number.isNaN(dateMs)) {
+			return Math.max(0, dateMs - now);
+		}
+	}
+
+	const resetMsMatch = /x-ratelimit-reset-ms\s*[:=]\s*(\d+)/i.exec(errorMessage);
+	if (resetMsMatch) {
+		const resetMs = Number(resetMsMatch[1]);
+		if (!Number.isNaN(resetMs)) {
+			if (resetMs > 1_000_000_000_000) {
+				return Math.max(0, resetMs - now);
+			}
+			return Math.max(0, resetMs);
+		}
+	}
+
+	const resetMatch = /x-ratelimit-reset\s*[:=]\s*(\d+)/i.exec(errorMessage);
+	if (resetMatch) {
+		const resetSeconds = Number(resetMatch[1]);
+		if (!Number.isNaN(resetSeconds)) {
+			if (resetSeconds > 1_000_000_000) {
+				return Math.max(0, resetSeconds * 1000 - now);
+			}
+			return Math.max(0, resetSeconds * 1000);
+		}
+	}
+
+	return undefined;
+}
+
+/** Reason discriminator on a transient error classification. */
+export type TransientReason = "envelope" | "transport" | "rate_limit" | "model_capacity" | "server_error";
+
+const ANTHROPIC_ENVELOPE_PATTERN = /anthropic stream envelope error:/i;
+const ANTHROPIC_ENVELOPE_BEFORE_START = /before message_start/i;
+
+/**
+ * Classify a transient error message into a {@link TransientReason}, or `undefined`
+ * if the message is not transient. Used by the retry-policy emission boundary
+ * (pi-agent-core) and by the auto-compaction `Error`-throwing retry path.
+ */
+export function classifyTransient(errorMessage: string): TransientReason | undefined {
+	if (ANTHROPIC_ENVELOPE_PATTERN.test(errorMessage) && ANTHROPIC_ENVELOPE_BEFORE_START.test(errorMessage)) {
+		return "envelope";
+	}
+
+	const reason = parseRateLimitReason(errorMessage);
+	if (reason === "RATE_LIMIT_EXCEEDED") return "rate_limit";
+	if (reason === "MODEL_CAPACITY_EXHAUSTED") return "model_capacity";
+	if (reason === "SERVER_ERROR") return "server_error";
+
+	if (isUnexpectedSocketCloseMessage(errorMessage)) {
+		return "transport";
+	}
+
+	if (
+		/overloaded|provider.?returned.?error|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|timed? out|timeout|terminated|retry delay|stream stall/i.test(
+			errorMessage,
+		)
+	) {
+		return "transport";
+	}
+
+	return undefined;
+}
+
+/** Convenience: is this error message classifiable as transient (any reason)? */
+export function isTransientErrorMessage(errorMessage: string): boolean {
+	return classifyTransient(errorMessage) !== undefined;
 }

@@ -41,8 +41,22 @@ export * from "./modes/theme/theme";
 // SDK for programmatic usage
 export * from "./sdk";
 export * from "./session/agent-session";
-// Auth and model registry
-export * from "./session/auth-storage";
+// Auth credentials — the implementation lives in pi-ai (it has its own CLI
+// and OAuth provider integrations); coding-agent re-exports for backwards
+// compatibility with downstream packages (swarm-extension, etc.) that
+// historically imported `AuthStorage` from `@oh-my-pi/pi-coding-agent`.
+export type {
+	ApiKeyCredential,
+	AuthCredential,
+	AuthCredentialEntry,
+	AuthCredentialStore,
+	AuthStorageData,
+	AuthStorageOptions,
+	OAuthCredential,
+	SerializedAuthStorage,
+	StoredAuthCredential,
+} from "@oh-my-pi/pi-ai";
+export { AuthStorage } from "@oh-my-pi/pi-ai";
 // Compaction
 export * from "./session/compaction";
 export * from "./session/messages";

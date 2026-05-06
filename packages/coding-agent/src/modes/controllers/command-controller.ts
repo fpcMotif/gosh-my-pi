@@ -28,7 +28,7 @@ import { computeContextBreakdown, renderContextUsage } from "../../modes/utils/c
 import { buildHotkeysMarkdown } from "../../modes/utils/hotkeys-markdown";
 import { buildToolsMarkdown } from "../../modes/utils/tools-markdown";
 import type { AsyncJobSnapshotItem } from "../../session/agent-session";
-import type { AuthStorage } from "../../session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import type { NewSessionOptions } from "../../session/session-manager";
 import { outputMeta } from "../../tools/output-meta";
 import { resolveToCwd, stripOuterDoubleQuotes } from "../../tools/path-utils";

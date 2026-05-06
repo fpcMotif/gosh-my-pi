@@ -4,10 +4,15 @@
  * Used for embedding the agent in other applications.
  * Receives commands as JSON on stdin, outputs events and responses as JSON on stdout.
  *
+ * Wire vocabulary: omp-rpc/v1 (see ./wire/README.md). Outbound events are
+ * translated through ./wire/translate.ts; internal-only events are dropped.
+ * Commands are documented as v1 by reference (see rpc-types.ts).
+ *
  * Protocol:
+ * - Handshake: server emits {type: "ready", schema: "omp-rpc/v1"} on startup
  * - Commands: JSON objects with `type` field, optional `id` for correlation
  * - Responses: JSON objects with `type: "response"`, `command`, `success`, and optional `data`/`error`
- * - Events: AgentSessionEvent objects streamed as they occur
+ * - Events: WireEventV1 (10 variants), translated from internal AgentSessionEvent
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
 import { $env, readJsonl, Snowflake } from "@oh-my-pi/pi-utils";
@@ -20,6 +25,7 @@ import { runExtensionCompact, runExtensionSetModel } from "../../extensibility/e
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { isRpcHostToolResult, isRpcHostToolUpdate, RpcHostToolBridge } from "./host-tools";
+import { RequestCorrelator } from "./request-correlator";
 import type {
 	RpcCommand,
 	RpcExtensionUIRequest,
@@ -30,18 +36,13 @@ import type {
 	RpcResponse,
 	RpcSessionState,
 } from "./rpc-types";
+import { toWireEvent } from "./wire/translate";
+import { OMP_RPC_SCHEMA_V1, type WireFrame } from "./wire/v1";
 
 // Re-export types for consumers
 export type * from "./rpc-types";
 
-export type PendingExtensionRequest = {
-	resolve: (response: RpcExtensionUIResponse) => void;
-	reject: (error: Error) => void;
-};
-
-type RpcOutput = (
-	obj: RpcResponse | RpcExtensionUIRequest | RpcHostToolCallRequest | RpcHostToolCancelRequest | object,
-) => void;
+type RpcOutput = (frame: WireFrame) => void;
 
 function normalizeHostToolDefinitions(tools: RpcHostToolDefinition[]): RpcHostToolDefinition[] {
 	return tools.map((tool, index) => {
@@ -86,58 +87,26 @@ function shouldEmitRpcTitles(): boolean {
 	return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
-export function requestRpcEditor(
-	pendingRequests: Map<string, PendingExtensionRequest>,
+export async function requestRpcEditor(
+	correlator: RequestCorrelator,
 	output: RpcOutput,
 	title: string,
 	prefill?: string,
 	dialogOptions?: ExtensionUIDialogOptions,
 	editorOptions?: { promptStyle?: boolean },
 ): Promise<string | undefined> {
-	if (dialogOptions?.signal !== undefined && dialogOptions?.signal.aborted) return Promise.resolve(undefined);
-
-	const id = Snowflake.next() as string;
-	const { promise, resolve, reject } = Promise.withResolvers<string | undefined>();
-	let settled = false;
-
-	const cleanup = () => {
-		dialogOptions?.signal?.removeEventListener("abort", onAbort);
-		pendingRequests.delete(id);
-	};
-	const finish = (value: string | undefined) => {
-		if (settled) return;
-		settled = true;
-		cleanup();
-		resolve(value);
-	};
-	const fail = (error: Error) => {
-		if (settled) return;
-		settled = true;
-		cleanup();
-		reject(error);
-	};
-	const onAbort = () => {
-		output({
-			type: "extension_ui_request",
-			id: Snowflake.next() as string,
-			method: "cancel",
-			targetId: id,
-		} as RpcExtensionUIRequest);
-		finish(undefined);
-	};
-
-	dialogOptions?.signal?.addEventListener("abort", onAbort, { once: true });
-	pendingRequests.set(id, {
-		resolve: response => {
-			if ("cancelled" in response && response.cancelled) {
-				finish(undefined);
-			} else if ("value" in response) {
-				finish(response.value);
-			} else {
-				finish(undefined);
-			}
+	const { id, promise } = correlator.register<RpcExtensionUIResponse | undefined>({
+		signal: dialogOptions?.signal,
+		defaultValue: undefined,
+		onAbort: () => {
+			// Notify the host to dismiss the editor; correlator already cleans up locally.
+			output({
+				type: "extension_ui_request",
+				id: Snowflake.next() as string,
+				method: "cancel",
+				targetId: id,
+			} as RpcExtensionUIRequest);
 		},
-		reject: fail,
 	});
 	output({
 		type: "extension_ui_request",
@@ -147,7 +116,11 @@ export function requestRpcEditor(
 		prefill,
 		promptStyle: editorOptions?.promptStyle,
 	} as RpcExtensionUIRequest);
-	return promise;
+	const response = await promise;
+	if (response === undefined) return undefined;
+	if ("cancelled" in response && response.cancelled) return undefined;
+	if ("value" in response) return response.value;
+	return undefined;
 }
 
 /**
@@ -155,10 +128,11 @@ export function requestRpcEditor(
  * Listens for JSON commands on stdin, outputs events and responses on stdout.
  */
 export async function runRpcMode(session: AgentSession): Promise<never> {
-	// Signal to RPC clients that the server is ready to accept commands
-	process.stdout.write(`${JSON.stringify({ type: "ready" })}\n`);
-	const output = (obj: RpcResponse | RpcExtensionUIRequest | object) => {
-		process.stdout.write(`${JSON.stringify(obj)}\n`);
+	// Signal to RPC clients that the server is ready, with the wire schema
+	// version. Hosts SHOULD verify schema === "omp-rpc/v1".
+	process.stdout.write(`${JSON.stringify({ type: "ready", schema: OMP_RPC_SCHEMA_V1 })}\n`);
+	const output = (frame: WireFrame) => {
+		process.stdout.write(`${JSON.stringify(frame)}\n`);
 	};
 	const emitRpcTitles = shouldEmitRpcTitles();
 
@@ -177,7 +151,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		return { id, type: "response", command, success: false, error: message };
 	};
 
-	const pendingExtensionRequests = new Map<string, PendingExtensionRequest>();
+	const extensionUIRequests = new RequestCorrelator();
 	const hostToolBridge = new RpcHostToolBridge(output);
 
 	// Shutdown request flag (wrapped in object to allow mutation with const)
@@ -188,52 +162,31 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	 */
 	class RpcExtensionUIContext implements ExtensionUIContext {
 		constructor(
-			private pendingRequests: Map<string, PendingExtensionRequest>,
-			private output: (obj: RpcResponse | RpcExtensionUIRequest | object) => void,
+			private correlator: RequestCorrelator,
+			private output: (frame: WireFrame) => void,
 		) {}
 
-		/** Helper for dialog methods with signal/timeout support */
-		#createDialogPromise<T>(
+		/**
+		 * Helper for dialog methods. Registers a correlated request, emits the
+		 * extension_ui_request frame, and parses the response when it arrives.
+		 * Signal abort and timeout are handled by the correlator.
+		 */
+		async #createDialogPromise<T>(
 			opts: ExtensionUIDialogOptions | undefined,
 			defaultValue: T,
 			request: Record<string, unknown>,
 			parseResponse: (response: RpcExtensionUIResponse) => T,
 		): Promise<T> {
-			if (opts?.signal !== undefined && opts?.signal.aborted) return Promise.resolve(defaultValue);
-
-			const id = Snowflake.next() as string;
-			const { promise, resolve, reject } = Promise.withResolvers<T>();
-			let timeoutId: NodeJS.Timeout | undefined;
-
-			const cleanup = () => {
-				if (timeoutId) clearTimeout(timeoutId);
-				opts?.signal?.removeEventListener("abort", onAbort);
-				this.pendingRequests.delete(id);
-			};
-
-			const onAbort = () => {
-				cleanup();
-				resolve(defaultValue);
-			};
-			opts?.signal?.addEventListener("abort", onAbort, { once: true });
-
-			if (opts?.timeout !== undefined) {
-				timeoutId = setTimeout(() => {
-					opts.onTimeout?.();
-					cleanup();
-					resolve(defaultValue);
-				}, opts.timeout);
-			}
-
-			this.pendingRequests.set(id, {
-				resolve: (response: RpcExtensionUIResponse) => {
-					cleanup();
-					resolve(parseResponse(response));
-				},
-				reject,
+			const { id, promise } = this.correlator.register<RpcExtensionUIResponse | undefined>({
+				signal: opts?.signal,
+				timeoutMs: opts?.timeout,
+				defaultValue: undefined,
+				onTimeout: () => opts?.onTimeout?.(),
 			});
 			this.output({ type: "extension_ui_request", id, ...request } as RpcExtensionUIRequest);
-			return promise;
+			const response = await promise;
+			if (response === undefined) return defaultValue;
+			return parseResponse(response);
 		}
 
 		select(title: string, options: string[], dialogOptions?: ExtensionUIDialogOptions): Promise<string | undefined> {
@@ -371,7 +324,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			dialogOptions?: ExtensionUIDialogOptions,
 			editorOptions?: { promptStyle?: boolean },
 		): Promise<string | undefined> {
-			return requestRpcEditor(this.pendingRequests, this.output, title, prefill, dialogOptions, editorOptions);
+			return requestRpcEditor(this.correlator, this.output, title, prefill, dialogOptions, editorOptions);
 		}
 
 		get theme(): Theme {
@@ -481,7 +434,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				},
 				compact: instructionsOrOptions => runExtensionCompact(session, instructionsOrOptions),
 			},
-			new RpcExtensionUIContext(pendingExtensionRequests, output),
+			new RpcExtensionUIContext(extensionUIRequests, output),
 		);
 		extensionRunner.onError(err => {
 			output({ type: "extension_error", extensionPath: err.extensionPath, event: err.event, error: err.error });
@@ -492,9 +445,13 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		});
 	}
 
-	// Output all agent events as JSON
+	// Translate internal AgentSessionEvent → v1 wire events. Internal-only
+	// events (auto_compaction_*, auto_retry_*, ttsr_*, todo_*, irc_message,
+	// retry_fallback_*) translate to null and are dropped — they remain
+	// available to in-process subscribers but never reach the wire.
 	session.subscribe(event => {
-		output(event);
+		const wire = toWireEvent(event);
+		if (wire !== null) output(wire);
 	});
 
 	// Handle a single command
@@ -776,13 +733,10 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	// Listen for JSON input using Bun's stdin
 	for await (const parsed of readJsonl(Bun.stdin.stream())) {
 		try {
-			// Handle extension UI responses
+			// Handle extension UI responses — route via correlator. Stale ids are no-ops.
 			if ((parsed as RpcExtensionUIResponse).type === "extension_ui_response") {
 				const response = parsed as RpcExtensionUIResponse;
-				const pending = pendingExtensionRequests.get(response.id);
-				if (pending) {
-					pending.resolve(response);
-				}
+				extensionUIRequests.resolve(response.id, response);
 				continue;
 			}
 

@@ -6,7 +6,7 @@ import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import type { AssistantMessage, Message, ProviderPayload, ProviderSessionState, Usage } from "@oh-my-pi/pi-ai/types";
 import { createOpenAIResponsesHistoryPayload } from "@oh-my-pi/pi-ai/utils";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
-import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import {
 	type SessionEntry,
 	SessionManager,
@@ -172,7 +172,7 @@ async function createSessionHarness(
 	const [{ createAgentSession }, { Settings }, { AuthStorage }] = await Promise.all([
 		import("@oh-my-pi/pi-coding-agent/sdk"),
 		import("@oh-my-pi/pi-coding-agent/config/settings"),
-		import("@oh-my-pi/pi-coding-agent/session/auth-storage"),
+		import("@oh-my-pi/pi-ai"),
 	]);
 	const authStorage = await AuthStorage.create(path.join(tempDir, `testauth-${Snowflake.next()}.db`));
 	authStorage.setRuntimeApiKey("openai", "test-key");

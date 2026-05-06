@@ -25,7 +25,7 @@ import submitReminderTemplate from "../prompts/system/subagent-yield-reminder.md
 import { AgentRegistry } from "../registry/agent-registry";
 import { createAgentSession, discoverAuthStorage } from "../sdk";
 import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
-import type { AuthStorage } from "../session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import { SessionManager } from "../session/session-manager";
 import { type ContextFileEntry, truncateTail } from "../tools";
 import { jtdToJsonSchema, normalizeSchema } from "../tools/jtd-to-json-schema";

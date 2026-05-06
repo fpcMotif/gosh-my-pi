@@ -1,4 +1,5 @@
 import type { AssistantMessage, ToolResultMessage } from "@oh-my-pi/pi-ai";
+import { classifyAssistantError } from "../error-kind";
 import type { AgentMessage, AgentEvent } from "../types";
 
 export function emitCursorSplitAssistantMessage(
@@ -11,7 +12,7 @@ export function emitCursorSplitAssistantMessage(
 	if (buffer.length === 0) {
 		clearStreamMessage();
 		appendMessage(assistantMessage);
-		emit({ type: "message_end", message: assistantMessage });
+		emit({ type: "message_end", message: assistantMessage, errorKind: classifyAssistantError(assistantMessage) });
 		return;
 	}
 
@@ -25,7 +26,7 @@ export function emitCursorSplitAssistantMessage(
 	if (fullText.length === 0 || splitPoint <= 0 || splitPoint >= fullText.length) {
 		clearStreamMessage();
 		appendMessage(assistantMessage);
-		emit({ type: "message_end", message: assistantMessage });
+		emit({ type: "message_end", message: assistantMessage, errorKind: classifyAssistantError(assistantMessage) });
 		for (const { toolResult } of buffer) {
 			emit({ type: "message_start", message: toolResult });
 			appendMessage(toolResult);
@@ -44,7 +45,7 @@ export function emitCursorSplitAssistantMessage(
 
 	clearStreamMessage();
 	appendMessage(preambleMessage);
-	emit({ type: "message_end", message: preambleMessage });
+	emit({ type: "message_end", message: preambleMessage, errorKind: classifyAssistantError(preambleMessage) });
 
 	for (const { toolResult } of buffer) {
 		emit({ type: "message_start", message: toolResult });
@@ -67,6 +68,10 @@ export function emitCursorSplitAssistantMessage(
 		};
 		emit({ type: "message_start", message: continuationMessage });
 		appendMessage(continuationMessage);
-		emit({ type: "message_end", message: continuationMessage });
+		emit({
+			type: "message_end",
+			message: continuationMessage,
+			errorKind: classifyAssistantError(continuationMessage),
+		});
 	}
 }

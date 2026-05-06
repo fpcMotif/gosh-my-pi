@@ -23,6 +23,8 @@ export * from "./snowflake";
 export * from "./stream";
 export * from "./tab-spacing";
 export * from "./temp";
+export * from "./terminal-id";
+export * from "./text-width";
 export * from "./type-guards";
 export * from "./which";
 

@@ -30,7 +30,7 @@ import { type Static, Type } from "@sinclair/typebox";
 import { type ConfigError, ConfigFile } from "../config";
 import { parseModelString, resolveProviderModelReference } from "../config/model-resolver";
 import { isValidThemeColor, type ThemeColor } from "../modes/theme/theme";
-import type { AuthStorage, OAuthCredential } from "../session/auth-storage";
+import type { AuthStorage, OAuthCredential } from "@oh-my-pi/pi-ai";
 import {
 	buildCanonicalModelIndex,
 	type CanonicalModelIndex,

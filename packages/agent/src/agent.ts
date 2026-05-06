@@ -15,6 +15,7 @@ import {
 	type ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
 import { agentLoop, agentLoopContinue } from "./agent-loop";
+import { classifyAssistantError } from "./error-kind";
 import {
 	AgentBusyError,
 	type AgentContext,
@@ -496,7 +497,11 @@ export class Agent {
 
 		this.appendMessage(errorMsg);
 		this.#state.error = errorMessage;
-		this.#emit({ type: "agent_end", messages: [errorMsg] });
+		this.#emit({
+			type: "agent_end",
+			messages: [errorMsg],
+			errorKind: classifyAssistantError(errorMsg as AssistantMessage, model.contextWindow),
+		});
 	}
 
 	#cleanupLoop() {

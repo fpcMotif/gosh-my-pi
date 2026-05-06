@@ -1,9 +1,22 @@
 import { type ResolvedThinkingLevel, ThinkingLevel } from "@oh-my-pi/pi-agent-core/thinking";
-import { clampThinkingLevelForModel, type Effort, THINKING_EFFORTS } from "@oh-my-pi/pi-ai/model-thinking";
-import type { Model } from "@oh-my-pi/pi-ai/types";
+import { type Effort, THINKING_EFFORTS } from "@oh-my-pi/pi-ai/model-thinking";
+
+// Re-export the canonical session-level thinking surface so existing
+// `import ... from "../thinking"` callers in coding-agent keep working.
+// New session-level resolution logic (parseThinkingLevel, toReasoningEffort,
+// resolveThinkingLevelForModel) lives in pi-agent-core/thinking.ts.
+export {
+	parseThinkingLevel,
+	resolveThinkingLevelForModel,
+	type ResolvedThinkingLevel,
+	ThinkingLevel,
+	toReasoningEffort,
+} from "@oh-my-pi/pi-agent-core/thinking";
 
 /**
- * Metadata used to render thinking selector values in the coding-agent UI.
+ * Display metadata used to render thinking selector values in the
+ * coding-agent UI. Pure presentation — kept here because pi-agent-core
+ * has no UI concerns.
  */
 export interface ThinkingLevelMetadata {
 	value: ThinkingLevel;
@@ -37,52 +50,20 @@ const THINKING_LEVEL_METADATA: Record<ThinkingLevel, ThinkingLevelMetadata> = {
 	},
 };
 
-const THINKING_LEVELS = new Set<string>([ThinkingLevel.Inherit, ThinkingLevel.Off, ...THINKING_EFFORTS]);
-const EFFORT_LEVELS = new Set<string>(THINKING_EFFORTS);
-
-/**
- * Parses a provider-facing effort value.
- */
-export function parseEffort(value: string | null | undefined): Effort | undefined {
-	return value !== undefined && value !== null && EFFORT_LEVELS.has(value) ? (value as Effort) : undefined;
-}
-
-/**
- * Parses an agent-local thinking selector.
- */
-export function parseThinkingLevel(value: string | null | undefined): ThinkingLevel | undefined {
-	return value !== undefined && value !== null && THINKING_LEVELS.has(value) ? (value as ThinkingLevel) : undefined;
-}
-
-/**
- * Returns display metadata for a thinking selector.
- */
+/** Returns display metadata for a thinking selector. */
 export function getThinkingLevelMetadata(level: ThinkingLevel): ThinkingLevelMetadata {
 	return THINKING_LEVEL_METADATA[level];
 }
 
-/**
- * Converts an agent-local selector into the effort sent to providers.
- */
-export function toReasoningEffort(level: ThinkingLevel | undefined): Effort | undefined {
-	if (level === undefined || level === ThinkingLevel.Off || level === ThinkingLevel.Inherit) {
-		return undefined;
-	}
-	return level;
-}
+const EFFORT_LEVELS = new Set<string>(THINKING_EFFORTS);
 
 /**
- * Resolves a selector against the current model while preserving explicit "off".
+ * Parse a CLI-input string into an {@link Effort}, or undefined when the
+ * input is not a recognized provider-facing effort level.
+ *
+ * Stays in coding-agent because it parses CLI input — pi-ai expects typed
+ * `Effort` values at its API boundary.
  */
-export function resolveThinkingLevelForModel(
-	model: Model | undefined,
-	level: ThinkingLevel | undefined,
-): ResolvedThinkingLevel | undefined {
-	if (level === undefined || level === ThinkingLevel.Inherit) {
-		return undefined;
-	}
-	if (level === ThinkingLevel.Off) {
-		return ThinkingLevel.Off;
-	}
-	return clampThinkingLevelForModel(model, level);
+export function parseEffort(value: string | null | undefined): Effort | undefined {
+	return value !== undefined && value !== null && EFFORT_LEVELS.has(value) ? (value as Effort) : undefined;
 }

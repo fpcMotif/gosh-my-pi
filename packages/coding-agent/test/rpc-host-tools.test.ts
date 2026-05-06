@@ -27,7 +27,9 @@ describe("RpcHostToolBridge", () => {
 	it("forwards host tool updates and results to the pending execution", async () => {
 		const frames: Array<RpcHostToolCallRequest | RpcHostToolCancelRequest> = [];
 		const bridge = new RpcHostToolBridge(frame => {
-			frames.push(frame);
+			if (frame.type === "host_tool_call" || frame.type === "host_tool_cancel") {
+				frames.push(frame as unknown as RpcHostToolCallRequest | RpcHostToolCancelRequest);
+			}
 		});
 		const [tool] = bridge.setTools([
 			{
@@ -83,7 +85,9 @@ describe("RpcHostToolBridge", () => {
 	it("emits a cancel frame when the host tool execution is aborted", async () => {
 		const frames: Array<RpcHostToolCallRequest | RpcHostToolCancelRequest> = [];
 		const bridge = new RpcHostToolBridge(frame => {
-			frames.push(frame);
+			if (frame.type === "host_tool_call" || frame.type === "host_tool_cancel") {
+				frames.push(frame as unknown as RpcHostToolCallRequest | RpcHostToolCancelRequest);
+			}
 		});
 		const [tool] = bridge.setTools([
 			{

@@ -18,6 +18,7 @@ import type {
 	ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
 import type { Static, TSchema } from "@sinclair/typebox";
+import type { AgentErrorKind } from "./error-kind";
 
 /** Stream function - can return sync or Promise for async config lookup */
 export type StreamFn = (
@@ -493,7 +494,7 @@ export interface AnyAgentTool extends Omit<AgentTool, "execute" | "renderCall" |
 export type AgentEvent =
 	// Agent lifecycle
 	| { type: "agent_start" }
-	| { type: "agent_end"; messages: AgentMessage[] }
+	| { type: "agent_end"; messages: AgentMessage[]; errorKind?: AgentErrorKind }
 	// Turn lifecycle - a turn is one assistant response + any tool calls/results
 	| { type: "turn_start" }
 	| { type: "turn_end"; message: AgentMessage; toolResults: ToolResultMessage[] }
@@ -501,7 +502,7 @@ export type AgentEvent =
 	| { type: "message_start"; message: AgentMessage }
 	// Only emitted for assistant messages during streaming
 	| { type: "message_update"; message: AgentMessage; assistantMessageEvent: AssistantMessageEvent }
-	| { type: "message_end"; message: AgentMessage }
+	| { type: "message_end"; message: AgentMessage; errorKind?: AgentErrorKind }
 	// Tool execution lifecycle
 	| {
 			type: "tool_execution_start";

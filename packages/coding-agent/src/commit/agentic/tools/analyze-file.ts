@@ -6,7 +6,7 @@ import type { NumstatEntry } from "../../../commit/types";
 import type { ModelRegistry } from "../../../config/model-registry";
 import type { Settings } from "../../../config/settings";
 import type { CustomTool, CustomToolContext } from "../../../extensibility/custom-tools/types";
-import type { AuthStorage } from "../../../session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import { TaskTool } from "../../../task";
 import type { TaskParams } from "../../../task/types";
 import type { ToolSession } from "../../../tools";

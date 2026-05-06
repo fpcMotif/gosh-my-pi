@@ -1,4 +1,5 @@
 import { EventStream, type AssistantMessage, type ToolResultMessage } from "@oh-my-pi/pi-ai";
+import { type AgentErrorKind, classifyAssistantError } from "./error-kind";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, StreamFn } from "./types";
 import { createAbortedToolResult, executeToolCalls, INTENT_FIELD } from "./agent-loop/execution";
 
@@ -6,6 +7,25 @@ export { INTENT_FIELD };
 import { streamAssistantResponse } from "./agent-loop/streaming";
 
 /* eslint-disable no-await-in-loop */
+
+/**
+ * Find the last assistant message in `messages` and classify any error it
+ * carries. Returns undefined when no assistant message ended in error.
+ */
+function lastAssistantErrorKind(messages: AgentMessage[], contextWindow?: number): AgentErrorKind | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i];
+		if (message.role === "assistant") {
+			return classifyAssistantError(message, contextWindow);
+		}
+	}
+	return undefined;
+}
+
+/** Classify an error on an assistant message; returns undefined for any other role. */
+function messageErrorKind(message: AgentMessage, contextWindow?: number): AgentErrorKind | undefined {
+	return message.role === "assistant" ? classifyAssistantError(message, contextWindow) : undefined;
+}
 
 /**
  * Main loop logic shared by agentLoop and agentLoopContinue.
@@ -39,7 +59,11 @@ async function runLoop(
 			pendingMessages,
 		);
 		if (result.terminated) {
-			stream.push({ type: "agent_end", messages: newMessages });
+			stream.push({
+				type: "agent_end",
+				messages: newMessages,
+				errorKind: lastAssistantErrorKind(newMessages, config.model?.contextWindow),
+			});
 			stream.end(newMessages);
 			return;
 		}
@@ -56,7 +80,11 @@ async function runLoop(
 		break;
 	}
 
-	stream.push({ type: "agent_end", messages: newMessages });
+	stream.push({
+		type: "agent_end",
+		messages: newMessages,
+		errorKind: lastAssistantErrorKind(newMessages, config.model?.contextWindow),
+	});
 	stream.end(newMessages);
 }
 
