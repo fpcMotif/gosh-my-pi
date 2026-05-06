@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,14 +51,15 @@ type OmpWorkspace struct {
 	toolResultMessages map[string]string
 
 	agentBusy          bool
-	agentReady         bool
 	skipPermissions    bool
 	currentAssistantID string
 	msgCounter         atomic.Uint64
 
 	model AgentModel
 
-	program   *tea.Program
+	program *tea.Program
+	// events is a test-only seam: tests assign a buffered channel here and
+	// drain it in nextMessageEvent. In production sendUI always uses program.
 	events    chan tea.Msg
 	closeOnce sync.Once
 }
@@ -72,7 +74,6 @@ func NewOmpWorkspace(client *ompclient.Client, cwd string) *OmpWorkspace {
 		resolver:           config.IdentityResolver(),
 		messages:           make(map[string]message.Message),
 		toolResultMessages: make(map[string]string),
-		agentReady:         true,
 		model: AgentModel{
 			CatwalkCfg: catwalk.Model{ID: ompModelID, Name: "omp backend"},
 			ModelCfg:   cfg.Models[config.SelectedModelTypeLarge],
@@ -187,6 +188,8 @@ func (w *OmpWorkspace) CreateSession(ctx context.Context, title string) (session
 	s := w.session
 	w.messages = make(map[string]message.Message)
 	w.msgOrder = nil
+	w.toolResultMessages = make(map[string]string)
+	w.currentAssistantID = ""
 	w.mu.Unlock()
 	w.sendUI(pubsub.Event[session.Session]{Type: pubsub.CreatedEvent, Payload: s})
 	return s, nil
@@ -227,11 +230,11 @@ func (w *OmpWorkspace) CreateAgentToolSessionID(messageID, toolCallID string) st
 }
 
 func (w *OmpWorkspace) ParseAgentToolSessionID(sessionID string) (string, string, bool) {
-	parts := splitLast(sessionID, ompToolSessionDelim)
-	if len(parts) != 2 {
+	i := strings.LastIndex(sessionID, ompToolSessionDelim)
+	if i < 0 {
 		return "", "", false
 	}
-	return parts[0], parts[1], true
+	return sessionID[:i], sessionID[i+len(ompToolSessionDelim):], true
 }
 
 // -- Messages --
@@ -648,19 +651,26 @@ func (w *OmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 		} `json:"assistantMessageEvent"`
 	}
 	if err := json.Unmarshal(raw, &delta); err == nil && delta.AssistantMessageEvent.Type != "" {
-		switch delta.AssistantMessageEvent.Type {
+		ev := delta.AssistantMessageEvent
+		switch ev.Type {
 		case "text_delta":
+			if ev.Delta == "" {
+				return nil
+			}
 			return w.updateAssistant(func(msg *message.Message) {
-				msg.AppendContent(delta.AssistantMessageEvent.Delta)
+				msg.AppendContent(ev.Delta)
 			})
 		case "thinking_delta":
+			if ev.Delta == "" {
+				return nil
+			}
 			return w.updateAssistant(func(msg *message.Message) {
-				msg.AppendReasoningContent(delta.AssistantMessageEvent.Delta)
+				msg.AppendReasoningContent(ev.Delta)
 			})
 		case "error":
 			text := "Request failed"
-			if delta.AssistantMessageEvent.Error != nil && delta.AssistantMessageEvent.Error.ErrorMessage != "" {
-				text = delta.AssistantMessageEvent.Error.ErrorMessage
+			if ev.Error != nil && ev.Error.ErrorMessage != "" {
+				text = ev.Error.ErrorMessage
 			}
 			w.setAgentBusy(false)
 			return w.finishAssistant(message.FinishReasonError, text, "")
@@ -748,7 +758,6 @@ func (w *OmpWorkspace) handleTurnEnd(raw []byte) tea.Msg {
 	}
 	w.mu.Unlock()
 
-	// Send the last message update (usually the assistant message) so the UI refreshes.
 	if len(msgs) > 0 {
 		return pubsub.Event[message.Message]{Type: pubsub.UpdatedEvent, Payload: msgs[0]}
 	}
@@ -811,14 +820,16 @@ func (w *OmpWorkspace) handleToolExecutionUpdate(raw []byte) tea.Msg {
 		return nil
 	}
 	id := p.ToolCallID + "-result"
+	now := time.Now().Unix()
+	content := stringifyToolResult(p.PartialResult)
 	sessionID := w.sessionID()
 	w.mu.Lock()
 	msg, ok := w.messages[id]
 	if ok && len(msg.Parts) > 0 {
 		if tr, ok := msg.Parts[0].(message.ToolResult); ok {
-			tr.Content = stringifyToolResult(p.PartialResult)
+			tr.Content = content
 			msg.Parts[0] = tr
-			msg.UpdatedAt = time.Now().Unix()
+			msg.UpdatedAt = now
 			w.messages[id] = msg
 		}
 	}
@@ -831,11 +842,11 @@ func (w *OmpWorkspace) handleToolExecutionUpdate(raw []byte) tea.Msg {
 				message.ToolResult{
 					ToolCallID: p.ToolCallID,
 					Name:       p.ToolName,
-					Content:    stringifyToolResult(p.PartialResult),
+					Content:    content,
 				},
 			},
-			CreatedAt: time.Now().Unix(),
-			UpdatedAt: time.Now().Unix(),
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 		w.upsertMessageLocked(msg)
 		w.toolResultMessages[p.ToolCallID] = msg.ID
@@ -864,6 +875,7 @@ func (w *OmpWorkspace) handleToolExecutionEnd(raw []byte) tea.Msg {
 	}
 
 	id := p.ToolCallID + "-result"
+	now := time.Now().Unix()
 	result := message.Message{
 		ID:        id,
 		Role:      message.Tool,
@@ -876,8 +888,8 @@ func (w *OmpWorkspace) handleToolExecutionEnd(raw []byte) tea.Msg {
 				IsError:    p.IsError,
 			},
 		},
-		CreatedAt: time.Now().Unix(),
-		UpdatedAt: time.Now().Unix(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	w.mu.Lock()
 	w.upsertMessageLocked(result)
@@ -886,9 +898,9 @@ func (w *OmpWorkspace) handleToolExecutionEnd(raw []byte) tea.Msg {
 	return pubsub.Event[message.Message]{Type: pubsub.CreatedEvent, Payload: result.Clone()}
 }
 
-// parseAgentMessage converts a raw JSON agent message into a crush message.Message.
-// The fieldName parameter is the key in the parent object that holds the message;
-// if empty the raw bytes are the message itself.
+// parseAgentMessage converts a raw JSON agent message into a message.Message.
+// If fieldName is non-empty, raw is treated as a wrapper object and the
+// message body is read from that key; otherwise raw is the body.
 func (w *OmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.Message, bool) {
 	var body json.RawMessage
 	if fieldName != "" {
@@ -922,7 +934,7 @@ func (w *OmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 
 	switch probe.Role {
 	case "user":
-		msg.Parts = w.parseUserContent(body)
+		msg.Parts = w.parseTextWrappedContent(body)
 		msg.ID = w.nextID("user")
 	case "assistant":
 		msg.Parts = w.parseAssistantContent(body)
@@ -932,10 +944,10 @@ func (w *OmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 		msg.Parts = w.parseToolResultContent(body)
 		msg.ID = w.nextID("tool")
 	case "bashExecution", "pythonExecution":
-		msg.Parts = w.parseExecutionContent(body, probe.Role)
+		msg.Parts = w.parseExecutionContent(body)
 		msg.ID = w.nextID("exec")
 	case "custom", "hookMessage":
-		msg.Parts = w.parseCustomContent(body)
+		msg.Parts = w.parseTextWrappedContent(body)
 		msg.ID = w.nextID("custom")
 	default:
 		msg.Parts = []message.ContentPart{message.TextContent{Text: fmt.Sprintf("[%s message]", probe.Role)}}
@@ -945,20 +957,25 @@ func (w *OmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 	return msg, true
 }
 
-func (w *OmpWorkspace) parseUserContent(raw []byte) []message.ContentPart {
+func (w *OmpWorkspace) parseTextWrappedContent(raw []byte) []message.ContentPart {
 	var p struct {
 		Content any `json:"content"`
 	}
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil
 	}
-	return w.extractTextParts(p.Content)
+	text := extractTextString(p.Content)
+	if text == "" {
+		return nil
+	}
+	return []message.ContentPart{message.TextContent{Text: text}}
 }
 
-func (w *OmpWorkspace) extractTextParts(content any) []message.ContentPart {
+// extractTextString flattens an RPC content value (string | []{type:"text",text}) into a string.
+func extractTextString(content any) string {
 	switch v := content.(type) {
 	case string:
-		return []message.ContentPart{message.TextContent{Text: v}}
+		return v
 	case []any:
 		var texts []string
 		for _, item := range v {
@@ -972,34 +989,20 @@ func (w *OmpWorkspace) extractTextParts(content any) []message.ContentPart {
 				}
 			}
 		}
-		if len(texts) > 0 {
-			return []message.ContentPart{message.TextContent{Text: joinStrings(texts, "")}}
-		}
+		return strings.Join(texts, "")
 	}
-	return nil
+	return ""
 }
 
 func (w *OmpWorkspace) parseAssistantContent(raw []byte) []message.ContentPart {
 	var p struct {
 		Content      []json.RawMessage `json:"content"`
-		Model        string            `json:"model"`
-		Provider     string            `json:"provider"`
 		StopReason   string            `json:"stopReason"`
 		ErrorMessage string            `json:"errorMessage"`
-		Usage        struct {
-			Input  int `json:"input"`
-			Output int `json:"output"`
-		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil
 	}
-
-	msg := message.Message{
-		Model:    p.Model,
-		Provider: p.Provider,
-	}
-	_ = msg
 
 	var parts []message.ContentPart
 	for _, block := range p.Content {
@@ -1026,16 +1029,19 @@ func (w *OmpWorkspace) parseAssistantContent(raw []byte) []message.ContentPart {
 			}
 		case "toolCall":
 			var tc struct {
-				ID        string         `json:"id"`
-				Name      string         `json:"name"`
-				Arguments map[string]any `json:"arguments"`
+				ID        string          `json:"id"`
+				Name      string          `json:"name"`
+				Arguments json.RawMessage `json:"arguments"`
 			}
 			if err := json.Unmarshal(block, &tc); err == nil {
-				input, _ := json.Marshal(tc.Arguments)
+				input := string(tc.Arguments)
+				if input == "" {
+					input = "{}"
+				}
 				parts = append(parts, message.ToolCall{
 					ID:    tc.ID,
 					Name:  tc.Name,
-					Input: string(input),
+					Input: input,
 				})
 			}
 		}
@@ -1075,36 +1081,17 @@ func (w *OmpWorkspace) parseToolResultContent(raw []byte) []message.ContentPart 
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil
 	}
-	text := ""
-	switch v := p.Content.(type) {
-	case string:
-		text = v
-	case []any:
-		var texts []string
-		for _, item := range v {
-			m, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			if m["type"] == "text" {
-				if t, ok := m["text"].(string); ok {
-					texts = append(texts, t)
-				}
-			}
-		}
-		text = joinStrings(texts, "")
-	}
 	return []message.ContentPart{
 		message.ToolResult{
 			ToolCallID: p.ToolCallID,
 			Name:       p.ToolName,
-			Content:    text,
+			Content:    extractTextString(p.Content),
 			IsError:    p.IsError,
 		},
 	}
 }
 
-func (w *OmpWorkspace) parseExecutionContent(raw []byte, role string) []message.ContentPart {
+func (w *OmpWorkspace) parseExecutionContent(raw []byte) []message.ContentPart {
 	var p struct {
 		Command  string `json:"command"`
 		Code     string `json:"code"`
@@ -1123,16 +1110,6 @@ func (w *OmpWorkspace) parseExecutionContent(raw []byte, role string) []message.
 		text += fmt.Sprintf("\n(exit code: %d)", *p.ExitCode)
 	}
 	return []message.ContentPart{message.TextContent{Text: text}}
-}
-
-func (w *OmpWorkspace) parseCustomContent(raw []byte) []message.ContentPart {
-	var p struct {
-		Content any `json:"content"`
-	}
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return nil
-	}
-	return w.extractTextParts(p.Content)
 }
 
 // -- helpers --
@@ -1306,7 +1283,7 @@ func stringifyToolResult(raw json.RawMessage) string {
 	var obj map[string]any
 	if err := json.Unmarshal(raw, &obj); err == nil {
 		if content, ok := obj["content"]; ok {
-			if text := stringifyContentValue(content); text != "" {
+			if text := extractTextString(content); text != "" {
 				return text
 			}
 		}
@@ -1325,54 +1302,6 @@ func stringifyToolResult(raw json.RawMessage) string {
 		return string(raw)
 	}
 	return string(pretty)
-}
-
-func stringifyContentValue(content any) string {
-	switch v := content.(type) {
-	case string:
-		return v
-	case []any:
-		var texts []string
-		for _, item := range v {
-			m, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			if m["type"] == "text" {
-				if t, ok := m["text"].(string); ok {
-					texts = append(texts, t)
-				}
-			}
-		}
-		return joinStrings(texts, "")
-	default:
-		return ""
-	}
-}
-
-func joinStrings(parts []string, sep string) string {
-	var result string
-	for i, p := range parts {
-		if i > 0 {
-			result += sep
-		}
-		result += p
-	}
-	return result
-}
-
-func splitLast(s, sep string) []string {
-	idx := -1
-	for i := len(s) - len(sep); i >= 0; i-- {
-		if s[i:i+len(sep)] == sep {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		return []string{s}
-	}
-	return []string{s[:idx], s[idx+len(sep):]}
 }
 
 // Compile-time check.
