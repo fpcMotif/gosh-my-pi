@@ -23,6 +23,26 @@ describe("Input component", () => {
 		return input;
 	}
 
+	it("renders placeholder when value is empty", () => {
+		const input = new Input();
+		input.placeholder = "Type something...";
+		const lines = input.render(40);
+		// The placeholder should be visible and styled with dim (90)
+		expect(lines[0]).toContain("\x1b[90m");
+		expect(lines[0]).toContain("ype something...");
+		// The cursor character should be the first char of placeholder 'T'
+		expect(lines[0]).toContain("\x1b[7mT\x1b[27m");
+
+		// When value is entered, placeholder should disappear
+		input.setValue("Hello");
+		// Reset cursor position to end of value, standard behavior when editing
+		input.handleInput("\x05");
+		const linesWithValue = input.render(40);
+		expect(linesWithValue[0]).not.toContain("\x1b[90m");
+		expect(linesWithValue[0]).not.toContain("Type something...");
+		expect(linesWithValue[0]).toContain("Hello");
+	});
+
 	it("moves by CJK and punctuation blocks (backward)", () => {
 		const text = "天气不错，去散步吧！";
 
