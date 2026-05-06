@@ -2,78 +2,78 @@
 # have multiple the action would only apply the label if ALL of them match.
 
 "area: ci":
-  - "/^ci: /i"
+   - "/^ci: /i"
 "area: crush run":
-  - "/crush run/i"
-  - "/headless/i"
-  - "/non-interactive/i"
+   - "/crush run/i"
+   - "/headless/i"
+   - "/non-interactive/i"
 "area: diff":
-  - "/diff/i"
+   - "/diff/i"
 "area: docs":
-  - "/(docs|documentation|readme)/i"
+   - "/(docs|documentation|readme)/i"
 "area: images":
-  - "/image/i"
+   - "/image/i"
 "area: lsp":
-  - "/lsp/i"
+   - "/lsp/i"
 "area: mcp":
-  - "/mcp/i"
+   - "/mcp/i"
 "area: mouse":
-  - "/(mouse|scroll)/i"
+   - "/(mouse|scroll)/i"
 "area: onboarding":
-  - "/(onboarding)/i"
+   - "/(onboarding)/i"
 "area: permissions":
-  - "/permission/i"
+   - "/permission/i"
 "area: releasing":
-  - "/(release|releasing|aur|brew|nix|npm|scoop|termux|winget)/i"
+   - "/(release|releasing|aur|brew|nix|npm|scoop|termux|winget)/i"
 "area: session":
-  - "/session/i"
+   - "/session/i"
 "area: shell":
-  - "/shell/i"
+   - "/shell/i"
 "area: themes":
-  - "/theme/i"
+   - "/theme/i"
 "area: tools":
-  - "/tool/i"
+   - "/tool/i"
 "os: android":
-  - "/(android|termux)/i"
+   - "/(android|termux)/i"
 "os: linux":
-  - "/(linux|fedora|debian|ubuntu)/i"
+   - "/(linux|fedora|debian|ubuntu)/i"
 "os: macos":
-  - "/(macos|osx|darwin)/i"
+   - "/(macos|osx|darwin)/i"
 "os: windows":
-  - "/(windows|win10|win11|win32|wsl|scoop|winget)/i"
+   - "/(windows|win10|win11|win32|wsl|scoop|winget)/i"
 "panic / crash":
-  - "/(panic|crash|segfault)/i"
+   - "/(panic|crash|segfault)/i"
 "provider: anthropic claude":
-  - "/(anthropic|claude)/i"
+   - "/(anthropic|claude)/i"
 "provider: avian":
-  - "/avian/i"
+   - "/avian/i"
 "provider: aws bedrock":
-  - "/(aws|bedrock)/i"
+   - "/(aws|bedrock)/i"
 "provider: azure":
-  - "/azure/i"
+   - "/azure/i"
 "provider: github copilot":
-  - "/copilot/i"
+   - "/copilot/i"
 "provider: google gemini":
-  - "/gemini/i"
+   - "/gemini/i"
 "provider: google vertex":
-  - "/vertex/i"
+   - "/vertex/i"
 "provider: hyper":
-  - "/hyper/i"
+   - "/hyper/i"
 "provider: kimi":
-  - "/kimi/i"
+   - "/kimi/i"
 "provider: minimax":
-  - "/minimax/i"
+   - "/minimax/i"
 "provider: ollama":
-  - "/llama/i"
+   - "/llama/i"
 "provider: openai chatgpt":
-  - "/(openai|gpt)/i"
+   - "/(openai|gpt)/i"
 "provider: openrouter":
-  - "/openrouter/i"
+   - "/openrouter/i"
 "provider: qwen":
-  - "/qwen/i"
+   - "/qwen/i"
 "provider: vercel":
-  - "/vercel/i"
+   - "/vercel/i"
 "provider: xai grok":
-  - "/(xai|x\\.ai|grok)/i"
+   - "/(xai|x\\.ai|grok)/i"
 "security":
-  - "/(security|vulnerability|exploit)/i"
+   - "/(security|vulnerability|exploit)/i"

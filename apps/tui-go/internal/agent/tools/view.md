@@ -25,10 +25,11 @@ Read a file by path with line numbers; supports offset and line limit (default 2
 </limitations>
 
 <cross_platform>
+
 - Handles Windows (CRLF) and Unix (LF) line endings
 - Works with forward slashes (/) and backslashes (\)
 - Auto-detects text encoding for common formats
-</cross_platform>
+  </cross_platform>
 
 <tips>
 - Use with Glob to find files first

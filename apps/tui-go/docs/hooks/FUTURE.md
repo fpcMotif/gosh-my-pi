@@ -33,9 +33,9 @@ Additive envelope field. Accepts a list of strings:
 
 ```jsonc
 {
-  "decision": "allow",
-  "context": "Scrubbed one secret",
-  "context_files": ["README.md", "docs/ARCHITECTURE.md"],
+	"decision": "allow",
+	"context": "Scrubbed one secret",
+	"context_files": ["README.md", "docs/ARCHITECTURE.md"],
 }
 ```
 
@@ -108,15 +108,15 @@ Additive, per-hook. Zero-value matches current default (skip sub-agents):
 
 ```jsonc
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "^bash$",
-        "command": "./hooks/audit.sh",
-        "include_sub_agents": true, // default false
-      },
-    ],
-  },
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "^bash$",
+				"command": "./hooks/audit.sh",
+				"include_sub_agents": true, // default false
+			},
+		],
+	},
 }
 ```
 
@@ -180,11 +180,11 @@ Stdin payload extends the common envelope with the prompt:
 
 ```jsonc
 {
-  "event": "UserPromptSubmit",
-  "session_id": "…",
-  "cwd": "/home/user/project",
-  "prompt": "fix the login flow",
-  "attachments": ["screenshot.png"],
+	"event": "UserPromptSubmit",
+	"session_id": "…",
+	"cwd": "/home/user/project",
+	"prompt": "fix the login flow",
+	"attachments": ["screenshot.png"],
 }
 ```
 
@@ -193,10 +193,10 @@ Output envelope reuses common fields plus one new per-event field,
 
 ```jsonc
 {
-  "decision": "allow", // optional; deny blocks the submission entirely
-  "reason": "includes a production secret", // shown to the user when denying
-  "context": "Current branch: feat/login",
-  "updated_prompt": "fix the login flow\n\n(from @TODO on line 42)",
+	"decision": "allow", // optional; deny blocks the submission entirely
+	"reason": "includes a production secret", // shown to the user when denying
+	"context": "Current branch: feat/login",
+	"updated_prompt": "fix the login flow\n\n(from @TODO on line 42)",
 }
 ```
 
@@ -313,10 +313,10 @@ every platform.
   behavior with shell intuition.
 - Path-prefix check on `argv[0]`; if path, read shebang with a bounded
   `io.LimitReader` and parse. Support:
-  - `#!/absolute/interpreter args…`
-  - `#!/usr/bin/env NAME` → resolve `NAME` on PATH
-  - `#!/usr/bin/env -S NAME args…` → treat as above; `-S` is common enough to
-    handle. Other `env` flags can error.
+   - `#!/absolute/interpreter args…`
+   - `#!/usr/bin/env NAME` → resolve `NAME` on PATH
+   - `#!/usr/bin/env -S NAME args…` → treat as above; `-S` is common enough to
+     handle. Other `env` flags can error.
 - Unified exit-code helper. mvdan's `interp.ExitStatus` and `os/exec`'s
   `ProcessState.ExitCode()` both become a single `int`.
 - Context cancellation: mvdan's exec handler uses `exec.CommandContext` for its

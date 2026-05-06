@@ -15,15 +15,15 @@ Crush uses JSON configuration files with the following priority (highest to lowe
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "models": {},
-  "providers": {},
-  "mcp": {},
-  "lsp": {},
-  "hooks": {},
-  "options": {},
-  "permissions": {},
-  "tools": {}
+	"$schema": "https://charm.land/crush.json",
+	"models": {},
+	"providers": {},
+	"mcp": {},
+	"lsp": {},
+	"hooks": {},
+	"options": {},
+	"permissions": {},
+	"tools": {}
 }
 ```
 
@@ -39,17 +39,17 @@ The `$schema` property enables IDE autocomplete but is optional.
 
 ```json
 {
-  "models": {
-    "large": {
-      "model": "claude-sonnet-4-20250514",
-      "provider": "anthropic",
-      "max_tokens": 16384
-    },
-    "small": {
-      "model": "claude-haiku-4-20250514",
-      "provider": "anthropic"
-    }
-  }
+	"models": {
+		"large": {
+			"model": "claude-sonnet-4-20250514",
+			"provider": "anthropic",
+			"max_tokens": 16384
+		},
+		"small": {
+			"model": "claude-haiku-4-20250514",
+			"provider": "anthropic"
+		}
+	}
 }
 ```
 
@@ -61,20 +61,20 @@ The `$schema` property enables IDE autocomplete but is optional.
 
 ```json
 {
-  "providers": {
-    "deepseek": {
-      "type": "openai-compat",
-      "base_url": "https://api.deepseek.com/v1",
-      "api_key": "$DEEPSEEK_API_KEY",
-      "models": [
-        {
-          "id": "deepseek-chat",
-          "name": "Deepseek V3",
-          "context_window": 64000
-        }
-      ]
-    }
-  }
+	"providers": {
+		"deepseek": {
+			"type": "openai-compat",
+			"base_url": "https://api.deepseek.com/v1",
+			"api_key": "$DEEPSEEK_API_KEY",
+			"models": [
+				{
+					"id": "deepseek-chat",
+					"name": "Deepseek V3",
+					"context_window": 64000
+				}
+			]
+		}
+	}
 }
 ```
 
@@ -86,16 +86,16 @@ The `$schema` property enables IDE autocomplete but is optional.
 
 ```json
 {
-  "lsp": {
-    "go": {
-      "command": "gopls",
-      "env": { "GOTOOLCHAIN": "go1.24.5" }
-    },
-    "typescript": {
-      "command": "typescript-language-server",
-      "args": ["--stdio"]
-    }
-  }
+	"lsp": {
+		"go": {
+			"command": "gopls",
+			"env": { "GOTOOLCHAIN": "go1.24.5" }
+		},
+		"typescript": {
+			"command": "typescript-language-server",
+			"args": ["--stdio"]
+		}
+	}
 }
 ```
 
@@ -106,20 +106,20 @@ The `$schema` property enables IDE autocomplete but is optional.
 
 ```json
 {
-  "mcp": {
-    "filesystem": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["/path/to/mcp-server.js"]
-    },
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/",
-      "headers": {
-        "Authorization": "Bearer $GH_PAT"
-      }
-    }
-  }
+	"mcp": {
+		"filesystem": {
+			"type": "stdio",
+			"command": "node",
+			"args": ["/path/to/mcp-server.js"]
+		},
+		"github": {
+			"type": "http",
+			"url": "https://api.githubcopilot.com/mcp/",
+			"headers": {
+				"Authorization": "Bearer $GH_PAT"
+			}
+		}
+	}
 }
 ```
 
@@ -130,23 +130,23 @@ The `$schema` property enables IDE autocomplete but is optional.
 
 ```json
 {
-  "options": {
-    "skills_paths": ["./skills"],
-    "disabled_tools": ["bash", "sourcegraph"],
-    "disabled_skills": ["crush-config"],
-    "tui": {
-      "compact_mode": false,
-      "diff_mode": "unified",
-      "transparent": false
-    },
-    "auto_lsp": true,
-    "debug": false,
-    "debug_lsp": false,
-    "attribution": {
-      "trailer_style": "assisted-by",
-      "generated_with": true
-    }
-  }
+	"options": {
+		"skills_paths": ["./skills"],
+		"disabled_tools": ["bash", "sourcegraph"],
+		"disabled_skills": ["crush-config"],
+		"tui": {
+			"compact_mode": false,
+			"diff_mode": "unified",
+			"transparent": false
+		},
+		"auto_lsp": true,
+		"debug": false,
+		"debug_lsp": false,
+		"attribution": {
+			"trailer_style": "assisted-by",
+			"generated_with": true
+		}
+	}
 }
 ```
 
@@ -162,18 +162,18 @@ Hooks are user-defined shell commands that fire on agent events. Currently only 
 
 ```json
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "^(edit|write|multiedit)$",
-        "command": ".crush/hooks/protect-files.sh"
-      },
-      {
-        "matcher": "^bash$",
-        "command": ".crush/hooks/no-haskell.sh"
-      }
-    ]
-  }
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "^(edit|write|multiedit)$",
+				"command": ".crush/hooks/protect-files.sh"
+			},
+			{
+				"matcher": "^bash$",
+				"command": ".crush/hooks/no-haskell.sh"
+			}
+		]
+	}
 }
 ```
 
@@ -199,24 +199,24 @@ A JSON payload is piped to the hook command:
 
 ```json
 {
-  "event": "PreToolUse",
-  "session_id": "abc-123",
-  "cwd": "/path/to/project",
-  "tool_name": "bash",
-  "tool_input": {"command": "ls -la"}
+	"event": "PreToolUse",
+	"session_id": "abc-123",
+	"cwd": "/path/to/project",
+	"tool_name": "bash",
+	"tool_input": { "command": "ls -la" }
 }
 ```
 
 ### Hook Environment Variables
 
-| Variable | Description |
-|---|---|
-| `CRUSH_EVENT` | Event name (e.g. `PreToolUse`) |
-| `CRUSH_TOOL_NAME` | Name of the tool being called |
-| `CRUSH_SESSION_ID` | Current session ID |
-| `CRUSH_CWD` | Current working directory |
-| `CRUSH_PROJECT_DIR` | Project root directory |
-| `CRUSH_TOOL_INPUT_COMMAND` | Value of `command` from tool input (if present) |
+| Variable                     | Description                                       |
+| ---------------------------- | ------------------------------------------------- |
+| `CRUSH_EVENT`                | Event name (e.g. `PreToolUse`)                    |
+| `CRUSH_TOOL_NAME`            | Name of the tool being called                     |
+| `CRUSH_SESSION_ID`           | Current session ID                                |
+| `CRUSH_CWD`                  | Current working directory                         |
+| `CRUSH_PROJECT_DIR`          | Project root directory                            |
+| `CRUSH_TOOL_INPUT_COMMAND`   | Value of `command` from tool input (if present)   |
 | `CRUSH_TOOL_INPUT_FILE_PATH` | Value of `file_path` from tool input (if present) |
 
 ### Hook Output
@@ -224,7 +224,7 @@ A JSON payload is piped to the hook command:
 **Exit code 0** — the hook succeeded. Stdout is parsed as JSON:
 
 ```json
-{"decision": "allow", "context": "optional context appended to tool result"}
+{ "decision": "allow", "context": "optional context appended to tool result" }
 ```
 
 - `decision`: `allow` to explicitly allow, `deny` to block, `none` (or omit) for no opinion.
@@ -247,11 +247,11 @@ Crush also supports the Claude Code hook output format:
 
 ```json
 {
-  "hookSpecificOutput": {
-    "permissionDecision": "allow",
-    "permissionDecisionReason": "Auto-approved",
-    "updatedInput": {"command": "echo rewritten"}
-  }
+	"hookSpecificOutput": {
+		"permissionDecision": "allow",
+		"permissionDecisionReason": "Auto-approved",
+		"updatedInput": { "command": "echo rewritten" }
+	}
 }
 ```
 
@@ -271,9 +271,9 @@ When multiple hooks match, their decisions are aggregated:
 
 ```json
 {
-  "permissions": {
-    "allowed_tools": ["view", "ls", "grep", "edit"]
-  }
+	"permissions": {
+		"allowed_tools": ["view", "ls", "grep", "edit"]
+	}
 }
 ```
 

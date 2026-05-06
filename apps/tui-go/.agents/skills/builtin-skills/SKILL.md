@@ -1,9 +1,8 @@
 ---
 name: builtin-skills
-description:
-  Use when creating a new builtin skill for Crush, editing an existing builtin
-  skill (internal/skills/builtin/), or when the user needs to understand how the
-  embedded skill system works.
+description: Use when creating a new builtin skill for Crush, editing an existing builtin
+   skill (internal/skills/builtin/), or when the user needs to understand how the
+   embedded skill system works.
 ---
 
 # Builtin Skills

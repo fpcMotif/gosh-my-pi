@@ -12,10 +12,10 @@
 - Use the `github.com/charmbracelet/x/ansi` package for any string
   manipulation that might involve ANSI codes. Do not manipulate ANSI strings
   at byte level! Some useful functions:
-  - `ansi.Cut`
-  - `ansi.StringWidth`
-  - `ansi.Strip`
-  - `ansi.Truncate`
+   - `ansi.Cut`
+   - `ansi.StringWidth`
+   - `ansi.Strip`
+   - `ansi.Truncate`
 
 ## Architecture
 

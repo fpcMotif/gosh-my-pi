@@ -242,8 +242,8 @@ Configuration itself is stored as a JSON object:
 
 ```json
 {
-  "this-setting": { "this": "that" },
-  "that-setting": ["ceci", "cela"]
+	"this-setting": { "this": "that" },
+	"that-setting": ["ceci", "cela"]
 }
 ```
 
@@ -271,22 +271,22 @@ like you would. LSPs can be added manually like so:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "lsp": {
-    "go": {
-      "command": "gopls",
-      "env": {
-        "GOTOOLCHAIN": "go1.24.5"
-      }
-    },
-    "typescript": {
-      "command": "typescript-language-server",
-      "args": ["--stdio"]
-    },
-    "nix": {
-      "command": "nil"
-    }
-  }
+	"$schema": "https://charm.land/crush.json",
+	"lsp": {
+		"go": {
+			"command": "gopls",
+			"env": {
+				"GOTOOLCHAIN": "go1.24.5"
+			}
+		},
+		"typescript": {
+			"command": "typescript-language-server",
+			"args": ["--stdio"]
+		},
+		"nix": {
+			"command": "nil"
+		}
+	}
 }
 ```
 
@@ -299,39 +299,39 @@ using `$(echo $VAR)` syntax.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "mcp": {
-    "filesystem": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["/path/to/mcp-server.js"],
-      "timeout": 120,
-      "disabled": false,
-      "disabled_tools": ["some-tool-name"],
-      "env": {
-        "NODE_ENV": "production"
-      }
-    },
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/",
-      "timeout": 120,
-      "disabled": false,
-      "disabled_tools": ["create_issue", "create_pull_request"],
-      "headers": {
-        "Authorization": "Bearer $GH_PAT"
-      }
-    },
-    "streaming-service": {
-      "type": "sse",
-      "url": "https://example.com/mcp/sse",
-      "timeout": 120,
-      "disabled": false,
-      "headers": {
-        "API-Key": "$(echo $API_KEY)"
-      }
-    }
-  }
+	"$schema": "https://charm.land/crush.json",
+	"mcp": {
+		"filesystem": {
+			"type": "stdio",
+			"command": "node",
+			"args": ["/path/to/mcp-server.js"],
+			"timeout": 120,
+			"disabled": false,
+			"disabled_tools": ["some-tool-name"],
+			"env": {
+				"NODE_ENV": "production"
+			}
+		},
+		"github": {
+			"type": "http",
+			"url": "https://api.githubcopilot.com/mcp/",
+			"timeout": 120,
+			"disabled": false,
+			"disabled_tools": ["create_issue", "create_pull_request"],
+			"headers": {
+				"Authorization": "Bearer $GH_PAT"
+			}
+		},
+		"streaming-service": {
+			"type": "sse",
+			"url": "https://example.com/mcp/sse",
+			"timeout": 120,
+			"disabled": false,
+			"headers": {
+				"API-Key": "$(echo $API_KEY)"
+			}
+		}
+	}
 }
 ```
 
@@ -358,16 +358,10 @@ permissions. Use this with care.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "permissions": {
-    "allowed_tools": [
-      "view",
-      "ls",
-      "grep",
-      "edit",
-      "mcp_context7_get-library-doc"
-    ]
-  }
+	"$schema": "https://charm.land/crush.json",
+	"permissions": {
+		"allowed_tools": ["view", "ls", "grep", "edit", "mcp_context7_get-library-doc"]
+	}
 }
 ```
 
@@ -382,10 +376,10 @@ completely hidden from the agent.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "options": {
-    "disabled_tools": ["bash", "sourcegraph"]
-  }
+	"$schema": "https://charm.land/crush.json",
+	"options": {
+		"disabled_tools": ["bash", "sourcegraph"]
+	}
 }
 ```
 
@@ -399,10 +393,10 @@ from the agent, including builtin skills and skills discovered from disk.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "options": {
-    "disabled_skills": ["crush-config"]
-  }
+	"$schema": "https://charm.land/crush.json",
+	"options": {
+		"disabled_skills": ["crush-config"]
+	}
 }
 ```
 
@@ -415,31 +409,31 @@ activate on demand.
 
 The global paths we looks for skills are:
 
-* `$CRUSH_SKILLS_DIR`
-* `$XDG_CONFIG_HOME/agents/skills` or `~/.config/agents/skills/`
-* `$XDG_CONFIG_HOME/crush/skills` or `~/.config/crush/skills/`
-* On Windows, we _also_ look at
-  * `%LOCALAPPDATA%\agents\skills\` or `%USERPROFILE%\AppData\Local\agents\skills\`
-  * `%LOCALAPPDATA%\crush\skills\` or `%USERPROFILE%\AppData\Local\crush\skills\`
-* Additional paths configured via `options.skills_paths`
+- `$CRUSH_SKILLS_DIR`
+- `$XDG_CONFIG_HOME/agents/skills` or `~/.config/agents/skills/`
+- `$XDG_CONFIG_HOME/crush/skills` or `~/.config/crush/skills/`
+- On Windows, we _also_ look at
+   - `%LOCALAPPDATA%\agents\skills\` or `%USERPROFILE%\AppData\Local\agents\skills\`
+   - `%LOCALAPPDATA%\crush\skills\` or `%USERPROFILE%\AppData\Local\crush\skills\`
+- Additional paths configured via `options.skills_paths`
 
 On top of that, we _also_ load skills in your project from the following
 relative paths:
 
-* `.agents/skills`
-* `.crush/skills`
-* `.claude/skills`
-* `.cursor/skills`
+- `.agents/skills`
+- `.crush/skills`
+- `.claude/skills`
+- `.cursor/skills`
 
 ```jsonc
 {
-  "$schema": "https://charm.land/crush.json",
-  "options": {
-    "skills_paths": [
-      "~/.config/crush/skills", // Windows: "%LOCALAPPDATA%\\crush\\skills",
-      "./project-skills",
-    ],
-  },
+	"$schema": "https://charm.land/crush.json",
+	"options": {
+		"skills_paths": [
+			"~/.config/crush/skills", // Windows: "%LOCALAPPDATA%\\crush\\skills",
+			"./project-skills",
+		],
+	},
 }
 ```
 
@@ -469,10 +463,10 @@ focused _and_ your terminal supports reporting the focus state.
 
 ```jsonc
 {
-  "$schema": "https://charm.land/crush.json",
-  "options": {
-    "disable_notifications": false, // default
-  },
+	"$schema": "https://charm.land/crush.json",
+	"options": {
+		"disable_notifications": false, // default
+	},
 }
 ```
 
@@ -489,10 +483,10 @@ name and location with the `initialize_as` option:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "options": {
-    "initialize_as": "AGENTS.md"
-  }
+	"$schema": "https://charm.land/crush.json",
+	"options": {
+		"initialize_as": "AGENTS.md"
+	}
 }
 ```
 
@@ -509,22 +503,22 @@ it creates. You can customize this behavior with the `attribution` option:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "options": {
-    "attribution": {
-      "trailer_style": "co-authored-by",
-      "generated_with": true
-    }
-  }
+	"$schema": "https://charm.land/crush.json",
+	"options": {
+		"attribution": {
+			"trailer_style": "co-authored-by",
+			"generated_with": true
+		}
+	}
 }
 ```
 
 - `trailer_style`: Controls the attribution trailer added to commit messages
   (default: `assisted-by`)
-  - `assisted-by`: Adds `Assisted-by: [Model Name] via Crush <crush@charm.land>`
-    (includes the model name)
-  - `co-authored-by`: Adds `Co-Authored-By: Crush <crush@charm.land>`
-  - `none`: No attribution trailer
+   - `assisted-by`: Adds `Assisted-by: [Model Name] via Crush <crush@charm.land>`
+     (includes the model name)
+   - `co-authored-by`: Adds `Co-Authored-By: Crush <crush@charm.land>`
+   - `none`: No attribution trailer
 - `generated_with`: When true (default), adds `💘 Generated with Crush` line to
   commit messages and PR descriptions
 
@@ -547,26 +541,26 @@ API. Don't forget to set `DEEPSEEK_API_KEY` in your environment.
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "providers": {
-    "deepseek": {
-      "type": "openai-compat",
-      "base_url": "https://api.deepseek.com/v1",
-      "api_key": "$DEEPSEEK_API_KEY",
-      "models": [
-        {
-          "id": "deepseek-chat",
-          "name": "Deepseek V3",
-          "cost_per_1m_in": 0.27,
-          "cost_per_1m_out": 1.1,
-          "cost_per_1m_in_cached": 0.07,
-          "cost_per_1m_out_cached": 1.1,
-          "context_window": 64000,
-          "default_max_tokens": 5000
-        }
-      ]
-    }
-  }
+	"$schema": "https://charm.land/crush.json",
+	"providers": {
+		"deepseek": {
+			"type": "openai-compat",
+			"base_url": "https://api.deepseek.com/v1",
+			"api_key": "$DEEPSEEK_API_KEY",
+			"models": [
+				{
+					"id": "deepseek-chat",
+					"name": "Deepseek V3",
+					"cost_per_1m_in": 0.27,
+					"cost_per_1m_out": 1.1,
+					"cost_per_1m_in_cached": 0.07,
+					"cost_per_1m_out_cached": 1.1,
+					"context_window": 64000,
+					"default_max_tokens": 5000
+				}
+			]
+		}
+	}
 }
 ```
 
@@ -576,31 +570,31 @@ Custom Anthropic-compatible providers follow this format:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "providers": {
-    "custom-anthropic": {
-      "type": "anthropic",
-      "base_url": "https://api.anthropic.com/v1",
-      "api_key": "$ANTHROPIC_API_KEY",
-      "extra_headers": {
-        "anthropic-version": "2023-06-01"
-      },
-      "models": [
-        {
-          "id": "claude-sonnet-4-20250514",
-          "name": "Claude Sonnet 4",
-          "cost_per_1m_in": 3,
-          "cost_per_1m_out": 15,
-          "cost_per_1m_in_cached": 3.75,
-          "cost_per_1m_out_cached": 0.3,
-          "context_window": 200000,
-          "default_max_tokens": 50000,
-          "can_reason": true,
-          "supports_attachments": true
-        }
-      ]
-    }
-  }
+	"$schema": "https://charm.land/crush.json",
+	"providers": {
+		"custom-anthropic": {
+			"type": "anthropic",
+			"base_url": "https://api.anthropic.com/v1",
+			"api_key": "$ANTHROPIC_API_KEY",
+			"extra_headers": {
+				"anthropic-version": "2023-06-01"
+			},
+			"models": [
+				{
+					"id": "claude-sonnet-4-20250514",
+					"name": "Claude Sonnet 4",
+					"cost_per_1m_in": 3,
+					"cost_per_1m_out": 15,
+					"cost_per_1m_in_cached": 3.75,
+					"cost_per_1m_out_cached": 0.3,
+					"context_window": 200000,
+					"default_max_tokens": 50000,
+					"can_reason": true,
+					"supports_attachments": true
+				}
+			]
+		}
+	}
 }
 ```
 
@@ -625,25 +619,25 @@ To add specific models to the configuration, configure as such:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "providers": {
-    "vertexai": {
-      "models": [
-        {
-          "id": "claude-sonnet-4@20250514",
-          "name": "VertexAI Sonnet 4",
-          "cost_per_1m_in": 3,
-          "cost_per_1m_out": 15,
-          "cost_per_1m_in_cached": 3.75,
-          "cost_per_1m_out_cached": 0.3,
-          "context_window": 200000,
-          "default_max_tokens": 50000,
-          "can_reason": true,
-          "supports_attachments": true
-        }
-      ]
-    }
-  }
+	"$schema": "https://charm.land/crush.json",
+	"providers": {
+		"vertexai": {
+			"models": [
+				{
+					"id": "claude-sonnet-4@20250514",
+					"name": "VertexAI Sonnet 4",
+					"cost_per_1m_in": 3,
+					"cost_per_1m_out": 15,
+					"cost_per_1m_in_cached": 3.75,
+					"cost_per_1m_out_cached": 0.3,
+					"context_window": 200000,
+					"default_max_tokens": 50000,
+					"can_reason": true,
+					"supports_attachments": true
+				}
+			]
+		}
+	}
 }
 ```
 
@@ -655,21 +649,21 @@ Local models can also be configured via OpenAI-compatible API. Here are two comm
 
 ```json
 {
-  "providers": {
-    "ollama": {
-      "name": "Ollama",
-      "base_url": "http://localhost:11434/v1/",
-      "type": "openai-compat",
-      "models": [
-        {
-          "name": "Qwen 3 30B",
-          "id": "qwen3:30b",
-          "context_window": 256000,
-          "default_max_tokens": 20000
-        }
-      ]
-    }
-  }
+	"providers": {
+		"ollama": {
+			"name": "Ollama",
+			"base_url": "http://localhost:11434/v1/",
+			"type": "openai-compat",
+			"models": [
+				{
+					"name": "Qwen 3 30B",
+					"id": "qwen3:30b",
+					"context_window": 256000,
+					"default_max_tokens": 20000
+				}
+			]
+		}
+	}
 }
 ```
 
@@ -677,21 +671,21 @@ Local models can also be configured via OpenAI-compatible API. Here are two comm
 
 ```json
 {
-  "providers": {
-    "lmstudio": {
-      "name": "LM Studio",
-      "base_url": "http://localhost:1234/v1/",
-      "type": "openai-compat",
-      "models": [
-        {
-          "name": "Qwen 3 30B",
-          "id": "qwen/qwen3-30b-a3b-2507",
-          "context_window": 256000,
-          "default_max_tokens": 20000
-        }
-      ]
-    }
-  }
+	"providers": {
+		"lmstudio": {
+			"name": "LM Studio",
+			"base_url": "http://localhost:1234/v1/",
+			"type": "openai-compat",
+			"models": [
+				{
+					"name": "Qwen 3 30B",
+					"id": "qwen/qwen3-30b-a3b-2507",
+					"context_window": 256000,
+					"default_max_tokens": 20000
+				}
+			]
+		}
+	}
 }
 ```
 
@@ -718,11 +712,11 @@ config:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "options": {
-    "debug": true,
-    "debug_lsp": true
-  }
+	"$schema": "https://charm.land/crush.json",
+	"options": {
+		"debug": true,
+		"debug_lsp": true
+	}
 }
 ```
 
@@ -745,10 +739,10 @@ your `crush.json` config:
 
 ```json
 {
-  "$schema": "https://charm.land/crush.json",
-  "options": {
-    "disable_provider_auto_update": true
-  }
+	"$schema": "https://charm.land/crush.json",
+	"options": {
+		"disable_provider_auto_update": true
+	}
 }
 ```
 
@@ -801,9 +795,9 @@ Or by setting the following in your config:
 
 ```json
 {
-  "options": {
-    "disable_metrics": true
-  }
+	"options": {
+		"disable_metrics": true
+	}
 }
 ```
 

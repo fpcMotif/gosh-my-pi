@@ -46,6 +46,6 @@ inline or delegates to a helper function.
 
 ## Existing Builtins
 
-| Command | File | Description |
-|---------|------|-------------|
-| `jq` | `jq.go` | JSON processor using `github.com/itchyny/gojq` |
+| Command | File    | Description                                    |
+| ------- | ------- | ---------------------------------------------- |
+| `jq`    | `jq.go` | JSON processor using `github.com/itchyny/gojq` |

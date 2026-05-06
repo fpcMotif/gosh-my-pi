@@ -19,8 +19,9 @@ Create or overwrite a file with given content; auto-creates parent dirs. Cannot 
 </limitations>
 
 <cross_platform>
+
 - Use forward slashes (/) for compatibility
-</cross_platform>
+  </cross_platform>
 
 <tips>
 - Use View tool first to examine existing files before modifying

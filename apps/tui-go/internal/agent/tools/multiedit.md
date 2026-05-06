@@ -24,27 +24,30 @@ Apply multiple find-and-replace edits to a single file in one operation; edits r
 
 <inherited_rules>
 All instructions from the Edit tool documentation apply verbatim to every edit item:
+
 - Critical requirements for exact matching and uniqueness
 - Warnings and common failures (tabs vs spaces, blank lines, brace placement, etc.)
 - Verification steps before using, recovery steps, best practices, and whitespace checklist
-Use the same level of precision as Edit. Multiedit often fails due to formatting mismatches—double-check whitespace for every edit.
-</inherited_rules>
+  Use the same level of precision as Edit. Multiedit often fails due to formatting mismatches—double-check whitespace for every edit.
+  </inherited_rules>
 
 <critical_requirements>
+
 1. Apply Edit tool rules to EACH edit (see edit.md).
 2. Edits are applied in order; successful edits are kept even if later edits fail.
 3. Plan sequence carefully: earlier edits change the file content that later edits must match.
 4. Ensure each old_string is unique at its application time (after prior edits).
 5. Check the response for failed edits and retry them if needed.
-</critical_requirements>
+   </critical_requirements>
 
 <verification_before_using>
+
 1. View the file and copy exact text (including whitespace) for each target.
 2. Check how many instances each old_string has BEFORE the sequence starts.
 3. Dry-run mentally: after applying edit #N, will edit #N+1 still match? Adjust old_string/new_string accordingly.
 4. Prefer fewer, larger context blocks over many tiny fragments that are easy to misalign.
 5. If edits are independent, consider separate multiedit batches per logical region.
-</verification_before_using>
+   </verification_before_using>
 
 <warnings>
 - Operation continues even if some edits fail; check response for failed edits.
@@ -55,23 +58,26 @@ Use the same level of precision as Edit. Multiedit often fails due to formatting
 
 <recovery_steps>
 If some edits fail:
+
 1. Check the response metadata for the list of failed edits with their error messages.
 2. View the file again to see the current state after successful edits.
 3. Adjust the failed edits based on the new file content.
 4. Retry the failed edits with corrected old_string values.
 5. Consider breaking complex batches into smaller, independent operations.
-</recovery_steps>
+   </recovery_steps>
 
 <best_practices>
+
 - Ensure all edits result in correct, idiomatic code; don't leave code broken.
 - Use absolute file paths (starting with /).
 - Use replace_all only when you're certain; otherwise provide unique context.
 - Match existing style exactly (spaces, tabs, blank lines).
 - Review failed edits in the response and retry with corrections.
-</best_practices>
+  </best_practices>
 
 <whitespace_checklist>
 For EACH edit, verify:
+
 - [ ] Viewed the file first
 - [ ] Counted indentation spaces/tabs
 - [ ] Included blank lines if present
@@ -79,7 +85,7 @@ For EACH edit, verify:
 - [ ] Included 3–5 lines of surrounding context
 - [ ] Verified text appears exactly once (or using replace_all deliberately)
 - [ ] Copied text character-for-character, not approximated
-</whitespace_checklist>
+      </whitespace_checklist>
 
 <examples>
 ✅ Correct: Sequential edits where the second match accounts for the first change
@@ -122,4 +128,5 @@ edits: [
 // - edits_failed: [{index: 2, error: "...", edit: {...}}]
 // You can then retry edit 2 with corrected context
 ```
+
 </examples>

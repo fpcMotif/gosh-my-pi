@@ -91,9 +91,9 @@ internal/
   `go test ./internal/llm/prompt -run TestGetContextFromPaths`)
 - **Update Golden Files**: `go test ./... -update` (regenerates `.golden`
   files when test output changes)
-  - Update specific package:
-    `go test ./internal/tui/components/core -update` (in this case,
-    we're updating "core")
+   - Update specific package:
+     `go test ./internal/tui/components/core -update` (in this case,
+     we're updating "core")
 - **Lint**: `task lint:fix`
 - **Format**: `task fmt` (`gofumpt -w .`)
 - **Modernize**: `task modernize` (runs `modernize` which makes code
@@ -128,7 +128,7 @@ internal/
   permissions.
 - **Log messages**: Log messages must start with a capital letter (e.g.,
   "Failed to save session" not "failed to save session").
-  - This is enforced by `task lint:log` which runs as part of `task lint`.
+   - This is enforced by `task lint:log` which runs as part of `task lint`.
 - **Comments**: End comments in periods unless comments are at the end of the
   line.
 
@@ -159,11 +159,11 @@ func TestYourFunction(t *testing.T) {
 ## Formatting
 
 - ALWAYS format any Go code you write.
-  - First, try `gofumpt -w .`.
-  - If `gofumpt` is not available, use `goimports`.
-  - If `goimports` is not available, use `gofmt`.
-  - You can also use `task fmt` to run `gofumpt -w .` on the entire project,
-    as long as `gofumpt` is on the `PATH`.
+   - First, try `gofumpt -w .`.
+   - If `gofumpt` is not available, use `goimports`.
+   - If `goimports` is not available, use `gofmt`.
+   - You can also use `task fmt` to run `gofumpt -w .` on the entire project,
+     as long as `gofumpt` is on the `PATH`.
 
 ## Comments
 

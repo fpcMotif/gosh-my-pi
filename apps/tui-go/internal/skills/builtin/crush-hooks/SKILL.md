@@ -23,15 +23,15 @@ accept snake_case (`PreToolUse`, `pretooluse`, `pre_tool_use` all work).
 
 ```jsonc
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "^bash$",              // regex against tool name (optional; omit to match all)
-        "command": "./hooks/my-hook.sh",   // required: shell command to run
-        "timeout": 10                     // optional: seconds, default 30
-      }
-    ]
-  }
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "^bash$", // regex against tool name (optional; omit to match all)
+				"command": "./hooks/my-hook.sh", // required: shell command to run
+				"timeout": 10, // optional: seconds, default 30
+			},
+		],
+	},
 }
 ```
 
@@ -49,25 +49,25 @@ the input/output contract is identical regardless of language.
 
 **Environment variables:**
 
-| Variable                     | Description                              |
-| ---------------------------- | ---------------------------------------- |
-| `CRUSH_EVENT`                | Event name (e.g. `PreToolUse`)           |
-| `CRUSH_TOOL_NAME`            | Tool being called (e.g. `bash`)          |
-| `CRUSH_SESSION_ID`           | Current session ID                       |
-| `CRUSH_CWD`                  | Working directory                        |
-| `CRUSH_PROJECT_DIR`          | Project root directory                   |
-| `CRUSH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
-| `CRUSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
+| Variable                     | Description                          |
+| ---------------------------- | ------------------------------------ |
+| `CRUSH_EVENT`                | Event name (e.g. `PreToolUse`)       |
+| `CRUSH_TOOL_NAME`            | Tool being called (e.g. `bash`)      |
+| `CRUSH_SESSION_ID`           | Current session ID                   |
+| `CRUSH_CWD`                  | Working directory                    |
+| `CRUSH_PROJECT_DIR`          | Project root directory               |
+| `CRUSH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command  |
+| `CRUSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path |
 
 **JSON on stdin:**
 
 ```json
 {
-  "event": "PreToolUse",
-  "session_id": "313909e",
-  "cwd": "/home/user/project",
-  "tool_name": "bash",
-  "tool_input": {"command": "rm -rf /"}
+	"event": "PreToolUse",
+	"session_id": "313909e",
+	"cwd": "/home/user/project",
+	"tool_name": "bash",
+	"tool_input": { "command": "rm -rf /" }
 }
 ```
 
@@ -75,12 +75,12 @@ the input/output contract is identical regardless of language.
 
 Communicate back via exit code (+ stderr) or JSON on stdout.
 
-| Exit Code | Meaning                                                       |
-| --------- | ------------------------------------------------------------- |
-| 0         | Success. Stdout is parsed as the JSON envelope below.         |
-| 2         | Block this tool call. Stderr becomes the deny reason.         |
-| 49        | Halt the whole turn. Stderr becomes the halt reason.          |
-| Other     | Non-blocking error. Logged and ignored; tool call proceeds.   |
+| Exit Code | Meaning                                                     |
+| --------- | ----------------------------------------------------------- |
+| 0         | Success. Stdout is parsed as the JSON envelope below.       |
+| 2         | Block this tool call. Stderr becomes the deny reason.       |
+| 49        | Halt the whole turn. Stderr becomes the halt reason.        |
+| Other     | Non-blocking error. Logged and ignored; tool call proceeds. |
 
 Exit 2 blocks one tool call (agent sees the reason and can try again); exit 49
 ends the whole turn (user takes over). Default to deny — reach for halt only
@@ -91,12 +91,12 @@ policy violation).
 
 ```json
 {
-  "version": 1,
-  "decision": "allow",
-  "halt": false,
-  "reason": "...",
-  "context": "Extra info for the model",
-  "updated_input": {"command": "rewritten"}
+	"version": 1,
+	"decision": "allow",
+	"halt": false,
+	"reason": "...",
+	"context": "Extra info for the model",
+	"updated_input": { "command": "rewritten" }
 }
 ```
 
@@ -140,7 +140,7 @@ Config: `{"matcher": "^bash$", "command": "./hooks/no-rm-rf.sh"}`
 ### Auto-approve read-only tools (inline, no script)
 
 ```jsonc
-{"matcher": "^(view|ls|grep|glob)$", "command": "echo '{\"decision\":\"allow\"}'"}
+{ "matcher": "^(view|ls|grep|glob)$", "command": "echo '{\"decision\":\"allow\"}'" }
 ```
 
 Every `view`/`ls`/`grep`/`glob` call now runs without prompting.

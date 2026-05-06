@@ -216,52 +216,52 @@ module.exports = loadNative();
 
 // --- generated const enum exports (do not edit) ---
 module.exports.AstMatchStrictness = {
-  Cst: 'cst',
-  Smart: 'smart',
-  Ast: 'ast',
-  Relaxed: 'relaxed',
-  Signature: 'signature',
-  Template: 'template',
+	Cst: "cst",
+	Smart: "smart",
+	Ast: "ast",
+	Relaxed: "relaxed",
+	Signature: "signature",
+	Template: "template",
 };
 module.exports.Ellipsis = {
-  Unicode: 0,
-  Ascii: 1,
-  Omit: 2,
+	Unicode: 0,
+	Ascii: 1,
+	Omit: 2,
 };
 module.exports.Encoding = {
-  O200kBase: 'O200kBase',
-  Cl100kBase: 'Cl100kBase',
+	O200kBase: "O200kBase",
+	Cl100kBase: "Cl100kBase",
 };
 module.exports.FileType = {
-  File: 1,
-  Dir: 2,
-  Symlink: 3,
+	File: 1,
+	Dir: 2,
+	Symlink: 3,
 };
 module.exports.GrepOutputMode = {
-  Content: 'content',
-  Count: 'count',
-  FilesWithMatches: 'filesWithMatches',
+	Content: "content",
+	Count: "count",
+	FilesWithMatches: "filesWithMatches",
 };
 module.exports.ImageFormat = {
-  PNG: 0,
-  JPEG: 1,
-  WEBP: 2,
-  GIF: 3,
+	PNG: 0,
+	JPEG: 1,
+	WEBP: 2,
+	GIF: 3,
 };
 module.exports.KeyEventType = {
-  Press: 1,
-  Repeat: 2,
-  Release: 3,
+	Press: 1,
+	Repeat: 2,
+	Release: 3,
 };
 module.exports.MacOSAppearance = {
-  Dark: 'dark',
-  Light: 'light',
+	Dark: "dark",
+	Light: "light",
 };
 module.exports.SamplingFilter = {
-  Nearest: 1,
-  Triangle: 2,
-  CatmullRom: 3,
-  Gaussian: 4,
-  Lanczos3: 5,
+	Nearest: 1,
+	Triangle: 2,
+	CatmullRom: 3,
+	Gaussian: 4,
+	Lanczos3: 5,
 };
 // --- end generated const enum exports ---
