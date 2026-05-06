@@ -159,7 +159,6 @@ export async function runPluginCommand(cmd: PluginCommandArgs): Promise<void> {
 		case "disable":
 			await handleDisable(manager, cmd.args, cmd.flags);
 			break;
-
 	}
 }
 

@@ -24,11 +24,7 @@ import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { getDefault, type SettingPath, Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
-import {
-	clearClaudePluginRootsCache,
-	injectPluginDirRoots,
-	preloadPluginRoots,
-} from "./discovery/helpers";
+import { clearClaudePluginRootsCache, injectPluginDirRoots, preloadPluginRoots } from "./discovery/helpers";
 import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
 
@@ -729,8 +725,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	} else {
 		await logger.time("preloadPluginRoots", preloadPluginRoots, home, getProjectDir());
 	}
-
-
 
 	const { options: sessionOptions } = await logger.time(
 		"buildSessionOptions",
