@@ -107,9 +107,9 @@ describe("RetryController", () => {
 		const successMsg: AssistantMessage = { ...assistantError(""), stopReason: "stop", errorMessage: undefined };
 		// stopReason gate: even with a transient errorKind, a non-error stopReason is not retried.
 		expect(retry.isRetryable(successMsg, { kind: "transient" })).toBe(false);
-		expect(retry.isRetryable({ ...successMsg, stopReason: "aborted" }, { kind: "usage_limit", retryAfterMs: 1 })).toBe(
-			false,
-		);
+		expect(
+			retry.isRetryable({ ...successMsg, stopReason: "aborted" }, { kind: "usage_limit", retryAfterMs: 1 }),
+		).toBe(false);
 	});
 
 	test("handle() returns false when retry is disabled", async () => {
@@ -143,7 +143,9 @@ describe("RetryController", () => {
 		expect(result).toBe(false);
 		expect(retry.attempt).toBe(0); // reset
 		const finalEvent = calls.emits.find(
-			e => (e as { type: string; success?: boolean }).type === "auto_retry_end" && (e as { success?: boolean }).success === false,
+			e =>
+				(e as { type: string; success?: boolean }).type === "auto_retry_end" &&
+				(e as { success?: boolean }).success === false,
 		);
 		expect(finalEvent).toBeDefined();
 	});

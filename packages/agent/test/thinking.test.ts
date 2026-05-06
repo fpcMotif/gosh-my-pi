@@ -1,12 +1,7 @@
 import type { Model } from "@oh-my-pi/pi-ai";
 import { Effort } from "@oh-my-pi/pi-ai/model-thinking";
 import { describe, expect, test } from "bun:test";
-import {
-	parseThinkingLevel,
-	resolveThinkingLevelForModel,
-	ThinkingLevel,
-	toReasoningEffort,
-} from "../src/thinking";
+import { parseThinkingLevel, resolveThinkingLevelForModel, ThinkingLevel, toReasoningEffort } from "../src/thinking";
 
 function reasoningModel(thinkingMin: Effort, thinkingMax: Effort): Model {
 	return {
@@ -77,7 +72,9 @@ describe("toReasoningEffort", () => {
 
 describe("resolveThinkingLevelForModel", () => {
 	test("'inherit' → undefined", () => {
-		expect(resolveThinkingLevelForModel(reasoningModel(Effort.Low, Effort.High), ThinkingLevel.Inherit)).toBeUndefined();
+		expect(
+			resolveThinkingLevelForModel(reasoningModel(Effort.Low, Effort.High), ThinkingLevel.Inherit),
+		).toBeUndefined();
 	});
 
 	test("undefined input → undefined", () => {

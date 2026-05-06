@@ -273,9 +273,7 @@ describe("toWireEvent — internal-only events return null", () => {
 	});
 
 	test("auto_retry_end", () => {
-		expect(
-			toWireEvent({ type: "auto_retry_end", success: true, attempt: 1 } as AgentSessionEvent),
-		).toBeNull();
+		expect(toWireEvent({ type: "auto_retry_end", success: true, attempt: 1 } as AgentSessionEvent)).toBeNull();
 	});
 
 	test("retry_fallback_applied", () => {
