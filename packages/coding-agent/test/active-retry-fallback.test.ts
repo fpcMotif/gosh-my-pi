@@ -1,10 +1,7 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Model } from "@oh-my-pi/pi-ai";
 import { describe, expect, test } from "bun:test";
-import {
-	ActiveRetryFallback,
-	type ActiveRetryFallbackContext,
-} from "../src/session/active-retry-fallback";
+import { ActiveRetryFallback, type ActiveRetryFallbackContext } from "../src/session/active-retry-fallback";
 import type { RetryFallbackPolicy, RetryFallbackSelector } from "../src/session/retry-fallback-policy";
 
 function makeModel(provider: string, id: string): Model {
@@ -31,7 +28,11 @@ interface FakeContextOverrides {
 
 function makeContext(opts: FakeContextOverrides = {}): {
 	ctx: ActiveRetryFallbackContext;
-	calls: { setModel: Model[]; setThinking: (ThinkingLevel | undefined)[]; emits: Array<{ from: string; to: string; role: string }> };
+	calls: {
+		setModel: Model[];
+		setThinking: (ThinkingLevel | undefined)[];
+		emits: Array<{ from: string; to: string; role: string }>;
+	};
 } {
 	const calls = {
 		setModel: [] as Model[],

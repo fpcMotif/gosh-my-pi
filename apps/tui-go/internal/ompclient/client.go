@@ -2,6 +2,7 @@ package ompclient
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,18 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+)
+
+// Channel buffer sizes for fan-out from the read loop. The shutdown drain
+// goroutines (see commit 7635a1d "unblock omp bridge stderr discard and
+// side-channel deadlock") rely on these being non-zero so dispatch isn't
+// blocked when consumers haven't subscribed yet.
+const (
+	eventsBufferSize         = 256
+	sideChannelBufferSize    = 16
+	subprocessShutdownGrace  = 2 * time.Second
+	scannerInitialBufferSize = 64 * 1024
+	scannerMaxBufferSize     = 16 * 1024 * 1024
 )
 
 // Options configures the omp RPC subprocess.
@@ -117,10 +130,10 @@ func Spawn(ctx context.Context, opts Options) (*Client, error) {
 		stdin:          stdin,
 		stdout:         stdout,
 		pending:        make(map[string]chan *Response),
-		events:         make(chan *AgentEvent, 256),
-		extensionUI:    make(chan *ExtensionUIReq, 16),
-		hostToolCall:   make(chan *HostToolCallReq, 16),
-		hostToolCancel: make(chan *HostToolCancelReq, 16),
+		events:         make(chan *AgentEvent, eventsBufferSize),
+		extensionUI:    make(chan *ExtensionUIReq, sideChannelBufferSize),
+		hostToolCall:   make(chan *HostToolCallReq, sideChannelBufferSize),
+		hostToolCancel: make(chan *HostToolCancelReq, sideChannelBufferSize),
 		done:           make(chan struct{}),
 	}
 	go c.readLoop()
@@ -232,7 +245,7 @@ func (c *Client) Close() error {
 		// Wait for read loop to drain.
 		select {
 		case <-c.done:
-		case <-time.After(2 * time.Second):
+		case <-time.After(subprocessShutdownGrace):
 			if c.cmd.Process != nil {
 				_ = c.cmd.Process.Kill()
 			}
@@ -254,7 +267,7 @@ func (c *Client) readLoop() {
 	defer close(c.hostToolCancel)
 
 	scanner := bufio.NewScanner(c.stdout)
-	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	scanner.Buffer(make([]byte, scannerInitialBufferSize), scannerMaxBufferSize)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -283,7 +296,7 @@ func (c *Client) dispatch(line []byte) {
 	}
 	if err := json.Unmarshal(line, &probe); err != nil {
 		// Malformed; surface as best-effort agent_event with raw payload.
-		c.events <- &AgentEvent{Kind: "_raw", Payload: append([]byte(nil), line...)}
+		c.events <- &AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)}
 		return
 	}
 
@@ -291,7 +304,7 @@ func (c *Client) dispatch(line []byte) {
 	case "response":
 		var r Response
 		if err := json.Unmarshal(line, &r); err != nil {
-			c.events <- &AgentEvent{Kind: "_raw", Payload: append([]byte(nil), line...)}
+			c.events <- &AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)}
 			return
 		}
 		c.mu.Lock()
@@ -303,7 +316,7 @@ func (c *Client) dispatch(line []byte) {
 	case "extension_ui_request":
 		var r ExtensionUIReq
 		if err := json.Unmarshal(line, &r); err == nil {
-			r.Raw = append([]byte(nil), line...)
+			r.Raw = bytes.Clone(line)
 			c.extensionUI <- &r
 		}
 	case "host_tool_call":
@@ -322,7 +335,7 @@ func (c *Client) dispatch(line []byte) {
 		// etc.); the full body is preserved for the consumer to parse.
 		c.events <- &AgentEvent{
 			Kind:    probe.Type,
-			Payload: append([]byte(nil), line...),
+			Payload: bytes.Clone(line),
 		}
 	}
 }

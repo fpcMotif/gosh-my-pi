@@ -117,31 +117,6 @@ type HostToolDefinition struct {
 	Hidden      bool           `json:"hidden,omitempty"`
 }
 
-// Frame is one decoded line from the omp RPC stdout. Exactly one of
-// the typed sub-frames is populated based on Type.
-//
-// Type values seen on stdout:
-//
-//	"response"               -> Response
-//	"agent_event"            -> AgentEvent (covers message_update,
-//	                            tool_execution_start/update/end, etc.)
-//	"extension_ui_request"   -> ExtensionUI
-//	"host_tool_call"         -> HostToolCall
-//	"host_tool_cancel"       -> HostToolCancel
-//
-// Unknown types are preserved in Raw so the caller can decide.
-type Frame struct {
-	Type string `json:"type"`
-
-	Response       *Response         `json:"-"`
-	AgentEvent     *AgentEvent       `json:"-"`
-	ExtensionUI    *ExtensionUIReq   `json:"-"`
-	HostToolCall   *HostToolCallReq  `json:"-"`
-	HostToolCancel *HostToolCancelReq `json:"-"`
-
-	Raw json.RawMessage `json:"-"`
-}
-
 // Response is a typed response to a command. Mirrors RpcResponse.
 type Response struct {
 	ID      string          `json:"id,omitempty"`
@@ -169,13 +144,13 @@ type AgentEvent struct {
 // ExtensionUIReq mirrors RpcExtensionUIRequest. Always carries id
 // + method; remaining fields depend on method.
 type ExtensionUIReq struct {
-	ID       string          `json:"id"`
-	Method   string          `json:"method"`
-	Title    string          `json:"title,omitempty"`
-	Message  string          `json:"message,omitempty"`
-	Options  []string        `json:"options,omitempty"`
-	Timeout  *int            `json:"timeout,omitempty"`
-	Raw      json.RawMessage `json:"-"`
+	ID      string          `json:"id"`
+	Method  string          `json:"method"`
+	Title   string          `json:"title,omitempty"`
+	Message string          `json:"message,omitempty"`
+	Options []string        `json:"options,omitempty"`
+	Timeout *int            `json:"timeout,omitempty"`
+	Raw     json.RawMessage `json:"-"`
 }
 
 // HostToolCallReq mirrors RpcHostToolCallRequest.

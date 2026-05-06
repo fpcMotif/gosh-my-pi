@@ -1,7 +1,9 @@
 package backend
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -12,10 +14,16 @@ func createDotCrushDir(dir string) error {
 	}
 
 	gitIgnorePath := filepath.Join(dir, ".gitignore")
-	if _, err := os.Stat(gitIgnorePath); os.IsNotExist(err) {
-		if err := os.WriteFile(gitIgnorePath, []byte("*\n"), 0o644); err != nil {
-			return fmt.Errorf("failed to create .gitignore file: %q %w", gitIgnorePath, err)
+	f, err := os.OpenFile(gitIgnorePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return nil
 		}
+		return fmt.Errorf("failed to create .gitignore file: %q %w", gitIgnorePath, err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString("*\n"); err != nil {
+		return fmt.Errorf("failed to write .gitignore file: %q %w", gitIgnorePath, err)
 	}
 
 	return nil

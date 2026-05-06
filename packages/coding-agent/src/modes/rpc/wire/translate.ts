@@ -13,19 +13,12 @@
  * within v1) or pin the old field name in the projection.
  */
 
-import type {
-	AgentEvent,
-	AgentErrorKind,
-	AgentMessage,
-	TransientReason,
-} from "@oh-my-pi/pi-agent-core";
+import type { AgentEvent, AgentErrorKind, AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type {
 	AssistantMessage,
 	AssistantMessageEvent,
 	ImageContent,
-	MessageAttribution,
 	RedactedThinkingContent,
-	StopReason,
 	TextContent,
 	ThinkingContent,
 	ToolCall,
@@ -50,17 +43,14 @@ import type {
 	WireEventV1,
 	WireHookMessageV1,
 	WireImageContentV1,
-	WireMessageAttributionV1,
 	WireMessageV1,
 	WirePythonExecutionMessageV1,
 	WireRedactedThinkingContentV1,
-	WireStopReasonV1,
 	WireTextContentV1,
 	WireThinkingContentV1,
 	WireToolCallV1,
 	WireToolResultMessageV1,
 	WireToolResultV1,
-	WireTransientReasonV1,
 	WireUsageV1,
 	WireUserContentBlockV1,
 	WireUserMessageV1,
@@ -173,10 +163,6 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 // Sub-shape projections
 // ============================================================================
 
-function toWireAttribution(attribution: MessageAttribution | undefined): WireMessageAttributionV1 | undefined {
-	return attribution;
-}
-
 function toWireUsage(usage: Usage): WireUsageV1 {
 	return {
 		input: usage.input,
@@ -192,14 +178,6 @@ function toWireUsage(usage: Usage): WireUsageV1 {
 	};
 }
 
-function toWireStopReason(reason: StopReason): WireStopReasonV1 {
-	return reason;
-}
-
-function toWireTransientReason(reason: TransientReason): WireTransientReasonV1 {
-	return reason;
-}
-
 function toWireErrorKind(kind: AgentErrorKind): WireErrorKindV1 {
 	switch (kind.kind) {
 		case "context_overflow":
@@ -212,7 +190,7 @@ function toWireErrorKind(kind: AgentErrorKind): WireErrorKindV1 {
 			return {
 				kind: "transient",
 				...(kind.retryAfterMs !== undefined && { retryAfterMs: kind.retryAfterMs }),
-				...(kind.reason !== undefined && { reason: toWireTransientReason(kind.reason) }),
+				...(kind.reason !== undefined && { reason: kind.reason }),
 			};
 		case "fatal":
 			return { kind: "fatal" };
@@ -289,7 +267,7 @@ function toWireUserMessage(msg: UserMessage): WireUserMessageV1 {
 		role: "user",
 		content: toWireUserContentList(msg.content),
 		...(msg.synthetic !== undefined && { synthetic: msg.synthetic }),
-		...(msg.attribution !== undefined && { attribution: toWireAttribution(msg.attribution) }),
+		...(msg.attribution !== undefined && { attribution: msg.attribution }),
 		timestamp: msg.timestamp,
 	};
 }
@@ -303,7 +281,7 @@ function toWireAssistantMessage(msg: AssistantMessage): WireAssistantMessageV1 {
 		model: msg.model,
 		...(msg.responseId !== undefined && { responseId: msg.responseId }),
 		usage: toWireUsage(msg.usage),
-		stopReason: toWireStopReason(msg.stopReason),
+		stopReason: msg.stopReason,
 		...(msg.errorMessage !== undefined && { errorMessage: msg.errorMessage }),
 		timestamp: msg.timestamp,
 		...(msg.duration !== undefined && { duration: msg.duration }),
@@ -319,7 +297,7 @@ function toWireToolResultMessage(msg: ToolResultMessage): WireToolResultMessageV
 		content: msg.content.map(toWireUserContent),
 		...(msg.details !== undefined && { details: msg.details }),
 		isError: msg.isError,
-		...(msg.attribution !== undefined && { attribution: toWireAttribution(msg.attribution) }),
+		...(msg.attribution !== undefined && { attribution: msg.attribution }),
 		...(msg.prunedAt !== undefined && { prunedAt: msg.prunedAt }),
 		timestamp: msg.timestamp,
 	};
@@ -358,7 +336,7 @@ function toWireCustomMessage(msg: CustomMessage): WireCustomMessageV1 {
 		content: toWireUserContentList(msg.content),
 		display: msg.display,
 		...(msg.details !== undefined && { details: msg.details }),
-		...(msg.attribution !== undefined && { attribution: toWireAttribution(msg.attribution) }),
+		...(msg.attribution !== undefined && { attribution: msg.attribution }),
 		timestamp: msg.timestamp,
 	};
 }
@@ -370,7 +348,7 @@ function toWireHookMessage(msg: HookMessage): WireHookMessageV1 {
 		content: toWireUserContentList(msg.content),
 		display: msg.display,
 		...(msg.details !== undefined && { details: msg.details }),
-		...(msg.attribution !== undefined && { attribution: toWireAttribution(msg.attribution) }),
+		...(msg.attribution !== undefined && { attribution: msg.attribution }),
 		timestamp: msg.timestamp,
 	};
 }
@@ -383,7 +361,7 @@ function toWireMessage(msg: AgentMessage): WireMessageV1 {
 			return {
 				role: "developer",
 				content: toWireUserContentList(msg.content),
-				...(msg.attribution !== undefined && { attribution: toWireAttribution(msg.attribution) }),
+				...(msg.attribution !== undefined && { attribution: msg.attribution }),
 				timestamp: msg.timestamp,
 			};
 		case "assistant":

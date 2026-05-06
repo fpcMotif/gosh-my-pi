@@ -77,11 +77,9 @@ class RpcHostToolAdapter<TParams extends TSchema = TSchema, TTheme extends Theme
 export class RpcHostToolBridge {
 	#output: RpcHostToolOutput;
 	#definitions = new Map<string, RpcHostToolDefinition>();
-	// Resolve/reject correlation goes through the shared RequestCorrelator
-	// (decision 8 / interpretation B). The streaming update callbacks are
-	// tracked separately since they don't fit the one-shot register/resolve
-	// pattern — they fire repeatedly until the final result frame.
 	#correlator = new RequestCorrelator();
+	// Streaming update callbacks fire repeatedly until the final result frame,
+	// so they don't fit the one-shot register/resolve pattern in #correlator.
 	#updateCallbacks = new Map<string, AgentToolUpdateCallback<unknown>>();
 
 	constructor(output: RpcHostToolOutput) {

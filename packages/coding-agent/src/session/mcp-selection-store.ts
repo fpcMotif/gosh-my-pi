@@ -37,11 +37,6 @@ export interface MCPSelectionInit {
  * tools exist, which subset is selected for the current session, the seed
  * defaults from config, and the per-session-file remembered defaults used
  * when restoring sessions.
- *
- * Active-tool management (`setActiveToolsByName`, `#applyActiveToolsByName`)
- * stays on `AgentSession` because it crosses concerns (system prompt rebuild,
- * Auto-QA tool injection, agent-state mutation) — it *uses* this store to
- * read/write the MCP-specific projection of the active tool set.
  */
 export class MCPSelectionStore {
 	#ctx: MCPSelectionContext;
@@ -86,7 +81,7 @@ export class MCPSelectionStore {
 		if (!this.#enabled) {
 			return this.#ctx.getActiveToolNames().filter(name => isMCPToolName(name) && this.#ctx.toolRegistry.has(name));
 		}
-		return this.#filterSelectable(this.#selectedToolNames);
+		return this.filterSelectable(this.#selectedToolNames);
 	}
 
 	/** Recompute the discoverable-tools map from the current tool registry. */
@@ -99,7 +94,7 @@ export class MCPSelectionStore {
 
 	/** Drop selected names that no longer correspond to discoverable+registered tools. */
 	pruneSelected(): void {
-		this.#selectedToolNames = new Set(this.#filterSelectable(this.#selectedToolNames));
+		this.#selectedToolNames = new Set(this.filterSelectable(this.#selectedToolNames));
 	}
 
 	/**
@@ -118,7 +113,7 @@ export class MCPSelectionStore {
 
 	/** Configured-default selection (defaults-by-tool ∪ defaults-by-server), filtered to selectable. */
 	getConfiguredDefaults(): string[] {
-		return this.#filterSelectable([
+		return this.filterSelectable([
 			...this.#defaultToolNames,
 			...selectDiscoverableMCPToolNamesByServer(this.#discoverableTools.values(), this.#defaultServerNames),
 		]);
@@ -127,7 +122,7 @@ export class MCPSelectionStore {
 	/** Remember the configured defaults associated with a session file (for switch-restore). */
 	rememberSessionDefault(sessionFile: string | null | undefined, toolNames: Iterable<string>): void {
 		if (sessionFile === null || sessionFile === undefined || sessionFile === "") return;
-		this.#sessionDefaults.set(path.resolve(sessionFile), this.#filterSelectable(toolNames));
+		this.#sessionDefaults.set(path.resolve(sessionFile), this.filterSelectable(toolNames));
 	}
 
 	getSessionDefault(sessionFile: string | null | undefined): string[] {
@@ -151,11 +146,6 @@ export class MCPSelectionStore {
 		return left.length === right.length && left.every((name, index) => name === right[index]);
 	}
 
-	/** Filter an iterable of names to those discoverable+registered. */
-	filterSelectable(toolNames: Iterable<string>): string[] {
-		return this.#filterSelectable(toolNames);
-	}
-
 	/**
 	 * Activate a list of MCP tools by adding them to the selection set.
 	 * Returns the names that were actually added (after de-dup + filter).
@@ -177,7 +167,7 @@ export class MCPSelectionStore {
 
 	/** Read the current selection set as an array (for active-tools assembly). */
 	getSelectedSnapshot(): string[] {
-		return this.#filterSelectable(this.#selectedToolNames);
+		return this.filterSelectable(this.#selectedToolNames);
 	}
 
 	/**
@@ -186,7 +176,7 @@ export class MCPSelectionStore {
 	 * fresh session's MCP set.
 	 */
 	getSelectableExplicitDefaults(): string[] {
-		return this.#filterSelectable(this.#defaultToolNames);
+		return this.filterSelectable(this.#defaultToolNames);
 	}
 
 	/**
@@ -208,7 +198,7 @@ export class MCPSelectionStore {
 		this.#selectedToolNames = new Set(snapshot);
 	}
 
-	#filterSelectable(toolNames: Iterable<string>): string[] {
+	filterSelectable(toolNames: Iterable<string>): string[] {
 		return Array.from(toolNames).filter(
 			name => this.#discoverableTools.has(name) && this.#ctx.toolRegistry.has(name),
 		);

@@ -33,10 +33,6 @@ export interface ActiveRetryFallbackContext {
  * Owns the per-session "currently-active retry fallback" state and the
  * methods that mutate it: applying a candidate model when the primary fails,
  * clearing on success, and restoring the primary once its cooldown expires.
- *
- * Extracted from `AgentSession` to give the cluster a deletion-test seam:
- * the entire fallback subsystem now lives behind one field on the session,
- * and unsubscribing it is a one-line change.
  */
 export class ActiveRetryFallback {
 	#state: ActiveRetryFallbackState | undefined = undefined;
@@ -69,22 +65,18 @@ export class ActiveRetryFallback {
 			if (!candidate) continue;
 			const apiKey = await this.#ctx.modelRegistry.getApiKey(candidate, this.#ctx.sessionId);
 			if (apiKey === null || apiKey === undefined || apiKey === "") continue;
-			await this.#applyCandidate(role, selector, currentSelector);
+			await this.#applyCandidate(role, selector, currentSelector, candidate);
 			return true;
 		}
 		return false;
 	}
 
-	async #applyCandidate(role: string, selector: RetryFallbackSelector, currentSelector: string): Promise<void> {
-		const candidate = this.#ctx.modelRegistry.find(selector.provider, selector.id);
-		if (!candidate) {
-			throw new Error(`Retry fallback model not found: ${selector.raw}`);
-		}
-		const apiKey = await this.#ctx.modelRegistry.getApiKey(candidate, this.#ctx.sessionId);
-		if (apiKey === null || apiKey === undefined || apiKey === "") {
-			throw new Error(`No API key for retry fallback ${selector.raw}`);
-		}
-
+	async #applyCandidate(
+		role: string,
+		selector: RetryFallbackSelector,
+		currentSelector: string,
+		candidate: Model,
+	): Promise<void> {
 		const currentThinkingLevel = this.#ctx.getThinkingLevel();
 		const nextThinkingLevel = selector.thinkingLevel ?? currentThinkingLevel;
 

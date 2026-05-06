@@ -27,9 +27,6 @@ export interface PythonControllerContext {
  * in-flight kernel executions (so dispose can wait/abort), queues messages
  * emitted during streaming, manages a per-session kernel owner id used to
  * scope kernel-session disposal.
- *
- * Sibling of {@link BashController}, with the additional concern of
- * cooperative kernel cleanup at dispose time.
  */
 export class PythonController {
 	#ctx: PythonControllerContext;
