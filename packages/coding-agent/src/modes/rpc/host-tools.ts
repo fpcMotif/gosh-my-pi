@@ -150,10 +150,16 @@ export class RpcHostToolBridge {
 		});
 
 		// Ensure update-callback cleanup happens when the promise settles
-		// regardless of how (resolve, reject, or abort).
-		void promise.finally(() => {
-			this.#updateCallbacks.delete(id);
-		});
+		// regardless of how (resolve, reject, or abort), without creating a
+		// second promise that can reject unobserved.
+		void promise.then(
+			() => {
+				this.#updateCallbacks.delete(id);
+			},
+			() => {
+				this.#updateCallbacks.delete(id);
+			},
+		);
 
 		// Custom abort error message — RequestCorrelator's default reason is
 		// generic; preserve the prior "Host tool X was aborted" wording.

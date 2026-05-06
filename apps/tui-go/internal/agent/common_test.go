@@ -62,7 +62,11 @@ func hyperBuilder(model string) builderFunc {
 }
 
 func testEnv(t *testing.T) fakeEnv {
-	workingDir := filepath.Join("/tmp/crush-test/", t.Name())
+	baseDir := "/tmp/crush-test"
+	if info, err := os.Stat(baseDir); err == nil && !info.IsDir() {
+		require.NoError(t, os.Remove(baseDir))
+	}
+	workingDir := filepath.Join(baseDir, t.Name())
 	os.RemoveAll(workingDir)
 
 	err := os.MkdirAll(workingDir, 0o755)

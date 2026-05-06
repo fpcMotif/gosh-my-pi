@@ -1634,12 +1634,13 @@ export class AgentSession {
 	}
 
 	async activateDiscoveredMCPTools(toolNames: string[]): Promise<string[]> {
+		const previousSelectedMCPToolNames = this.getSelectedMCPToolNames();
 		const activated = this.#mcp.collectActivatable(toolNames);
 		if (activated.length === 0) {
 			return [];
 		}
 		const nextActive = [...this.#getActiveNonMCPToolNames(), ...this.#mcp.getSelectedSnapshot()];
-		await this.setActiveToolsByName(nextActive);
+		await this.#applyActiveToolsByName(nextActive, { previousSelectedMCPToolNames });
 		return activated;
 	}
 

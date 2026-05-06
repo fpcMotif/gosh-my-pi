@@ -3,10 +3,13 @@ package model
 import (
 	"testing"
 
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/csync"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/dialog"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
 	"github.com/stretchr/testify/require"
 )
@@ -74,6 +77,42 @@ func TestCurrentModelSupportsImages(t *testing.T) {
 	})
 }
 
+func TestEditorSendMessageMatchesReturnKeyEncodings(t *testing.T) {
+	t.Parallel()
+
+	keyMap := DefaultKeyMap()
+	messages := []tea.KeyPressMsg{
+		tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}),
+		tea.KeyPressMsg(tea.Key{Code: 'm', Mod: tea.ModCtrl}),
+	}
+
+	for _, msg := range messages {
+		require.True(t, key.Matches(msg, keyMap.Editor.SendMessage), "expected %q to send message", msg.String())
+		require.False(t, key.Matches(msg, keyMap.Editor.Newline), "expected %q not to insert newline", msg.String())
+	}
+}
+
+func TestEditorCtrlMSubmitsPrompt(t *testing.T) {
+	providers := csync.NewMap[string, config.ProviderConfig]()
+	providers.Set("test-provider", config.ProviderConfig{ID: "test-provider"})
+	cfg := &config.Config{
+		Providers: providers,
+		Options: &config.Options{
+			TUI: &config.TUIOptions{},
+		},
+	}
+
+	ui := New(common.DefaultCommon(&testWorkspace{cfg: cfg}), "", false)
+	ui.textarea.SetValue("quit")
+
+	cmd := ui.handleKeyPressMsg(tea.KeyPressMsg(tea.Key{Code: 'm', Mod: tea.ModCtrl}))
+
+	require.Nil(t, cmd)
+	require.True(t, ui.dialog.ContainsDialog(dialog.QuitID))
+	require.False(t, ui.dialog.ContainsDialog(dialog.ModelsID))
+	require.Empty(t, ui.textarea.Value())
+}
+
 func newTestUIWithConfig(t *testing.T, cfg *config.Config) *UI {
 	t.Helper()
 
@@ -92,4 +131,8 @@ type testWorkspace struct {
 
 func (w *testWorkspace) Config() *config.Config {
 	return w.cfg
+}
+
+func (w *testWorkspace) ProjectNeedsInitialization() (bool, error) {
+	return false, nil
 }

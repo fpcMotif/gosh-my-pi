@@ -1,30 +1,35 @@
 package log
 
 import (
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
 func TestHTTPRoundTripLogger(t *testing.T) {
-	// Create a test server that returns a 500 error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Custom-Header", "test-value")
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error": "Internal server error", "code": 500}`))
-	}))
-	defer server.Close()
+	client := &http.Client{
+		Transport: &HTTPRoundTripLogger{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if req.Method != http.MethodPost {
+					t.Fatalf("expected POST, got %s", req.Method)
+				}
+				return &http.Response{
+					StatusCode:    http.StatusInternalServerError,
+					Status:        "500 Internal Server Error",
+					Header:        http.Header{"Content-Type": []string{"application/json"}, "X-Custom-Header": []string{"test-value"}},
+					Body:          io.NopCloser(strings.NewReader(`{"error": "Internal server error", "code": 500}`)),
+					ContentLength: int64(len(`{"error": "Internal server error", "code": 500}`)),
+					Request:       req,
+				}, nil
+			}),
+		},
+	}
 
-	// Create HTTP client with logging
-	client := NewHTTPClient()
-
-	// Make a request
 	req, err := http.NewRequestWithContext(
 		t.Context(),
 		http.MethodPost,
-		server.URL,
+		"https://example.test/fail",
 		strings.NewReader(`{"test": "data"}`),
 	)
 	if err != nil {
@@ -43,6 +48,12 @@ func TestHTTPRoundTripLogger(t *testing.T) {
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("Expected status code 500, got %d", resp.StatusCode)
 	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
 
 func TestFormatHeaders(t *testing.T) {

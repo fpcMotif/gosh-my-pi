@@ -103,7 +103,7 @@ func DefaultKeyMap() KeyMap {
 		key.WithHelp("/", "add file"),
 	)
 	km.Editor.SendMessage = key.NewBinding(
-		key.WithKeys("enter"),
+		key.WithKeys("enter", "ctrl+m"),
 		key.WithHelp("enter", "send"),
 	)
 	km.Editor.OpenEditor = key.NewBinding(

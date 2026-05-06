@@ -1212,7 +1212,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			);
 			const firstWithKey = candidatesWithKeys.find(c => c !== null);
 			if (firstWithKey) {
-				selectedModel = firstWithKey;
+				model = firstWithKey;
 			}
 			if (model !== null && model !== undefined) {
 				if (modelFallbackMessage !== null && modelFallbackMessage !== undefined && modelFallbackMessage !== "") {

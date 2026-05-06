@@ -543,6 +543,16 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			}
 
 			case "set_model": {
+				// The Go TUI (apps/tui-go) registers a single placeholder
+				// model "gmp/gmp-backend" so it can reuse Crush's model-
+				// picker plumbing without duplicating the backend's full
+				// model registry. When it sends that pair, treat it as a
+				// no-op meaning "keep whatever model the backend already
+				// has" and echo the current model back so the TUI can
+				// label its header correctly.
+				if (command.provider === "gmp" && command.modelId === "gmp-backend") {
+					return success(id, "set_model", session.model ?? null);
+				}
 				const models = session.getAvailableModels();
 				const model = models.find(m => m.provider === command.provider && m.id === command.modelId);
 				if (!model) {

@@ -93,4 +93,6 @@ export function runCli(argv: string[]): Promise<void> {
 	return run({ bin: APP_NAME, version: VERSION, argv: runArgv, commands, help: showHelp });
 }
 
-await runCli(process.argv.slice(2));
+if (import.meta.main) {
+	await runCli(process.argv.slice(2));
+}
