@@ -544,10 +544,99 @@ func (w *OmpWorkspace) Subscribe(program *tea.Program) {
 		}
 	}()
 
+	// Drain the side-channels so the ompclient read-loop never blocks on a
+	// channel send. Without these consumers, the 17th unhandled
+	// extension_ui_request (or host_tool_call) would fill the 16-slot buffer
+	// and freeze the entire RPC stream — including command responses — until
+	// context-deadline. See D2 in the bridge review.
+	//
+	// The MVP responds with Cancelled: true to all UI prompts and with an
+	// error to any host tool call. Plumbing prompts into the Crush
+	// permission UI is a follow-up.
+	go w.drainExtensionUI()
+	go w.drainHostToolCalls()
+	go w.drainHostToolCancels()
+
 	for ev := range w.client.Events() {
 		w.handleAgentEvent(ev)
 	}
 	w.setAgentBusy(false)
+}
+
+// drainExtensionUI consumes incoming UI prompts from the agent and
+// auto-responds with Cancelled: true. omp's RpcExtensionUIContext
+// already handles cancellation as the safe default (its built-in
+// timeout resolves to undefined / cancelled), so this preserves
+// agent-side correctness while we lack a real dialog binding.
+func (w *OmpWorkspace) drainExtensionUI() {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("OmpWorkspace.drainExtensionUI panic", "recover", r)
+		}
+	}()
+	for req := range w.client.ExtensionUIRequests() {
+		if req == nil || req.ID == "" {
+			continue
+		}
+		resp := ompclient.ExtensionUIResp{
+			Type:      "extension_ui_response",
+			ID:        req.ID,
+			Cancelled: true,
+		}
+		if err := w.client.Send(resp); err != nil {
+			slog.Debug("omp workspace: extension_ui_response send failed",
+				"id", req.ID, "method", req.Method, "error", err)
+		} else {
+			slog.Debug("omp workspace: auto-cancelled extension_ui_request",
+				"id", req.ID, "method", req.Method)
+		}
+	}
+}
+
+// drainHostToolCalls rejects every incoming host tool invocation with
+// an error result. The Go TUI does not currently register host tools
+// via set_host_tools, so a host_tool_call frame here is unexpected; we
+// fail it explicitly rather than let omp hang on a missing response.
+func (w *OmpWorkspace) drainHostToolCalls() {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("OmpWorkspace.drainHostToolCalls panic", "recover", r)
+		}
+	}()
+	for req := range w.client.HostToolCalls() {
+		if req == nil || req.ID == "" {
+			continue
+		}
+		resp := ompclient.HostToolResult{
+			Type:    "host_tool_result",
+			ID:      req.ID,
+			Result:  "host tool not registered by gmp-tui-go",
+			IsError: true,
+		}
+		if err := w.client.Send(resp); err != nil {
+			slog.Debug("omp workspace: host_tool_result send failed",
+				"id", req.ID, "tool", req.ToolName, "error", err)
+		}
+	}
+}
+
+// drainHostToolCancels acknowledges cancellation requests for prior
+// host tool calls. We never tracked the original calls, so the
+// cancellation is structurally a no-op — but we must still consume it
+// to prevent the read-loop deadlock.
+func (w *OmpWorkspace) drainHostToolCancels() {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("OmpWorkspace.drainHostToolCancels panic", "recover", r)
+		}
+	}()
+	for req := range w.client.HostToolCancels() {
+		if req == nil {
+			continue
+		}
+		slog.Debug("omp workspace: host tool cancellation ignored",
+			"id", req.ID, "targetId", req.TargetID)
+	}
 }
 
 func (w *OmpWorkspace) Shutdown() {
