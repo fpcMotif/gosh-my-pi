@@ -5,7 +5,7 @@ This document explains how MCP server definitions become callable `mcp__*` tools
 ## Architecture at a glance
 
 ```text
-Config sources (.omp/.claude/.cursor/.vscode/mcp.json, mcp.json, etc.)
+Config sources (.omp/.cursor/.vscode/mcp.json, mcp.json, etc.)
   -> discovery providers normalize to canonical MCPServer
   -> capability loader dedupes by server name (higher provider priority wins)
   -> loadAllMCPConfigs converts to MCPServerConfig + skips enabled:false

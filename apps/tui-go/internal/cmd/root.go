@@ -23,6 +23,11 @@ import (
 	fang "charm.land/fang/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/exp/charmtone"
+	xstrings "github.com/charmbracelet/x/exp/strings"
+	"github.com/charmbracelet/x/term"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/app"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/client"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
@@ -38,21 +43,17 @@ import (
 	ui "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/model"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/version"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
-	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
-	xstrings "github.com/charmbracelet/x/exp/strings"
-	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
 var clientHost string
+var executablePath = os.Executable
 
 func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
 	rootCmd.PersistentFlags().StringP("data-dir", "D", "", "Custom crush data directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
-	rootCmd.PersistentFlags().StringP("agent-cmd", "a", "", "Path to omp binary or full command line (overrides sibling-binary lookup, PATH, and OMP_TUI_BACKEND)")
+	rootCmd.PersistentFlags().StringP("agent-cmd", "a", "", "Path to gmp binary or full command line (overrides sibling-binary lookup, PATH, and GMP_TUI_BACKEND)")
 	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific crush server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
@@ -88,7 +89,7 @@ gmp-tui-go --cwd /path/to/project
 gmp-tui-go --yolo
 
 # Use a local backend command
-OMP_TUI_BACKEND="bun packages/coding-agent/src/cli.ts" gmp-tui-go
+GMP_TUI_BACKEND="bun packages/coding-agent/src/cli.ts" gmp-tui-go
 
 # Continue a previous session
 gmp-tui-go --session {session-id}
@@ -227,19 +228,23 @@ func setupWorkspaceWithProgressBar(cmd *cobra.Command) (workspace.Workspace, fun
 
 // setupWorkspace returns a Workspace backed by the existing omp RPC backend.
 func setupWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
-	return setupOmpWorkspace(cmd)
+	return setupGmpWorkspace(cmd)
 }
 
-// resolveOmpBackend picks the omp binary (and any prefix args) according to
+// resolveOmpBackend picks the gmp binary (and any prefix args) according to
 // the documented priority:
 //
 //  1. --agent-cmd flag, when explicitly set.
-//  2. OMP_TUI_BACKEND env var, for local development overrides
+//  2. GMP_TUI_BACKEND env var, for local development overrides
 //     (e.g. "bun packages/coding-agent/src/cli.ts").
-//  3. Sibling-binary lookup: filepath.Dir(os.Executable())/omp[.exe].
-//     This is the default for bundled archives where gmp-tui-go and omp
+//  3. OMP_TUI_BACKEND env var, as a legacy compatibility alias.
+//  4. Sibling-binary lookup: filepath.Dir(os.Executable())/gmp[.exe].
+//     This is the default for bundled archives where gmp-tui-go and gmp
 //     ship side-by-side.
-//  4. Bare "omp" on PATH — exec.CommandContext does PATH resolution.
+//  5. Bare "gmp" on PATH — exec.CommandContext does PATH resolution.
+//     Note: we deliberately spawn "gmp", not "omp", so this fork does not
+//     collide with an upstream `omp` binary that may already be installed
+//     (e.g. via Nix from can1357/oh-my-pi).
 //
 // The first non-empty candidate wins. Returns at least one element.
 func resolveOmpBackend(cmd *cobra.Command) []string {
@@ -248,15 +253,17 @@ func resolveOmpBackend(cmd *cobra.Command) []string {
 			return fields
 		}
 	}
-	if env := os.Getenv("OMP_TUI_BACKEND"); env != "" {
-		if fields := strings.Fields(env); len(fields) > 0 {
-			return fields
+	for _, envName := range []string{"GMP_TUI_BACKEND", "OMP_TUI_BACKEND"} {
+		if env := os.Getenv(envName); env != "" {
+			if fields := strings.Fields(env); len(fields) > 0 {
+				return fields
+			}
 		}
 	}
 	if sibling := siblingOmpPath(); sibling != "" {
 		return []string{sibling}
 	}
-	return []string{"omp"}
+	return []string{"gmp"}
 }
 
 // setupOmpLogging configures slog to write to ~/.gmp/tui.log via the
@@ -288,15 +295,15 @@ func setupOmpLogging(debug bool) (io.Writer, error) {
 	return crushlog.SubprocessWriter(ompLogFile, debug), nil
 }
 
-// siblingOmpPath returns the absolute path of an `omp` binary sitting next
+// siblingOmpPath returns the absolute path of a `gmp` binary sitting next
 // to the running executable, or "" if it doesn't exist or os.Executable
 // can't be resolved. Honours .exe on Windows.
 func siblingOmpPath() string {
-	exe, err := os.Executable()
+	exe, err := executablePath()
 	if err != nil {
 		return ""
 	}
-	candidate := filepath.Join(filepath.Dir(exe), "omp")
+	candidate := filepath.Join(filepath.Dir(exe), "gmp")
 	if runtime.GOOS == "windows" {
 		candidate += ".exe"
 	}
@@ -306,7 +313,7 @@ func siblingOmpPath() string {
 	return ""
 }
 
-func setupOmpWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
+func setupGmpWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
 	cwd, err := ResolveCwd(cmd)
 	if err != nil {
 		return nil, nil, err
@@ -340,7 +347,7 @@ func setupOmpWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) 
 	if err != nil {
 		return nil, nil, err
 	}
-	ws := workspace.NewOmpWorkspace(client, cwd)
+	ws := workspace.NewGmpWorkspace(client, cwd)
 	return ws, ws.Shutdown, nil
 }
 

@@ -28,16 +28,16 @@ import (
 )
 
 const (
-	ompProviderID       = "omp"
-	ompModelID          = "omp-backend"
-	ompToolSessionDelim = "$$"
+	gmpProviderID       = "gmp"
+	gmpModelID          = "gmp-backend"
+	gmpToolSessionDelim = "$$"
 )
 
-var ErrUnsupported = errors.New("omp backend: operation not supported in MVP")
+var ErrUnsupported = errors.New("gmp backend: operation not supported in MVP")
 
-// OmpWorkspace implements the Workspace interface by talking to an
-// external `omp --mode rpc` process over JSONL stdio.
-type OmpWorkspace struct {
+// GmpWorkspace implements the Workspace interface by talking to an
+// external `gmp --mode rpc` process over JSONL stdio.
+type GmpWorkspace struct {
 	client *ompclient.Client
 	cwd    string
 	cfg    *config.Config
@@ -64,10 +64,10 @@ type OmpWorkspace struct {
 	closeOnce sync.Once
 }
 
-// NewOmpWorkspace creates a workspace backed by an omp RPC subprocess.
-func NewOmpWorkspace(client *ompclient.Client, cwd string) *OmpWorkspace {
+// NewGmpWorkspace creates a workspace backed by an omp RPC subprocess.
+func NewGmpWorkspace(client *ompclient.Client, cwd string) *GmpWorkspace {
 	cfg := newOmpConfig()
-	w := &OmpWorkspace{
+	w := &GmpWorkspace{
 		client:             client,
 		cwd:                cwd,
 		cfg:                cfg,
@@ -75,7 +75,7 @@ func NewOmpWorkspace(client *ompclient.Client, cwd string) *OmpWorkspace {
 		messages:           make(map[string]message.Message),
 		toolResultMessages: make(map[string]string),
 		model: AgentModel{
-			CatwalkCfg: catwalk.Model{ID: ompModelID, Name: "omp backend"},
+			CatwalkCfg: catwalk.Model{ID: gmpModelID, Name: "gmp backend"},
 			ModelCfg:   cfg.Models[config.SelectedModelTypeLarge],
 		},
 	}
@@ -86,18 +86,18 @@ func NewOmpWorkspace(client *ompclient.Client, cwd string) *OmpWorkspace {
 	return w
 }
 
-func (w *OmpWorkspace) nextID(prefix string) string {
+func (w *GmpWorkspace) nextID(prefix string) string {
 	n := w.msgCounter.Add(1)
 	return fmt.Sprintf("%s-%d", prefix, n)
 }
 
-func (w *OmpWorkspace) syncState(ctx context.Context) {
+func (w *GmpWorkspace) syncState(ctx context.Context) {
 	if w.client == nil {
 		return
 	}
 	resp, err := w.client.Call(ctx, ompclient.Command{Type: "get_state"})
 	if err != nil {
-		slog.Debug("omp workspace: failed to sync state", "error", err)
+		slog.Debug("gmp workspace: failed to sync state", "error", err)
 		return
 	}
 	var st struct {
@@ -121,7 +121,7 @@ func (w *OmpWorkspace) syncState(ctx context.Context) {
 		w.model = AgentModel{
 			CatwalkCfg: catwalk.Model{ID: st.Model.ID, Name: modelName},
 			ModelCfg: config.SelectedModel{
-				Provider: ompProviderID,
+				Provider: gmpProviderID,
 				Model:    st.Model.ID,
 			},
 		}
@@ -130,13 +130,13 @@ func (w *OmpWorkspace) syncState(ctx context.Context) {
 	w.syncMessages(ctx)
 }
 
-func (w *OmpWorkspace) syncMessages(ctx context.Context) {
+func (w *GmpWorkspace) syncMessages(ctx context.Context) {
 	if w.client == nil {
 		return
 	}
 	resp, err := w.client.Call(ctx, ompclient.Command{Type: "get_messages"})
 	if err != nil {
-		slog.Debug("omp workspace: failed to sync messages", "error", err)
+		slog.Debug("gmp workspace: failed to sync messages", "error", err)
 		return
 	}
 	var payload struct {
@@ -168,7 +168,7 @@ func (w *OmpWorkspace) syncMessages(ctx context.Context) {
 
 // -- Sessions --
 
-func (w *OmpWorkspace) CreateSession(ctx context.Context, title string) (session.Session, error) {
+func (w *GmpWorkspace) CreateSession(ctx context.Context, title string) (session.Session, error) {
 	if w.client != nil {
 		_, err := w.client.Call(ctx, ompclient.Command{Type: "new_session"})
 		if err != nil {
@@ -195,7 +195,7 @@ func (w *OmpWorkspace) CreateSession(ctx context.Context, title string) (session
 	return s, nil
 }
 
-func (w *OmpWorkspace) GetSession(ctx context.Context, sessionID string) (session.Session, error) {
+func (w *GmpWorkspace) GetSession(ctx context.Context, sessionID string) (session.Session, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.session.ID == "" {
@@ -204,7 +204,7 @@ func (w *OmpWorkspace) GetSession(ctx context.Context, sessionID string) (sessio
 	return w.session, nil
 }
 
-func (w *OmpWorkspace) ListSessions(ctx context.Context) ([]session.Session, error) {
+func (w *GmpWorkspace) ListSessions(ctx context.Context) ([]session.Session, error) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	if w.session.ID == "" {
@@ -213,7 +213,7 @@ func (w *OmpWorkspace) ListSessions(ctx context.Context) ([]session.Session, err
 	return []session.Session{w.session}, nil
 }
 
-func (w *OmpWorkspace) SaveSession(ctx context.Context, sess session.Session) (session.Session, error) {
+func (w *GmpWorkspace) SaveSession(ctx context.Context, sess session.Session) (session.Session, error) {
 	w.mu.Lock()
 	w.session = sess
 	w.mu.Unlock()
@@ -221,25 +221,25 @@ func (w *OmpWorkspace) SaveSession(ctx context.Context, sess session.Session) (s
 	return sess, nil
 }
 
-func (w *OmpWorkspace) DeleteSession(ctx context.Context, sessionID string) error {
+func (w *GmpWorkspace) DeleteSession(ctx context.Context, sessionID string) error {
 	return ErrUnsupported
 }
 
-func (w *OmpWorkspace) CreateAgentToolSessionID(messageID, toolCallID string) string {
-	return messageID + ompToolSessionDelim + toolCallID
+func (w *GmpWorkspace) CreateAgentToolSessionID(messageID, toolCallID string) string {
+	return messageID + gmpToolSessionDelim + toolCallID
 }
 
-func (w *OmpWorkspace) ParseAgentToolSessionID(sessionID string) (string, string, bool) {
-	i := strings.LastIndex(sessionID, ompToolSessionDelim)
+func (w *GmpWorkspace) ParseAgentToolSessionID(sessionID string) (string, string, bool) {
+	i := strings.LastIndex(sessionID, gmpToolSessionDelim)
 	if i < 0 {
 		return "", "", false
 	}
-	return sessionID[:i], sessionID[i+len(ompToolSessionDelim):], true
+	return sessionID[:i], sessionID[i+len(gmpToolSessionDelim):], true
 }
 
 // -- Messages --
 
-func (w *OmpWorkspace) ListMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
+func (w *GmpWorkspace) ListMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	out := make([]message.Message, 0, len(w.msgOrder))
@@ -251,7 +251,7 @@ func (w *OmpWorkspace) ListMessages(ctx context.Context, sessionID string) ([]me
 	return out, nil
 }
 
-func (w *OmpWorkspace) ListUserMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
+func (w *GmpWorkspace) ListUserMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
 	msgs, err := w.ListMessages(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -265,7 +265,7 @@ func (w *OmpWorkspace) ListUserMessages(ctx context.Context, sessionID string) (
 	return out, nil
 }
 
-func (w *OmpWorkspace) ListAllUserMessages(ctx context.Context) ([]message.Message, error) {
+func (w *GmpWorkspace) ListAllUserMessages(ctx context.Context) ([]message.Message, error) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	var out []message.Message
@@ -279,7 +279,7 @@ func (w *OmpWorkspace) ListAllUserMessages(ctx context.Context) ([]message.Messa
 
 // -- Agent --
 
-func (w *OmpWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error {
+func (w *GmpWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error {
 	now := time.Now().Unix()
 
 	w.mu.Lock()
@@ -343,7 +343,7 @@ func (w *OmpWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, a
 	return err
 }
 
-func (w *OmpWorkspace) AgentCancel(sessionID string) {
+func (w *GmpWorkspace) AgentCancel(sessionID string) {
 	if w.client != nil {
 		_, _ = w.client.Call(context.Background(), ompclient.Command{Type: "abort"})
 	}
@@ -353,37 +353,37 @@ func (w *OmpWorkspace) AgentCancel(sessionID string) {
 	w.setAgentBusy(false)
 }
 
-func (w *OmpWorkspace) AgentIsBusy() bool {
+func (w *GmpWorkspace) AgentIsBusy() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.agentBusy
 }
 
-func (w *OmpWorkspace) AgentIsSessionBusy(sessionID string) bool {
+func (w *GmpWorkspace) AgentIsSessionBusy(sessionID string) bool {
 	return w.AgentIsBusy()
 }
 
-func (w *OmpWorkspace) AgentModel() AgentModel {
+func (w *GmpWorkspace) AgentModel() AgentModel {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.model
 }
 
-func (w *OmpWorkspace) AgentIsReady() bool {
+func (w *GmpWorkspace) AgentIsReady() bool {
 	return true
 }
 
-func (w *OmpWorkspace) AgentQueuedPrompts(sessionID string) int {
+func (w *GmpWorkspace) AgentQueuedPrompts(sessionID string) int {
 	return 0
 }
 
-func (w *OmpWorkspace) AgentQueuedPromptsList(sessionID string) []string {
+func (w *GmpWorkspace) AgentQueuedPromptsList(sessionID string) []string {
 	return nil
 }
 
-func (w *OmpWorkspace) AgentClearQueue(sessionID string) {}
+func (w *GmpWorkspace) AgentClearQueue(sessionID string) {}
 
-func (w *OmpWorkspace) AgentSummarize(ctx context.Context, sessionID string) error {
+func (w *GmpWorkspace) AgentSummarize(ctx context.Context, sessionID string) error {
 	if w.client == nil {
 		return ErrUnsupported
 	}
@@ -391,7 +391,7 @@ func (w *OmpWorkspace) AgentSummarize(ctx context.Context, sessionID string) err
 	return err
 }
 
-func (w *OmpWorkspace) UpdateAgentModel(ctx context.Context) error {
+func (w *GmpWorkspace) UpdateAgentModel(ctx context.Context) error {
 	if w.client == nil {
 		return nil
 	}
@@ -399,26 +399,26 @@ func (w *OmpWorkspace) UpdateAgentModel(ctx context.Context) error {
 	return err
 }
 
-func (w *OmpWorkspace) InitCoderAgent(ctx context.Context) error {
+func (w *GmpWorkspace) InitCoderAgent(ctx context.Context) error {
 	w.syncState(ctx)
 	return nil
 }
 
-func (w *OmpWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
+func (w *GmpWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
 	return w.cfg.Models[config.SelectedModelTypeSmall]
 }
 
 // -- Permissions --
 
-func (w *OmpWorkspace) PermissionGrant(perm permission.PermissionRequest)           {}
-func (w *OmpWorkspace) PermissionGrantPersistent(perm permission.PermissionRequest) {}
-func (w *OmpWorkspace) PermissionDeny(perm permission.PermissionRequest)            {}
-func (w *OmpWorkspace) PermissionSkipRequests() bool {
+func (w *GmpWorkspace) PermissionGrant(perm permission.PermissionRequest)           {}
+func (w *GmpWorkspace) PermissionGrantPersistent(perm permission.PermissionRequest) {}
+func (w *GmpWorkspace) PermissionDeny(perm permission.PermissionRequest)            {}
+func (w *GmpWorkspace) PermissionSkipRequests() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.skipPermissions
 }
-func (w *OmpWorkspace) PermissionSetSkipRequests(skip bool) {
+func (w *GmpWorkspace) PermissionSetSkipRequests(skip bool) {
 	w.mu.Lock()
 	w.skipPermissions = skip
 	w.mu.Unlock()
@@ -426,46 +426,46 @@ func (w *OmpWorkspace) PermissionSetSkipRequests(skip bool) {
 
 // -- FileTracker --
 
-func (w *OmpWorkspace) FileTrackerRecordRead(ctx context.Context, sessionID, path string) {}
-func (w *OmpWorkspace) FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time {
+func (w *GmpWorkspace) FileTrackerRecordRead(ctx context.Context, sessionID, path string) {}
+func (w *GmpWorkspace) FileTrackerLastReadTime(ctx context.Context, sessionID, path string) time.Time {
 	return time.Time{}
 }
-func (w *OmpWorkspace) FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
+func (w *GmpWorkspace) FileTrackerListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
 	return nil, nil
 }
 
 // -- History --
 
-func (w *OmpWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
+func (w *GmpWorkspace) ListSessionHistory(ctx context.Context, sessionID string) ([]history.File, error) {
 	return nil, nil
 }
 
 // -- LSP --
 
-func (w *OmpWorkspace) LSPStart(ctx context.Context, path string) {}
-func (w *OmpWorkspace) LSPStopAll(ctx context.Context)            {}
-func (w *OmpWorkspace) LSPGetStates() map[string]LSPClientInfo    { return nil }
-func (w *OmpWorkspace) LSPGetDiagnosticCounts(name string) lsp.DiagnosticCounts {
+func (w *GmpWorkspace) LSPStart(ctx context.Context, path string) {}
+func (w *GmpWorkspace) LSPStopAll(ctx context.Context)            {}
+func (w *GmpWorkspace) LSPGetStates() map[string]LSPClientInfo    { return nil }
+func (w *GmpWorkspace) LSPGetDiagnosticCounts(name string) lsp.DiagnosticCounts {
 	return lsp.DiagnosticCounts{}
 }
 
 // -- Config (read-only) --
 
-func (w *OmpWorkspace) Config() *config.Config {
+func (w *GmpWorkspace) Config() *config.Config {
 	return w.cfg
 }
 
-func (w *OmpWorkspace) WorkingDir() string {
+func (w *GmpWorkspace) WorkingDir() string {
 	return w.cwd
 }
 
-func (w *OmpWorkspace) Resolver() config.VariableResolver {
+func (w *GmpWorkspace) Resolver() config.VariableResolver {
 	return w.resolver
 }
 
 // -- Config mutations --
 
-func (w *OmpWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
+func (w *GmpWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
 	w.mu.Lock()
 	w.cfg.Models[modelType] = model
 	w.model = AgentModel{
@@ -484,14 +484,14 @@ func (w *OmpWorkspace) UpdatePreferredModel(scope config.Scope, modelType config
 	return err
 }
 
-func (w *OmpWorkspace) SetCompactMode(scope config.Scope, enabled bool) error {
+func (w *GmpWorkspace) SetCompactMode(scope config.Scope, enabled bool) error {
 	w.cfg.Options.TUI.CompactMode = enabled
 	return nil
 }
-func (w *OmpWorkspace) SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error {
+func (w *GmpWorkspace) SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error {
 	return nil
 }
-func (w *OmpWorkspace) SetConfigField(scope config.Scope, key string, value any) error {
+func (w *GmpWorkspace) SetConfigField(scope config.Scope, key string, value any) error {
 	switch key {
 	case "options.disable_notifications":
 		if disabled, ok := value.(bool); ok {
@@ -504,36 +504,36 @@ func (w *OmpWorkspace) SetConfigField(scope config.Scope, key string, value any)
 	}
 	return nil
 }
-func (w *OmpWorkspace) RemoveConfigField(scope config.Scope, key string) error { return nil }
-func (w *OmpWorkspace) ImportCopilot() (*oauth.Token, bool)                    { return nil, false }
-func (w *OmpWorkspace) RefreshOAuthToken(ctx context.Context, scope config.Scope, providerID string) error {
+func (w *GmpWorkspace) RemoveConfigField(scope config.Scope, key string) error { return nil }
+func (w *GmpWorkspace) ImportCopilot() (*oauth.Token, bool)                    { return nil, false }
+func (w *GmpWorkspace) RefreshOAuthToken(ctx context.Context, scope config.Scope, providerID string) error {
 	return nil
 }
 
 // -- Project lifecycle --
 
-func (w *OmpWorkspace) ProjectNeedsInitialization() (bool, error) { return false, nil }
-func (w *OmpWorkspace) MarkProjectInitialized() error             { return nil }
-func (w *OmpWorkspace) InitializePrompt() (string, error)         { return "", nil }
+func (w *GmpWorkspace) ProjectNeedsInitialization() (bool, error) { return false, nil }
+func (w *GmpWorkspace) MarkProjectInitialized() error             { return nil }
+func (w *GmpWorkspace) InitializePrompt() (string, error)         { return "", nil }
 
 // -- MCP operations --
 
-func (w *OmpWorkspace) MCPGetStates() map[string]mcptools.ClientInfo         { return nil }
-func (w *OmpWorkspace) MCPRefreshPrompts(ctx context.Context, name string)   {}
-func (w *OmpWorkspace) MCPRefreshResources(ctx context.Context, name string) {}
-func (w *OmpWorkspace) RefreshMCPTools(ctx context.Context, name string)     {}
-func (w *OmpWorkspace) ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error) {
+func (w *GmpWorkspace) MCPGetStates() map[string]mcptools.ClientInfo         { return nil }
+func (w *GmpWorkspace) MCPRefreshPrompts(ctx context.Context, name string)   {}
+func (w *GmpWorkspace) MCPRefreshResources(ctx context.Context, name string) {}
+func (w *GmpWorkspace) RefreshMCPTools(ctx context.Context, name string)     {}
+func (w *GmpWorkspace) ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error) {
 	return nil, ErrUnsupported
 }
-func (w *OmpWorkspace) GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error) {
+func (w *GmpWorkspace) GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error) {
 	return "", ErrUnsupported
 }
-func (w *OmpWorkspace) EnableDockerMCP(ctx context.Context) error { return ErrUnsupported }
-func (w *OmpWorkspace) DisableDockerMCP() error                   { return nil }
+func (w *GmpWorkspace) EnableDockerMCP(ctx context.Context) error { return ErrUnsupported }
+func (w *GmpWorkspace) DisableDockerMCP() error                   { return nil }
 
 // -- Events --
 
-func (w *OmpWorkspace) Subscribe(program *tea.Program) {
+func (w *GmpWorkspace) Subscribe(program *tea.Program) {
 	w.mu.Lock()
 	w.program = program
 	w.mu.Unlock()
@@ -542,7 +542,7 @@ func (w *OmpWorkspace) Subscribe(program *tea.Program) {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("OmpWorkspace.Subscribe panic", "recover", r)
+			slog.Error("GmpWorkspace.Subscribe panic", "recover", r)
 			program.Quit()
 		}
 	}()
@@ -571,10 +571,10 @@ func (w *OmpWorkspace) Subscribe(program *tea.Program) {
 // already handles cancellation as the safe default (its built-in
 // timeout resolves to undefined / cancelled), so this preserves
 // agent-side correctness while we lack a real dialog binding.
-func (w *OmpWorkspace) drainExtensionUI() {
+func (w *GmpWorkspace) drainExtensionUI() {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("OmpWorkspace.drainExtensionUI panic", "recover", r)
+			slog.Error("GmpWorkspace.drainExtensionUI panic", "recover", r)
 		}
 	}()
 	for req := range w.client.ExtensionUIRequests() {
@@ -587,10 +587,10 @@ func (w *OmpWorkspace) drainExtensionUI() {
 			Cancelled: true,
 		}
 		if err := w.client.Send(resp); err != nil {
-			slog.Debug("omp workspace: extension_ui_response send failed",
+			slog.Debug("gmp workspace: extension_ui_response send failed",
 				"id", req.ID, "method", req.Method, "error", err)
 		} else {
-			slog.Debug("omp workspace: auto-cancelled extension_ui_request",
+			slog.Debug("gmp workspace: auto-cancelled extension_ui_request",
 				"id", req.ID, "method", req.Method)
 		}
 	}
@@ -600,10 +600,10 @@ func (w *OmpWorkspace) drainExtensionUI() {
 // an error result. The Go TUI does not currently register host tools
 // via set_host_tools, so a host_tool_call frame here is unexpected; we
 // fail it explicitly rather than let omp hang on a missing response.
-func (w *OmpWorkspace) drainHostToolCalls() {
+func (w *GmpWorkspace) drainHostToolCalls() {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("OmpWorkspace.drainHostToolCalls panic", "recover", r)
+			slog.Error("GmpWorkspace.drainHostToolCalls panic", "recover", r)
 		}
 	}()
 	for req := range w.client.HostToolCalls() {
@@ -617,7 +617,7 @@ func (w *OmpWorkspace) drainHostToolCalls() {
 			IsError: true,
 		}
 		if err := w.client.Send(resp); err != nil {
-			slog.Debug("omp workspace: host_tool_result send failed",
+			slog.Debug("gmp workspace: host_tool_result send failed",
 				"id", req.ID, "tool", req.ToolName, "error", err)
 		}
 	}
@@ -627,22 +627,22 @@ func (w *OmpWorkspace) drainHostToolCalls() {
 // host tool calls. We never tracked the original calls, so the
 // cancellation is structurally a no-op — but we must still consume it
 // to prevent the read-loop deadlock.
-func (w *OmpWorkspace) drainHostToolCancels() {
+func (w *GmpWorkspace) drainHostToolCancels() {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("OmpWorkspace.drainHostToolCancels panic", "recover", r)
+			slog.Error("GmpWorkspace.drainHostToolCancels panic", "recover", r)
 		}
 	}()
 	for req := range w.client.HostToolCancels() {
 		if req == nil {
 			continue
 		}
-		slog.Debug("omp workspace: host tool cancellation ignored",
+		slog.Debug("gmp workspace: host tool cancellation ignored",
 			"id", req.ID, "targetId", req.TargetID)
 	}
 }
 
-func (w *OmpWorkspace) Shutdown() {
+func (w *GmpWorkspace) Shutdown() {
 	w.closeOnce.Do(func() {
 		if w.client != nil {
 			_ = w.client.Close()
@@ -650,7 +650,7 @@ func (w *OmpWorkspace) Shutdown() {
 	})
 }
 
-func (w *OmpWorkspace) handleAgentEvent(ev *ompclient.AgentEvent) {
+func (w *GmpWorkspace) handleAgentEvent(ev *ompclient.AgentEvent) {
 	if ev == nil {
 		return
 	}
@@ -660,7 +660,7 @@ func (w *OmpWorkspace) handleAgentEvent(ev *ompclient.AgentEvent) {
 }
 
 // translateEvent converts an omp RPC agent event into a tea.Msg.
-func (w *OmpWorkspace) translateEvent(ev *ompclient.AgentEvent) tea.Msg {
+func (w *GmpWorkspace) translateEvent(ev *ompclient.AgentEvent) tea.Msg {
 	switch ev.Kind {
 	case "agent_start":
 		w.setAgentBusy(true)
@@ -701,7 +701,7 @@ func (w *OmpWorkspace) translateEvent(ev *ompclient.AgentEvent) tea.Msg {
 	}
 }
 
-func (w *OmpWorkspace) handleMessageStart(raw []byte) tea.Msg {
+func (w *GmpWorkspace) handleMessageStart(raw []byte) tea.Msg {
 	msg, ok := w.parseAgentMessage(raw, "message")
 	if !ok {
 		return nil
@@ -729,7 +729,7 @@ func (w *OmpWorkspace) handleMessageStart(raw []byte) tea.Msg {
 	return pubsub.Event[message.Message]{Type: eventType, Payload: msg.Clone()}
 }
 
-func (w *OmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
+func (w *GmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 	var delta struct {
 		AssistantMessageEvent struct {
 			Type  string `json:"type"`
@@ -789,7 +789,7 @@ func (w *OmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 	return pubsub.Event[message.Message]{Type: pubsub.UpdatedEvent, Payload: msg.Clone()}
 }
 
-func (w *OmpWorkspace) handleMessageEnd(raw []byte) tea.Msg {
+func (w *GmpWorkspace) handleMessageEnd(raw []byte) tea.Msg {
 	msg, ok := w.parseAgentMessage(raw, "message")
 	if !ok {
 		return nil
@@ -816,7 +816,7 @@ func (w *OmpWorkspace) handleMessageEnd(raw []byte) tea.Msg {
 	return pubsub.Event[message.Message]{Type: pubsub.UpdatedEvent, Payload: msg.Clone()}
 }
 
-func (w *OmpWorkspace) handleTurnEnd(raw []byte) tea.Msg {
+func (w *GmpWorkspace) handleTurnEnd(raw []byte) tea.Msg {
 	var payload struct {
 		Message     json.RawMessage   `json:"message"`
 		ToolResults []json.RawMessage `json:"toolResults"`
@@ -853,31 +853,34 @@ func (w *OmpWorkspace) handleTurnEnd(raw []byte) tea.Msg {
 	return nil
 }
 
-func (w *OmpWorkspace) handleAgentEnd(raw []byte) {
+func (w *GmpWorkspace) handleAgentEnd(raw []byte) {
 	var payload struct {
 		Messages []json.RawMessage `json:"messages"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return
 	}
-	w.mu.Lock()
+
+	msgs := make([]message.Message, 0, len(payload.Messages))
 	for _, rm := range payload.Messages {
 		msg, ok := w.parseAgentMessage(rm, "")
 		if !ok {
 			continue
 		}
+		msgs = append(msgs, msg)
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, msg := range msgs {
 		if msg.ID == "" {
 			msg.ID = w.nextID("agent")
 		}
-		if _, exists := w.messages[msg.ID]; !exists {
-			w.msgOrder = append(w.msgOrder, msg.ID)
-		}
-		w.messages[msg.ID] = msg
+		w.upsertMessageLocked(msg)
 	}
-	w.mu.Unlock()
 }
 
-func (w *OmpWorkspace) handleToolExecutionStart(raw []byte) tea.Msg {
+func (w *GmpWorkspace) handleToolExecutionStart(raw []byte) tea.Msg {
 	var p struct {
 		ToolCallID string          `json:"toolCallId"`
 		ToolName   string          `json:"toolName"`
@@ -899,7 +902,7 @@ func (w *OmpWorkspace) handleToolExecutionStart(raw []byte) tea.Msg {
 	})
 }
 
-func (w *OmpWorkspace) handleToolExecutionUpdate(raw []byte) tea.Msg {
+func (w *GmpWorkspace) handleToolExecutionUpdate(raw []byte) tea.Msg {
 	var p struct {
 		ToolCallID    string          `json:"toolCallId"`
 		ToolName      string          `json:"toolName"`
@@ -947,7 +950,7 @@ func (w *OmpWorkspace) handleToolExecutionUpdate(raw []byte) tea.Msg {
 	return pubsub.Event[message.Message]{Type: pubsub.CreatedEvent, Payload: msg.Clone()}
 }
 
-func (w *OmpWorkspace) handleToolExecutionEnd(raw []byte) tea.Msg {
+func (w *GmpWorkspace) handleToolExecutionEnd(raw []byte) tea.Msg {
 	var p struct {
 		ToolCallID string          `json:"toolCallId"`
 		ToolName   string          `json:"toolName"`
@@ -990,7 +993,7 @@ func (w *OmpWorkspace) handleToolExecutionEnd(raw []byte) tea.Msg {
 // parseAgentMessage converts a raw JSON agent message into a message.Message.
 // If fieldName is non-empty, raw is treated as a wrapper object and the
 // message body is read from that key; otherwise raw is the body.
-func (w *OmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.Message, bool) {
+func (w *GmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.Message, bool) {
 	var body json.RawMessage
 	if fieldName != "" {
 		var wrapper map[string]json.RawMessage
@@ -1046,7 +1049,7 @@ func (w *OmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 	return msg, true
 }
 
-func (w *OmpWorkspace) parseTextWrappedContent(raw []byte) []message.ContentPart {
+func (w *GmpWorkspace) parseTextWrappedContent(raw []byte) []message.ContentPart {
 	var p struct {
 		Content any `json:"content"`
 	}
@@ -1083,7 +1086,7 @@ func extractTextString(content any) string {
 	return ""
 }
 
-func (w *OmpWorkspace) parseAssistantContent(raw []byte) []message.ContentPart {
+func (w *GmpWorkspace) parseAssistantContent(raw []byte) []message.ContentPart {
 	var p struct {
 		Content      []json.RawMessage `json:"content"`
 		StopReason   string            `json:"stopReason"`
@@ -1160,7 +1163,7 @@ func (w *OmpWorkspace) parseAssistantContent(raw []byte) []message.ContentPart {
 	return parts
 }
 
-func (w *OmpWorkspace) parseToolResultContent(raw []byte) []message.ContentPart {
+func (w *GmpWorkspace) parseToolResultContent(raw []byte) []message.ContentPart {
 	var p struct {
 		ToolCallID string `json:"toolCallId"`
 		ToolName   string `json:"toolName"`
@@ -1180,7 +1183,7 @@ func (w *OmpWorkspace) parseToolResultContent(raw []byte) []message.ContentPart 
 	}
 }
 
-func (w *OmpWorkspace) parseExecutionContent(raw []byte) []message.ContentPart {
+func (w *GmpWorkspace) parseExecutionContent(raw []byte) []message.ContentPart {
 	var p struct {
 		Command  string `json:"command"`
 		Code     string `json:"code"`
@@ -1203,19 +1206,19 @@ func (w *OmpWorkspace) parseExecutionContent(raw []byte) []message.ContentPart {
 
 // -- helpers --
 
-func (w *OmpWorkspace) setAgentBusy(busy bool) {
+func (w *GmpWorkspace) setAgentBusy(busy bool) {
 	w.mu.Lock()
 	w.agentBusy = busy
 	w.mu.Unlock()
 }
 
-func (w *OmpWorkspace) sessionID() string {
+func (w *GmpWorkspace) sessionID() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.session.ID
 }
 
-func (w *OmpWorkspace) sessionTitle() string {
+func (w *GmpWorkspace) sessionTitle() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.session.Title
@@ -1225,17 +1228,17 @@ func newOmpConfig() *config.Config {
 	progress := true
 	cfg := &config.Config{
 		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Provider: ompProviderID, Model: ompModelID},
-			config.SelectedModelTypeSmall: {Provider: ompProviderID, Model: ompModelID},
+			config.SelectedModelTypeLarge: {Provider: gmpProviderID, Model: gmpModelID},
+			config.SelectedModelTypeSmall: {Provider: gmpProviderID, Model: gmpModelID},
 		},
 		RecentModels: make(map[config.SelectedModelType][]config.SelectedModel),
 		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
-			ompProviderID: {
-				ID:   ompProviderID,
-				Name: "omp",
+			gmpProviderID: {
+				ID:   gmpProviderID,
+				Name: "gmp",
 				Type: catwalk.TypeOpenAI,
 				Models: []catwalk.Model{
-					{ID: ompModelID, Name: "omp backend"},
+					{ID: gmpModelID, Name: "gmp backend"},
 				},
 			},
 		}),
@@ -1251,7 +1254,7 @@ func newOmpConfig() *config.Config {
 	return cfg
 }
 
-func (w *OmpWorkspace) ensureSessionLocked() session.Session {
+func (w *GmpWorkspace) ensureSessionLocked() session.Session {
 	if w.session.ID == "" {
 		now := time.Now().Unix()
 		w.session = session.Session{
@@ -1264,7 +1267,7 @@ func (w *OmpWorkspace) ensureSessionLocked() session.Session {
 	return w.session
 }
 
-func (w *OmpWorkspace) upsertMessageLocked(msg message.Message) {
+func (w *GmpWorkspace) upsertMessageLocked(msg message.Message) {
 	if w.messages == nil {
 		w.messages = make(map[string]message.Message)
 	}
@@ -1278,7 +1281,7 @@ func (w *OmpWorkspace) upsertMessageLocked(msg message.Message) {
 	}
 }
 
-func (w *OmpWorkspace) matchingUserIDLocked(text string) (string, bool) {
+func (w *GmpWorkspace) matchingUserIDLocked(text string) (string, bool) {
 	for i := len(w.msgOrder) - 1; i >= 0; i-- {
 		msg, ok := w.messages[w.msgOrder[i]]
 		if ok && msg.Role == message.User && msg.Content().Text == text {
@@ -1288,7 +1291,7 @@ func (w *OmpWorkspace) matchingUserIDLocked(text string) (string, bool) {
 	return "", false
 }
 
-func (w *OmpWorkspace) ensureAssistantLocked() message.Message {
+func (w *GmpWorkspace) ensureAssistantLocked() message.Message {
 	if w.currentAssistantID != "" {
 		if msg, ok := w.messages[w.currentAssistantID]; ok {
 			return msg
@@ -1310,7 +1313,7 @@ func (w *OmpWorkspace) ensureAssistantLocked() message.Message {
 	return msg
 }
 
-func (w *OmpWorkspace) updateAssistant(update func(*message.Message)) tea.Msg {
+func (w *GmpWorkspace) updateAssistant(update func(*message.Message)) tea.Msg {
 	w.mu.Lock()
 	msg := w.ensureAssistantLocked()
 	update(&msg)
@@ -1320,7 +1323,7 @@ func (w *OmpWorkspace) updateAssistant(update func(*message.Message)) tea.Msg {
 	return pubsub.Event[message.Message]{Type: pubsub.UpdatedEvent, Payload: msg.Clone()}
 }
 
-func (w *OmpWorkspace) finishAssistant(reason message.FinishReason, text string, details string) tea.Msg {
+func (w *GmpWorkspace) finishAssistant(reason message.FinishReason, text string, details string) tea.Msg {
 	w.mu.Lock()
 	if w.currentAssistantID == "" {
 		w.mu.Unlock()
@@ -1344,7 +1347,7 @@ func (w *OmpWorkspace) finishAssistant(reason message.FinishReason, text string,
 	return pubsub.Event[message.Message]{Type: pubsub.UpdatedEvent, Payload: msg.Clone()}
 }
 
-func (w *OmpWorkspace) sendUI(msg tea.Msg) {
+func (w *GmpWorkspace) sendUI(msg tea.Msg) {
 	if msg == nil {
 		return
 	}
@@ -1394,4 +1397,4 @@ func stringifyToolResult(raw json.RawMessage) string {
 }
 
 // Compile-time check.
-var _ Workspace = (*OmpWorkspace)(nil)
+var _ Workspace = (*GmpWorkspace)(nil)

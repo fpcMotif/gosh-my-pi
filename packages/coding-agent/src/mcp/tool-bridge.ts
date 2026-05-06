@@ -69,7 +69,7 @@ export interface MCPToolDetails {
 	rawContent?: MCPContent[];
 	/** Provider ID (e.g., "claude", "mcp-json") */
 	provider?: string;
-	/** Provider display name (e.g., "Claude Code", "MCP Config") */
+	/** Provider display name (e.g., "MCP Config") */
 	providerName?: string;
 }
 /**

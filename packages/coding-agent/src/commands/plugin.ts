@@ -2,7 +2,7 @@
  * Manage plugins (install, uninstall, list, etc.).
  */
 import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
-import { type PluginCommandArgs, runPluginCommand } from "../cli/plugin-cli";
+import { type PluginAction, type PluginCommandArgs, runPluginCommand } from "../cli/plugin-cli";
 import { initTheme } from "../modes/theme/theme";
 
 const ACTIONS: PluginAction[] = [
@@ -42,10 +42,6 @@ export default class Plugin extends Command {
 		enable: Flags.string({ description: "Enable a feature" }),
 		disable: Flags.string({ description: "Disable a feature" }),
 		set: Flags.string({ description: "Set plugin config (key=value)" }),
-		scope: Flags.string({
-			description: 'Install scope: "user" (default) or "project"',
-			options: ["user", "project"],
-		}),
 	};
 
 	async run(): Promise<void> {
@@ -65,7 +61,6 @@ export default class Plugin extends Command {
 				enable: flags.enable,
 				disable: flags.disable,
 				set: flags.set,
-				scope: flags.scope as "user" | "project" | undefined,
 			},
 		};
 

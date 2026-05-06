@@ -11,7 +11,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import { $env, $which, getProjectDir, logger, postmortem, setProjectDir, VERSION } from "@oh-my-pi/pi-utils";
+import { $env, getProjectDir, logger, postmortem, setProjectDir, VERSION } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 
 import { runCli } from "./cli";
@@ -20,12 +20,12 @@ import { processFileArguments } from "./cli/file-processor";
 import { buildInitialMessage } from "./cli/initial-message";
 import { listModels } from "./cli/list-models";
 import { selectSession } from "./cli/session-picker";
+import { resolveTuiGoLaunch, shouldAttemptTuiGoLaunch } from "./cli/tui-go-launcher";
 import { findConfigFile } from "./config";
 import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { getDefault, type SettingPath, Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
-import { clearClaudePluginRootsCache, injectPluginDirRoots, preloadPluginRoots } from "./discovery/helpers";
 import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
 
@@ -132,43 +132,25 @@ export async function submitInteractiveInput(
 	}
 }
 
-/**
- * When `omp` is launched in an interactive TTY, optionally spawn the
- * Go-side TUI frontend (`gmp-tui-go`) instead of the in-process legacy
- * TUI. Controlled by the `OMP_TUI` env var:
- *
- * - unset / `legacy` / `auto`: legacy in-process TUI (current default)
- * - `go`: try to spawn `gmp-tui-go`; fall back to legacy if not found
- * - `go-strict`: try to spawn `gmp-tui-go`; exit with code 2 if not found
- *
- * The user can override binary discovery via `OMP_TUI_BIN` (full path).
- *
- * Returns the child process exit code when tui-go was spawned, or `null`
- * when the caller should fall through to the legacy interactive mode.
- */
+// Returns the child process exit code when tui-go was spawned, or null
+// when the caller should fall through to the legacy interactive mode.
 async function tryAutoSpawnTuiGo(): Promise<number | null> {
-	const opt = process.env.OMP_TUI?.toLowerCase();
-	if (opt !== "go" && opt !== "go-strict") {
-		// Not opted in — fall through to legacy.
+	const launch = resolveTuiGoLaunch();
+	if (launch.action === "legacy") {
 		return null;
 	}
 
-	const binPath = process.env.OMP_TUI_BIN ?? $which("gmp-tui-go") ?? $which("tui-go");
-	if (binPath === null || binPath === undefined || binPath === "") {
-		const message =
-			"OMP_TUI=go but no tui-go binary found in PATH. " +
-			"Install gmp-tui-go (or tui-go), or set OMP_TUI_BIN to its full path. " +
-			"Set OMP_TUI=legacy to suppress this and use the in-process TUI.";
-		if (opt === "go-strict") {
-			logger.error(message);
+	if (launch.action === "missing") {
+		if (launch.strict) {
+			logger.error(launch.message);
 			process.exit(2);
 		}
-		logger.warn(`${message} Falling back to legacy interactive mode.`);
+		logger.warn(`${launch.message} Falling back to legacy interactive mode.`);
 		return null;
 	}
 
-	logger.debug("Spawning Go TUI frontend", { bin: binPath });
-	const child = Bun.spawn([binPath], {
+	logger.debug("Spawning Go TUI frontend", { bin: launch.binPath });
+	const child = Bun.spawn([launch.binPath], {
 		stdio: ["inherit", "inherit", "inherit"],
 		env: { ...process.env },
 	});
@@ -763,14 +745,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		sessionManager = await SessionManager.open(selectedPath);
 	}
 
-	// Wire --plugin-dir and preload plugin roots for sync consumers (LSP config)
-	const home = os.homedir();
-	if (parsedArgs.pluginDirs && parsedArgs.pluginDirs.length > 0) {
-		await logger.time("injectPluginDirRoots", injectPluginDirRoots, home, parsedArgs.pluginDirs!, getProjectDir());
-	} else {
-		await logger.time("preloadPluginRoots", preloadPluginRoots, home, getProjectDir());
-	}
-
 	const { options: sessionOptions } = await logger.time(
 		"buildSessionOptions",
 		buildSessionOptions,
@@ -889,7 +863,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		await runRpcMode(session);
 	} else if (mode === "acp") {
 		await runAcpMode(session, createAcpSession);
-	} else if (isInteractive) {
+	} else if (shouldAttemptTuiGoLaunch(mode, isInteractive)) {
 		const tuiGoExitCode = await tryAutoSpawnTuiGo();
 		if (tuiGoExitCode !== null) {
 			await session.dispose();

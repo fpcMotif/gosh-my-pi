@@ -96,3 +96,17 @@ CI status drifts between commits — verify with `gh run list --branch main` bef
 ## Commit style
 
 Conventional commits (`type(scope): message`). No emojis in commits, issues, PRs, or branch names (per AGENTS.md).
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues via `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo with `CONTEXT.md` at the root. See `docs/agents/domain.md`.

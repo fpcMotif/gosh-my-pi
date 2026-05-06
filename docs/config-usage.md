@@ -28,8 +28,8 @@ Key integration points:
 ```text
          Generic helper order (`config.ts`)
 ┌───────────────────────────────────────┐
-│ 1) ~/.omp/agent, ~/.claude, ...       │
-│ 2) <cwd>/.omp, <cwd>/.claude, ...     │
+│ 1) ~/.omp/agent, ~/.codex, ...        │
+│ 2) <cwd>/.omp, <cwd>/.codex, ...      │
 └───────────────────────────────────────┘
                     │
                     ▼
@@ -52,21 +52,18 @@ Key integration points:
 `src/config.ts` defines a fixed source priority list:
 
 1. `.omp` (native)
-2. `.claude`
-3. `.codex`
-4. `.gemini`
+2. `.codex`
+3. `.gemini`
 
 User-level bases:
 
 - `~/.omp/agent`
-- `~/.claude`
 - `~/.codex`
 - `~/.gemini`
 
 Project-level bases:
 
 - `<cwd>/.omp`
-- `<cwd>/.claude`
 - `<cwd>/.codex`
 - `<cwd>/.gemini`
 
@@ -102,7 +99,7 @@ Searches for the first existing file across ordered bases, returns first match (
 
 ## `findAllNearestProjectConfigDirs(subpath, cwd)`
 
-Walks parent directories upward and returns the **nearest existing directory per source base** (`.omp`, `.claude`, `.codex`, `.gemini`), then sorts results by source priority.
+Walks parent directories upward and returns the **nearest existing directory per source base** (`.omp`, `.codex`, `.gemini`), then sorts results by source priority.
 
 Use this when project config should be inherited from ancestor directories (monorepo/nested workspace behavior).
 
@@ -175,15 +172,13 @@ Most non-core config loading flows through the capability registry (`src/capabil
 Providers are sorted by numeric priority (higher first). Example priorities:
 
 - Native OMP (`builtin.ts`): `100`
-- Claude: `80`
-- Codex / agents / Claude marketplace: `70`
+- Codex / agents: `70`
 - Gemini: `60`
 
 ```text
 Provider precedence (higher wins)
 
 native (.omp)          priority 100
-claude                 priority  80
 codex / agents / ...   priority  70
 gemini                 priority  60
 ```

@@ -126,9 +126,8 @@ See [`v1.ts`](v1.ts) for exact field definitions per role.
 ## Command vocabulary
 
 Commands sent host → server are documented in
-[`../rpc-types.ts`](../rpc-types.ts) as the `RpcCommand` union. Per
-[design decision 5C](../../../../../../.claude/plans/rpc-schema-versioning-design.md),
-commands ARE the v1 surface — no separate translator. Adding a command
+[`../rpc-types.ts`](../rpc-types.ts) as the `RpcCommand` union. Commands
+ARE the v1 surface — no separate translator. Adding a command
 variant is additive evolution within v1; renaming or removing requires
 a major bump.
 
@@ -214,8 +213,7 @@ Tests in [`translate.test.ts`](translate.test.ts) verify:
 
 ## References
 
-- Design discussion: [`rpc-schema-versioning-design.md`](../../../../../../.claude/plans/rpc-schema-versioning-design.md)
-- Implementation plan: [`rpc-v1-implementation.md`](../../../../../../.claude/plans/rpc-v1-implementation.md)
+- Schema package: [`v1.ts`](v1.ts)
 - TypeScript types: [`v1.ts`](v1.ts)
 - Translator: [`translate.ts`](translate.ts)
 - Tests: [`translate.test.ts`](translate.test.ts)

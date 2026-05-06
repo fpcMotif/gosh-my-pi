@@ -53,38 +53,30 @@ Loading path:
 
 Because bundled parsing uses `level: "fatal"`, malformed bundled frontmatter throws and can fail discovery entirely.
 
-## Filesystem and plugin discovery
+## Filesystem Discovery
 
-`discoverAgents(cwd, home)` (`src/task/discovery.ts`) merges agents from multiple places before appending bundled definitions.
+`discoverAgents(cwd)` (`src/task/discovery.ts`) merges agents from multiple filesystem sources before appending bundled definitions.
 
 ### Discovery inputs
 
 1. User config agent dirs from `getConfigDirs("agents", { project: false })`
 2. Nearest project agent dirs from `findAllNearestProjectConfigDirs("agents", cwd)`
-3. Claude plugin roots (`listClaudePluginRoots(home)`) with `agents/` subdirs
-4. Bundled agents (`loadBundledAgents()`)
+3. Bundled agents (`loadBundledAgents()`)
 
 ### Actual source order
 
 Source-family order comes from `getConfigDirs("", { project: false })`, which is derived from `priorityList` in `src/config.ts`:
 
 1. `.omp`
-2. `.claude`
-3. `.codex`
-4. `.gemini`
+2. `.codex`
+3. `.gemini`
 
 For each source family, discovery order is:
 
 1. nearest project dir for that source (if found)
 2. user dir for that source
 
-After all source-family dirs, plugin `agents/` dirs are appended (project-scope plugins first, then user-scope).
-
 Bundled agents are appended last.
-
-### Important caveat: stale comments vs current code
-
-`discovery.ts` header comments still mention `.pi` and do not mention `.codex`/`.gemini`. Actual runtime order is driven by `src/config.ts` and currently uses `.omp`, `.claude`, `.codex`, `.gemini`.
 
 ## Merge and collision rules
 
@@ -97,7 +89,7 @@ Discovery uses first-wins dedup by exact `agent.name`:
 Implications:
 
 - Project overrides user for same source family.
-- Higher-priority source family overrides lower (`.omp` before `.claude`, etc.).
+- Higher-priority source family overrides lower (`.omp` before `.codex`, etc.).
 - Non-bundled agents override bundled agents with the same name.
 - Name matching is case-sensitive (`Task` and `task` are distinct).
 - Within one directory, markdown files are read in lexicographic filename order before dedup.

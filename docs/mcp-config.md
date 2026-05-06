@@ -12,7 +12,7 @@ Source of truth in code:
 
 ## Preferred config locations
 
-OMP can discover MCP servers from multiple tools (`.claude/`, `.cursor/`, `.vscode/`, `opencode.json`, and more), but for OMP-native configuration you should usually use one of these files:
+OMP can discover MCP servers from multiple tools (`.cursor/`, `.vscode/`, `opencode.json`, and more), but for OMP-native configuration you should usually use one of these files:
 
 - Project: `.omp/mcp.json`
 - User: `~/.omp/agent/mcp.json`

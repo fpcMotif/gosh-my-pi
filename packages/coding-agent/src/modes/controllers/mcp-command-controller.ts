@@ -967,7 +967,7 @@ export class MCPCommandController {
 				lines.push("");
 			}
 
-			// Show discovered servers (from .claude.json, .cursor/mcp.json, .vscode/mcp.json, etc.)
+			// Show discovered servers (from .cursor/mcp.json, .vscode/mcp.json, etc.)
 			if (discoveredServers.length > 0) {
 				// Group by source display name + path
 				const bySource = new Map<string, typeof discoveredServers>();

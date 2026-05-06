@@ -126,7 +126,7 @@ export interface FileSlashCommand {
 	name: string;
 	description: string;
 	content: string;
-	source: string; // e.g., "via Claude Code (User)"
+	source: string; // e.g., "via Codex (User)"
 	/** Source metadata for display */
 	_source?: { providerName: string; level: "user" | "project" | "native" };
 }

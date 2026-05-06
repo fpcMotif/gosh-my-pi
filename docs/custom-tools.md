@@ -46,9 +46,7 @@ CustomTool.execute(toolCallId, params, onUpdate, ctx, signal)
 
 1. Capability providers (`toolCapability`), including:
    - Native OMP config (`~/.omp/agent/tools`, `.omp/tools`)
-   - Claude config (`~/.claude/tools`, `.claude/tools`)
    - Codex config (`~/.codex/tools`, `.codex/tools`)
-   - Claude marketplace plugin cache provider
 2. Installed plugin manifests (`~/.omp/plugins/node_modules/*` via plugin loader)
 3. Explicit configured paths passed to the loader
 

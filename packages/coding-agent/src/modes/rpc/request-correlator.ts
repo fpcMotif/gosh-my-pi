@@ -58,15 +58,15 @@ export class RequestCorrelator {
 	 */
 	register<T>(opts: RegisterOptions<T> = {}): CorrelatedRequest<T> {
 		const id = opts.id ?? (Snowflake.next() as string);
+		const hasDefaultValue = Object.hasOwn(opts, "defaultValue");
 
 		// Pre-resolution short-circuit when signal is already aborted.
 		if (opts.signal?.aborted === true) {
 			return {
 				id,
-				promise:
-					opts.defaultValue !== undefined
-						? Promise.resolve(opts.defaultValue)
-						: Promise.reject(new Error(`Request ${id} aborted before registration`)),
+				promise: hasDefaultValue
+					? Promise.resolve(opts.defaultValue as T)
+					: Promise.reject(new Error(`Request ${id} aborted before registration`)),
 			};
 		}
 
@@ -85,8 +85,8 @@ export class RequestCorrelator {
 		const onAbort = (): void => {
 			cleanup();
 			opts.onAbort?.();
-			if (opts.defaultValue !== undefined) {
-				resolve(opts.defaultValue);
+			if (hasDefaultValue) {
+				resolve(opts.defaultValue as T);
 			} else {
 				reject(new Error(`Request ${id} aborted`));
 			}
@@ -98,8 +98,8 @@ export class RequestCorrelator {
 			timeoutHandle = setTimeout(() => {
 				cleanup();
 				opts.onTimeout?.();
-				if (opts.defaultValue !== undefined) {
-					resolve(opts.defaultValue);
+				if (hasDefaultValue) {
+					resolve(opts.defaultValue as T);
 				} else {
 					reject(new Error(`Request ${id} timed out after ${opts.timeoutMs}ms`));
 				}

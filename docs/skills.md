@@ -24,7 +24,7 @@ The runtime only requires `name` and `path` for validity. In practice, matching 
 
 ### Directory layout
 
-For provider-based discovery (native/Claude/Codex/Agents/plugin providers), skills are discovered as **one level under `skills/`**:
+For provider-based discovery (native/Codex/Agents/plugin providers), skills are discovered as **one level under `skills/`**:
 
 - `<skills-root>/<skill-name>/SKILL.md`
 
@@ -81,19 +81,17 @@ Provider ordering is priority-first (higher wins), then registration order for t
 Current registered skill providers:
 
 1. `native` (priority 100) — `.omp` user/project skills via `src/discovery/builtin.ts`
-2. `claude` (priority 80)
-3. priority 70 group (in registration order):
-   - `claude-plugins`
+2. priority 70 group (in registration order):
    - `agents`
    - `codex`
-4. `opencode` (priority 55)
+3. `opencode` (priority 55)
    Dedup key is skill name. First item with a given name wins.
 
 ### Source toggles and filtering
 
 `discoverSkills()` applies these controls:
 
-- source toggles: `enableCodexUser`, `enableClaudeUser`, `enableClaudeProject`, `enablePiUser`, `enablePiProject`
+- source toggles: `enableCodexUser`, `enablePiUser`, `enablePiProject`
 - `disabledExtensions` entries with `skill:<name>`
 - `ignoredSkills` (exclude)
 - `includeSkills` (include allowlist; empty means include all)
@@ -104,7 +102,7 @@ Filter order is:
 2. source enabled
 3. not ignored
 4. included (if include list present)
-   For providers other than codex/claude/native (for example `agents`, `claude-plugins`, `opencode`), enablement currently falls back to: enabled if **any** built-in source toggle is enabled.
+   For providers other than codex/native (for example `agents` and `opencode`), enablement currently falls back to: enabled if **any** built-in source toggle is enabled.
 
 ### Collision and duplicate handling
 

@@ -258,14 +258,6 @@
 			"types": "./src/extensibility/plugins/*.ts",
 			"import": "./src/extensibility/plugins/*.ts"
 		},
-		"./extensibility/plugins/marketplace": {
-			"types": "./src/extensibility/plugins/marketplace/index.ts",
-			"import": "./src/extensibility/plugins/marketplace/index.ts"
-		},
-		"./extensibility/plugins/marketplace/*": {
-			"types": "./src/extensibility/plugins/marketplace/*.ts",
-			"import": "./src/extensibility/plugins/marketplace/*.ts"
-		},
 		"./internal-urls": {
 			"types": "./src/internal-urls/index.ts",
 			"import": "./src/internal-urls/index.ts"

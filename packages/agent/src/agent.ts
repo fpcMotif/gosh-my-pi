@@ -196,6 +196,33 @@ export class Agent {
 		this.#opts.serviceTier = serviceTier;
 	}
 
+	/** Steering mode: how queued steering messages are drained. Defaults to "one-at-a-time". */
+	getSteeringMode(): "all" | "one-at-a-time" {
+		return this.#opts.steeringMode ?? "one-at-a-time";
+	}
+
+	setSteeringMode(mode: "all" | "one-at-a-time"): void {
+		this.#opts.steeringMode = mode;
+	}
+
+	/** Follow-up mode: how queued follow-up messages are drained. Defaults to "all". */
+	getFollowUpMode(): "all" | "one-at-a-time" {
+		return this.#opts.followUpMode ?? "all";
+	}
+
+	setFollowUpMode(mode: "all" | "one-at-a-time"): void {
+		this.#opts.followUpMode = mode;
+	}
+
+	/** Interrupt mode: when steering messages interrupt tool execution. Defaults to "immediate". */
+	getInterruptMode(): "immediate" | "wait" {
+		return this.#opts.interruptMode ?? "immediate";
+	}
+
+	setInterruptMode(mode: "immediate" | "wait"): void {
+		this.#opts.interruptMode = mode;
+	}
+
 	subscribe(listener: AgentListener): () => void {
 		this.#listeners.add(listener);
 		return () => this.#listeners.delete(listener);

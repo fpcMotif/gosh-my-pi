@@ -1,9 +1,0 @@
-{
-	"name": "my-plugin",
-	"version": "0.1.0",
-	"omp": {
-		"extensions": [
-			"./index.ts"
-		]
-	}
-}

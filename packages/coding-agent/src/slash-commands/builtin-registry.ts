@@ -1,12 +1,6 @@
-import * as os from "node:os";
-import * as path from "node:path";
-
 import { getOAuthProviders } from "@oh-my-pi/pi-ai";
-import { getConfigDirName } from "@oh-my-pi/pi-utils";
-import { invalidate as invalidateFsCache } from "../capability/fs";
 import type { SettingPath, SettingValue } from "../config/settings";
 import { settings } from "../config/settings";
-import { clearClaudePluginRootsCache, resolveActiveProjectRegistryPath } from "../discovery/helpers.js";
 import { PluginManager } from "../extensibility/plugins";
 import type { InteractiveModeContext } from "../modes/types";
 
@@ -643,21 +637,22 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 	},
 	{
 		name: "plugins",
-		description: "List installed npm plugins",
+		description: "View and manage installed plugins",
+		subcommands: [{ name: "list", description: "List installed npm/local plugins" }],
+		allowArgs: true,
 		handle: async (_command, runtime) => {
 			runtime.ctx.editor.setText("");
 			try {
-				const npm = new PluginManager();
-				const plugins = await npm.list();
-				if (plugins.length === 0) {
-					runtime.ctx.showStatus("No plugins installed");
-					return;
+				const lines: string[] = [];
+				const npmPlugins = await new PluginManager().list();
+				if (npmPlugins.length > 0) {
+					lines.push("npm/local plugins:");
+					for (const p of npmPlugins) {
+						const status = p.enabled === false ? " (disabled)" : "";
+						lines.push(`  ${p.name}@${p.version}${status}`);
+					}
 				}
-				const lines = plugins.map(p => {
-					const status = p.enabled === false ? " (disabled)" : "";
-					return `  ${p.name}@${p.version}${status}`;
-				});
-				runtime.ctx.showStatus(`npm plugins:\n${lines.join("\n")}`);
+				runtime.ctx.showStatus(lines.length === 0 ? "No plugins installed" : lines.join("\n"));
 			} catch (error) {
 				runtime.ctx.showStatus(`Plugin error: ${String(error)}`);
 			}
@@ -667,14 +662,6 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		name: "reload-plugins",
 		description: "Reload all plugins (skills, commands, hooks, tools, agents, MCP)",
 		handle: async (_command, runtime) => {
-			// Invalidate the fs content cache for all registry files so
-			// listClaudePluginRoots re-reads from disk on next access.
-			const home = os.homedir();
-			invalidateFsCache(path.join(home, ".claude", "plugins", "installed_plugins.json"));
-			invalidateFsCache(path.join(home, getConfigDirName(), "plugins", "installed_plugins.json"));
-			const projectPath = await resolveActiveProjectRegistryPath(runtime.ctx.sessionManager.getCwd());
-			if (projectPath !== null && projectPath !== undefined && projectPath !== "") invalidateFsCache(projectPath);
-			clearClaudePluginRootsCache();
 			await runtime.ctx.refreshSlashCommandState();
 			runtime.ctx.showStatus("Plugins reloaded.");
 			runtime.ctx.editor.setText("");

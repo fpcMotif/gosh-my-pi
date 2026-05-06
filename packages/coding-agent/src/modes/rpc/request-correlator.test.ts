@@ -81,6 +81,16 @@ describe("RequestCorrelator", () => {
 		expect(c.pendingCount).toBe(0);
 	});
 
+	test("timeout resolves when explicit defaultValue is undefined", async () => {
+		const c = new RequestCorrelator();
+		const { promise } = c.register<string | undefined>({
+			timeoutMs: 10,
+			defaultValue: undefined,
+		});
+		expect(await promise).toBeUndefined();
+		expect(c.pendingCount).toBe(0);
+	});
+
 	test("timeout without defaultValue rejects", async () => {
 		const c = new RequestCorrelator();
 		const { promise } = c.register<string>({ timeoutMs: 10 });
@@ -102,6 +112,18 @@ describe("RequestCorrelator", () => {
 		const result = await promise;
 		expect(result).toBe("aborted-default");
 		expect(abortFired).toBe(true);
+	});
+
+	test("abort resolves when explicit defaultValue is undefined", async () => {
+		const c = new RequestCorrelator();
+		const ac = new AbortController();
+		const { promise } = c.register<string | undefined>({
+			signal: ac.signal,
+			defaultValue: undefined,
+		});
+		ac.abort();
+		expect(await promise).toBeUndefined();
+		expect(c.pendingCount).toBe(0);
 	});
 
 	test("pre-aborted signal short-circuits to defaultValue", async () => {

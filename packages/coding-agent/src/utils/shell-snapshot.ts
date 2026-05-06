@@ -33,7 +33,7 @@ function getShellConfigFile(shell: string): string {
 /**
  * Generate the snapshot creation script.
  * This script sources the user's rc file and extracts functions, aliases, and options.
- * Matches Claude Code's snapshot generation logic.
+ * Matches common interactive shell snapshot generation logic.
  */
 function generateSnapshotScript(shell: string, snapshotPath: string, rcFile: string): string {
 	const hasRcFile = fs.existsSync(rcFile);

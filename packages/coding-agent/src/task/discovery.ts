@@ -3,20 +3,14 @@
  *
  * Discovers agent definitions from:
  *   - ~/.omp/agent/agents/*.md (user-level, primary)
- *   - ~/.pi/agent/agents/*.md (user-level, legacy)
- *   - ~/.claude/agents/*.md (user-level, legacy)
  *   - .omp/agents/*.md (project-level, primary)
- *   - .pi/agents/*.md (project-level, legacy)
- *   - .claude/agents/*.md (project-level, legacy)
  *
  * Agent files use markdown with YAML frontmatter.
  */
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { findAllNearestProjectConfigDirs, getConfigDirs } from "../config";
-import { listClaudePluginRoots } from "../discovery/helpers";
 import { loadBundledAgents, parseAgent } from "./agents";
 import type { AgentDefinition, AgentSource } from "./types";
 
@@ -51,15 +45,15 @@ async function loadAgentsFromDir(dir: string, source: AgentSource): Promise<Agen
 /**
  * Discover agents from filesystem and merge with bundled agents.
  *
- * Precedence (highest wins): .omp > .pi > .claude (project before user), then bundled
+ * Precedence (highest wins): config source order (project before user), then bundled
  *
  * @param cwd - Current working directory for project agent discovery
  */
-export async function discoverAgents(cwd: string, home: string = os.homedir()): Promise<DiscoveryResult> {
+export async function discoverAgents(cwd: string): Promise<DiscoveryResult> {
 	const resolvedCwd = path.resolve(cwd);
 	const agentSources = Array.from(new Set(getConfigDirs("", { project: false }).map(entry => entry.source)));
 
-	// Get user directories (priority order: .omp, .pi, .claude, ...)
+	// Get user directories in config source priority order.
 	const userDirs = getConfigDirs("agents", { project: false })
 		.filter(entry => agentSources.includes(entry.source))
 		.map(entry => ({
@@ -85,17 +79,6 @@ export async function discoverAgents(cwd: string, home: string = os.homedir()): 
 		if (project) orderedDirs.push({ dir: project.path, source: "project" });
 		const user = userDirs.find(entry => entry.source === source);
 		if (user) orderedDirs.push({ dir: user.path, source: "user" });
-	}
-
-	// Load agents from Claude Code marketplace plugins
-	const { roots: pluginRoots } = await listClaudePluginRoots(home, resolvedCwd);
-	const sortedPluginRoots = [...pluginRoots].sort((a, b) => {
-		if (a.scope === b.scope) return 0;
-		return a.scope === "project" ? -1 : 1;
-	});
-	for (const plugin of sortedPluginRoots) {
-		const agentsDir = path.join(plugin.path, "agents");
-		orderedDirs.push({ dir: agentsDir, source: plugin.scope === "project" ? "project" : "user" });
 	}
 
 	const seen = new Set<string>();

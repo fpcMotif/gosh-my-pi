@@ -7,9 +7,7 @@ This document describes how slash commands are discovered, deduplicated, surface
 - [`src/extensibility/slash-commands.ts`](../packages/coding-agent/src/extensibility/slash-commands.ts)
 - [`src/capability/slash-command.ts`](../packages/coding-agent/src/capability/slash-command.ts)
 - [`src/discovery/builtin.ts`](../packages/coding-agent/src/discovery/builtin.ts)
-- [`src/discovery/claude.ts`](../packages/coding-agent/src/discovery/claude.ts)
 - [`src/discovery/codex.ts`](../packages/coding-agent/src/discovery/codex.ts)
-- [`src/discovery/claude-plugins.ts`](../packages/coding-agent/src/discovery/claude-plugins.ts)
 - [`src/capability/index.ts`](../packages/coding-agent/src/capability/index.ts)
 - [`src/discovery/helpers.ts`](../packages/coding-agent/src/discovery/helpers.ts)
 - [`src/session/agent-session.ts`](../packages/coding-agent/src/session/agent-session.ts)
@@ -29,12 +27,10 @@ The capability registry loads all registered providers, sorted by provider prior
 Current slash-command providers and priorities:
 
 1. `native` (OMP) — priority `100`
-2. `claude` — priority `80`
-3. `claude-plugins` — priority `70`
-4. `codex` — priority `70`
-5. `opencode` — priority `55`
+2. `codex` — priority `70`
+3. `opencode` — priority `55`
 
-Tie behavior: equal-priority providers keep registration order. Current import order registers `claude-plugins` before `codex`, so plugin commands win over codex commands on name collisions.
+Tie behavior: equal-priority providers keep registration order.
 
 ### Name-collision behavior
 
@@ -66,15 +62,6 @@ Search roots come from `.omp` directories:
 
 `getConfigDirs()` returns project first, then user, so **project native commands beat user native commands** when names collide.
 
-## `claude` provider (`claude.ts`)
-
-Loads, subject to `commands.enableClaudeUser` and `commands.enableClaudeProject` settings:
-
-- user: `~/.claude/commands/*.md`
-- project: `<cwd>/.claude/commands/*.md`
-
-The provider pushes user items before project items, so **user Claude commands beat project Claude commands** on same-name collisions inside this provider.
-
 ## `codex` provider (`codex.ts`)
 
 Loads:
@@ -95,12 +82,6 @@ Loads, subject to `commands.enableOpencodeUser` and `commands.enableOpencodeProj
 
 Both sides are loaded then flattened in user-first order, so **user OpenCode commands beat project OpenCode commands** on collisions. OpenCode command content is parsed with frontmatter stripping, and command name can be overridden by frontmatter `name`; otherwise filename is used.
 
-## `claude-plugins` provider (`claude-plugins.ts`)
-
-Loads plugin command roots from `~/.claude/plugins/installed_plugins.json`, then scans `<pluginRoot>/commands/*.md`.
-
-Ordering follows registry iteration order and per-plugin entry order from that JSON data. There is no additional sort step.
-
 ## 3) Materialization to runtime `FileSlashCommand`
 
 `loadSlashCommands()` in `src/extensibility/slash-commands.ts` converts capability items into `FileSlashCommand` objects used at prompt time.
@@ -112,7 +93,7 @@ For each command:
    - `frontmatter.description` if present
    - else first non-empty body line (trimmed, max 60 chars with `...`)
 3. keep parsed body as executable template content
-4. compute a display source string like `via Claude Code Project`
+4. compute a display source string like `via Codex Project`
 
 Frontmatter parse severity is source-dependent:
 

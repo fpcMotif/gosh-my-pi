@@ -17,7 +17,6 @@ import { expandTilde } from "./tools/path-utils";
 
 const priorityList = [
 	{ dir: CONFIG_DIR_NAME, globalAgentDir: getConfigAgentDirName },
-	{ dir: ".claude" },
 	{ dir: ".codex" },
 	{ dir: ".gemini" },
 ];
@@ -254,8 +253,8 @@ export class ConfigFile<T> implements IConfigFile<T> {
 
 /**
  * Config directory bases in priority order (highest first).
- * User-level: ~/.omp/agent, ~/.claude, ~/.codex, ~/.gemini
- * Project-level: .omp, .claude, .codex, .gemini
+ * User-level: ~/.omp/agent, ~/.codex, ~/.gemini
+ * Project-level: .omp, .codex, .gemini
  */
 const USER_CONFIG_BASES = priorityList.map(({ dir, globalAgentDir }) => ({
 	base: () => path.join(os.homedir(), globalAgentDir ? globalAgentDir() : dir),
@@ -269,7 +268,7 @@ const PROJECT_CONFIG_BASES = priorityList.map(({ dir }) => ({
 
 export interface ConfigDirEntry {
 	path: string;
-	source: string; // e.g., ".omp", ".claude"
+	source: string; // e.g., ".omp", ".codex"
 	level: "user" | "project";
 }
 
@@ -384,7 +383,7 @@ export function findConfigFileWithMeta(
 
 /**
  * Find all nearest config directories by walking up from cwd.
- * Returns one entry per config base (.omp, .claude) - the nearest one found.
+ * Returns one entry per config base (.omp, .codex, .gemini) - the nearest one found.
  * Results are in priority order (highest first).
  */
 export function findAllNearestProjectConfigDirs(subpath: string, cwd: string = getProjectDir()): ConfigDirEntry[] {

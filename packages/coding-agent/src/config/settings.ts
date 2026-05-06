@@ -110,7 +110,7 @@ export class Settings {
 
 	/** Global settings from config.yml */
 	#global: RawSettings = {};
-	/** Project settings from .claude/settings.yml etc */
+	/** Project settings from provider-specific settings files */
 	#project: RawSettings = {};
 	/** Runtime overrides (not persisted) */
 	#overrides: RawSettings = {};

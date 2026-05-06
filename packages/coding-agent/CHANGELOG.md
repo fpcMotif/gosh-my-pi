@@ -8,10 +8,16 @@
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt and updated TypeScript project diagnostics to use tsgo.
 - Renamed the installed CLI command and prebuilt binary artifacts from `omp` to `gmp` to avoid collisions with an existing `omp` command.
 
+### Removed
+
+- Removed marketplace plugin management and Claude marketplace plugin auto-discovery.
+
 ### Fixed
 
 - Fixed vivid `RowSplit` layouts so an explicit empty separator omits the default vertical rule.
 - Kept vivid sidebar and minimized welcome chrome in sync after session, cwd, model, and thinking-level changes.
+- Fixed RPC extension editor requests so aborts and timeouts resolve when `defaultValue` is explicitly `undefined`.
+- Removed stale Claude/marketplace discovery imports that could break extension, CLI help, and session replay startup paths.
 
 ## [14.5.11] - 2026-04-30
 

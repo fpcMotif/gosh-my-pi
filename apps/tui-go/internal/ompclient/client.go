@@ -29,8 +29,10 @@ const (
 
 // Options configures the omp RPC subprocess.
 type Options struct {
-	// Bin is the binary to spawn. Defaults to "omp".
-	// Override with the OMP_TUI_BACKEND env var (handled by caller).
+	// Bin is the binary to spawn. Defaults to "gmp" (the local fork's
+	// renamed coding-agent binary; intentionally not "omp" to avoid
+	// collision with an upstream `omp` install on PATH).
+	// Override with the GMP_TUI_BACKEND env var (handled by caller).
 	Bin string
 
 	// PrefixArgs are placed before "--mode rpc". This supports commands
@@ -93,7 +95,7 @@ type Client struct {
 func Spawn(ctx context.Context, opts Options) (*Client, error) {
 	bin := opts.Bin
 	if bin == "" {
-		bin = "omp"
+		bin = "gmp"
 	}
 	args := append([]string{}, opts.PrefixArgs...)
 	args = append(args, "--mode", "rpc")

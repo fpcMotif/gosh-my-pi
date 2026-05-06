@@ -1621,10 +1621,6 @@ export const SETTINGS_SCHEMA = {
 
 	"skills.enableCodexUser": { type: "boolean", default: true },
 
-	"skills.enableClaudeUser": { type: "boolean", default: true },
-
-	"skills.enableClaudeProject": { type: "boolean", default: true },
-
 	"skills.enablePiUser": { type: "boolean", default: true },
 
 	"skills.enablePiProject": { type: "boolean", default: true },
@@ -1634,19 +1630,6 @@ export const SETTINGS_SCHEMA = {
 	"skills.ignoredSkills": { type: "array", default: [] as string[] },
 
 	"skills.includeSkills": { type: "array", default: [] as string[] },
-
-	// Commands
-	"commands.enableClaudeUser": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tasks", label: "Claude User Commands", description: "Load commands from ~/.claude/commands/" },
-	},
-
-	"commands.enableClaudeProject": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tasks", label: "Claude Project Commands", description: "Load commands from .claude/commands/" },
-	},
 
 	"commands.enableOpencodeUser": {
 		type: "boolean",
@@ -1978,8 +1961,6 @@ export interface SkillsSettings {
 	enabled?: boolean;
 	enableSkillCommands?: boolean;
 	enableCodexUser?: boolean;
-	enableClaudeUser?: boolean;
-	enableClaudeProject?: boolean;
 	enablePiUser?: boolean;
 	enablePiProject?: boolean;
 	customDirectories?: string[];

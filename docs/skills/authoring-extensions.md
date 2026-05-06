@@ -79,7 +79,7 @@ omp discovers extension modules in this order:
 
 1. **Project-scoped auto-discovery** — `<cwd>/.omp/extensions/`
 2. **User-scoped auto-discovery** — `~/.omp/agent/extensions/`
-3. **Marketplace-installed plugins** — `~/.omp/plugins/node_modules/` (extensions shipped inside installed plugin packages)
+3. **Installed plugins** — `~/.omp/plugins/node_modules/` (extensions shipped inside npm/local plugin packages)
 4. **CLI flag** — `omp --extension ./my-ext.ts` (also `-e`; `--hook` is treated as an alias)
 5. **Settings `extensions` array** — paths listed in `~/.omp/agent/config.yml` or `<cwd>/.omp/settings.json`
 
@@ -209,7 +209,6 @@ Full event catalog: see [hooks authoring guide](./authoring-hooks.md).
 | Pure event interception (policy, redaction)    | **Extension** or **Hook** (both work; extension is preferred)             |
 | Legacy hook module already exists              | **Hook** (`HookAPI` from `@oh-my-pi/pi-coding-agent/extensibility/hooks`) |
 | Registering provider / custom message renderer | **Extension only**                                                        |
-| Shipping as a marketplace plugin               | **Extension** (use `package.json` manifest)                               |
 
 Extensions are a strict superset of hooks. New authoring should use `ExtensionAPI`.
 

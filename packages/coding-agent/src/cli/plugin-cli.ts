@@ -102,15 +102,14 @@ export function parsePluginArgs(args: string[]): PluginCommandArgs | undefined {
 		} else if (arg === "--set" && i + 1 < args.length) {
 			result.flags.set = args[++i];
 		} else if (arg === "--scope" && i + 1 < args.length && !args[i + 1].startsWith("-")) {
-			const s = args[++i];
-			if (s === "user" || s === "project") {
-				result.flags.scope = s;
+			const scope = args[++i];
+			if (scope === "user" || scope === "project") {
+				result.flags.scope = scope;
 			} else {
-				console.error(chalk.red(`Invalid --scope value: "${s}". Must be "user" or "project".`));
+				console.error(chalk.red(`Invalid --scope value: "${scope}". Must be "user" or "project".`));
 				process.exit(1);
 			}
 		} else if (arg === "--scope") {
-			// --scope with no value following
 			console.error(chalk.red(`--scope requires a value: "user" or "project".`));
 			process.exit(1);
 		} else if (!arg.startsWith("-")) {

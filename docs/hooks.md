@@ -65,7 +65,7 @@ The factory can:
 
 ### Important legacy mismatch
 
-Discovery providers for `hookCapability` still model pre/post shell-style hook files (for example `.claude/hooks/pre/*`, `.omp/.../hooks/pre/*`).
+Discovery providers for `hookCapability` still model pre/post shell-style hook files (for example `.omp/.../hooks/pre/*`, `.codex/hooks/pre/*`).
 
 The hook loader here uses dynamic module import and requires a default JS/TS hook factory. If a discovered hook path is not importable as a module, load fails and is reported in `LoadHooksResult.errors`.
 

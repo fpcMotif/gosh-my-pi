@@ -12,8 +12,6 @@ function createIsolatedSkillsSettings(): Settings {
 	return Settings.isolated({
 		"skills.enabled": true,
 		"skills.enableCodexUser": false,
-		"skills.enableClaudeUser": false,
-		"skills.enableClaudeProject": false,
 		"skills.enablePiUser": false,
 		"skills.enablePiProject": true,
 	});

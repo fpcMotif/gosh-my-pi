@@ -38,7 +38,6 @@ export interface Args {
 	hooks?: string[];
 	extensions?: string[];
 	noExtensions?: boolean;
-	pluginDirs?: string[];
 	print?: boolean;
 	export?: string;
 	noSkills?: boolean;
@@ -165,9 +164,6 @@ export function parseArgs(args: readonly string[], extensionFlags?: Map<string, 
 		} else if ((arg === "--extension" || arg === "-e") && i + 1 < expandedArgs.length) {
 			result.extensions = result.extensions ?? [];
 			result.extensions.push(expandedArgs[++i]);
-		} else if (arg === "--plugin-dir" && i + 1 < expandedArgs.length) {
-			result.pluginDirs = result.pluginDirs ?? [];
-			result.pluginDirs.push(expandedArgs[++i]);
 		} else if (arg === "--no-extensions") {
 			result.noExtensions = true;
 		} else if (arg === "--no-skills") {
@@ -281,9 +277,6 @@ ${chalk.bold("Available Tools (default-enabled unless noted):")}
   todo_write    - Manage todo/task lists
   web_search    - Search the web
   ask           - Ask user questions (interactive mode only)
-
-${chalk.bold("Plugin Options:")}
-  --plugin-dir <path>        Load plugin from directory (repeatable)
 
 ${chalk.bold("Useful Commands:")}
   ${APP_NAME} agents unpack           - Export bundled subagents to ~/.omp/agent/agents (default)
