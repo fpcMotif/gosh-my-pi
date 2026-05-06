@@ -3,6 +3,7 @@ import { Snowflake } from "@oh-my-pi/pi-utils";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { applyToolProxy } from "../../extensibility/tool-proxy";
 import type { Theme } from "../../modes/theme/theme";
+import { RequestCorrelator } from "./request-correlator";
 import type {
 	RpcHostToolCallRequest,
 	RpcHostToolCancelRequest,
@@ -10,14 +11,14 @@ import type {
 	RpcHostToolResult,
 	RpcHostToolUpdate,
 } from "./rpc-types";
+import type { WireFrame } from "./wire/v1";
 
-type RpcHostToolOutput = (frame: RpcHostToolCallRequest | RpcHostToolCancelRequest) => void;
-
-type PendingHostToolCall = {
-	resolve: (result: AgentToolResult<unknown>) => void;
-	reject: (error: Error) => void;
-	onUpdate?: AgentToolUpdateCallback<unknown>;
-};
+/**
+ * The output callback emits any v1 wire frame. RpcHostToolBridge only
+ * emits the host_tool_call / host_tool_cancel sub-types but takes the
+ * full WireFrame parameter so it composes with rpc-mode's chokepoint.
+ */
+type RpcHostToolOutput = (frame: WireFrame) => void;
 
 function isAgentToolResult(value: unknown): value is AgentToolResult<unknown> {
 	if (value === null || value === undefined || typeof value !== "object") return false;
@@ -76,7 +77,12 @@ class RpcHostToolAdapter<TParams extends TSchema = TSchema, TTheme extends Theme
 export class RpcHostToolBridge {
 	#output: RpcHostToolOutput;
 	#definitions = new Map<string, RpcHostToolDefinition>();
-	#pendingCalls = new Map<string, PendingHostToolCall>();
+	// Resolve/reject correlation goes through the shared RequestCorrelator
+	// (decision 8 / interpretation B). The streaming update callbacks are
+	// tracked separately since they don't fit the one-shot register/resolve
+	// pattern — they fire repeatedly until the final result frame.
+	#correlator = new RequestCorrelator();
+	#updateCallbacks = new Map<string, AgentToolUpdateCallback<unknown>>();
 
 	constructor(output: RpcHostToolOutput) {
 		this.#output = output;
@@ -92,9 +98,7 @@ export class RpcHostToolBridge {
 	}
 
 	handleResult(frame: RpcHostToolResult): boolean {
-		const pending = this.#pendingCalls.get(frame.id);
-		if (!pending) return false;
-		this.#pendingCalls.delete(frame.id);
+		this.#updateCallbacks.delete(frame.id);
 		if (frame.isError === true) {
 			const text = frame.result.content
 				.filter(
@@ -103,17 +107,15 @@ export class RpcHostToolBridge {
 				.map(item => item.text)
 				.join("\n")
 				.trim();
-			pending.reject(new Error(text || "Host tool execution failed"));
-			return true;
+			return this.#correlator.reject(frame.id, new Error(text || "Host tool execution failed"));
 		}
-		pending.resolve(frame.result);
-		return true;
+		return this.#correlator.resolve(frame.id, frame.result);
 	}
 
 	handleUpdate(frame: RpcHostToolUpdate): boolean {
-		const pending = this.#pendingCalls.get(frame.id);
-		if (!pending) return false;
-		pending.onUpdate?.(frame.partialResult);
+		const onUpdate = this.#updateCallbacks.get(frame.id);
+		if (!onUpdate) return false;
+		onUpdate(frame.partialResult);
 		return true;
 	}
 
@@ -124,47 +126,22 @@ export class RpcHostToolBridge {
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback<unknown>,
 	): Promise<AgentToolResult<unknown>> {
-		if (signal !== undefined && signal.aborted) {
-			return Promise.reject(new Error(`Host tool "${definition.name}" was aborted`));
-		}
-
-		const id = Snowflake.next() as string;
-		const { promise, resolve, reject } = Promise.withResolvers<AgentToolResult<unknown>>();
-		let settled = false;
-
-		const cleanup = () => {
-			signal?.removeEventListener("abort", onAbort);
-			this.#pendingCalls.delete(id);
-		};
-
-		const onAbort = () => {
-			if (settled) return;
-			settled = true;
-			cleanup();
-			this.#output({
-				type: "host_tool_cancel",
-				id: Snowflake.next() as string,
-				targetId: id,
-			});
-			reject(new Error(`Host tool "${definition.name}" was aborted`));
-		};
-
-		signal?.addEventListener("abort", onAbort, { once: true });
-		this.#pendingCalls.set(id, {
-			resolve: result => {
-				if (settled) return;
-				settled = true;
-				cleanup();
-				resolve(result);
+		const { id, promise } = this.#correlator.register<AgentToolResult<unknown>>({
+			signal,
+			onAbort: () => {
+				// Notify host to dismiss the pending tool call.
+				this.#output({
+					type: "host_tool_cancel",
+					id: Snowflake.next() as string,
+					targetId: id,
+				});
+				this.#updateCallbacks.delete(id);
 			},
-			reject: error => {
-				if (settled) return;
-				settled = true;
-				cleanup();
-				reject(error);
-			},
-			onUpdate,
 		});
+
+		if (onUpdate !== undefined) {
+			this.#updateCallbacks.set(id, onUpdate);
+		}
 
 		this.#output({
 			type: "host_tool_call",
@@ -174,15 +151,24 @@ export class RpcHostToolBridge {
 			arguments: args,
 		});
 
-		return promise;
+		// Ensure update-callback cleanup happens when the promise settles
+		// regardless of how (resolve, reject, or abort).
+		void promise.finally(() => {
+			this.#updateCallbacks.delete(id);
+		});
+
+		// Custom abort error message — RequestCorrelator's default reason is
+		// generic; preserve the prior "Host tool X was aborted" wording.
+		return promise.catch(error => {
+			if (signal?.aborted === true) {
+				throw new Error(`Host tool "${definition.name}" was aborted`);
+			}
+			throw error;
+		});
 	}
 
 	rejectAllPending(message: string): void {
-		const error = new Error(message);
-		const pendingCalls = Array.from(this.#pendingCalls.values());
-		this.#pendingCalls.clear();
-		for (const pending of pendingCalls) {
-			pending.reject(error);
-		}
+		this.#correlator.cancelAll(message);
+		this.#updateCallbacks.clear();
 	}
 }

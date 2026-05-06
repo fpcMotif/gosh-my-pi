@@ -4,6 +4,8 @@ export * from "./agent";
 export * from "./agent-loop";
 export * from "./agent-loop/execution";
 export * from "./agent-loop/streaming";
+// Typed error classification on AgentEvent
+export * from "./error-kind";
 // Proxy utilities
 export * from "./proxy";
 // Thinking selectors

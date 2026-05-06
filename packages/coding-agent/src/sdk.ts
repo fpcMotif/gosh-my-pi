@@ -85,7 +85,7 @@ import {
 	SecretObfuscator,
 } from "./secrets";
 import { AgentSession } from "./session/agent-session";
-import { AuthStorage } from "./session/auth-storage";
+import { AuthStorage } from "@oh-my-pi/pi-ai";
 import { convertToLlm } from "./session/messages";
 import { SessionManager } from "./session/session-manager";
 import { closeAllConnections } from "./ssh/connection-manager";

@@ -2,7 +2,7 @@ import type { CommitAgentState } from "../../../commit/agentic/state";
 import type { ModelRegistry } from "../../../config/model-registry";
 import type { Settings } from "../../../config/settings";
 import type { CustomTool } from "../../../extensibility/custom-tools/types";
-import type { AuthStorage } from "../../../session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import { createAnalyzeFileTool } from "./analyze-file";
 import { createGitFileDiffTool } from "./git-file-diff";
 import { createGitHunkTool } from "./git-hunk";

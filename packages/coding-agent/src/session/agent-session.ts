@@ -19,6 +19,7 @@ import * as path from "node:path";
 import {
 	type Agent,
 	AgentBusyError,
+	type AgentErrorKind,
 	type AgentEvent,
 	type AgentMessage,
 	type AgentState,
@@ -42,16 +43,7 @@ import type {
 	Usage,
 	UsageReport,
 } from "@oh-my-pi/pi-ai";
-import {
-	calculateRateLimitBackoffMs,
-	getSupportedEfforts,
-	isContextOverflow,
-	isUnexpectedSocketCloseMessage,
-	isUsageLimitError,
-	modelsAreEqual,
-	parseRateLimitReason,
-	streamSimple,
-} from "@oh-my-pi/pi-ai";
+import { getSupportedEfforts, isContextOverflow, modelsAreEqual, streamSimple } from "@oh-my-pi/pi-ai";
 import { killTree, MacOSPowerAssertion } from "@oh-my-pi/pi-natives";
 import {
 	abortableSleep,
@@ -75,8 +67,7 @@ import {
 } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
-import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "../edit";
-import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
+import type { BashResult } from "../exec/bash-executor";
 import { exportSessionToHtml } from "../export/html";
 import type { TtsrManager, TtsrMatchContext } from "../export/ttsr";
 import type { LoadedCustomCommand } from "../extensibility/custom-commands";
@@ -106,18 +97,11 @@ import type { HookCommandContext } from "../extensibility/hooks/types";
 import type { Skill, SkillWarning } from "../extensibility/skills";
 import { expandSlashCommand, type FileSlashCommand } from "../extensibility/slash-commands";
 import { type LocalProtocolOptions, resolveLocalUrlToPath } from "../internal-urls";
+import type { PythonResult } from "../ipy/executor";
 import {
-	disposeKernelSessionsByOwner,
-	executePython as executePythonCommand,
-	type PythonResult,
-} from "../ipy/executor";
-import {
-	buildDiscoverableMCPSearchIndex,
-	collectDiscoverableMCPTools,
 	type DiscoverableMCPSearchIndex,
 	type DiscoverableMCPTool,
 	isMCPToolName,
-	selectDiscoverableMCPToolNamesByServer,
 } from "../mcp/discoverable-tool-metadata";
 import { getCurrentThemeName, theme } from "../modes/theme/theme";
 import type { PlanModeState } from "../plan-mode/state";
@@ -126,21 +110,15 @@ import autoHandoffThresholdFocusPrompt from "../prompts/system/auto-handoff-thre
 import eagerTodoPrompt from "../prompts/system/eager-todo.md" with { type: "text" };
 import handoffDocumentPrompt from "../prompts/system/handoff-document.md" with { type: "text" };
 import ircIncomingTemplate from "../prompts/system/irc-incoming.md" with { type: "text" };
-import planModeActivePrompt from "../prompts/system/plan-mode-active.md" with { type: "text" };
-import planModeReferencePrompt from "../prompts/system/plan-mode-reference.md" with { type: "text" };
 import planModeToolDecisionReminderPrompt from "../prompts/system/plan-mode-tool-decision-reminder.md" with { type: "text" };
-import ttsrInterruptTemplate from "../prompts/system/ttsr-interrupt.md" with { type: "text" };
 import { type AgentRegistry, MAIN_AGENT_ID } from "../registry/agent-registry";
 import { deobfuscateSessionContext, type SecretObfuscator } from "../secrets/obfuscator";
 import { resolveThinkingLevelForModel, toReasoningEffort } from "../thinking";
-import { assertEditableFile } from "../tools/auto-generated-guard";
 import type { CheckpointState } from "../tools/checkpoint";
 import { outputMeta } from "../tools/output-meta";
 import { normalizeLocalScheme, resolveToCwd } from "../tools/path-utils";
 import { isAutoQaEnabled } from "../tools/report-tool-issue";
 import type { TodoItem, TodoPhase } from "../tools/todo-write";
-import { ToolError } from "../tools/tool-errors";
-import { clampTimeout } from "../tools/tool-timeouts";
 import { parseCommandArgs } from "../utils/command-args";
 import { type EditMode, resolveEditMode } from "../utils/edit-mode";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
@@ -160,21 +138,24 @@ import {
 } from "./compaction";
 import { DEFAULT_PRUNE_CONFIG, pruneToolOutputs } from "./compaction/pruning";
 import {
-	type BashExecutionMessage,
 	type CompactionSummaryMessage,
 	type CustomMessage,
 	convertToLlm,
 	type FileMentionMessage,
-	type PythonExecutionMessage,
 } from "./messages";
+import { ActiveRetryFallback } from "./active-retry-fallback";
+import { BackgroundExchangeQueue } from "./background-exchange-queue";
+import { BashController } from "./bash-controller";
+import { runCompactionWithRetry } from "./compaction-retry";
+import { MCPSelectionStore } from "./mcp-selection-store";
 import { PendingSessionMessages } from "./pending-session-messages";
-import {
-	type ActiveRetryFallbackState,
-	formatRetryFallbackSelector,
-	parseRetryFallbackSelector,
-	RetryFallbackPolicy,
-	type RetryFallbackSelector,
-} from "./retry-fallback-policy";
+import { PlanModeController } from "./plan-mode-controller";
+import { ProviderSessionPool } from "./provider-session-pool";
+import { PythonController } from "./python-controller";
+import { TtsrEngine } from "./ttsr-engine";
+import { formatRetryFallbackSelector, RetryFallbackPolicy } from "./retry-fallback-policy";
+import { RetryController } from "./retry-controller";
+import { StreamingEditGuard } from "./streaming-edit-guard";
 import { formatSessionDumpText } from "./session-dump-format";
 import type {
 	BranchSummaryEntry,
@@ -409,9 +390,7 @@ export class AgentSession {
 	#eventListeners: AgentSessionEventListener[] = [];
 
 	#pendingMessages = new PendingSessionMessages();
-	#planModeState: PlanModeState | undefined;
-	#planReferenceSent = false;
-	#planReferencePath = "local://PLAN.md";
+	#planMode: PlanModeController;
 
 	// Compaction state
 	#compactionAbortController: AbortController | undefined = undefined;
@@ -425,12 +404,9 @@ export class AgentSession {
 	#handoffAbortController: AbortController | undefined = undefined;
 	#skipPostTurnMaintenanceAssistantTimestamp: number | undefined = undefined;
 
-	// Retry state
-	#retryAbortController: AbortController | undefined = undefined;
-	#retryAttempt = 0;
-	#retryPromise: Promise<void> | undefined = undefined;
-	#retryResolve: (() => void) | undefined = undefined;
-	#activeRetryFallback: ActiveRetryFallbackState | undefined = undefined;
+	// Retry state — owned by the RetryController + ActiveRetryFallback subsystems
+	#retry: RetryController;
+	#activeRetryFallback: ActiveRetryFallback;
 	#retryFallbackPolicy: RetryFallbackPolicy;
 	// Todo completion reminder state
 	#todoReminderCount = 0;
@@ -438,20 +414,15 @@ export class AgentSession {
 	#toolChoiceQueue = new ToolChoiceQueue();
 
 	// Bash execution state
-	#bashAbortControllers = new Set<AbortController>();
-	#pendingBashMessages: BashExecutionMessage[] = [];
+	#bash: BashController;
 
-	// Python execution state
-	#pythonAbortControllers = new Set<AbortController>();
+	// Python execution state — owned by PythonController
+	#python: PythonController;
 	#pythonKernelOwnerId: string;
-	#pendingPythonMessages: PythonExecutionMessage[] = [];
-	#activePythonExecutions = new Set<Promise<unknown>>();
-	#pythonExecutionDisposing = false;
 
 	// Background-channel IRC exchanges queued while the recipient was streaming.
 	// Drained into history (via emitExternalEvent) once the recipient becomes idle.
-	#pendingBackgroundExchanges: CustomMessage[][] = [];
-	#scheduledBackgroundExchangeFlush = false;
+	#backgroundExchanges: BackgroundExchangeQueue;
 	// Agent identity + registry for IRC relay forwarding to the main session UI.
 	#agentId: string | undefined;
 	#agentRegistry: AgentRegistry | undefined;
@@ -480,40 +451,24 @@ export class AgentSession {
 	#convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
 	#rebuildSystemPrompt: ((toolNames: string[], tools: Map<string, AgentTool>) => Promise<string>) | undefined;
 	#baseSystemPrompt: string;
-	#mcpDiscoveryEnabled = false;
-	#discoverableMCPTools = new Map<string, DiscoverableMCPTool>();
-	#discoverableMCPSearchIndex: DiscoverableMCPSearchIndex | null = null;
-	#selectedMCPToolNames = new Set<string>();
+	#mcp: MCPSelectionStore;
 	#rpcHostToolNames = new Set<string>();
-	#defaultSelectedMCPServerNames = new Set<string>();
-	#defaultSelectedMCPToolNames = new Set<string>();
-	#sessionDefaultSelectedMCPToolNames = new Map<string, string[]>();
 
 	// TTSR manager for time-traveling stream rules
-	#ttsrManager: TtsrManager | undefined = undefined;
-	#pendingTtsrInjections: Rule[] = [];
-	#ttsrAbortPending = false;
-	#ttsrRetryToken = 0;
-	#ttsrResumePromise: Promise<void> | undefined = undefined;
-	#ttsrResumeResolve: (() => void) | undefined = undefined;
+	#ttsr: TtsrEngine;
 	#postPromptTasks = new Set<Promise<void>>();
 	#postPromptTasksPromise: Promise<void> | undefined = undefined;
 	#postPromptTasksResolve: (() => void) | undefined = undefined;
 	#postPromptTasksAbortController = new AbortController();
 
-	#streamingEditAbortTriggered = false;
-	#streamingEditCheckedLineCounts = new Map<string, number>();
-
-	#streamingEditPrecheckedToolCallIds = new Set<string>();
-
-	#streamingEditFileCache = new Map<string, string>();
+	#streamingEditGuard: StreamingEditGuard;
 	#promptInFlightCount = 0;
 	#obfuscator: SecretObfuscator | undefined;
 	#checkpointState: CheckpointState | undefined = undefined;
 	#pendingRewindReport: string | undefined = undefined;
 	#lastSuccessfulYieldToolCallId: string | undefined = undefined;
 	#promptGeneration = 0;
-	#providerSessionState = new Map<string, ProviderSessionState>();
+	#providerSessions = new ProviderSessionPool();
 
 	#startPowerAssertion(): void {
 		if (process.platform !== "darwin") {
@@ -563,6 +518,63 @@ export class AgentSession {
 			modelRegistry: this.#modelRegistry,
 		});
 		this.configWarnings.push(...this.#retryFallbackPolicy.validateChains());
+		this.#activeRetryFallback = new ActiveRetryFallback({
+			sessionId: this.sessionId,
+			modelRegistry: this.#modelRegistry,
+			sessionManager: this.sessionManager,
+			settings: this.settings,
+			policy: this.#retryFallbackPolicy,
+			getModel: () => this.model,
+			getThinkingLevel: () => this.thinkingLevel,
+			setModelWithReset: model => this.#setModelWithProviderSessionReset(model),
+			setThinkingLevel: level => this.setThinkingLevel(level),
+			emitFallbackApplied: payload =>
+				this.#emitSessionEvent({ type: "retry_fallback_applied", ...payload }),
+		});
+		this.#retry = new RetryController({
+			sessionId: this.sessionId,
+			settings: this.settings,
+			agent: this.agent,
+			modelRegistry: this.#modelRegistry,
+			retryFallbackPolicy: this.#retryFallbackPolicy,
+			activeRetryFallback: this.#activeRetryFallback,
+			getModel: () => this.model,
+			getModelSelector: () =>
+				this.model ? formatRetryFallbackSelector(this.model, this.thinkingLevel) : undefined,
+			getPromptGeneration: () => this.#promptGeneration,
+			emitSessionEvent: event => this.#emitSessionEvent(event),
+			scheduleAgentContinue: options => this.#scheduleAgentContinue(options),
+		});
+		this.#streamingEditGuard = new StreamingEditGuard({
+			settings: this.settings,
+			abortAgent: () => this.agent.abort(),
+			resolveFsPath: filePath => this.#resolveSessionFsPath(filePath),
+			getCwd: () => this.sessionManager.getCwd(),
+			getObfuscator: () => this.#obfuscator,
+		});
+		this.#bash = new BashController({
+			sessionId: this.sessionId,
+			agent: this.agent,
+			sessionManager: this.sessionManager,
+			isStreaming: () => this.isStreaming,
+			extensionRunner: this.#extensionRunner,
+		});
+		this.#python = new PythonController({
+			kernelOwnerId: this.#pythonKernelOwnerId,
+			agent: this.agent,
+			sessionManager: this.sessionManager,
+			settings: this.settings,
+			isStreaming: () => this.isStreaming,
+			extensionRunner: this.#extensionRunner,
+		});
+		this.#backgroundExchanges = new BackgroundExchangeQueue({
+			isStreaming: () => this.isStreaming,
+			emitMessageEvent: event => this.agent.emitExternalEvent(event),
+		});
+		this.#planMode = new PlanModeController({
+			getLocalProtocolOptions: () => this.#localProtocolOptions(),
+			getCwd: () => this.sessionManager.getCwd(),
+		});
 		this.#todoPhaseState = new TodoPhaseState({
 			getClearDelaySec: () => this.settings.get("tasks.todoClearDelay"),
 			onAutoClear: () => this.#emit({ type: "todo_auto_clear" }),
@@ -574,28 +586,34 @@ export class AgentSession {
 		this.#convertToLlm = config.convertToLlm ?? convertToLlm;
 		this.#rebuildSystemPrompt = config.rebuildSystemPrompt;
 		this.#baseSystemPrompt = this.agent.state.systemPrompt;
-		this.#mcpDiscoveryEnabled = config.mcpDiscoveryEnabled ?? false;
-		this.#setDiscoverableMCPTools(this.#collectDiscoverableMCPToolsFromRegistry());
-		this.#selectedMCPToolNames = new Set(config.initialSelectedMCPToolNames ?? []);
-		this.#defaultSelectedMCPServerNames = new Set(config.defaultSelectedMCPServerNames ?? []);
-		this.#defaultSelectedMCPToolNames = new Set(config.defaultSelectedMCPToolNames ?? []);
-		this.#pruneSelectedMCPToolNames();
+		this.#mcp = new MCPSelectionStore(
+			{
+				toolRegistry: this.#toolRegistry,
+				sessionManager: this.sessionManager,
+				getActiveToolNames: () => this.getActiveToolNames(),
+			},
+			{
+				enabled: config.mcpDiscoveryEnabled ?? false,
+				initialSelected: config.initialSelectedMCPToolNames ?? [],
+				defaultServerNames: config.defaultSelectedMCPServerNames ?? [],
+				defaultToolNames: config.defaultSelectedMCPToolNames ?? [],
+			},
+		);
+		this.#mcp.setDiscoverableFromRegistry();
+		this.#mcp.pruneSelected();
 		const persistedSelectedMCPToolNames = this.buildDisplaySessionContext().selectedMCPToolNames;
 		const currentSelectedMCPToolNames = this.getSelectedMCPToolNames();
 		const persistInitialMCPToolSelection =
 			config.persistInitialMCPToolSelection ?? this.sessionManager.getBranch().length === 0;
 		if (
-			this.#mcpDiscoveryEnabled &&
+			this.#mcp.isEnabled &&
 			persistInitialMCPToolSelection &&
-			!this.#selectedMCPToolNamesMatch(persistedSelectedMCPToolNames, currentSelectedMCPToolNames)
+			!this.#mcp.selectionsMatch(persistedSelectedMCPToolNames, currentSelectedMCPToolNames)
 		) {
 			this.sessionManager.appendMCPToolSelection(currentSelectedMCPToolNames);
 		}
-		this.#rememberSessionDefaultSelectedMCPToolNames(
-			this.sessionManager.getSessionFile(),
-			this.#getConfiguredDefaultSelectedMCPToolNames(),
-		);
-		this.#ttsrManager = config.ttsrManager;
+		this.#mcp.rememberSessionDefault(this.sessionManager.getSessionFile(), this.#mcp.getConfiguredDefaults());
+		this.#ttsr = new TtsrEngine({ sessionManager: this.sessionManager }, config.ttsrManager);
 		this.#obfuscator = config.obfuscator;
 		this.#agentId = config.agentId;
 		this.#agentRegistry = config.agentRegistry;
@@ -606,10 +624,10 @@ export class AgentSession {
 				message,
 				assistantMessageEvent,
 			};
-			this.#preCacheStreamingEditFile(event);
-			this.#maybeAbortStreamingEdit(event);
+			this.#streamingEditGuard.preCache(event);
+			this.#streamingEditGuard.maybeAbort(event);
 		});
-		this.agent.providerSessionState = this.#providerSessionState;
+		this.agent.providerSessionState = this.#providerSessions.state;
 		this.#syncTodoPhasesFromBranch();
 
 		// Always subscribe to agent events for internal handling
@@ -660,17 +678,17 @@ export class AgentSession {
 
 	/** Provider-scoped mutable state store for transport/session caches. */
 	get providerSessionState(): Map<string, ProviderSessionState> {
-		return this.#providerSessionState;
+		return this.#providerSessions.state;
 	}
 
 	/** TTSR manager for time-traveling stream rules */
 	get ttsrManager(): TtsrManager | undefined {
-		return this.#ttsrManager;
+		return this.#ttsr.manager;
 	}
 
 	/** Whether a TTSR abort is pending (stream was aborted to inject rules) */
 	get isTtsrAbortPending(): boolean {
-		return this.#ttsrAbortPending;
+		return this.#ttsr.isAbortPending;
 	}
 
 	getAsyncJobSnapshot(options?: { recentLimit?: number }): AsyncJobSnapshot | null {
@@ -758,14 +776,14 @@ export class AgentSession {
 		await this.#emitSessionEvent(displayEvent);
 
 		if (event.type === "turn_start") {
-			this.#resetStreamingEditState();
+			this.#streamingEditGuard.reset();
 			// TTSR: Reset buffer on turn start
-			this.#ttsrManager?.resetBuffer();
+			this.#ttsr.manager?.resetBuffer();
 		}
 
 		// TTSR: Increment message count on turn end (for repeat-after-gap tracking)
-		if (event.type === "turn_end" && this.#ttsrManager) {
-			this.#ttsrManager.incrementMessageCount();
+		if (event.type === "turn_end" && this.#ttsr.manager) {
+			this.#ttsr.manager.incrementMessageCount();
 		}
 		// Finalize the tool-choice queue's in-flight yield after tools have executed.
 		// This must happen at turn_end (not message_end) because onInvoked handlers
@@ -788,7 +806,7 @@ export class AgentSession {
 		}
 
 		// TTSR: Check for pattern matches on assistant text/thinking and tool argument deltas
-		if (event.type === "message_update" && this.#ttsrManager?.hasRules()) {
+		if (event.type === "message_update" && this.#ttsr.manager?.hasRules()) {
 			const assistantEvent = event.assistantMessageEvent;
 			let matchContext: TtsrMatchContext | undefined;
 
@@ -797,54 +815,57 @@ export class AgentSession {
 			} else if (assistantEvent.type === "thinking_delta") {
 				matchContext = { source: "thinking" };
 			} else if (assistantEvent.type === "toolcall_delta") {
-				matchContext = this.#getTtsrToolMatchContext(event.message, assistantEvent.contentIndex);
+				matchContext = this.#ttsr.getToolMatchContext(event.message, assistantEvent.contentIndex);
 			}
 
 			if (matchContext && "delta" in assistantEvent) {
-				const matches = this.#ttsrManager.checkDelta(assistantEvent.delta, matchContext);
+				const matches = this.#ttsr.manager.checkDelta(assistantEvent.delta, matchContext);
 				if (matches.length > 0) {
 					// Queue rules for injection; mark as injected only after successful enqueue.
 
-					this.#addPendingTtsrInjections(matches);
+					this.#ttsr.addRules(matches);
 
-					if (this.#shouldInterruptForTtsrMatch(matches, matchContext)) {
+					if (this.#ttsr.shouldInterruptForMatch(matches, matchContext)) {
 						// Abort the stream immediately — do not gate on extension callbacks
-						this.#ttsrAbortPending = true;
-						this.#ensureTtsrResumePromise();
+						this.#ttsr.setAbortPending(true);
+						this.#ttsr.ensureResumePromise();
 						this.agent.abort();
 						// Notify extensions (fire-and-forget, does not block abort)
 						this.#emitSessionEvent({ type: "ttsr_triggered", rules: matches }).catch(() => {});
 						// Schedule retry after a short delay
-						const retryToken = ++this.#ttsrRetryToken;
+						const retryToken = this.#ttsr.nextRetryToken();
 						const generation = this.#promptGeneration;
 						const targetMessageTimestamp =
 							event.message.role === "assistant" ? event.message.timestamp : undefined;
 						this.#schedulePostPromptTask(
 							async () => {
-								if (this.#ttsrRetryToken !== retryToken) {
-									this.#resolveTtsrResume();
+								if (this.#ttsr.retryToken !== retryToken) {
+									this.#ttsr.resolveResume();
 									return;
 								}
 
-								const targetAssistantIndex = this.#findTtsrAssistantIndex(targetMessageTimestamp);
+								const targetAssistantIndex = this.#ttsr.findAssistantIndex(
+									this.agent.state.messages,
+									targetMessageTimestamp,
+								);
 								if (
-									!this.#ttsrAbortPending ||
+									!this.#ttsr.isAbortPending ||
 									this.#promptGeneration !== generation ||
 									targetAssistantIndex === -1
 								) {
-									this.#ttsrAbortPending = false;
-									this.#pendingTtsrInjections = [];
-									this.#resolveTtsrResume();
+									this.#ttsr.setAbortPending(false);
+									this.#ttsr.clearPending();
+									this.#ttsr.resolveResume();
 									return;
 								}
-								this.#ttsrAbortPending = false;
-								const ttsrSettings = this.#ttsrManager?.getSettings();
+								this.#ttsr.setAbortPending(false);
+								const ttsrSettings = this.#ttsr.manager?.getSettings();
 								if (ttsrSettings?.contextMode === "discard") {
 									// Remove the partial/aborted assistant turn from agent state
 									this.agent.replaceMessages(this.agent.state.messages.slice(0, targetAssistantIndex));
 								}
 								// Inject TTSR rules as system reminder before retry
-								const injection = this.#getTtsrInjectionContent();
+								const injection = this.#ttsr.consume();
 								if (injection) {
 									const details = { rules: injection.rules.map(rule => rule.name) };
 									this.agent.appendMessage({
@@ -863,12 +884,12 @@ export class AgentSession {
 										details,
 										"agent",
 									);
-									this.#markTtsrInjected(details.rules);
+									this.#ttsr.markInjected(details.rules);
 								}
 								try {
 									await this.agent.continue();
 								} catch {
-									this.#resolveTtsrResume();
+									this.#ttsr.resolveResume();
 								}
 							},
 							{ delayMs: 50 },
@@ -885,14 +906,14 @@ export class AgentSession {
 				event.assistantMessageEvent.type === "toolcall_delta" ||
 				event.assistantMessageEvent.type === "toolcall_end")
 		) {
-			this.#preCacheStreamingEditFile(event);
+			this.#streamingEditGuard.preCache(event);
 		}
 
 		if (
 			event.type === "message_update" &&
 			(event.assistantMessageEvent.type === "toolcall_end" || event.assistantMessageEvent.type === "toolcall_delta")
 		) {
-			this.#maybeAbortStreamingEdit(event);
+			this.#streamingEditGuard.maybeAbort(event);
 		}
 
 		// Handle session persistence
@@ -908,7 +929,7 @@ export class AgentSession {
 					event.message.attribution ?? "agent",
 				);
 				if (event.message.role === "custom" && event.message.customType === "ttsr-injection") {
-					this.#markTtsrInjected(this.#extractTtsrRuleNames(event.message.details));
+					this.#ttsr.markInjected(this.#ttsr.extractRuleNamesFromDetails(event.message.details));
 				}
 			} else if (
 				event.message.role === "user" ||
@@ -927,11 +948,11 @@ export class AgentSession {
 				this.#lastAssistantMessage = event.message;
 				const assistantMsg = event.message as AssistantMessage;
 				// Resolve TTSR resume gate before checking for new deferred injections.
-				// Gate on #ttsrAbortPending, not stopReason: a non-TTSR abort (e.g. streaming
+				// Gate on the TTSR abort flag, not stopReason: a non-TTSR abort (e.g. streaming
 				// edit) also produces stopReason === "aborted" but has no continuation coming.
-				// Only skip when #ttsrAbortPending is true (TTSR continuation is imminent).
-				if (!this.#ttsrAbortPending) {
-					this.#resolveTtsrResume();
+				// Only skip when TTSR is mid-abort (continuation is imminent).
+				if (!this.#ttsr.isAbortPending) {
+					this.#ttsr.resolveResume();
 				}
 				this.#queueDeferredTtsrInjectionIfNeeded(assistantMsg);
 				if (this.#handoffAbortController) {
@@ -940,21 +961,22 @@ export class AgentSession {
 				if (
 					assistantMsg.stopReason !== "error" &&
 					assistantMsg.stopReason !== "aborted" &&
-					this.#retryAttempt > 0
+					this.#retry.attempt > 0
 				) {
-					if (this.#activeRetryFallback && this.model) {
+					const activeRole = this.#activeRetryFallback.role;
+					if (activeRole !== undefined && this.model) {
 						await this.#emitSessionEvent({
 							type: "retry_fallback_succeeded",
 							model: formatRetryFallbackSelector(this.model, this.thinkingLevel),
-							role: this.#activeRetryFallback.role,
+							role: activeRole,
 						});
 					}
+					const successfulAttempt = this.#retry.consumeSuccessfulAttempt();
 					await this.#emitSessionEvent({
 						type: "auto_retry_end",
 						success: true,
-						attempt: this.#retryAttempt,
+						attempt: successfulAttempt,
 					});
-					this.#retryAttempt = 0;
 				}
 			}
 
@@ -967,7 +989,7 @@ export class AgentSession {
 				};
 				// Invalidate streaming edit cache when edit tool completes to prevent stale data
 				if (toolName === "edit" && details?.path !== null && details?.path !== undefined && details?.path !== "") {
-					this.#invalidateFileCacheForPath(details.path);
+					this.#streamingEditGuard.invalidateForPath(details.path);
 				}
 				if (toolName === "todo_write" && isError !== true && Array.isArray(details?.phases)) {
 					this.setTodoPhases(details.phases);
@@ -1048,11 +1070,12 @@ export class AgentSession {
 			this.#lastSuccessfulYieldToolCallId = undefined;
 
 			// Check for retryable errors first (overloaded, rate limit, server errors)
-			if (this.#isRetryableError(msg)) {
-				const didRetry = await this.#handleRetryableError(msg);
+			const errorKind = event.errorKind;
+			if (this.#retry.isRetryable(msg, errorKind)) {
+				const didRetry = await this.#retry.handle(msg, errorKind);
 				if (didRetry) return; // Retry was initiated, don't proceed to compaction
 			}
-			this.#resolveRetry();
+			this.#retry.resolve();
 
 			if (msg.stopReason === "aborted" && this.#checkpointState) {
 				this.#checkpointState = undefined;
@@ -1074,31 +1097,6 @@ export class AgentSession {
 			}
 		}
 	};
-
-	/** Resolve the pending retry promise */
-	#resolveRetry(): void {
-		if (this.#retryResolve) {
-			this.#retryResolve();
-			this.#retryResolve = undefined;
-			this.#retryPromise = undefined;
-		}
-	}
-
-	/** Create the TTSR resume gate promise if one doesn't already exist. */
-	#ensureTtsrResumePromise(): void {
-		if (this.#ttsrResumePromise) return;
-		const { promise, resolve } = Promise.withResolvers<void>();
-		this.#ttsrResumePromise = promise;
-		this.#ttsrResumeResolve = resolve;
-	}
-
-	/** Resolve and clear the TTSR resume gate. */
-	#resolveTtsrResume(): void {
-		if (!this.#ttsrResumeResolve) return;
-		this.#ttsrResumeResolve();
-		this.#ttsrResumeResolve = undefined;
-		this.#ttsrResumePromise = undefined;
-	}
 
 	#ensurePostPromptTasksPromise(): void {
 		if (this.#postPromptTasksPromise) return;
@@ -1168,7 +1166,7 @@ export class AgentSession {
 					return;
 				}
 				try {
-					await this.#maybeRestoreRetryFallbackPrimary();
+					await this.#activeRetryFallback.maybeRestorePrimary();
 					await this.agent.continue();
 				} catch {
 					options?.onError?.();
@@ -1208,7 +1206,7 @@ export class AgentSession {
 	async #cancelPostPromptTasks(): Promise<void> {
 		this.#postPromptTasksAbortController.abort();
 		this.#postPromptTasksAbortController = new AbortController();
-		this.#resolveTtsrResume();
+		this.#ttsr.resolveResume();
 
 		const pendingTasks = Array.from(this.#postPromptTasks);
 		if (pendingTasks.length === 0) {
@@ -1229,12 +1227,14 @@ export class AgentSession {
 	 */
 	async #waitForPostPromptRecovery(): Promise<void> {
 		while (true) {
-			if (this.#retryPromise) {
-				await this.#retryPromise;
+			const retryPromise = this.#retry.waitFor();
+			if (retryPromise) {
+				await retryPromise;
 				continue;
 			}
-			if (this.#ttsrResumePromise) {
-				await this.#ttsrResumePromise;
+			const ttsrResume = this.#ttsr.getResumePromise();
+			if (ttsrResume) {
+				await ttsrResume;
 				continue;
 			}
 			if (this.#postPromptTasksPromise) {
@@ -1252,85 +1252,16 @@ export class AgentSession {
 		}
 	}
 
-	/** Get TTSR injection payload and clear pending injections. */
-	#getTtsrInjectionContent(): { content: string; rules: Rule[] } | undefined {
-		if (this.#pendingTtsrInjections.length === 0) return undefined;
-		const rules = this.#pendingTtsrInjections;
-		const content = rules
-			.map(r => prompt.render(ttsrInterruptTemplate, { name: r.name, path: r.path, content: r.content }))
-			.join("\n\n");
-		this.#pendingTtsrInjections = [];
-		return { content, rules };
-	}
-
-	#addPendingTtsrInjections(rules: Rule[]): void {
-		const seen = new Set(this.#pendingTtsrInjections.map(rule => rule.name));
-		for (const rule of rules) {
-			if (seen.has(rule.name)) continue;
-			this.#pendingTtsrInjections.push(rule);
-			seen.add(rule.name);
-		}
-	}
-
-	#extractTtsrRuleNames(details: unknown): string[] {
-		if (details === null || details === undefined || typeof details !== "object" || Array.isArray(details)) {
-			return [];
-		}
-		const rules = (details as { rules?: unknown }).rules;
-		if (!Array.isArray(rules)) {
-			return [];
-		}
-		return rules.filter((ruleName): ruleName is string => typeof ruleName === "string");
-	}
-
-	#markTtsrInjected(ruleNames: string[]): void {
-		const uniqueRuleNames = Array.from(
-			new Set(ruleNames.map(ruleName => ruleName.trim()).filter(ruleName => ruleName.length > 0)),
-		);
-		if (uniqueRuleNames.length === 0) {
-			return;
-		}
-		this.#ttsrManager?.markInjectedByNames(uniqueRuleNames);
-		this.sessionManager.appendTtsrInjection(uniqueRuleNames);
-	}
-
-	#findTtsrAssistantIndex(targetTimestamp: number | undefined): number {
-		const messages = this.agent.state.messages;
-		for (let i = messages.length - 1; i >= 0; i--) {
-			const message = messages[i];
-			if (message.role !== "assistant") {
-				continue;
-			}
-			if (targetTimestamp === undefined || message.timestamp === targetTimestamp) {
-				return i;
-			}
-		}
-		return -1;
-	}
-
-	#shouldInterruptForTtsrMatch(matches: Rule[], matchContext: TtsrMatchContext): boolean {
-		const globalMode = this.#ttsrManager?.getSettings().interruptMode ?? "always";
-		for (const rule of matches) {
-			const mode = rule.interruptMode ?? globalMode;
-			if (mode === "never") continue;
-			if (mode === "prose-only" && (matchContext.source === "text" || matchContext.source === "thinking"))
-				return true;
-			if (mode === "tool-only" && matchContext.source === "tool") return true;
-			if (mode === "always") return true;
-		}
-		return false;
-	}
-
 	#queueDeferredTtsrInjectionIfNeeded(assistantMsg: AssistantMessage): void {
-		if (this.#ttsrAbortPending || this.#pendingTtsrInjections.length === 0) {
+		if (this.#ttsr.isAbortPending || !this.#ttsr.hasPending()) {
 			return;
 		}
 		if (assistantMsg.stopReason === "aborted" || assistantMsg.stopReason === "error") {
-			this.#pendingTtsrInjections = [];
+			this.#ttsr.clearPending();
 			return;
 		}
 
-		const injection = this.#getTtsrInjectionContent();
+		const injection = this.#ttsr.consume();
 		if (!injection) {
 			return;
 		}
@@ -1343,106 +1274,28 @@ export class AgentSession {
 			attribution: "agent",
 			timestamp: Date.now(),
 		});
-		this.#ensureTtsrResumePromise();
+		this.#ttsr.ensureResumePromise();
 		// Mark as injected after this custom message is delivered and persisted (handled in message_end).
 		// followUp() only enqueues; resume on the next tick once streaming settles.
 		this.#scheduleAgentContinue({
 			delayMs: 1,
 			generation: this.#promptGeneration,
 			onSkip: () => {
-				this.#resolveTtsrResume();
+				this.#ttsr.resolveResume();
 			},
 			shouldContinue: () => {
 				if (this.agent.state.isStreaming || !this.agent.hasQueuedMessages()) {
-					this.#resolveTtsrResume();
+					this.#ttsr.resolveResume();
 					return false;
 				}
 				return true;
 			},
 			onError: () => {
-				this.#resolveTtsrResume();
+				this.#ttsr.resolveResume();
 			},
 		});
 	}
 
-	/** Build TTSR match context for tool call argument deltas. */
-	#getTtsrToolMatchContext(message: AgentMessage, contentIndex: number): TtsrMatchContext {
-		const context: TtsrMatchContext = { source: "tool" };
-		if (message.role !== "assistant") {
-			return context;
-		}
-
-		const content = message.content;
-		if (!Array.isArray(content) || contentIndex < 0 || contentIndex >= content.length) {
-			return context;
-		}
-
-		const block = content[contentIndex];
-		if (!block || typeof block !== "object" || block.type !== "toolCall") {
-			return context;
-		}
-
-		const toolCall = block as ToolCall;
-		context.toolName = toolCall.name;
-		context.streamKey = toolCall.id ? `toolcall:${toolCall.id}` : `tool:${toolCall.name}:${contentIndex}`;
-		context.filePaths = this.#extractTtsrFilePathsFromArgs(toolCall.arguments);
-		return context;
-	}
-
-	/** Extract path-like arguments from tool call payload for TTSR glob matching. */
-	#extractTtsrFilePathsFromArgs(args: unknown): string[] | undefined {
-		if (args === null || args === undefined || typeof args !== "object" || Array.isArray(args)) {
-			return undefined;
-		}
-
-		const rawPaths: string[] = [];
-		for (const [key, value] of Object.entries(args)) {
-			const normalizedKey = key.toLowerCase();
-			if (typeof value === "string" && (normalizedKey === "path" || normalizedKey.endsWith("path"))) {
-				rawPaths.push(value);
-				continue;
-			}
-			if (Array.isArray(value) && (normalizedKey === "paths" || normalizedKey.endsWith("paths"))) {
-				for (const candidate of value) {
-					if (typeof candidate === "string") {
-						rawPaths.push(candidate);
-					}
-				}
-			}
-		}
-
-		const normalizedPaths = rawPaths.flatMap(pathValue => this.#normalizeTtsrPathCandidates(pathValue));
-		if (normalizedPaths.length === 0) {
-			return undefined;
-		}
-
-		return Array.from(new Set(normalizedPaths));
-	}
-
-	/** Convert a path argument into stable relative/absolute candidates for glob checks. */
-	#normalizeTtsrPathCandidates(rawPath: string): string[] {
-		const trimmed = rawPath.trim();
-		if (trimmed.length === 0) {
-			return [];
-		}
-
-		const normalizedInput = trimmed.replaceAll("\\", "/");
-		const candidates = new Set<string>([normalizedInput]);
-		if (normalizedInput.startsWith("./")) {
-			candidates.add(normalizedInput.slice(2));
-		}
-
-		const cwd = this.sessionManager.getCwd();
-		const absolutePath = path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(cwd, trimmed);
-		candidates.add(absolutePath.replaceAll("\\", "/"));
-
-		const relativePath = path.relative(cwd, absolutePath).replaceAll("\\", "/");
-		if (relativePath && relativePath !== "." && !relativePath.startsWith("../") && relativePath !== "..") {
-			candidates.add(relativePath);
-		}
-
-		return Array.from(candidates);
-	}
 	/** Extract text content from a message */
 	#getUserMessageText(message: Message): string {
 		if (message.role !== "user") return "";
@@ -1465,134 +1318,6 @@ export class AgentSession {
 			}
 		}
 		return undefined;
-	}
-
-	#resetStreamingEditState(): void {
-		this.#streamingEditAbortTriggered = false;
-		this.#streamingEditCheckedLineCounts.clear();
-		this.#streamingEditPrecheckedToolCallIds.clear();
-		this.#streamingEditFileCache.clear();
-	}
-
-	#getStreamingEditToolCall(event: AgentEvent):
-		| {
-				toolCall: ToolCall;
-				path: string;
-				resolvedPath: string;
-				diff?: string;
-				op?: string;
-				rename?: string;
-		  }
-		| undefined {
-		if (event.type !== "message_update") return undefined;
-		if (event.message.role !== "assistant") return undefined;
-
-		const contentIndex = event.assistantMessageEvent.contentIndex ?? 0;
-		const messageContent = event.message.content;
-		if (!Array.isArray(messageContent) || contentIndex < 0 || contentIndex >= messageContent.length) {
-			return undefined;
-		}
-
-		const toolCall = messageContent[contentIndex] as ToolCall;
-		if (toolCall.name !== "edit") return undefined;
-
-		const args = toolCall.arguments;
-		if (!args || typeof args !== "object" || Array.isArray(args)) return undefined;
-		if ("old_text" in args || "new_text" in args) return undefined;
-
-		const path = typeof args.path === "string" ? args.path : undefined;
-		if (path === null || path === undefined || path === "") return undefined;
-
-		// `local://` URLs (e.g. local://PLAN.md for plan-mode) resolve to a real
-		// on-disk artifacts path; pre-caching works as long as we ask the
-		// local-protocol handler. Other internal-scheme URLs (agent://, skill://,
-		// rule://, mcp://, artifact://) have no stable filesystem representation;
-		// skip pre-cache entirely for those — the edit tool itself will reject
-		// them through its normal dispatch path.
-		const resolvedPath = this.#resolveSessionFsPath(path);
-		if (resolvedPath === undefined) return undefined;
-
-		return {
-			toolCall,
-			path,
-			resolvedPath,
-			diff: typeof args.diff === "string" ? args.diff : undefined,
-			op: typeof args.op === "string" ? args.op : undefined,
-			rename: typeof args.rename === "string" ? args.rename : undefined,
-		};
-	}
-
-	#lastStreamingEditToolCallId: string | undefined;
-	#abortStreamingEditForAutoGeneratedPath(toolCall: ToolCall, path: string, resolvedPath: string): void {
-		if (this.#lastStreamingEditToolCallId === toolCall.id) return;
-		this.#lastStreamingEditToolCallId = toolCall.id;
-		void assertEditableFile(resolvedPath, path).catch(error => {
-			// peekFile and other I/O can reject with ENOENT, etc. Only ToolError means
-			// auto-generated detection; other failures are left for the edit tool.
-			if (!(error instanceof ToolError)) return;
-			if (this.#lastStreamingEditToolCallId !== toolCall.id) return;
-
-			if (!this.#streamingEditAbortTriggered) {
-				this.#streamingEditAbortTriggered = true;
-				logger.warn("Streaming edit aborted due to auto-generated file guard", {
-					toolCallId: toolCall.id,
-					path,
-				});
-				this.agent.abort();
-			}
-		});
-	}
-
-	#preCacheStreamingEditFile(event: AgentEvent): void {
-		if (!this.settings.get("edit.streamingAbort")) return;
-		if (this.#streamingEditAbortTriggered) return;
-		if (event.type !== "message_update") return;
-
-		const assistantEvent = event.assistantMessageEvent;
-		if (
-			assistantEvent.type !== "toolcall_start" &&
-			assistantEvent.type !== "toolcall_delta" &&
-			assistantEvent.type !== "toolcall_end"
-		) {
-			return;
-		}
-
-		const streamingEdit = this.#getStreamingEditToolCall(event);
-		if (!streamingEdit) return;
-
-		const shouldCheckAutoGenerated =
-			!streamingEdit.toolCall.id || !this.#streamingEditPrecheckedToolCallIds.has(streamingEdit.toolCall.id);
-		if (shouldCheckAutoGenerated) {
-			if (streamingEdit.toolCall.id) {
-				this.#streamingEditPrecheckedToolCallIds.add(streamingEdit.toolCall.id);
-			}
-			this.#abortStreamingEditForAutoGeneratedPath(
-				streamingEdit.toolCall,
-				streamingEdit.path,
-				streamingEdit.resolvedPath,
-			);
-		}
-
-		this.#ensureFileCache(streamingEdit.resolvedPath);
-	}
-
-	#ensureFileCache(resolvedPath: string): void {
-		if (this.#streamingEditFileCache.has(resolvedPath)) return;
-
-		try {
-			const rawText = fs.readFileSync(resolvedPath, "utf-8");
-			const { text } = stripBom(rawText);
-			this.#streamingEditFileCache.set(resolvedPath, normalizeToLF(text));
-		} catch {
-			// Don't cache on read errors (including ENOENT) - let the edit tool handle them
-		}
-	}
-
-	/** Invalidate cache for a file after an edit completes to prevent stale data */
-	#invalidateFileCacheForPath(filePath: string): void {
-		const resolvedPath = this.#resolveSessionFsPath(filePath);
-		if (resolvedPath === undefined) return;
-		this.#streamingEditFileCache.delete(resolvedPath);
 	}
 
 	/**
@@ -1628,134 +1353,6 @@ export class AgentSession {
 			getArtifactsDir: () => this.sessionManager.getArtifactsDir(),
 			getSessionId: () => this.sessionManager.getSessionId(),
 		};
-	}
-
-	#maybeAbortStreamingEdit(event: AgentEvent): void {
-		if (!this.settings.get("edit.streamingAbort")) return;
-		if (this.#streamingEditAbortTriggered) return;
-		if (event.type !== "message_update") return;
-
-		const assistantEvent = event.assistantMessageEvent;
-		if (assistantEvent.type !== "toolcall_end" && assistantEvent.type !== "toolcall_delta") return;
-
-		const streamingEdit = this.#getStreamingEditToolCall(event);
-		if (
-			streamingEdit?.toolCall.id === null ||
-			streamingEdit?.toolCall.id === undefined ||
-			streamingEdit?.toolCall.id === ""
-		)
-			return;
-
-		const { toolCall, path, resolvedPath, diff, op, rename } = streamingEdit;
-		if (diff === null || diff === undefined || diff === "") return;
-		if (op !== null && op !== undefined && op !== "" && op !== "update") return;
-
-		if (!diff.includes("\n")) return;
-		const lastNewlineIndex = diff.lastIndexOf("\n");
-		if (lastNewlineIndex < 0) return;
-		const diffForCheck = diff.endsWith("\n") ? diff : diff.slice(0, lastNewlineIndex + 1);
-		if (diffForCheck.trim().length === 0) return;
-
-		let normalizedDiff = normalizeDiff(diffForCheck.replace(/\r/g, ""));
-		if (!normalizedDiff) return;
-		// Deobfuscate the diff so removed lines match real file content
-		if (this.#obfuscator) normalizedDiff = this.#obfuscator.deobfuscate(normalizedDiff);
-		if (!normalizedDiff) return;
-		const lines = normalizedDiff.split("\n");
-		const hasChangeLine = lines.some(line => line.startsWith("+") || line.startsWith("-"));
-		if (!hasChangeLine) return;
-
-		const lineCount = lines.length;
-		const lastChecked = this.#streamingEditCheckedLineCounts.get(toolCall.id);
-		if (lastChecked !== undefined && lineCount <= lastChecked) return;
-		this.#streamingEditCheckedLineCounts.set(toolCall.id, lineCount);
-
-		const removedLines = lines
-			.filter(line => line.startsWith("-") && !line.startsWith("--- "))
-			.map(line => line.slice(1));
-		if (removedLines.length > 0) {
-			let cachedContent = this.#streamingEditFileCache.get(resolvedPath);
-			if (cachedContent === undefined) {
-				this.#ensureFileCache(resolvedPath);
-				cachedContent = this.#streamingEditFileCache.get(resolvedPath);
-			}
-			if (cachedContent !== undefined) {
-				const missing = removedLines.find(line => !cachedContent.includes(normalizeToLF(line)));
-				if (missing !== null && missing !== undefined && missing !== "") {
-					this.#streamingEditAbortTriggered = true;
-					logger.warn("Streaming edit aborted due to patch preview failure", {
-						toolCallId: toolCall.id,
-						path,
-						error: `Failed to find expected lines in ${path}:\n${missing}`,
-					});
-					this.agent.abort();
-				}
-				return;
-			}
-			if (assistantEvent.type === "toolcall_delta") return;
-			void this.#checkRemovedLinesAsync(toolCall.id, path, resolvedPath, removedLines);
-			return;
-		}
-
-		if (assistantEvent.type === "toolcall_delta") return;
-		void this.#checkPreviewPatchAsync(toolCall.id, path, rename, normalizedDiff);
-	}
-
-	async #checkRemovedLinesAsync(
-		toolCallId: string,
-		path: string,
-		resolvedPath: string,
-		removedLines: string[],
-	): Promise<void> {
-		if (this.#streamingEditAbortTriggered) return;
-		try {
-			const { text } = stripBom(await Bun.file(resolvedPath).text());
-			const normalizedContent = normalizeToLF(text);
-			const missing = removedLines.find(line => !normalizedContent.includes(normalizeToLF(line)));
-			if (missing !== null && missing !== undefined && missing !== "") {
-				this.#streamingEditAbortTriggered = true;
-				logger.warn("Streaming edit aborted due to patch preview failure", {
-					toolCallId,
-					path,
-					error: `Failed to find expected lines in ${path}:\n${missing}`,
-				});
-				this.agent.abort();
-			}
-		} catch (error) {
-			// Ignore ENOENT (file not found) - let the edit tool handle missing files
-			// Also ignore other errors during async fallback
-			if (!isEnoent(error)) {
-				// Log unexpected errors but don't abort
-			}
-		}
-	}
-
-	async #checkPreviewPatchAsync(
-		toolCallId: string,
-		path: string,
-		rename: string | undefined,
-		normalizedDiff: string,
-	): Promise<void> {
-		if (this.#streamingEditAbortTriggered) return;
-		try {
-			await previewPatch(
-				{ path, op: "update", rename, diff: normalizedDiff },
-				{
-					cwd: this.sessionManager.getCwd(),
-					allowFuzzy: this.settings.get("edit.fuzzyMatch"),
-					fuzzyThreshold: this.settings.get("edit.fuzzyThreshold"),
-				},
-			);
-		} catch (error) {
-			if (error instanceof ParseError) return;
-			this.#streamingEditAbortTriggered = true;
-			logger.warn("Streaming edit aborted due to patch preview failure", {
-				toolCallId,
-				path,
-				error: error instanceof Error ? error.message : String(error),
-			});
-			this.agent.abort();
-		}
 	}
 
 	/** Emit extension events based on session events */
@@ -1914,7 +1511,7 @@ export class AgentSession {
 	 * Call this when completely done with the session.
 	 */
 	async dispose(): Promise<void> {
-		this.#pythonExecutionDisposing = true;
+		this.#python.markDisposing();
 		try {
 			if (this.#extensionRunner?.hasHandlers("session_shutdown") === true) {
 				await this.#extensionRunner.emit({ type: "session_shutdown" });
@@ -1929,35 +1526,20 @@ export class AgentSession {
 		if (drained === false && deliveryState) {
 			logger.warn("Async job completion deliveries still pending during dispose", { ...deliveryState });
 		}
-		const pythonExecutionsSettled = await this.#preparePythonExecutionsForDispose();
+		const pythonExecutionsSettled = await this.#python.prepareForDispose();
 		if (!pythonExecutionsSettled) {
 			logger.warn(
 				"Detaching retained Python kernel ownership during dispose while Python execution is still active",
 			);
 		}
-		await disposeKernelSessionsByOwner(this.#pythonKernelOwnerId);
+		await this.#python.disposeKernel();
 		this.#stopPowerAssertion();
 		await this.sessionManager.close();
-		this.#closeAllProviderSessions("dispose");
+		this.#providerSessions.closeAll("dispose");
 		this.#disconnectFromAgent();
 		this.#eventListeners = [];
 	}
 
-	#closeAllProviderSessions(reason: string): void {
-		for (const [providerKey, state] of this.#providerSessionState) {
-			try {
-				state.close();
-			} catch (error) {
-				logger.warn("Failed to close provider session state", {
-					providerKey,
-					reason,
-					error: String(error),
-				});
-			}
-		}
-
-		this.#providerSessionState.clear();
-	}
 
 	// =========================================================================
 	// Read-only State Access
@@ -2004,63 +1586,7 @@ export class AgentSession {
 
 	/** Current retry attempt (0 if not retrying) */
 	get retryAttempt(): number {
-		return this.#retryAttempt;
-	}
-
-	#collectDiscoverableMCPToolsFromRegistry(): Map<string, DiscoverableMCPTool> {
-		return new Map(collectDiscoverableMCPTools(this.#toolRegistry.values()).map(tool => [tool.name, tool] as const));
-	}
-
-	#setDiscoverableMCPTools(discoverableMCPTools: Map<string, DiscoverableMCPTool>): void {
-		this.#discoverableMCPTools = discoverableMCPTools;
-		this.#discoverableMCPSearchIndex = null;
-	}
-
-	#filterSelectableMCPToolNames(toolNames: Iterable<string>): string[] {
-		return Array.from(toolNames).filter(name => this.#discoverableMCPTools.has(name) && this.#toolRegistry.has(name));
-	}
-
-	#getConfiguredDefaultSelectedMCPToolNames(): string[] {
-		return this.#filterSelectableMCPToolNames([
-			...this.#defaultSelectedMCPToolNames,
-			...selectDiscoverableMCPToolNamesByServer(
-				this.#discoverableMCPTools.values(),
-				this.#defaultSelectedMCPServerNames,
-			),
-		]);
-	}
-
-	#pruneSelectedMCPToolNames(): void {
-		this.#selectedMCPToolNames = new Set(this.#filterSelectableMCPToolNames(this.#selectedMCPToolNames));
-	}
-
-	#selectedMCPToolNamesMatch(left: string[], right: string[]): boolean {
-		return left.length === right.length && left.every((name, index) => name === right[index]);
-	}
-
-	#rememberSessionDefaultSelectedMCPToolNames(
-		sessionFile: string | null | undefined,
-		toolNames: Iterable<string>,
-	): void {
-		if (sessionFile === null || sessionFile === undefined || sessionFile === "") return;
-		this.#sessionDefaultSelectedMCPToolNames.set(
-			path.resolve(sessionFile),
-			this.#filterSelectableMCPToolNames(toolNames),
-		);
-	}
-
-	#getSessionDefaultSelectedMCPToolNames(sessionFile: string | null | undefined): string[] {
-		if (sessionFile === null || sessionFile === undefined || sessionFile === "") return [];
-		return this.#sessionDefaultSelectedMCPToolNames.get(path.resolve(sessionFile)) ?? [];
-	}
-
-	#persistSelectedMCPToolNamesIfChanged(previousSelectedMCPToolNames: string[]): void {
-		if (!this.#mcpDiscoveryEnabled) return;
-		const nextSelectedMCPToolNames = this.getSelectedMCPToolNames();
-		if (this.#selectedMCPToolNamesMatch(previousSelectedMCPToolNames, nextSelectedMCPToolNames)) {
-			return;
-		}
-		this.sessionManager.appendMCPToolSelection(nextSelectedMCPToolNames);
+		return this.#retry.attempt;
 	}
 
 	#getActiveNonMCPToolNames(): string[] {
@@ -2113,46 +1639,29 @@ export class AgentSession {
 	}
 
 	isMCPDiscoveryEnabled(): boolean {
-		return this.#mcpDiscoveryEnabled;
+		return this.#mcp.isEnabled;
 	}
 
 	getDiscoverableMCPTools(): DiscoverableMCPTool[] {
-		return Array.from(this.#discoverableMCPTools.values());
+		return this.#mcp.getDiscoverableTools();
 	}
 
 	getDiscoverableMCPSearchIndex(): DiscoverableMCPSearchIndex {
-		if (!this.#discoverableMCPSearchIndex) {
-			this.#discoverableMCPSearchIndex = buildDiscoverableMCPSearchIndex(this.#discoverableMCPTools.values());
-		}
-		return this.#discoverableMCPSearchIndex;
+		return this.#mcp.getSearchIndex();
 	}
 
 	getSelectedMCPToolNames(): string[] {
-		if (!this.#mcpDiscoveryEnabled) {
-			return this.getActiveToolNames().filter(name => isMCPToolName(name) && this.#toolRegistry.has(name));
-		}
-		return this.#filterSelectableMCPToolNames(this.#selectedMCPToolNames);
+		return this.#mcp.getSelectedToolNames();
 	}
 
 	async activateDiscoveredMCPTools(toolNames: string[]): Promise<string[]> {
-		const nextSelectedMCPToolNames = new Set(this.#selectedMCPToolNames);
-		const activated: string[] = [];
-		for (const name of toolNames) {
-			if (!isMCPToolName(name) || !this.#discoverableMCPTools.has(name) || !this.#toolRegistry.has(name)) {
-				continue;
-			}
-			nextSelectedMCPToolNames.add(name);
-			activated.push(name);
-		}
+		const activated = this.#mcp.collectActivatable(toolNames);
 		if (activated.length === 0) {
 			return [];
 		}
-		const nextActive = [
-			...this.#getActiveNonMCPToolNames(),
-			...this.#filterSelectableMCPToolNames(nextSelectedMCPToolNames),
-		];
+		const nextActive = [...this.#getActiveNonMCPToolNames(), ...this.#mcp.getSelectedSnapshot()];
 		await this.setActiveToolsByName(nextActive);
-		return [...new Set(activated)];
+		return activated;
 	}
 
 	async #applyActiveToolsByName(
@@ -2178,13 +1687,7 @@ export class AgentSession {
 				validToolNames.push("report_tool_issue");
 			}
 		}
-		if (this.#mcpDiscoveryEnabled) {
-			this.#selectedMCPToolNames = new Set(
-				validToolNames.filter(
-					name => isMCPToolName(name) && this.#discoverableMCPTools.has(name) && this.#toolRegistry.has(name),
-				),
-			);
-		}
+		this.#mcp.setSelectedFromActive(validToolNames);
 		this.agent.setTools(tools);
 
 		// Rebuild base system prompt with new tool set
@@ -2193,7 +1696,7 @@ export class AgentSession {
 			this.agent.setSystemPrompt(this.#baseSystemPrompt);
 		}
 		if (options?.persistMCPSelection !== false) {
-			this.#persistSelectedMCPToolNamesIfChanged(previousSelectedMCPToolNames);
+			this.#mcp.persistIfChanged(previousSelectedMCPToolNames);
 		}
 	}
 
@@ -2211,17 +1714,13 @@ export class AgentSession {
 		sessionContext: SessionContext,
 		options?: { fallbackSelectedMCPToolNames?: Iterable<string> },
 	): Promise<void> {
-		if (!this.#mcpDiscoveryEnabled) return;
+		if (!this.#mcp.isEnabled) return;
 		const nextActiveNonMCPToolNames = this.#getActiveNonMCPToolNames();
-		const fallbackSelectedMCPToolNames =
-			options?.fallbackSelectedMCPToolNames ?? this.#getConfiguredDefaultSelectedMCPToolNames();
+		const fallbackSelectedMCPToolNames = options?.fallbackSelectedMCPToolNames ?? this.#mcp.getConfiguredDefaults();
 		const restoredMCPToolNames = sessionContext.hasPersistedMCPToolSelection
-			? this.#filterSelectableMCPToolNames(sessionContext.selectedMCPToolNames)
-			: this.#filterSelectableMCPToolNames(fallbackSelectedMCPToolNames);
-		this.#rememberSessionDefaultSelectedMCPToolNames(
-			this.sessionFile,
-			this.#getConfiguredDefaultSelectedMCPToolNames(),
-		);
+			? this.#mcp.filterSelectable(sessionContext.selectedMCPToolNames)
+			: this.#mcp.filterSelectable(fallbackSelectedMCPToolNames);
+		this.#mcp.rememberSessionDefault(this.sessionFile, this.#mcp.getConfiguredDefaults());
 		await this.#applyActiveToolsByName([...nextActiveNonMCPToolNames, ...restoredMCPToolNames], {
 			persistMCPSelection: false,
 		});
@@ -2266,18 +1765,12 @@ export class AgentSession {
 			this.#toolRegistry.set(finalTool.name, finalTool);
 		}
 
-		this.#setDiscoverableMCPTools(this.#collectDiscoverableMCPToolsFromRegistry());
-		this.#pruneSelectedMCPToolNames();
+		this.#mcp.setDiscoverableFromRegistry();
+		this.#mcp.pruneSelected();
 		if (!this.buildDisplaySessionContext().hasPersistedMCPToolSelection) {
-			this.#selectedMCPToolNames = new Set([
-				...this.#selectedMCPToolNames,
-				...this.#getConfiguredDefaultSelectedMCPToolNames(),
-			]);
+			this.#mcp.unionSelectedWithConfiguredDefaults();
 		}
-		this.#rememberSessionDefaultSelectedMCPToolNames(
-			this.sessionFile,
-			this.#getConfiguredDefaultSelectedMCPToolNames(),
-		);
+		this.#mcp.rememberSessionDefault(this.sessionFile, this.#mcp.getConfiguredDefaults());
 
 		const nextActive = [...this.#getActiveNonMCPToolNames(), ...this.getSelectedMCPToolNames()];
 		await this.#applyActiveToolsByName(nextActive, { previousSelectedMCPToolNames });
@@ -2420,23 +1913,19 @@ export class AgentSession {
 
 	/** Prompt templates */
 	getPlanModeState(): PlanModeState | undefined {
-		return this.#planModeState;
+		return this.#planMode.getState();
 	}
 
 	setPlanModeState(state: PlanModeState | undefined): void {
-		this.#planModeState = state;
-		if (state?.enabled === true) {
-			this.#planReferenceSent = false;
-			this.#planReferencePath = state.planFilePath;
-		}
+		this.#planMode.setState(state);
 	}
 
 	markPlanReferenceSent(): void {
-		this.#planReferenceSent = true;
+		this.#planMode.markReferenceSent();
 	}
 
 	setPlanReferencePath(path: string): void {
-		this.#planReferencePath = path;
+		this.#planMode.setReferencePath(path);
 	}
 
 	getCheckpointState(): CheckpointState | undefined {
@@ -2454,7 +1943,7 @@ export class AgentSession {
 	 * Inject the plan mode context message into the conversation history.
 	 */
 	async sendPlanModeContext(options?: { deliverAs?: "steer" | "followUp" | "nextTurn" }): Promise<void> {
-		const message = await this.#buildPlanModeMessage();
+		const message = await this.#planMode.buildActiveMessage();
 		if (!message) return;
 		await this.sendCustomMessage(
 			{
@@ -2504,78 +1993,6 @@ export class AgentSession {
 	// Prompting
 	// =========================================================================
 
-	/**
-	 * Build a plan mode message.
-	 * Returns null if plan mode is not enabled.
-	 * @returns The plan mode message, or null if plan mode is not enabled.
-	 */
-	async #buildPlanReferenceMessage(): Promise<CustomMessage | null> {
-		if (this.#planModeState?.enabled === true) return null;
-		if (this.#planReferenceSent) return null;
-
-		const planFilePath = this.#planReferencePath;
-		const resolvedPlanPath = resolveLocalUrlToPath(planFilePath, this.#localProtocolOptions());
-		let planContent: string;
-		try {
-			planContent = await Bun.file(resolvedPlanPath).text();
-		} catch (error) {
-			if (isEnoent(error)) {
-				return null;
-			}
-			throw error;
-		}
-
-		const content = prompt.render(planModeReferencePrompt, {
-			planFilePath,
-			planContent,
-		});
-
-		this.#planReferenceSent = true;
-
-		return {
-			role: "custom",
-			customType: "plan-mode-reference",
-			content,
-			display: false,
-			attribution: "agent",
-			timestamp: Date.now(),
-		};
-	}
-
-	async #buildPlanModeMessage(): Promise<CustomMessage | null> {
-		const state = this.#planModeState;
-		if (state?.enabled !== true) return null;
-		const sessionPlanUrl = "local://PLAN.md";
-		const resolvedPlanPath = state.planFilePath.startsWith("local:")
-			? resolveLocalUrlToPath(normalizeLocalScheme(state.planFilePath), this.#localProtocolOptions())
-			: resolveToCwd(state.planFilePath, this.sessionManager.getCwd());
-		const resolvedSessionPlan = resolveLocalUrlToPath(sessionPlanUrl, this.#localProtocolOptions());
-		const displayPlanPath =
-			state.planFilePath.startsWith("local:") || resolvedPlanPath !== resolvedSessionPlan
-				? state.planFilePath
-				: sessionPlanUrl;
-
-		const planExists = fs.existsSync(resolvedPlanPath);
-		const content = prompt.render(planModeActivePrompt, {
-			planFilePath: displayPlanPath,
-			planExists,
-			askToolName: "ask",
-			writeToolName: "write",
-			editToolName: "edit",
-			exitToolName: "exit_plan_mode",
-			reentry: state.reentry ?? false,
-			iterative: state.workflow === "iterative",
-		});
-
-		return {
-			role: "custom",
-			customType: "plan-mode-context",
-			content,
-			display: false,
-			attribution: "agent",
-			timestamp: Date.now(),
-		};
-	}
 
 	/**
 	 * Send a prompt to the agent.
@@ -2717,14 +2134,14 @@ export class AgentSession {
 		const generation = this.#promptGeneration;
 		try {
 			// Flush any pending bash messages before the new prompt
-			this.#flushPendingBashMessages();
-			this.#flushPendingPythonMessages();
-			this.#flushPendingBackgroundExchanges();
+			this.#bash.flushPending();
+			this.#python.flushPending();
+			this.#backgroundExchanges.flushPending();
 
 			// Reset todo reminder count on new user prompt
 			this.#todoReminderCount = 0;
 
-			await this.#maybeRestoreRetryFallbackPrimary();
+			await this.#activeRetryFallback.maybeRestorePrimary();
 
 			// Validate model
 			if (!this.model) {
@@ -2752,11 +2169,11 @@ export class AgentSession {
 
 			// Build messages array (session context, eager todo prelude, then active prompt message)
 			const messages: AgentMessage[] = [];
-			const planReferenceMessage = await this.#buildPlanReferenceMessage?.();
+			const planReferenceMessage = await this.#planMode.buildReferenceMessage();
 			if (planReferenceMessage) {
 				messages.push(planReferenceMessage);
 			}
-			const planModeMessage = await this.#buildPlanModeMessage();
+			const planModeMessage = await this.#planMode.buildActiveMessage();
 			if (planModeMessage) {
 				messages.push(planModeMessage);
 			}
@@ -3031,7 +2448,7 @@ export class AgentSession {
 		// schedule an immediate continue so the queued follow-up is delivered
 		// without waiting for the next user turn. We gate on isStreaming (model
 		// actively producing), isRetrying (auto-retry backoff is sleeping between
-		// attempts, #retryPromise set), and the last message being assistant —
+		// attempts), and the last message being assistant —
 		// agent.continue() only dequeues follow-ups from an assistant-ended state;
 		// resuming from user/toolResult state runs an extra model call on the
 		// stale prompt before draining the queue.
@@ -3344,11 +2761,8 @@ export class AgentSession {
 	 */
 	async newSession(options?: NewSessionOptions): Promise<boolean> {
 		const previousSessionFile = this.sessionFile;
-		const nextDiscoverySessionToolNames = this.#mcpDiscoveryEnabled
-			? [
-					...this.#getActiveNonMCPToolNames(),
-					...this.#filterSelectableMCPToolNames(this.#defaultSelectedMCPToolNames),
-				]
+		const nextDiscoverySessionToolNames = this.#mcp.isEnabled
+			? [...this.#getActiveNonMCPToolNames(), ...this.#mcp.getSelectableExplicitDefaults()]
 			: undefined;
 
 		// Emit session_before_switch event with reason "new" (can be cancelled)
@@ -3366,7 +2780,7 @@ export class AgentSession {
 		this.#disconnectFromAgent();
 		await this.abort();
 		this.#asyncJobManager?.cancelAll();
-		this.#closeAllProviderSessions("new session");
+		this.#providerSessions.closeAll("new session");
 		this.agent.reset();
 		if (
 			options?.drop === true &&
@@ -3395,14 +2809,10 @@ export class AgentSession {
 				this.sessionManager.appendMCPToolSelection(this.getSelectedMCPToolNames());
 			}
 		}
-		this.#rememberSessionDefaultSelectedMCPToolNames(
-			this.sessionFile,
-			this.#getConfiguredDefaultSelectedMCPToolNames(),
-		);
+		this.#mcp.rememberSessionDefault(this.sessionFile, this.#mcp.getConfiguredDefaults());
 
 		this.#todoReminderCount = 0;
-		this.#planReferenceSent = false;
-		this.#planReferencePath = "local://PLAN.md";
+		this.#planMode.reset();
 		this.#reconnectToAgent();
 
 		// Emit session_switch event with reason "new" to hooks
@@ -3508,7 +2918,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
-		this.#clearActiveRetryFallback();
+		this.#activeRetryFallback.clear();
 		this.#setModelWithProviderSessionReset(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, role);
 		this.settings.setModelRole(
@@ -3535,7 +2945,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
-		this.#clearActiveRetryFallback();
+		this.#activeRetryFallback.clear();
 		this.#setModelWithProviderSessionReset(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
@@ -3667,7 +3077,7 @@ export class AgentSession {
 		const next = scopedModels[nextIndex];
 
 		// Apply model
-		this.#clearActiveRetryFallback();
+		this.#activeRetryFallback.clear();
 		this.#setModelWithProviderSessionReset(next.model);
 		this.sessionManager.appendModelChange(`${next.model.provider}/${next.model.id}`);
 		this.settings.setModelRole("default", this.#formatRoleModelValue("default", next.model));
@@ -3698,7 +3108,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${nextModel.provider}/${nextModel.id}`);
 		}
 
-		this.#clearActiveRetryFallback();
+		this.#activeRetryFallback.clear();
 		this.#setModelWithProviderSessionReset(nextModel);
 		this.sessionManager.appendModelChange(`${nextModel.provider}/${nextModel.id}`);
 		this.settings.setModelRole("default", this.#formatRoleModelValue("default", nextModel));
@@ -3832,7 +3242,7 @@ export class AgentSession {
 		const sessionContext = this.buildDisplaySessionContext();
 		this.agent.replaceMessages(sessionContext.messages);
 		this.#syncTodoPhasesFromBranch();
-		this.#closeCodexProviderSessionsForHistoryRewrite();
+		this.#providerSessions.closeForCodexHistoryRewrite(this.model);
 		return result;
 	}
 
@@ -3962,7 +3372,7 @@ export class AgentSession {
 			const sessionContext = this.buildDisplaySessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
 			this.#syncTodoPhasesFromBranch();
-			this.#closeCodexProviderSessionsForHistoryRewrite();
+			this.#providerSessions.closeForCodexHistoryRewrite(this.model);
 
 			// Get the saved compaction entry for the hook
 			const savedCompactionEntry = newEntries.find(e => e.type === "compaction" && e.summary === summary) as
@@ -4326,7 +3736,7 @@ export class AgentSession {
 		this.#pendingRewindReport = undefined;
 	}
 	async #enforcePlanModeToolDecision(): Promise<void> {
-		if (this.#planModeState?.enabled !== true) {
+		if (!this.#planMode.isEnabled) {
 			return;
 		}
 		const assistantMessage = this.#findLastAssistantMessage();
@@ -4370,7 +3780,7 @@ export class AgentSession {
 			return undefined;
 		}
 
-		if (this.#planModeState?.enabled === true) {
+		if (this.#planMode.isEnabled) {
 			return undefined;
 		}
 		if (this.getTodoPhases().length > 0) {
@@ -4551,45 +3961,11 @@ export class AgentSession {
 	#setModelWithProviderSessionReset(model: Model): void {
 		const currentModel = this.model;
 		if (currentModel) {
-			this.#closeProviderSessionsForModelSwitch(currentModel, model);
+			this.#providerSessions.closeForModelSwitch(currentModel, model);
 		}
 		this.agent.setModel(model);
 	}
 
-	#closeCodexProviderSessionsForHistoryRewrite(): void {
-		const currentModel = this.model;
-		if (!currentModel || currentModel.api !== "openai-codex-responses") return;
-		this.#closeProviderSessionsForModelSwitch(currentModel, currentModel);
-	}
-
-	#closeProviderSessionsForModelSwitch(currentModel: Model, nextModel: Model): void {
-		const providerKeys = new Set<string>();
-		if (currentModel.api === "openai-codex-responses" || nextModel.api === "openai-codex-responses") {
-			providerKeys.add("openai-codex-responses");
-		}
-		if (currentModel.api === "openai-responses") {
-			providerKeys.add(`openai-responses:${currentModel.provider}`);
-		}
-		if (nextModel.api === "openai-responses") {
-			providerKeys.add(`openai-responses:${nextModel.provider}`);
-		}
-
-		for (const providerKey of providerKeys) {
-			const state = this.#providerSessionState.get(providerKey);
-			if (!state) continue;
-
-			try {
-				state.close();
-			} catch (error) {
-				logger.warn("Failed to close provider session state during model switch", {
-					providerKey,
-					error: String(error),
-				});
-			}
-
-			this.#providerSessionState.delete(providerKey);
-		}
-	}
 
 	#normalizeProviderReplayValue(value: unknown): unknown {
 		if (Array.isArray(value)) {
@@ -5000,73 +4376,31 @@ export class AgentSession {
 				let compactResult: CompactionResult | undefined;
 				let lastError: unknown;
 
-				for (const candidate of candidates) {
+				for (let candidateIdx = 0; candidateIdx < candidates.length; candidateIdx++) {
+					const candidate = candidates[candidateIdx];
 					const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
 					if (apiKey === null || apiKey === undefined || apiKey === "") continue;
 
-					let attempt = 0;
-					while (true) {
-						try {
-							compactResult = await compact(preparation, candidate, apiKey, undefined, autoCompactionSignal, {
+					const outcome = await runCompactionWithRetry({
+						attempt: () =>
+							compact(preparation, candidate, apiKey, undefined, autoCompactionSignal, {
 								promptOverride: hookPrompt,
 								extraContext: hookContext,
 								remoteInstructions: this.#baseSystemPrompt,
 								initiatorOverride: "agent",
-							});
-							break;
-						} catch (error) {
-							if (autoCompactionSignal.aborted) {
-								throw error;
-							}
+							}),
+						retrySettings,
+						modelLabel: `${candidate.provider}/${candidate.id}`,
+						isLastCandidate: candidateIdx === candidates.length - 1,
+						signal: autoCompactionSignal,
+					});
 
-							const message = error instanceof Error ? error.message : String(error);
-							const retryAfterMs = this.#parseRetryAfterMsFromError(message);
-							const shouldRetry =
-								retrySettings.enabled &&
-								attempt < retrySettings.maxRetries &&
-								(retryAfterMs !== undefined ||
-									this.#isTransientErrorMessage(message) ||
-									isUsageLimitError(message));
-							if (!shouldRetry) {
-								lastError = error;
-								break;
-							}
-
-							const baseDelayMs = retrySettings.baseDelayMs * 2 ** attempt;
-							const delayMs = retryAfterMs !== undefined ? Math.max(baseDelayMs, retryAfterMs) : baseDelayMs;
-
-							// If retry delay is too long (>30s), try next candidate instead of waiting
-							const maxAcceptableDelayMs = 30_000;
-							if (delayMs > maxAcceptableDelayMs) {
-								const hasMoreCandidates = candidates.indexOf(candidate) < candidates.length - 1;
-								if (hasMoreCandidates) {
-									logger.warn("Auto-compaction retry delay too long, trying next model", {
-										delayMs,
-										retryAfterMs,
-										error: message,
-										model: `${candidate.provider}/${candidate.id}`,
-									});
-									lastError = error;
-									break; // Exit retry loop, continue to next candidate
-								}
-								// No more candidates - we have to wait
-							}
-
-							attempt++;
-							logger.warn("Auto-compaction failed, retrying", {
-								attempt,
-								maxRetries: retrySettings.maxRetries,
-								delayMs,
-								retryAfterMs,
-								error: message,
-								model: `${candidate.provider}/${candidate.id}`,
-							});
-							await abortableSleep(delayMs, autoCompactionSignal);
-						}
-					}
-
-					if (compactResult) {
+					if (outcome.result) {
+						compactResult = outcome.result;
 						break;
+					}
+					if (outcome.lastError !== undefined) {
+						lastError = outcome.lastError;
 					}
 				}
 
@@ -5109,7 +4443,7 @@ export class AgentSession {
 			const sessionContext = this.buildDisplaySessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
 			this.#syncTodoPhasesFromBranch();
-			this.#closeCodexProviderSessionsForHistoryRewrite();
+			this.#providerSessions.closeForCodexHistoryRewrite(this.model);
 
 			// Get the saved compaction entry for the hook
 			const savedCompactionEntry = newEntries.find(e => e.type === "compaction" && e.summary === summary) as
@@ -5209,319 +4543,12 @@ export class AgentSession {
 	 * Context overflow errors are NOT retryable (handled by compaction instead).
 	 * Usage-limit errors are retryable because the retry handler performs credential switching.
 	 */
-	#isRetryableError(message: AssistantMessage): boolean {
-		if (
-			message.stopReason !== "error" ||
-			message.errorMessage === null ||
-			message.errorMessage === undefined ||
-			message.errorMessage === ""
-		)
-			return false;
-
-		// Context overflow is handled by compaction, not retry
-		const contextWindow = this.model?.contextWindow ?? 0;
-		if (isContextOverflow(message, contextWindow)) return false;
-
-		const err = message.errorMessage;
-		return this.#isTransientErrorMessage(err) || isUsageLimitError(err);
-	}
-
-	#isTransientErrorMessage(errorMessage: string): boolean {
-		return (
-			this.#isTransientEnvelopeErrorMessage(errorMessage) || this.#isTransientTransportErrorMessage(errorMessage)
-		);
-	}
-
-	#isTransientEnvelopeErrorMessage(errorMessage: string): boolean {
-		// Match Anthropic stream-envelope failures that indicate a broken stream before any content starts.
-		return /anthropic stream envelope error:/i.test(errorMessage) && /before message_start/i.test(errorMessage);
-	}
-
-	#isTransientTransportErrorMessage(errorMessage: string): boolean {
-		// Match: overloaded_error, provider returned error, rate limit, 429, 500, 502, 503, 504,
-		// service unavailable, network/connection/socket errors, fetch failed, terminated, retry delay exceeded
-		return (
-			isUnexpectedSocketCloseMessage(errorMessage) ||
-			/overloaded|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|timed? out|timeout|terminated|retry delay|stream stall/i.test(
-				errorMessage,
-			)
-		);
-	}
-
-	#clearActiveRetryFallback(): void {
-		this.#activeRetryFallback = undefined;
-	}
-
-	async #applyRetryFallbackCandidate(
-		role: string,
-		selector: RetryFallbackSelector,
-		currentSelector: string,
-	): Promise<void> {
-		const candidate = this.#modelRegistry.find(selector.provider, selector.id);
-		if (!candidate) {
-			throw new Error(`Retry fallback model not found: ${selector.raw}`);
-		}
-		const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
-		if (apiKey === null || apiKey === undefined || apiKey === "") {
-			throw new Error(`No API key for retry fallback ${selector.raw}`);
-		}
-
-		const currentThinkingLevel = this.thinkingLevel;
-		const nextThinkingLevel = selector.thinkingLevel ?? currentThinkingLevel;
-
-		this.#setModelWithProviderSessionReset(candidate);
-		this.sessionManager.appendModelChange(`${candidate.provider}/${candidate.id}`, "temporary");
-		this.settings.getStorage()?.recordModelUsage(`${candidate.provider}/${candidate.id}`);
-		this.setThinkingLevel(nextThinkingLevel);
-		if (!this.#activeRetryFallback) {
-			this.#activeRetryFallback = {
-				role,
-				originalSelector: currentSelector,
-				originalThinkingLevel: currentThinkingLevel,
-				lastAppliedFallbackThinkingLevel: nextThinkingLevel,
-			};
-		} else {
-			this.#activeRetryFallback.lastAppliedFallbackThinkingLevel = nextThinkingLevel;
-		}
-		await this.#emitSessionEvent({
-			type: "retry_fallback_applied",
-			from: currentSelector,
-			to: selector.raw,
-			role,
-		});
-	}
-
-	async #tryRetryModelFallback(currentSelector: string): Promise<boolean> {
-		const role = this.#activeRetryFallback?.role ?? this.#retryFallbackPolicy.resolveRole(currentSelector);
-		if (role === null || role === undefined || role === "") return false;
-
-		for (const selector of this.#retryFallbackPolicy.findCandidates(role, currentSelector)) {
-			if (this.#retryFallbackPolicy.isSelectorSuppressed(selector)) continue;
-			const candidate = this.#modelRegistry.find(selector.provider, selector.id);
-			if (!candidate) continue;
-			const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
-			if (apiKey === null || apiKey === undefined || apiKey === "") continue;
-			await this.#applyRetryFallbackCandidate(role, selector, currentSelector);
-			return true;
-		}
-
-		return false;
-	}
-
-	async #maybeRestoreRetryFallbackPrimary(): Promise<void> {
-		if (!this.#activeRetryFallback) return;
-		if (this.#retryFallbackPolicy.getRevertPolicy() !== "cooldown-expiry") return;
-
-		const {
-			originalSelector: originalSelectorRaw,
-			originalThinkingLevel,
-			lastAppliedFallbackThinkingLevel,
-		} = this.#activeRetryFallback;
-		const originalSelector = parseRetryFallbackSelector(originalSelectorRaw);
-		if (!originalSelector) {
-			this.#clearActiveRetryFallback();
-			return;
-		}
-
-		const currentModel = this.model;
-		if (!currentModel) return;
-		const currentSelector = formatRetryFallbackSelector(currentModel, this.thinkingLevel);
-		if (currentSelector === originalSelector.raw) {
-			if (!this.#retryFallbackPolicy.isSelectorSuppressed(originalSelector)) {
-				this.#clearActiveRetryFallback();
-			}
-			return;
-		}
-		if (this.#retryFallbackPolicy.isSelectorSuppressed(originalSelector)) return;
-
-		const primaryModel = this.#modelRegistry.find(originalSelector.provider, originalSelector.id);
-		if (!primaryModel) return;
-		const apiKey = await this.#modelRegistry.getApiKey(primaryModel, this.sessionId);
-		if (apiKey === null || apiKey === undefined || apiKey === "") return;
-
-		const currentThinkingLevel = this.thinkingLevel;
-		const thinkingToApply =
-			currentThinkingLevel === lastAppliedFallbackThinkingLevel ? originalThinkingLevel : currentThinkingLevel;
-		this.#setModelWithProviderSessionReset(primaryModel);
-		this.sessionManager.appendModelChange(`${primaryModel.provider}/${primaryModel.id}`, "temporary");
-		this.settings.getStorage()?.recordModelUsage(`${primaryModel.provider}/${primaryModel.id}`);
-		this.setThinkingLevel(thinkingToApply);
-		this.#clearActiveRetryFallback();
-	}
-
-	#parseRetryAfterMsFromError(errorMessage: string): number | undefined {
-		const now = Date.now();
-		const retryAfterMsMatch = /retry-after-ms\s*[:=]\s*(\d+)/i.exec(errorMessage);
-		if (retryAfterMsMatch) {
-			return Math.max(0, Number(retryAfterMsMatch[1]));
-		}
-
-		const retryAfterMatch = /retry-after\s*[:=]\s*([^\s,;]+)/i.exec(errorMessage);
-		if (retryAfterMatch) {
-			const value = retryAfterMatch[1];
-			const seconds = Number(value);
-			if (!Number.isNaN(seconds)) {
-				return Math.max(0, seconds * 1000);
-			}
-			const dateMs = Date.parse(value);
-			if (!Number.isNaN(dateMs)) {
-				return Math.max(0, dateMs - now);
-			}
-		}
-
-		const resetMsMatch = /x-ratelimit-reset-ms\s*[:=]\s*(\d+)/i.exec(errorMessage);
-		if (resetMsMatch) {
-			const resetMs = Number(resetMsMatch[1]);
-			if (!Number.isNaN(resetMs)) {
-				if (resetMs > 1_000_000_000_000) {
-					return Math.max(0, resetMs - now);
-				}
-				return Math.max(0, resetMs);
-			}
-		}
-
-		const resetMatch = /x-ratelimit-reset\s*[:=]\s*(\d+)/i.exec(errorMessage);
-		if (resetMatch) {
-			const resetSeconds = Number(resetMatch[1]);
-			if (!Number.isNaN(resetSeconds)) {
-				if (resetSeconds > 1_000_000_000) {
-					return Math.max(0, resetSeconds * 1000 - now);
-				}
-				return Math.max(0, resetSeconds * 1000);
-			}
-		}
-
-		// Smart Fallback if no exact headers found
-		return undefined;
-	}
-
 	/**
-	 * Handle retryable errors with exponential backoff.
-	 * @returns true if retry was initiated, false if max retries exceeded or disabled
-	 */
-	async #handleRetryableError(message: AssistantMessage): Promise<boolean> {
-		const retrySettings = this.settings.getGroup("retry");
-		if (!retrySettings.enabled) return false;
-
-		const generation = this.#promptGeneration;
-		this.#retryAttempt++;
-
-		// Create retry promise on first attempt so waitForRetry() can await it
-		// Ensure only one promise exists (avoid orphaned promises from concurrent calls)
-		if (!this.#retryPromise) {
-			const { promise, resolve } = Promise.withResolvers<void>();
-			this.#retryPromise = promise;
-			this.#retryResolve = resolve;
-		}
-
-		if (this.#retryAttempt > retrySettings.maxRetries) {
-			// Max retries exceeded, emit final failure and reset
-			await this.#emitSessionEvent({
-				type: "auto_retry_end",
-				success: false,
-				attempt: this.#retryAttempt - 1,
-				finalError: message.errorMessage,
-			});
-			this.#retryAttempt = 0;
-			this.#resolveRetry(); // Resolve so waitForRetry() completes
-			return false;
-		}
-
-		const errorMessage = message.errorMessage ?? "Unknown error";
-		const parsedRetryAfterMs = this.#parseRetryAfterMsFromError(errorMessage);
-		let delayMs = retrySettings.baseDelayMs * 2 ** (this.#retryAttempt - 1);
-		let switchedCredential = false;
-		let switchedModel = false;
-
-		if (this.model && isUsageLimitError(errorMessage)) {
-			const retryAfterMs = parsedRetryAfterMs ?? calculateRateLimitBackoffMs(parseRateLimitReason(errorMessage));
-			const switched = await this.#modelRegistry.authStorage.markUsageLimitReached(
-				this.model.provider,
-				this.sessionId,
-				{
-					retryAfterMs,
-					baseUrl: this.model.baseUrl,
-				},
-			);
-			if (switched) {
-				switchedCredential = true;
-				delayMs = 0;
-			} else if (retryAfterMs > delayMs) {
-				// No more accounts to switch to — wait out the backoff
-				delayMs = retryAfterMs;
-			}
-		}
-
-		const currentSelector = this.model ? formatRetryFallbackSelector(this.model, this.thinkingLevel) : undefined;
-		if (!switchedCredential && currentSelector !== null && currentSelector !== undefined && currentSelector !== "") {
-			this.#retryFallbackPolicy.noteCooldown(currentSelector, parsedRetryAfterMs, errorMessage);
-			switchedModel = await this.#tryRetryModelFallback(currentSelector);
-			if (switchedModel) {
-				delayMs = 0;
-			} else if (
-				parsedRetryAfterMs !== null &&
-				parsedRetryAfterMs !== undefined &&
-				parsedRetryAfterMs !== 0 &&
-				parsedRetryAfterMs > delayMs
-			) {
-				delayMs = parsedRetryAfterMs;
-			}
-		}
-
-		await this.#emitSessionEvent({
-			type: "auto_retry_start",
-			attempt: this.#retryAttempt,
-			maxAttempts: retrySettings.maxRetries,
-			delayMs,
-			errorMessage,
-		});
-
-		// Remove error message from agent state (keep in session for history)
-		const messages = this.agent.state.messages;
-		if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
-			this.agent.replaceMessages(messages.slice(0, -1));
-		}
-
-		// Wait with exponential backoff (abortable).
-		const retryAbortController = new AbortController();
-		this.#retryAbortController?.abort();
-		this.#retryAbortController = retryAbortController;
-		try {
-			await abortableSleep(delayMs, retryAbortController.signal);
-		} catch {
-			if (this.#retryAbortController !== retryAbortController) {
-				return false;
-			}
-			// Aborted during sleep - emit end event so UI can clean up
-			const attempt = this.#retryAttempt;
-			this.#retryAttempt = 0;
-			this.#retryAbortController = undefined;
-			await this.#emitSessionEvent({
-				type: "auto_retry_end",
-				success: false,
-				attempt,
-				finalError: "Retry cancelled",
-			});
-			this.#resolveRetry();
-			return false;
-		}
-		if (this.#retryAbortController === retryAbortController) {
-			this.#retryAbortController = undefined;
-		}
-
-		// Retry via continue() outside the agent_end event callback chain.
-		this.#scheduleAgentContinue({ delayMs: 1, generation });
-
-		return true;
-	}
-
-	/**
-	 * Cancel in-progress retry.
+	 * Cancel in-progress retry. Backwards-compatible wrapper around
+	 * {@link RetryController.abort}.
 	 */
 	abortRetry(): void {
-		this.#retryAbortController?.abort();
-		// Note: _retryAttempt is reset in the catch block of _autoRetry
-		this.#resolveRetry();
+		this.#retry.abort();
 	}
 
 	async #promptAgentWithIdleRetry(messages: AgentMessage[], options?: { toolChoice?: ToolChoice }): Promise<void> {
@@ -5544,7 +4571,7 @@ export class AgentSession {
 
 	/** Whether auto-retry is currently in progress */
 	get isRetrying(): boolean {
-		return this.#retryPromise !== undefined;
+		return this.#retry.isRetrying;
 	}
 
 	/** Whether auto-retry is enabled */
@@ -5560,303 +4587,72 @@ export class AgentSession {
 	}
 
 	// =========================================================================
-	// Bash Execution
+	// Bash Execution — delegated to BashController
 	// =========================================================================
 
-	async #saveBashOriginalArtifact(originalText: string): Promise<string | undefined> {
-		try {
-			return await this.sessionManager.saveArtifact(originalText, "bash-original");
-		} catch {
-			return undefined;
-		}
-	}
-
-	/**
-	 * Execute a bash command.
-	 * Adds result to agent context and session.
-	 * @param command The bash command to execute
-	 * @param onChunk Optional streaming callback for output
-	 * @param options.excludeFromContext If true, command output won't be sent to LLM (!! prefix)
-	 */
-	async executeBash(
+	/** Execute a bash command. Adds result to agent context and session. */
+	executeBash(
 		command: string,
 		onChunk?: (chunk: string) => void,
 		options?: { excludeFromContext?: boolean },
 	): Promise<BashResult> {
-		const excludeFromContext = options?.excludeFromContext === true;
-		const cwd = this.sessionManager.getCwd();
-
-		if (this.#extensionRunner?.hasHandlers("user_bash") === true) {
-			const hookResult = await this.#extensionRunner.emitUserBash({
-				type: "user_bash",
-				command,
-				excludeFromContext,
-				cwd,
-			});
-			if (hookResult?.result) {
-				this.recordBashResult(command, hookResult.result, options);
-				return hookResult.result;
-			}
-		}
-
-		const abortController = new AbortController();
-		this.#bashAbortControllers.add(abortController);
-
-		try {
-			const result = await executeBashCommand(command, {
-				onChunk,
-				signal: abortController.signal,
-				sessionKey: this.sessionId,
-				timeout: clampTimeout("bash") * 1000,
-				onMinimizedSave: originalText => this.#saveBashOriginalArtifact(originalText),
-			});
-
-			this.recordBashResult(command, result, options);
-			return result;
-		} finally {
-			this.#bashAbortControllers.delete(abortController);
-		}
+		return this.#bash.execute(command, onChunk, options);
 	}
 
-	/**
-	 * Record a bash execution result in session history.
-	 * Used by executeBash and by extensions that handle bash execution themselves.
-	 */
+	/** Record a bash execution result in session history. */
 	recordBashResult(command: string, result: BashResult, options?: { excludeFromContext?: boolean }): void {
-		const meta = outputMeta().truncationFromSummary(result, { direction: "tail" }).get();
-		const bashMessage: BashExecutionMessage = {
-			role: "bashExecution",
-			command,
-			output: result.output,
-			exitCode: result.exitCode,
-			cancelled: result.cancelled,
-			truncated: result.truncated,
-			meta,
-			timestamp: Date.now(),
-			excludeFromContext: options?.excludeFromContext,
-		};
-
-		// If agent is streaming, defer adding to avoid breaking tool_use/tool_result ordering
-		if (this.isStreaming) {
-			// Queue for later - will be flushed on agent_end
-			this.#pendingBashMessages.push(bashMessage);
-		} else {
-			// Add to agent state immediately
-			this.agent.appendMessage(bashMessage);
-
-			// Save to session
-			this.sessionManager.appendMessage(bashMessage);
-		}
+		this.#bash.recordResult(command, result, options);
 	}
 
-	/**
-	 * Cancel running bash command.
-	 */
+	/** Cancel running bash commands. */
 	abortBash(): void {
-		for (const abortController of this.#bashAbortControllers) {
-			abortController.abort();
-		}
+		this.#bash.abort();
 	}
 
-	/** Whether a bash command is currently running */
 	get isBashRunning(): boolean {
-		return this.#bashAbortControllers.size > 0;
+		return this.#bash.isRunning;
 	}
 
-	/** Whether there are pending bash messages waiting to be flushed */
 	get hasPendingBashMessages(): boolean {
-		return this.#pendingBashMessages.length > 0;
-	}
-
-	/**
-	 * Flush pending bash messages to agent state and session.
-	 * Called after agent turn completes to maintain proper message ordering.
-	 */
-	#flushPendingBashMessages(): void {
-		if (this.#pendingBashMessages.length === 0) return;
-
-		for (const bashMessage of this.#pendingBashMessages) {
-			// Add to agent state
-			this.agent.appendMessage(bashMessage);
-
-			// Save to session
-			this.sessionManager.appendMessage(bashMessage);
-		}
-
-		this.#pendingBashMessages = [];
+		return this.#bash.hasPending;
 	}
 
 	// =========================================================================
-	// User-Initiated Python Execution
+	// User-Initiated Python Execution — delegated to PythonController
 	// =========================================================================
 
-	/**
-	 * Execute Python code in the shared kernel.
-	 * Uses the same kernel session as the agent's Python tool, allowing collaborative editing.
-	 * @param code The Python code to execute
-	 * @param onChunk Optional streaming callback for output
-	 * @param options.excludeFromContext If true, execution won't be sent to LLM ($$ prefix)
-	 */
-	async executePython(
+	/** Execute Python in the shared kernel. */
+	executePython(
 		code: string,
 		onChunk?: (chunk: string) => void,
 		options?: { excludeFromContext?: boolean },
 	): Promise<PythonResult> {
-		const excludeFromContext = options?.excludeFromContext === true;
-		const cwd = this.sessionManager.getCwd();
-		this.assertPythonExecutionAllowed();
-
-		const abortController = new AbortController();
-		const execution = (async (): Promise<PythonResult> => {
-			if (this.#extensionRunner?.hasHandlers("user_python") === true) {
-				const hookResult = await this.#extensionRunner.emitUserPython({
-					type: "user_python",
-					code,
-					excludeFromContext,
-					cwd,
-				});
-				this.assertPythonExecutionAllowed();
-				if (hookResult?.result) {
-					this.recordPythonResult(code, hookResult.result, options);
-					return hookResult.result;
-				}
-			}
-
-			// Use the same session ID as the Python tool for kernel sharing
-			const sessionFile = this.sessionManager.getSessionFile();
-			const sessionId =
-				sessionFile !== null && sessionFile !== undefined && sessionFile !== ""
-					? `session:${sessionFile}:cwd:${cwd}`
-					: `cwd:${cwd}`;
-			const result = await executePythonCommand(code, {
-				cwd,
-				sessionId,
-				kernelOwnerId: this.#pythonKernelOwnerId,
-				kernelMode: this.settings.get("python.kernelMode"),
-				useSharedGateway: this.settings.get("python.sharedGateway"),
-				onChunk,
-				signal: abortController.signal,
-			});
-			this.recordPythonResult(code, result, options);
-			return result;
-		})();
-		return await this.trackPythonExecution(execution, abortController);
+		return this.#python.execute(code, onChunk, options);
 	}
 
 	assertPythonExecutionAllowed(): void {
-		if (this.#pythonExecutionDisposing) {
-			throw new Error("Python execution is unavailable while session disposal is in progress");
-		}
+		this.#python.assertAllowed();
 	}
 
-	/**
-	 * Track Python work started outside AgentSession.executePython so dispose can await and abort it too.
-	 */
+	/** Track Python work started outside `executePython` so dispose can wait/abort it. */
 	trackPythonExecution<T>(execution: Promise<T>, abortController: AbortController): Promise<T> {
-		this.#pythonAbortControllers.add(abortController);
-		this.#activePythonExecutions.add(execution);
-		void execution.then(
-			() => {
-				this.#pythonAbortControllers.delete(abortController);
-				this.#activePythonExecutions.delete(execution);
-			},
-			() => {
-				this.#pythonAbortControllers.delete(abortController);
-				this.#activePythonExecutions.delete(execution);
-			},
-		);
-		return execution;
+		return this.#python.track(execution, abortController);
 	}
 
-	/**
-	 * Record a Python execution result in session history.
-	 */
 	recordPythonResult(code: string, result: PythonResult, options?: { excludeFromContext?: boolean }): void {
-		const meta = outputMeta().truncationFromSummary(result, { direction: "tail" }).get();
-		const pythonMessage: PythonExecutionMessage = {
-			role: "pythonExecution",
-			code,
-			output: result.output,
-			exitCode: result.exitCode,
-			cancelled: result.cancelled,
-			truncated: result.truncated,
-			meta,
-			timestamp: Date.now(),
-			excludeFromContext: options?.excludeFromContext,
-		};
-
-		// If agent is streaming, defer adding to avoid breaking tool_use/tool_result ordering
-		if (this.isStreaming) {
-			this.#pendingPythonMessages.push(pythonMessage);
-		} else {
-			this.agent.appendMessage(pythonMessage);
-			this.sessionManager.appendMessage(pythonMessage);
-		}
+		this.#python.recordResult(code, result, options);
 	}
 
-	/**
-	 * Cancel running Python execution.
-	 */
 	abortPython(): void {
-		for (const abortController of this.#pythonAbortControllers) {
-			abortController.abort();
-		}
+		this.#python.abort();
 	}
 
-	async #waitForPythonExecutionsToSettle(timeoutMs: number): Promise<boolean> {
-		const deadline = Date.now() + timeoutMs;
-		while (this.#activePythonExecutions.size > 0) {
-			const remainingMs = deadline - Date.now();
-			if (remainingMs <= 0) {
-				return false;
-			}
-			const settled = await Promise.race([
-				Promise.allSettled(Array.from(this.#activePythonExecutions)).then(() => true),
-				Bun.sleep(remainingMs).then(() => false),
-			]);
-			if (!settled && this.#activePythonExecutions.size > 0) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	async #preparePythonExecutionsForDispose(): Promise<boolean> {
-		if (!(await this.#waitForPythonExecutionsToSettle(3_000))) {
-			logger.warn("Aborting active Python execution during dispose before retained kernel cleanup");
-			this.abortPython();
-			if (!(await this.#waitForPythonExecutionsToSettle(1_000))) {
-				logger.warn(
-					"Python execution is still active after dispose aborted all active runs; retained kernel ownership will still be detached",
-				);
-				return false;
-			}
-		}
-		return true;
-	}
-
-	/** Whether a Python execution is currently running */
 	get isPythonRunning(): boolean {
-		return this.#pythonAbortControllers.size > 0;
+		return this.#python.isRunning;
 	}
 
-	/** Whether there are pending Python messages waiting to be flushed */
 	get hasPendingPythonMessages(): boolean {
-		return this.#pendingPythonMessages.length > 0;
-	}
-
-	/**
-	 * Flush pending Python messages to agent state and session.
-	 */
-	#flushPendingPythonMessages(): void {
-		if (this.#pendingPythonMessages.length === 0) return;
-
-		for (const pythonMessage of this.#pendingPythonMessages) {
-			this.agent.appendMessage(pythonMessage);
-			this.sessionManager.appendMessage(pythonMessage);
-		}
-
-		this.#pendingPythonMessages = [];
+		return this.#python.hasPending;
 	}
 
 	// =========================================================================
@@ -5901,7 +4697,7 @@ export class AgentSession {
 		});
 
 		if (!awaitReply) {
-			this.#queueBackgroundExchangeInjection([incomingRecord]);
+			this.#backgroundExchanges.queue([incomingRecord]);
 			return { replyText: null };
 		}
 
@@ -5931,7 +4727,7 @@ export class AgentSession {
 			kind: "reply",
 			timestamp: replyRecord.timestamp,
 		});
-		this.#queueBackgroundExchangeInjection([incomingRecord, replyRecord]);
+		this.#backgroundExchanges.queue([incomingRecord, replyRecord]);
 
 		return { replyText };
 	}
@@ -6077,47 +4873,6 @@ export class AgentSession {
 		return messages;
 	}
 
-	#queueBackgroundExchangeInjection(messages: CustomMessage[]): void {
-		this.#pendingBackgroundExchanges.push(messages);
-		if (!this.isStreaming) {
-			this.#flushPendingBackgroundExchanges();
-			return;
-		}
-		this.#scheduleBackgroundExchangeFlush();
-	}
-
-	#scheduleBackgroundExchangeFlush(): void {
-		if (this.#scheduledBackgroundExchangeFlush) return;
-		this.#scheduledBackgroundExchangeFlush = true;
-		const attempt = (): void => {
-			if (this.#pendingBackgroundExchanges.length === 0) {
-				this.#scheduledBackgroundExchangeFlush = false;
-				return;
-			}
-			if (this.isStreaming) {
-				setTimeout(attempt, 50);
-				return;
-			}
-			this.#scheduledBackgroundExchangeFlush = false;
-			this.#flushPendingBackgroundExchanges();
-		};
-		setTimeout(attempt, 0);
-	}
-
-	#flushPendingBackgroundExchanges(): void {
-		if (this.#pendingBackgroundExchanges.length === 0) return;
-		const batches = this.#pendingBackgroundExchanges;
-		this.#pendingBackgroundExchanges = [];
-		for (const batch of batches) {
-			for (const msg of batch) {
-				// emitExternalEvent on message_end appends to agent state and dispatches
-				// to all session listeners, which in turn handle TUI rendering and
-				// sessionManager persistence via #handleAgentEvent.
-				this.agent.emitExternalEvent({ type: "message_start", message: msg });
-				this.agent.emitExternalEvent({ type: "message_end", message: msg });
-			}
-		}
-	}
 
 	// =========================================================================
 	// Session Management
@@ -6175,13 +4930,13 @@ export class AgentSession {
 		const previousModel = this.model;
 		const previousThinkingLevel = this.#thinkingLevel;
 		const previousServiceTier = this.agent.serviceTier;
-		const previousSelectedMCPToolNames = new Set(this.#selectedMCPToolNames);
+		const previousSelectedMCPToolNames = this.#mcp.captureSelectedSnapshot();
 		const previousTools = [...this.agent.state.tools];
 		const previousBaseSystemPrompt = this.#baseSystemPrompt;
 		const previousSystemPrompt = this.agent.state.systemPrompt;
 		const previousFallbackSelectedMCPToolNames =
 			previousSessionFile !== null && previousSessionFile !== undefined && previousSessionFile !== ""
-				? this.#getSessionDefaultSelectedMCPToolNames(previousSessionFile)
+				? this.#mcp.getSessionDefault(previousSessionFile)
 				: undefined;
 
 		this.#pendingMessages.reset();
@@ -6194,7 +4949,7 @@ export class AgentSession {
 			const didReloadConversationChange =
 				!switchingToDifferentSession &&
 				this.#didSessionMessagesChange(previousSessionContext.messages, sessionContext.messages);
-			const fallbackSelectedMCPToolNames = this.#getSessionDefaultSelectedMCPToolNames(sessionPath);
+			const fallbackSelectedMCPToolNames = this.#mcp.getSessionDefault(sessionPath);
 			await this.#restoreMCPSelectionsForSessionContext(sessionContext, { fallbackSelectedMCPToolNames });
 
 			// Emit session_switch event to hooks
@@ -6209,9 +4964,9 @@ export class AgentSession {
 			this.agent.replaceMessages(sessionContext.messages);
 			this.#syncTodoPhasesFromBranch();
 			if (switchingToDifferentSession) {
-				this.#closeAllProviderSessions("session switch");
+				this.#providerSessions.closeAll("session switch");
 			} else if (didReloadConversationChange) {
-				this.#closeAllProviderSessions("session reload");
+				this.#providerSessions.closeAll("session reload");
 			}
 
 			// Restore model if saved
@@ -6275,7 +5030,7 @@ export class AgentSession {
 					targetSessionFile: sessionPath,
 					error: String(mcpError),
 				});
-				this.#selectedMCPToolNames = new Set(previousSelectedMCPToolNames);
+				this.#mcp.restoreSelectedSnapshot(previousSelectedMCPToolNames);
 				this.agent.setTools(previousTools);
 				this.#baseSystemPrompt = previousBaseSystemPrompt;
 				this.agent.setSystemPrompt(previousSystemPrompt);
@@ -6366,7 +5121,7 @@ export class AgentSession {
 
 		if (!skipConversationRestore) {
 			this.agent.replaceMessages(sessionContext.messages);
-			this.#closeCodexProviderSessionsForHistoryRewrite();
+			this.#providerSessions.closeForCodexHistoryRewrite(this.model);
 		}
 
 		return { selectedText, cancelled: false };
@@ -6531,7 +5286,7 @@ export class AgentSession {
 		await this.#restoreMCPSelectionsForSessionContext(displayContext);
 		this.agent.replaceMessages(displayContext.messages);
 		this.#syncTodoPhasesFromBranch();
-		this.#closeCodexProviderSessionsForHistoryRewrite();
+		this.#providerSessions.closeForCodexHistoryRewrite(this.model);
 
 		this.#branchSummaryAbortController = undefined;
 

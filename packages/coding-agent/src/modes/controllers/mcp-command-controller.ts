@@ -33,7 +33,7 @@ import {
 	toConfigName,
 } from "../../mcp/smithery-registry";
 import type { MCPAuthConfig, MCPServerConfig, MCPServerConnection } from "../../mcp/types";
-import type { OAuthCredential } from "../../session/auth-storage";
+import type { OAuthCredential } from "@oh-my-pi/pi-ai";
 import { shortenPath } from "../../tools/render-utils";
 import { openPath } from "../../utils/open";
 import { DynamicBorder } from "../components/dynamic-border";

@@ -5,7 +5,7 @@ import type { AsyncJobManager } from "../async";
 import type { ModelRegistry } from "../config/model-registry";
 import type { PromptTemplate } from "../config/prompt-templates";
 import type { Settings } from "../config/settings";
-import type { AuthStorage } from "../session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import type { MCPManager } from "../mcp/manager";
 import { EditTool } from "../edit";
 import type { Skill } from "../extensibility/skills";

@@ -11,12 +11,12 @@ import type {
 	TextContent,
 	Usage,
 } from "@oh-my-pi/pi-ai";
-import { getTerminalId } from "@oh-my-pi/pi-tui";
 import {
 	getBlobsDir,
 	getAgentDir as getDefaultAgentDir,
 	getProjectDir,
 	getSessionsDir,
+	getTerminalId,
 	getTerminalSessionsDir,
 	isEnoent,
 	logger,

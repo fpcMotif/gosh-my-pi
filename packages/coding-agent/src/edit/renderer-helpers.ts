@@ -2,7 +2,8 @@
  * Helper utilities used by the edit tool renderer.
  */
 import { sanitizeText } from "@oh-my-pi/pi-natives";
-import { visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
+import { wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
+import { visibleWidth } from "@oh-my-pi/pi-utils";
 import { renderDiff as renderDiffColored } from "../modes/components/diff";
 import { type Theme } from "../modes/theme/theme";
 import {

@@ -6,7 +6,7 @@ import type { LoadExtensionsResult } from "../../src/extensibility/extensions/ty
 import type { CreateAgentSessionResult } from "../../src/sdk";
 import * as sdkModule from "../../src/sdk";
 import type { AgentSession, AgentSessionEvent, PromptOptions } from "../../src/session/agent-session";
-import type { AuthStorage } from "../../src/session/auth-storage";
+import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import { runSubprocess, SUBAGENT_WARNING_MISSING_YIELD } from "../../src/task/executor";
 import type { AgentDefinition } from "../../src/task/types";
 import { EventBus } from "../../src/utils/event-bus";
