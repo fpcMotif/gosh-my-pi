@@ -1,24 +1,13 @@
-import * as os from "node:os";
-import * as path from "node:path";
 import { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { getOAuthProviders, type OAuthProvider } from "@oh-my-pi/pi-ai";
 import type { Component, OverlayHandle } from "@oh-my-pi/pi-tui";
 import { Input, Loader, Spacer, Text } from "@oh-my-pi/pi-tui";
-import { getAgentDbPath, getConfigDirName, getProjectDir } from "@oh-my-pi/pi-utils";
-import { invalidate as invalidateFsCache } from "../../capability/fs";
+import { getAgentDbPath } from "@oh-my-pi/pi-utils";
 import { getRoleInfo } from "../../config/model-registry";
 import { formatModelSelectorValue } from "../../config/model-resolver";
 import { settings } from "../../config/settings";
 import { DebugSelectorComponent } from "../../debug";
 import { disableProvider, enableProvider } from "../../discovery";
-import { clearClaudePluginRootsCache, resolveActiveProjectRegistryPath } from "../../discovery/helpers";
-import {
-	getInstalledPluginsRegistryPath,
-	getMarketplacesCacheDir,
-	getMarketplacesRegistryPath,
-	getPluginsCacheDir,
-	MarketplaceManager,
-} from "../../extensibility/plugins/marketplace";
 import {
 	getAvailableThemes,
 	getSymbolTheme,
@@ -39,7 +28,6 @@ import { ExtensionDashboard } from "../components/extensions";
 import { HistorySearchComponent } from "../components/history-search";
 import { ModelSelectorComponent } from "../components/model-selector";
 import { OAuthSelectorComponent } from "../components/oauth-selector";
-import { PluginSelectorComponent } from "../components/plugin-selector";
 import { SessionObserverOverlayComponent } from "../components/session-observer-overlay";
 import { SessionSelectorComponent } from "../components/session-selector";
 import { SettingsSelectorComponent } from "../components/settings-selector";
@@ -432,99 +420,6 @@ export class SelectorController {
 				options,
 			);
 			return { component: selector, focus: selector };
-		});
-	}
-
-	async showPluginSelector(mode: "install" | "uninstall" = "install"): Promise<void> {
-		const mgr = new MarketplaceManager({
-			marketplacesRegistryPath: getMarketplacesRegistryPath(),
-			installedRegistryPath: getInstalledPluginsRegistryPath(),
-			projectInstalledRegistryPath: (await resolveActiveProjectRegistryPath(getProjectDir())) ?? undefined,
-			marketplacesCacheDir: getMarketplacesCacheDir(),
-			pluginsCacheDir: getPluginsCacheDir(),
-			clearPluginRootsCache: (extraPaths?: readonly string[]) => {
-				const home = os.homedir();
-				invalidateFsCache(path.join(home, ".claude", "plugins", "installed_plugins.json"));
-				invalidateFsCache(path.join(home, getConfigDirName(), "plugins", "installed_plugins.json"));
-				for (const p of extraPaths ?? []) invalidateFsCache(p);
-				clearClaudePluginRootsCache();
-			},
-		});
-
-		const [marketplaces, installed] = await Promise.all([mgr.listMarketplaces(), mgr.listInstalledPlugins()]);
-		const installedIds = new Set(installed.map(p => p.id));
-
-		if (mode === "uninstall") {
-			// Show only installed plugins for uninstall
-			const items = installed.map(p => {
-				const entry = p.entries[0];
-				const atIdx = p.id.lastIndexOf("@");
-				const pluginName = atIdx > 0 ? p.id.slice(0, atIdx) : p.id;
-				const mkt = atIdx > 0 ? p.id.slice(atIdx + 1) : "unknown";
-				return {
-					plugin: { name: pluginName, version: entry?.version, description: undefined as string | undefined },
-					marketplace: mkt,
-					scope: p.scope,
-				};
-			});
-			this.showSelector(done => {
-				const selector = new PluginSelectorComponent(marketplaces.length, items, new Set(), {
-					onSelect: async (name, marketplace, scope) => {
-						done();
-						const pluginId = `${name}@${marketplace}`;
-						this.ctx.showStatus(`Uninstalling ${pluginId}...`);
-						this.ctx.ui.requestRender();
-						try {
-							await mgr.uninstallPlugin(pluginId, scope);
-							this.ctx.showStatus(`Uninstalled ${pluginId}`);
-						} catch (error) {
-							this.ctx.showStatus(`Uninstall failed: ${String(error)}`);
-						}
-						this.ctx.ui.requestRender();
-					},
-					onCancel: () => {
-						done();
-						this.ctx.ui.requestRender();
-					},
-				});
-				return { component: selector, focus: selector.getSelectList() };
-			});
-			return;
-		}
-
-		// Install mode: show all available plugins from all marketplaces
-		const allPlugins: Array<{
-			plugin: { name: string; version?: string; description?: string };
-			marketplace: string;
-		}> = [];
-		for (const mkt of marketplaces) {
-			const plugins = await mgr.listAvailablePlugins(mkt.name);
-			for (const plugin of plugins) {
-				allPlugins.push({ plugin, marketplace: mkt.name });
-			}
-		}
-
-		this.showSelector(done => {
-			const selector = new PluginSelectorComponent(marketplaces.length, allPlugins, installedIds, {
-				onSelect: async (name, marketplace) => {
-					done();
-					this.ctx.showStatus(`Installing ${name} from ${marketplace}...`);
-					this.ctx.ui.requestRender();
-					try {
-						const force = installedIds.has(`${name}@${marketplace}`);
-						await mgr.installPlugin(name, marketplace, { force });
-						this.ctx.showStatus(`Installed ${name} from ${marketplace}`);
-					} catch (error) {
-						this.ctx.showStatus(`Install failed: ${String(error)}`);
-					}
-					this.ctx.ui.requestRender();
-				},
-				onCancel: () => {
-					done();
-					this.ctx.ui.requestRender();
-				},
-			});
-			return { component: selector, focus: selector.getSelectList() };
 		});
 	}
 
