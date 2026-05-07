@@ -46,6 +46,11 @@ import (
 // GmpAuthID is the identifier for the gmp auth dialog.
 const GmpAuthID = "gmp_auth"
 
+// maxProgressLines bounds the progressLog ring so a chatty OAuth flow
+// can't grow the dialog body unbounded across one session. Older
+// entries scroll off the top.
+const maxProgressLines = 10
+
 // GmpAuthState enumerates the dialog's render states.
 type GmpAuthState int
 
@@ -139,6 +144,9 @@ func (d *GmpAuth) HandleMsg(msg tea.Msg) Action {
 
 	case auth.ShowProgress:
 		d.progressLog = append(d.progressLog, m.Message)
+		if len(d.progressLog) > maxProgressLines {
+			d.progressLog = d.progressLog[len(d.progressLog)-maxProgressLines:]
+		}
 		// progress is informational; keep state as-is. The id is not tracked
 		// (gmp side did not register a correlated wait).
 		return nil

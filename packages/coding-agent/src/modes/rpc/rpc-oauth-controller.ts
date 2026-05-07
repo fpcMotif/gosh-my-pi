@@ -1,6 +1,7 @@
+import { Snowflake } from "@oh-my-pi/pi-utils";
 import type { OAuthAuthInfo, OAuthController, OAuthPrompt } from "@oh-my-pi/pi-ai/utils/oauth/types";
 import type { RequestCorrelator } from "./request-correlator";
-import type { RpcExtensionUIResponse } from "./rpc-types";
+import { AuthMethod, type RpcExtensionUIResponse } from "./rpc-types";
 import type { WireFrame } from "./wire/v1";
 
 type AuthRequestPayload = Record<string, unknown> & { method: `auth.${string}` };
@@ -28,19 +29,19 @@ export class RpcOAuthController implements OAuthController {
 	#correlator: RequestCorrelator;
 	#output: (frame: WireFrame) => void;
 	#timeoutMs: number;
-	signal?: AbortSignal;
+	#signal?: AbortSignal;
 
 	constructor(opts: RpcOAuthControllerOptions) {
 		this.#provider = opts.provider;
 		this.#correlator = opts.correlator;
 		this.#output = opts.output;
 		this.#timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-		this.signal = opts.signal;
+		this.#signal = opts.signal;
 	}
 
 	onAuth(info: OAuthAuthInfo): void {
 		this.#fireAndForget({
-			method: "auth.show_login_url",
+			method: AuthMethod.ShowLoginURL,
 			provider: this.#provider,
 			url: info.url,
 			instructions: info.instructions,
@@ -49,7 +50,7 @@ export class RpcOAuthController implements OAuthController {
 
 	onProgress(message: string): void {
 		this.#fireAndForget({
-			method: "auth.show_progress",
+			method: AuthMethod.ShowProgress,
 			provider: this.#provider,
 			message,
 		});
@@ -58,7 +59,7 @@ export class RpcOAuthController implements OAuthController {
 	async onPrompt(prompt: OAuthPrompt): Promise<string> {
 		return this.#awaitDialog(
 			{
-				method: "auth.prompt_code",
+				method: AuthMethod.PromptCode,
 				provider: this.#provider,
 				placeholder: prompt.placeholder,
 				allowEmpty: prompt.allowEmpty,
@@ -70,7 +71,7 @@ export class RpcOAuthController implements OAuthController {
 	async onManualCodeInput(): Promise<string> {
 		return this.#awaitDialog(
 			{
-				method: "auth.prompt_manual_redirect",
+				method: AuthMethod.PromptManualRedirect,
 				provider: this.#provider,
 				instructions: "Paste the full callback URL from your browser",
 			},
@@ -81,24 +82,25 @@ export class RpcOAuthController implements OAuthController {
 	/** Caller-side helper: emit auth.show_result after the login flow finishes. */
 	emitResult(success: boolean, error?: string): void {
 		this.#fireAndForget({
-			method: "auth.show_result",
+			method: AuthMethod.ShowResult,
 			provider: this.#provider,
 			success,
 			error,
 		});
 	}
 
+	/** Fire-and-forget: gmp does not register a correlator entry for these
+	 * frames. We mint a fresh Snowflake id (matches RpcExtensionUIContext.notify
+	 * pattern) so the wire `id` is still unique without polluting the pending
+	 * map with a 1s timeout entry per frame. */
 	#fireAndForget(req: AuthRequestPayload): void {
-		const { id } = this.#correlator.register<RpcExtensionUIResponse | undefined>({
-			defaultValue: undefined,
-			timeoutMs: 1000,
-		});
+		const id = Snowflake.next() as string;
 		this.#output({ type: "extension_ui_request", id, ...req });
 	}
 
 	async #awaitDialog(req: AuthRequestPayload, fallbackLabel: string): Promise<string> {
 		const { id, promise } = this.#correlator.register<RpcExtensionUIResponse | undefined>({
-			signal: this.signal,
+			signal: this.#signal,
 			timeoutMs: this.#timeoutMs,
 			defaultValue: undefined,
 		});

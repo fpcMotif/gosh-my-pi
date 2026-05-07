@@ -196,6 +196,28 @@ export type RpcResponse =
 	| { id?: string; type: "response"; command: string; success: false; error: string };
 
 // ============================================================================
+// Auth method discriminators
+// ============================================================================
+
+/**
+ * Method-name constants for the auth.* extension_ui_request flow. These are
+ * mirrored in apps/tui-go/internal/auth/methods.go — keep in sync.
+ */
+export const AuthMethod = {
+	ShowLoginURL: "auth.show_login_url",
+	ShowProgress: "auth.show_progress",
+	PromptCode: "auth.prompt_code",
+	PromptManualRedirect: "auth.prompt_manual_redirect",
+	ShowResult: "auth.show_result",
+	PickProvider: "auth.pick_provider",
+} as const;
+
+export const AuthCommand = {
+	Login: "auth.login",
+	Logout: "auth.logout",
+} as const;
+
+// ============================================================================
 // Extension UI Events (stdout)
 // ============================================================================
 

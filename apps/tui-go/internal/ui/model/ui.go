@@ -2317,10 +2317,10 @@ func (m *UI) trapLocalSlash(content string) (tea.Cmd, bool) {
 		return util.ReportInfo("debug overlay deferred — tail ~/.gmp/tui.log or run with --debug to mirror to stderr"), true
 	case "/login":
 		m.textarea.Reset()
-		return m.runGmpAuthCommand("auth.login", strings.TrimSpace(rest)), true
+		return m.runGmpAuthCommand(auth.CommandLogin, strings.TrimSpace(rest)), true
 	case "/logout":
 		m.textarea.Reset()
-		return m.runGmpAuthCommand("auth.logout", strings.TrimSpace(rest)), true
+		return m.runGmpAuthCommand(auth.CommandLogout, strings.TrimSpace(rest)), true
 	}
 	return nil, false
 }

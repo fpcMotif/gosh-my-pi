@@ -594,81 +594,66 @@ func (w *GmpWorkspace) drainExtensionUI() {
 	}
 }
 
+// authPayload is the union of every auth.* extension_ui_request payload.
+// Decoding into a single struct lets translateAuthRequest stay table-driven
+// — each entry only needs to map the parsed payload to its tea.Msg type.
+// Unknown JSON fields are ignored.
+type authPayload struct {
+	Provider     string   `json:"provider"`
+	URL          string   `json:"url"`
+	Instructions string   `json:"instructions"`
+	Message      string   `json:"message"`
+	Placeholder  string   `json:"placeholder"`
+	AllowEmpty   bool     `json:"allowEmpty"`
+	Success      bool     `json:"success"`
+	Error        string   `json:"error"`
+	Options      []string `json:"options"`
+	DefaultID    string   `json:"defaultId"`
+}
+
+// authDecoders maps each auth.* method to a builder that produces the tea.Msg
+// payload from a decoded authPayload. Keep the keys aligned with the constants
+// in apps/tui-go/internal/auth/methods.go and AuthMethod in rpc-types.ts.
+var authDecoders = map[string]func(id string, p authPayload) tea.Msg{
+	auth.MethodShowLoginURL: func(id string, p authPayload) tea.Msg {
+		return auth.ShowLoginURL{ID: id, Provider: p.Provider, URL: p.URL, Instructions: p.Instructions}
+	},
+	auth.MethodShowProgress: func(id string, p authPayload) tea.Msg {
+		return auth.ShowProgress{ID: id, Provider: p.Provider, Message: p.Message}
+	},
+	auth.MethodPromptCode: func(id string, p authPayload) tea.Msg {
+		return auth.PromptCode{ID: id, Provider: p.Provider, Placeholder: p.Placeholder, AllowEmpty: p.AllowEmpty}
+	},
+	auth.MethodPromptManualRedirect: func(id string, p authPayload) tea.Msg {
+		return auth.PromptManualRedirect{ID: id, Provider: p.Provider, Instructions: p.Instructions}
+	},
+	auth.MethodShowResult: func(id string, p authPayload) tea.Msg {
+		return auth.ShowResult{ID: id, Provider: p.Provider, Success: p.Success, Error: p.Error}
+	},
+	auth.MethodPickProvider: func(id string, p authPayload) tea.Msg {
+		return auth.PickProvider{ID: id, Options: p.Options, DefaultID: p.DefaultID}
+	},
+}
+
 // translateAuthRequest returns a Bubble Tea message for an inbound
-// auth.* extension_ui_request, or nil if the method is not an auth
-// flow method.
+// auth.* extension_ui_request, or nil if the method is not a known auth
+// flow method (in which case drainExtensionUI falls back to its
+// default-cancel response).
 func (w *GmpWorkspace) translateAuthRequest(req *ompclient.ExtensionUIReq) tea.Msg {
 	if !strings.HasPrefix(req.Method, "auth.") {
 		return nil
 	}
-	switch req.Method {
-	case "auth.show_login_url":
-		var p struct {
-			Provider     string `json:"provider"`
-			URL          string `json:"url"`
-			Instructions string `json:"instructions"`
-		}
-		if err := json.Unmarshal(req.Raw, &p); err != nil {
-			slog.Warn("gmp workspace: failed to parse auth.show_login_url", "id", req.ID, "error", err)
-			return nil
-		}
-		return auth.ShowLoginURL{ID: req.ID, Provider: p.Provider, URL: p.URL, Instructions: p.Instructions}
-	case "auth.show_progress":
-		var p struct {
-			Provider string `json:"provider"`
-			Message  string `json:"message"`
-		}
-		if err := json.Unmarshal(req.Raw, &p); err != nil {
-			slog.Warn("gmp workspace: failed to parse auth.show_progress", "id", req.ID, "error", err)
-			return nil
-		}
-		return auth.ShowProgress{ID: req.ID, Provider: p.Provider, Message: p.Message}
-	case "auth.prompt_code":
-		var p struct {
-			Provider    string `json:"provider"`
-			Placeholder string `json:"placeholder"`
-			AllowEmpty  bool   `json:"allowEmpty"`
-		}
-		if err := json.Unmarshal(req.Raw, &p); err != nil {
-			slog.Warn("gmp workspace: failed to parse auth.prompt_code", "id", req.ID, "error", err)
-			return nil
-		}
-		return auth.PromptCode{ID: req.ID, Provider: p.Provider, Placeholder: p.Placeholder, AllowEmpty: p.AllowEmpty}
-	case "auth.prompt_manual_redirect":
-		var p struct {
-			Provider     string `json:"provider"`
-			Instructions string `json:"instructions"`
-		}
-		if err := json.Unmarshal(req.Raw, &p); err != nil {
-			slog.Warn("gmp workspace: failed to parse auth.prompt_manual_redirect", "id", req.ID, "error", err)
-			return nil
-		}
-		return auth.PromptManualRedirect{ID: req.ID, Provider: p.Provider, Instructions: p.Instructions}
-	case "auth.show_result":
-		var p struct {
-			Provider string `json:"provider"`
-			Success  bool   `json:"success"`
-			Error    string `json:"error"`
-		}
-		if err := json.Unmarshal(req.Raw, &p); err != nil {
-			slog.Warn("gmp workspace: failed to parse auth.show_result", "id", req.ID, "error", err)
-			return nil
-		}
-		return auth.ShowResult{ID: req.ID, Provider: p.Provider, Success: p.Success, Error: p.Error}
-	case "auth.pick_provider":
-		var p struct {
-			Options   []string `json:"options"`
-			DefaultID string   `json:"defaultId"`
-		}
-		if err := json.Unmarshal(req.Raw, &p); err != nil {
-			slog.Warn("gmp workspace: failed to parse auth.pick_provider", "id", req.ID, "error", err)
-			return nil
-		}
-		return auth.PickProvider{ID: req.ID, Options: p.Options, DefaultID: p.DefaultID}
-	default:
+	build, ok := authDecoders[req.Method]
+	if !ok {
 		slog.Debug("gmp workspace: unknown auth.* method, falling back to cancel", "method", req.Method, "id", req.ID)
 		return nil
 	}
+	var p authPayload
+	if err := json.Unmarshal(req.Raw, &p); err != nil {
+		slog.Warn("gmp workspace: failed to parse auth payload", "method", req.Method, "id", req.ID, "error", err)
+		return nil
+	}
+	return build(req.ID, p)
 }
 
 func (w *GmpWorkspace) sendCancelledExtensionUIResponse(id string, method string) {

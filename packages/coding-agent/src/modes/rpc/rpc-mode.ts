@@ -153,6 +153,22 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		return { id, type: "response", command, success: false, error: message };
 	};
 
+	const runAuthCommand = async <T extends RpcCommand["type"]>(
+		id: string | undefined,
+		command: T,
+		body: () => Promise<object | null | undefined>,
+		onError?: (message: string) => void,
+	): Promise<RpcResponse> => {
+		try {
+			const data = await body();
+			return success(id, command, data ?? null);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			onError?.(message);
+			return errorResp(id, command, message);
+		}
+	};
+
 	const extensionUIRequests = new RequestCorrelator();
 	const hostToolBridge = new RpcHostToolBridge(output);
 
@@ -683,38 +699,34 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			case "auth.login": {
 				const provider = command.provider;
-				const authStorage = session.modelRegistry.authStorage;
 				const controller = new RpcOAuthController({
 					provider,
 					correlator: extensionUIRequests,
 					output,
 				});
-				try {
-					await authStorage.login(provider as OAuthProviderId, {
-						onAuth: info => controller.onAuth(info),
-						onProgress: msg => controller.onProgress(msg),
-						onPrompt: prompt => controller.onPrompt(prompt),
-						onManualCodeInput: () => controller.onManualCodeInput(),
-					});
-					controller.emitResult(true);
-					return success(id, "auth.login", { provider, ok: true });
-				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					controller.emitResult(false, message);
-					return errorResp(id, "auth.login", message);
-				}
+				return runAuthCommand(
+					id,
+					"auth.login",
+					async () => {
+						await session.modelRegistry.authStorage.login(provider as OAuthProviderId, {
+							onAuth: info => controller.onAuth(info),
+							onProgress: msg => controller.onProgress(msg),
+							onPrompt: prompt => controller.onPrompt(prompt),
+							onManualCodeInput: () => controller.onManualCodeInput(),
+						});
+						controller.emitResult(true);
+						return { provider, ok: true };
+					},
+					message => controller.emitResult(false, message),
+				);
 			}
 
 			case "auth.logout": {
 				const provider = command.provider;
-				const authStorage = session.modelRegistry.authStorage;
-				try {
-					await authStorage.logout(provider);
-					return success(id, "auth.logout", { provider });
-				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					return errorResp(id, "auth.logout", message);
-				}
+				return runAuthCommand(id, "auth.logout", async () => {
+					await session.modelRegistry.authStorage.logout(provider);
+					return { provider };
+				});
 			}
 
 			default: {
