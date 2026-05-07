@@ -598,7 +598,13 @@ export class AgentSession {
 		this.#agentId = config.agentId;
 		this.#agentRegistry = config.agentRegistry;
 		this.#branchSummaryCompleter = config.branchSummaryCompleter;
-		this.agent.setAssistantMessageEventInterceptor((message, assistantMessageEvent) => {
+		this.agent.setAssistantMessageEventInterceptor(assistantMessageEvent => {
+			const message =
+				assistantMessageEvent.type === "done"
+					? assistantMessageEvent.message
+					: assistantMessageEvent.type === "error"
+						? assistantMessageEvent.error
+						: assistantMessageEvent.partial;
 			const event: AgentEvent = {
 				type: "message_update",
 				message,
@@ -3119,7 +3125,7 @@ export class AgentSession {
 		const isChanging = effectiveLevel !== this.#thinkingLevel;
 
 		this.#thinkingLevel = effectiveLevel;
-		this.agent.setThinkingLevel(toReasoningEffort(effectiveLevel));
+		this.agent.setThinkingLevel(toReasoningEffort(effectiveLevel) ?? Effort.Medium);
 
 		if (isChanging) {
 			this.sessionManager.appendThinkingLevelChange(effectiveLevel);
@@ -4983,7 +4989,7 @@ export class AgentSession {
 				hasThinkingEntry ? (sessionContext.thinkingLevel as ThinkingLevel | undefined) : defaultThinkingLevel,
 			);
 			this.#thinkingLevel = nextThinkingLevel;
-			this.agent.setThinkingLevel(toReasoningEffort(nextThinkingLevel));
+			this.agent.setThinkingLevel(toReasoningEffort(nextThinkingLevel) ?? Effort.Medium);
 			this.agent.serviceTier = hasServiceTierEntry
 				? sessionContext.serviceTier
 				: configuredServiceTier === "none"
@@ -5020,7 +5026,7 @@ export class AgentSession {
 				this.agent.setModel(previousModel);
 			}
 			this.#thinkingLevel = previousThinkingLevel;
-			this.agent.setThinkingLevel(toReasoningEffort(previousThinkingLevel));
+			this.agent.setThinkingLevel(toReasoningEffort(previousThinkingLevel) ?? Effort.Medium);
 			this.agent.serviceTier = previousServiceTier;
 			this.#syncTodoPhasesFromBranch();
 			this.#reconnectToAgent();

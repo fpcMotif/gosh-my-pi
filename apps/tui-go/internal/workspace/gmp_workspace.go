@@ -667,10 +667,15 @@ func (w *GmpWorkspace) translateEvent(ev *ompclient.AgentEvent) tea.Msg {
 		return nil
 	case "agent_end":
 		w.setAgentBusy(false)
-		if msg := w.finishAssistant(message.FinishReasonEndTurn, "", ""); msg != nil {
+		finalEvents := w.handleAgentEnd(ev.Payload)
+		for _, msg := range finalEvents {
 			w.sendUI(msg)
 		}
-		w.handleAgentEnd(ev.Payload)
+		if !containsAssistantMessageEvent(finalEvents) {
+			if msg := w.finishAssistant(message.FinishReasonEndTurn, "", ""); msg != nil {
+				w.sendUI(msg)
+			}
+		}
 		return pubsub.Event[notify.Notification]{
 			Type: pubsub.CreatedEvent,
 			Payload: notify.Notification{
@@ -853,12 +858,12 @@ func (w *GmpWorkspace) handleTurnEnd(raw []byte) tea.Msg {
 	return nil
 }
 
-func (w *GmpWorkspace) handleAgentEnd(raw []byte) {
+func (w *GmpWorkspace) handleAgentEnd(raw []byte) []tea.Msg {
 	var payload struct {
 		Messages []json.RawMessage `json:"messages"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		return
+		return nil
 	}
 
 	msgs := make([]message.Message, 0, len(payload.Messages))
@@ -872,12 +877,31 @@ func (w *GmpWorkspace) handleAgentEnd(raw []byte) {
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	events := make([]tea.Msg, 0, len(msgs))
 	for _, msg := range msgs {
-		if msg.ID == "" {
-			msg.ID = w.nextID("agent")
+		eventType := pubsub.CreatedEvent
+		if msg.Role == message.User {
+			if id, ok := w.matchingUserIDLocked(msg.Content().Text); ok {
+				msg.ID = id
+			}
+		}
+		if msg.Role == message.Assistant {
+			if w.currentAssistantID != "" {
+				msg.ID = w.currentAssistantID
+			} else if id, ok := w.matchingAssistantIDLocked(msg.Content().Text); ok {
+				msg.ID = id
+			}
+		}
+		if _, exists := w.messages[msg.ID]; exists {
+			eventType = pubsub.UpdatedEvent
 		}
 		w.upsertMessageLocked(msg)
+		if msg.Role == message.Assistant {
+			w.currentAssistantID = ""
+		}
+		events = append(events, pubsub.Event[message.Message]{Type: eventType, Payload: msg.Clone()})
 	}
+	return events
 }
 
 func (w *GmpWorkspace) handleToolExecutionStart(raw []byte) tea.Msg {
@@ -1291,6 +1315,26 @@ func (w *GmpWorkspace) matchingUserIDLocked(text string) (string, bool) {
 	return "", false
 }
 
+func (w *GmpWorkspace) matchingAssistantIDLocked(text string) (string, bool) {
+	for i := len(w.msgOrder) - 1; i >= 0; i-- {
+		msg, ok := w.messages[w.msgOrder[i]]
+		if ok && msg.Role == message.Assistant && msg.Content().Text == text {
+			return msg.ID, true
+		}
+	}
+	return "", false
+}
+
+func containsAssistantMessageEvent(events []tea.Msg) bool {
+	for _, msg := range events {
+		event, ok := msg.(pubsub.Event[message.Message])
+		if ok && event.Payload.Role == message.Assistant {
+			return true
+		}
+	}
+	return false
+}
+
 func (w *GmpWorkspace) ensureAssistantLocked() message.Message {
 	if w.currentAssistantID != "" {
 		if msg, ok := w.messages[w.currentAssistantID]; ok {
@@ -1356,7 +1400,13 @@ func (w *GmpWorkspace) sendUI(msg tea.Msg) {
 	events := w.events
 	w.mu.RUnlock()
 	if program != nil {
-		program.Send(msg)
+		// Dispatch to a goroutine so we never block the caller. sendUI
+		// is sometimes invoked from inside the Bubble Tea Update
+		// goroutine (e.g. CreateSession during a SendMessage handler).
+		// Calling program.Send synchronously from there deadlocks: Send
+		// posts to the program's message channel which is drained by
+		// the same Update goroutine that's currently waiting for us.
+		go program.Send(msg)
 		return
 	}
 	if events == nil {

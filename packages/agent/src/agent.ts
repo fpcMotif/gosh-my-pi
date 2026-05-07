@@ -9,6 +9,7 @@ import {
 	type ImageContent,
 	type Message,
 	type Model,
+	type ProviderSessionState,
 	type ServiceTier,
 	type ThinkingBudgets,
 	type ToolChoice,
@@ -196,6 +197,14 @@ export class Agent {
 		this.#opts.serviceTier = serviceTier;
 	}
 
+	get providerSessionState(): Map<string, ProviderSessionState> | undefined {
+		return this.#opts.providerSessionState;
+	}
+
+	set providerSessionState(state: Map<string, ProviderSessionState> | undefined) {
+		this.#opts.providerSessionState = state;
+	}
+
 	/** Steering mode: how queued steering messages are drained. Defaults to "one-at-a-time". */
 	getSteeringMode(): "all" | "one-at-a-time" {
 		return this.#opts.steeringMode ?? "one-at-a-time";
@@ -256,6 +265,35 @@ export class Agent {
 	 */
 	followUp(m: AgentMessage) {
 		this.#followUpQueue.push(m);
+	}
+
+	/**
+	 * Check whether there are any queued steering or follow-up messages.
+	 */
+	hasQueuedMessages(): boolean {
+		return this.#steeringQueue.length > 0 || this.#followUpQueue.length > 0;
+	}
+
+	/**
+	 * Clear all queued steering and follow-up messages.
+	 */
+	clearAllQueues(): void {
+		this.#steeringQueue = [];
+		this.#followUpQueue = [];
+	}
+
+	/**
+	 * Pop the last steering message (LIFO). Returns undefined if empty.
+	 */
+	popLastSteer(): AgentMessage | undefined {
+		return this.#steeringQueue.pop();
+	}
+
+	/**
+	 * Pop the last follow-up message (LIFO). Returns undefined if empty.
+	 */
+	popLastFollowUp(): AgentMessage | undefined {
+		return this.#followUpQueue.pop();
 	}
 
 	/**

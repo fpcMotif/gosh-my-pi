@@ -13,7 +13,7 @@ export interface BashControllerContext {
 	agent: { appendMessage(message: AgentMessage): void };
 	sessionManager: {
 		getCwd(): string;
-		saveArtifact(content: string, label: string): Promise<string>;
+		saveArtifact(content: string, label: string): Promise<string | undefined>;
 		appendMessage(message: BashExecutionMessage): string;
 	};
 	isStreaming(): boolean;

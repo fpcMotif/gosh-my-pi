@@ -1,7 +1,11 @@
 package workspace
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -76,6 +80,144 @@ func TestGmpWorkspacePromptAndStreamEvents(t *testing.T) {
 	if resultEvent.Type != pubsub.CreatedEvent || len(results) != 1 || results[0].Content != "/tmp/project" {
 		t.Fatalf("tool result event = %#v, want created tool result content", resultEvent)
 	}
+}
+
+func TestGmpWorkspaceSendsPromptToRpcBackend(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := ompclient.Spawn(ctx, ompclient.Options{
+		Bin:        os.Args[0],
+		PrefixArgs: []string{"-test.run=TestGmpWorkspaceFakeRPCBackend", "--"},
+		Env:        append(os.Environ(), "GMP_TUI_GO_FAKE_RPC=1"),
+	})
+	if err != nil {
+		t.Fatalf("spawn fake rpc backend: %v", err)
+	}
+	defer client.Close()
+
+	w := NewGmpWorkspace(client, "/tmp/project")
+	w.events = make(chan tea.Msg, 16)
+	go w.Subscribe(nil)
+
+	sess, err := w.CreateSession(ctx, "New Session")
+	if err != nil {
+		t.Fatalf("CreateSession returned error: %v", err)
+	}
+	nextUIEvent(t, w)
+
+	if err := w.AgentRun(ctx, sess.ID, "bridge hello"); err != nil {
+		t.Fatalf("AgentRun returned error: %v", err)
+	}
+	nextMessageEvent(t, w) // local optimistic user
+	nextMessageEvent(t, w) // local optimistic assistant
+
+	updated := nextMessageEvent(t, w)
+	if updated.Type != pubsub.UpdatedEvent || updated.Payload.Role != message.Assistant {
+		t.Fatalf("backend update=%v, want assistant update", updated)
+	}
+	if updated.Payload.Content().Text != "backend saw: bridge hello" {
+		t.Fatalf("assistant text=%q", updated.Payload.Content().Text)
+	}
+}
+
+func TestGmpWorkspaceFakeRPCBackend(t *testing.T) {
+	if os.Getenv("GMP_TUI_GO_FAKE_RPC") != "1" {
+		return
+	}
+	runFakeGmpRPCBackend()
+	os.Exit(0)
+}
+
+func runFakeGmpRPCBackend() {
+	writeRPCFrame(map[string]any{"type": "ready", "schema": "omp-rpc/v1"})
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		var command struct {
+			ID      string `json:"id"`
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(scanner.Bytes(), &command); err != nil {
+			continue
+		}
+		switch command.Type {
+		case "get_state":
+			writeRPCFrame(map[string]any{
+				"id":      command.ID,
+				"type":    "response",
+				"command": "get_state",
+				"success": true,
+				"data": map[string]any{
+					"sessionId":   "rpc-session",
+					"sessionName": "RPC Session",
+					"model": map[string]any{
+						"provider": "test-provider",
+						"id":       "test-model",
+					},
+				},
+			})
+		case "get_messages":
+			writeRPCFrame(map[string]any{
+				"id":      command.ID,
+				"type":    "response",
+				"command": "get_messages",
+				"success": true,
+				"data":    map[string]any{"messages": []any{}},
+			})
+		case "new_session":
+			writeRPCFrame(map[string]any{
+				"id":      command.ID,
+				"type":    "response",
+				"command": "new_session",
+				"success": true,
+				"data":    map[string]any{"cancelled": false},
+			})
+		case "prompt":
+			writeRPCFrame(map[string]any{
+				"id":      command.ID,
+				"type":    "response",
+				"command": "prompt",
+				"success": true,
+			})
+			reply := "backend saw: " + command.Message
+			writeRPCFrame(map[string]any{"type": "agent_start"})
+			writeRPCFrame(map[string]any{
+				"type": "message_update",
+				"assistantMessageEvent": map[string]any{
+					"type":  "text_delta",
+					"delta": reply,
+				},
+			})
+			writeRPCFrame(map[string]any{
+				"type": "agent_end",
+				"messages": []any{
+					map[string]any{
+						"role":       "assistant",
+						"content":    []any{map[string]any{"type": "text", "text": reply}},
+						"stopReason": "stop",
+						"timestamp":  1700000000000,
+					},
+				},
+			})
+		default:
+			writeRPCFrame(map[string]any{
+				"id":      command.ID,
+				"type":    "response",
+				"command": command.Type,
+				"success": false,
+				"error":   "unexpected command",
+			})
+		}
+	}
+}
+
+func writeRPCFrame(frame any) {
+	data, err := json.Marshal(frame)
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintln(os.Stdout, string(data))
 }
 
 func nextMessageEvent(t *testing.T, w *GmpWorkspace) pubsub.Event[message.Message] {
@@ -513,12 +655,49 @@ func TestEventHandlers(t *testing.T) {
 		Kind:    "agent_end",
 		Payload: []byte(`{"type":"agent_end","messages":[{"role":"user","content":"bye","timestamp":1700000000000}]}`),
 	})
+	ev = nextMessageEvent(t, w)
+	if ev.Type != pubsub.CreatedEvent || ev.Payload.Role != message.User || ev.Payload.Content().Text != "bye" {
+		t.Fatalf("agent_end message=%v", ev)
+	}
 	notification := nextNotificationEvent(t, w)
 	if notification.Type != pubsub.CreatedEvent || notification.Payload.Type != notify.TypeAgentFinished {
 		t.Fatalf("agent_end notification=%v", notification)
 	}
 	if notification.Payload.SessionID == "" {
 		t.Fatalf("agent_end notification missing session id")
+	}
+}
+
+func TestAgentEndPublishesFinalMessages(t *testing.T) {
+	w := newTestGmpWorkspace()
+	w.CreateSession(context.Background(), "s")
+	w.AgentRun(context.Background(), "", "hello")
+	nextUIEvent(t, w) // session
+	nextUIEvent(t, w) // user
+	nextUIEvent(t, w) // assistant
+
+	w.handleAgentEvent(&ompclient.AgentEvent{
+		Kind:    "agent_end",
+		Payload: []byte(`{"type":"agent_end","messages":[{"role":"user","content":"hello","timestamp":1700000000000},{"role":"assistant","content":[{"type":"text","text":"final answer"}],"stopReason":"stop","timestamp":1700000000000}]}`),
+	})
+
+	userEvent := nextMessageEvent(t, w)
+	if userEvent.Type != pubsub.UpdatedEvent || userEvent.Payload.Role != message.User {
+		t.Fatalf("agent_end user event=%v", userEvent)
+	}
+	assistantEvent := nextMessageEvent(t, w)
+	if assistantEvent.Type != pubsub.UpdatedEvent || assistantEvent.Payload.Role != message.Assistant {
+		t.Fatalf("agent_end assistant event=%v", assistantEvent)
+	}
+	if assistantEvent.Payload.Content().Text != "final answer" {
+		t.Fatalf("assistant text=%q want final answer", assistantEvent.Payload.Content().Text)
+	}
+	if w.currentAssistantID != "" {
+		t.Fatalf("currentAssistantID not cleared")
+	}
+	notification := nextNotificationEvent(t, w)
+	if notification.Payload.Type != notify.TypeAgentFinished {
+		t.Fatalf("notification=%v", notification)
 	}
 }
 

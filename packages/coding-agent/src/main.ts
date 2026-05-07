@@ -663,7 +663,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		Bun.env.PI_NO_TITLE = "1";
 	}
 	const { pipedInput, fileText, fileImages } = await logger.time("prepareInitialMessage", async () => {
-		const pipedInput = await readPipedInput();
+		const pipedInput = parsedArgs.mode === "rpc" || parsedArgs.mode === "acp" ? undefined : await readPipedInput();
 		if (parsedArgs.fileArgs.length === 0) {
 			return { pipedInput, fileText: undefined, fileImages: undefined };
 		}
