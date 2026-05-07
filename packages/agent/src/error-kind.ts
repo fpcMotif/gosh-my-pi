@@ -82,11 +82,20 @@ export function errorToKind(error: AgentTaggedError): AgentErrorKind {
 				: { kind: "context_overflow" };
 		case "ProviderHttpError":
 			return { kind: "transient" };
+		case "UsageLimitError":
+			return { kind: "usage_limit", retryAfterMs: error.retryAfterMs };
+		case "LocalAbort":
+			// timeout / idle / stall are all transport-layer issues from the
+			// caller's perspective — collapse to the existing `transport` reason.
+			return { kind: "transient", reason: "transport" };
+		case "TurnAborted":
+			return { kind: "transient" };
 		case "AgentBusy":
 		case "ConfigInvalid":
 		case "ToolExecError":
 		case "SessionStorageError":
 		case "SubprocessAborted":
+		case "TurnReplayRefused":
 			return { kind: "fatal" };
 	}
 }
