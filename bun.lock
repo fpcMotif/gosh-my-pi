@@ -24,6 +24,7 @@
         "@oh-my-pi/pi-ai": "catalog:",
         "@oh-my-pi/pi-natives": "catalog:",
         "@oh-my-pi/pi-utils": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@sinclair/typebox": "catalog:",
@@ -79,6 +80,7 @@
         "ajv": "catalog:",
         "chalk": "catalog:",
         "diff": "catalog:",
+        "effect": "catalog:",
         "fflate": "catalog:",
         "handlebars": "catalog:",
         "linkedom": "catalog:",
@@ -188,6 +190,7 @@
       "version": "14.5.11",
       "dependencies": {
         "beautiful-mermaid": "catalog:",
+        "effect": "catalog:",
         "handlebars": "catalog:",
         "winston": "catalog:",
         "winston-daily-rotate-file": "catalog:",
