@@ -8,6 +8,7 @@ import {
 	parseRetryAfterMsFromString,
 	type TransientReason,
 } from "@oh-my-pi/pi-ai";
+import type { AgentTaggedError } from "./errors";
 
 export type { TransientReason };
 
@@ -63,4 +64,29 @@ export function classifyAssistantError(message: AssistantMessage, contextWindow?
 	}
 
 	return { kind: "fatal" };
+}
+
+/**
+ * One-way bridge from a typed Effect failure (`AgentTaggedError`) to the
+ * event-stream taxonomy (`AgentErrorKind`). Used at the boundary where an
+ * Effect program's failure becomes an emitted assistant-message error.
+ *
+ * Exhaustive over `AgentTaggedError._tag`: TypeScript will fail compilation
+ * if a new tagged error is added without a clause here.
+ */
+export function errorToKind(error: AgentTaggedError): AgentErrorKind {
+	switch (error._tag) {
+		case "ContextOverflow":
+			return error.usedTokens !== undefined
+				? { kind: "context_overflow", usedTokens: error.usedTokens }
+				: { kind: "context_overflow" };
+		case "ProviderHttpError":
+			return { kind: "transient" };
+		case "AgentBusy":
+		case "ConfigInvalid":
+		case "ToolExecError":
+		case "SessionStorageError":
+		case "SubprocessAborted":
+			return { kind: "fatal" };
+	}
 }
