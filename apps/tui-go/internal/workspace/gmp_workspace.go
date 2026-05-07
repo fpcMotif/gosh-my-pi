@@ -15,6 +15,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/notify"
 	mcptools "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools/mcp"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/auth"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/csync"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/history"
@@ -566,11 +567,15 @@ func (w *GmpWorkspace) Subscribe(program *tea.Program) {
 	w.setAgentBusy(false)
 }
 
-// drainExtensionUI consumes incoming UI prompts from the agent and
-// auto-responds with Cancelled: true. omp's RpcExtensionUIContext
-// already handles cancellation as the safe default (its built-in
-// timeout resolves to undefined / cancelled), so this preserves
-// agent-side correctness while we lack a real dialog binding.
+// drainExtensionUI consumes incoming UI prompts from the agent. For
+// auth-flow methods (auth.*), it forwards the request as a Bubble
+// Tea message so the model can open the existing OAuth / API-key
+// dialogs (apps/tui-go/internal/ui/dialog/oauth.go and
+// api_key_input.go); the dialog later sends back auth.Submit /
+// Confirm / Cancel which the workspace translates to an
+// extension_ui_response. For every other method it falls back to
+// the legacy "auto-cancel" behavior — gmp's RpcExtensionUIContext
+// already treats cancellation as the safe default.
 func (w *GmpWorkspace) drainExtensionUI() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -581,18 +586,125 @@ func (w *GmpWorkspace) drainExtensionUI() {
 		if req == nil || req.ID == "" {
 			continue
 		}
-		resp := ompclient.ExtensionUIResp{
-			Type:      "extension_ui_response",
-			ID:        req.ID,
-			Cancelled: true,
+		if msg := w.translateAuthRequest(req); msg != nil {
+			w.sendUI(msg)
+			continue
 		}
-		if err := w.client.Send(resp); err != nil {
-			slog.Debug("gmp workspace: extension_ui_response send failed",
-				"id", req.ID, "method", req.Method, "error", err)
-		} else {
-			slog.Debug("gmp workspace: auto-cancelled extension_ui_request",
-				"id", req.ID, "method", req.Method)
+		w.sendCancelledExtensionUIResponse(req.ID, req.Method)
+	}
+}
+
+// translateAuthRequest returns a Bubble Tea message for an inbound
+// auth.* extension_ui_request, or nil if the method is not an auth
+// flow method.
+func (w *GmpWorkspace) translateAuthRequest(req *ompclient.ExtensionUIReq) tea.Msg {
+	if !strings.HasPrefix(req.Method, "auth.") {
+		return nil
+	}
+	switch req.Method {
+	case "auth.show_login_url":
+		var p struct {
+			Provider     string `json:"provider"`
+			URL          string `json:"url"`
+			Instructions string `json:"instructions"`
 		}
+		if err := json.Unmarshal(req.Raw, &p); err != nil {
+			slog.Warn("gmp workspace: failed to parse auth.show_login_url", "id", req.ID, "error", err)
+			return nil
+		}
+		return auth.ShowLoginURL{ID: req.ID, Provider: p.Provider, URL: p.URL, Instructions: p.Instructions}
+	case "auth.show_progress":
+		var p struct {
+			Provider string `json:"provider"`
+			Message  string `json:"message"`
+		}
+		if err := json.Unmarshal(req.Raw, &p); err != nil {
+			slog.Warn("gmp workspace: failed to parse auth.show_progress", "id", req.ID, "error", err)
+			return nil
+		}
+		return auth.ShowProgress{ID: req.ID, Provider: p.Provider, Message: p.Message}
+	case "auth.prompt_code":
+		var p struct {
+			Provider    string `json:"provider"`
+			Placeholder string `json:"placeholder"`
+			AllowEmpty  bool   `json:"allowEmpty"`
+		}
+		if err := json.Unmarshal(req.Raw, &p); err != nil {
+			slog.Warn("gmp workspace: failed to parse auth.prompt_code", "id", req.ID, "error", err)
+			return nil
+		}
+		return auth.PromptCode{ID: req.ID, Provider: p.Provider, Placeholder: p.Placeholder, AllowEmpty: p.AllowEmpty}
+	case "auth.prompt_manual_redirect":
+		var p struct {
+			Provider     string `json:"provider"`
+			Instructions string `json:"instructions"`
+		}
+		if err := json.Unmarshal(req.Raw, &p); err != nil {
+			slog.Warn("gmp workspace: failed to parse auth.prompt_manual_redirect", "id", req.ID, "error", err)
+			return nil
+		}
+		return auth.PromptManualRedirect{ID: req.ID, Provider: p.Provider, Instructions: p.Instructions}
+	case "auth.show_result":
+		var p struct {
+			Provider string `json:"provider"`
+			Success  bool   `json:"success"`
+			Error    string `json:"error"`
+		}
+		if err := json.Unmarshal(req.Raw, &p); err != nil {
+			slog.Warn("gmp workspace: failed to parse auth.show_result", "id", req.ID, "error", err)
+			return nil
+		}
+		return auth.ShowResult{ID: req.ID, Provider: p.Provider, Success: p.Success, Error: p.Error}
+	case "auth.pick_provider":
+		var p struct {
+			Options   []string `json:"options"`
+			DefaultID string   `json:"defaultId"`
+		}
+		if err := json.Unmarshal(req.Raw, &p); err != nil {
+			slog.Warn("gmp workspace: failed to parse auth.pick_provider", "id", req.ID, "error", err)
+			return nil
+		}
+		return auth.PickProvider{ID: req.ID, Options: p.Options, DefaultID: p.DefaultID}
+	default:
+		slog.Debug("gmp workspace: unknown auth.* method, falling back to cancel", "method", req.Method, "id", req.ID)
+		return nil
+	}
+}
+
+func (w *GmpWorkspace) sendCancelledExtensionUIResponse(id string, method string) {
+	resp := ompclient.ExtensionUIResp{
+		Type:      "extension_ui_response",
+		ID:        id,
+		Cancelled: true,
+	}
+	if err := w.client.Send(resp); err != nil {
+		slog.Debug("gmp workspace: extension_ui_response send failed",
+			"id", id, "method", method, "error", err)
+	} else {
+		slog.Debug("gmp workspace: auto-cancelled extension_ui_request",
+			"id", id, "method", method)
+	}
+}
+
+// HandleAuthReply translates a Bubble Tea reply (auth.Submit /
+// Confirm / Cancel) into the matching extension_ui_response on the
+// wire. The model layer calls this when the user dismisses an auth
+// dialog.
+func (w *GmpWorkspace) HandleAuthReply(msg tea.Msg) {
+	var resp ompclient.ExtensionUIResp
+	switch m := msg.(type) {
+	case auth.Submit:
+		resp = ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Value: m.Value}
+	case auth.Confirm:
+		confirmed := true
+		resp = ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Confirmed: &confirmed}
+	case auth.Cancel:
+		resp = ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Cancelled: true}
+	default:
+		return
+	}
+	if err := w.client.Send(resp); err != nil {
+		slog.Debug("gmp workspace: auth reply send failed", "id", resp.ID, "error", err)
 	}
 }
 

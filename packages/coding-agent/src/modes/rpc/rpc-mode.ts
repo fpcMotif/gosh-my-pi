@@ -24,8 +24,10 @@ import type {
 import { runExtensionCompact, runExtensionSetModel } from "../../extensibility/extensions/compact-handler";
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
+import type { OAuthProviderId } from "@oh-my-pi/pi-ai/utils/oauth/types";
 import { isRpcHostToolResult, isRpcHostToolUpdate, RpcHostToolBridge } from "./host-tools";
 import { RequestCorrelator } from "./request-correlator";
+import { RpcOAuthController } from "./rpc-oauth-controller";
 import type {
 	RpcCommand,
 	RpcExtensionUIRequest,
@@ -677,6 +679,42 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			case "get_messages": {
 				return success(id, "get_messages", { messages: session.messages });
+			}
+
+			case "auth.login": {
+				const provider = command.provider;
+				const authStorage = session.modelRegistry.authStorage;
+				const controller = new RpcOAuthController({
+					provider,
+					correlator: extensionUIRequests,
+					output,
+				});
+				try {
+					await authStorage.login(provider as OAuthProviderId, {
+						onAuth: info => controller.onAuth(info),
+						onProgress: msg => controller.onProgress(msg),
+						onPrompt: prompt => controller.onPrompt(prompt),
+						onManualCodeInput: () => controller.onManualCodeInput(),
+					});
+					controller.emitResult(true);
+					return success(id, "auth.login", { provider, ok: true });
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					controller.emitResult(false, message);
+					return errorResp(id, "auth.login", message);
+				}
+			}
+
+			case "auth.logout": {
+				const provider = command.provider;
+				const authStorage = session.modelRegistry.authStorage;
+				try {
+					await authStorage.logout(provider);
+					return success(id, "auth.logout", { provider });
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return errorResp(id, "auth.logout", message);
+				}
 			}
 
 			default: {

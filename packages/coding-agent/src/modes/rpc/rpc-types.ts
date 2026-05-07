@@ -65,7 +65,11 @@ export type RpcCommand =
 	| { id?: string; type: "set_session_name"; name: string }
 
 	// Messages
-	| { id?: string; type: "get_messages" };
+	| { id?: string; type: "get_messages" }
+
+	// Auth (gmp providers via AuthStorage)
+	| { id?: string; type: "auth.login"; provider: string }
+	| { id?: string; type: "auth.logout"; provider: string };
 
 // ============================================================================
 // RPC State
@@ -184,6 +188,10 @@ export type RpcResponse =
 	// Messages
 	| { id?: string; type: "response"; command: "get_messages"; success: true; data: { messages: AgentMessage[] } }
 
+	// Auth
+	| { id?: string; type: "response"; command: "auth.login"; success: true; data: { provider: string; ok: boolean } }
+	| { id?: string; type: "response"; command: "auth.logout"; success: true; data: { provider: string } }
+
 	// Error response (any command can fail)
 	| { id?: string; type: "response"; command: string; success: false; error: string };
 
@@ -235,7 +243,48 @@ export type RpcExtensionUIRequest =
 			widgetPlacement?: "aboveEditor" | "belowEditor";
 	  }
 	| { type: "extension_ui_request"; id: string; method: "setTitle"; title: string }
-	| { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string };
+	| { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string }
+
+	// Auth flow methods (mirror gmp's OAuthController surface; routed in apps/tui-go to oauth.go / api_key_input.go).
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "auth.show_login_url";
+			provider: string;
+			url: string;
+			instructions?: string;
+	  }
+	| { type: "extension_ui_request"; id: string; method: "auth.show_progress"; provider: string; message: string }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "auth.prompt_code";
+			provider: string;
+			placeholder?: string;
+			allowEmpty?: boolean;
+	  }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "auth.prompt_manual_redirect";
+			provider: string;
+			instructions: string;
+	  }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "auth.show_result";
+			provider: string;
+			success: boolean;
+			error?: string;
+	  }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "auth.pick_provider";
+			options: string[];
+			defaultId?: string;
+	  };
 
 // ============================================================================
 // Host Tool Frames (bidirectional)
