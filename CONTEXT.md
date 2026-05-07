@@ -471,6 +471,79 @@ surface work in Phase 2) remains the north star; Phase 1 lite is the
 bounded next step that sheds the obviously-unreachable code without
 touching the type surface the UI shares with Crush internals.
 
+**AgentRunController**:
+The Effect-side wrapper around `Agent.prompt` / `Agent.continue`
+introduced by the v4 migration P3. Owns no new state; it reframes the
+existing pi-agent-core run as an `Effect<void, AgentRunError, ...>`
+program so retries, recovery, and durability hooks become a Layer
+seam instead of inline `try/catch`. Public surface stays
+`Promise<void>` — `Effect.runPromise` lives at the seam. Lives in
+`packages/agent/src/run/agent-run.ts`. Sits inside the existing
+`RetryController`/`ActiveRetryFallback` boundary; does **not**
+replace them. _Avoid_: turn pump, turn driver, AgentTurnRunner,
+durable workflow, Workflow.
+
+**RecoveryMarker**:
+A typed JSONL line (`event: "recovery-marker"`) appended to the session
+log at three well-defined safe points: after `message_end`, after each
+`tool_execution_end`, and after `turn_end`. Carries
+`{generation, lastEventSeq, isStreaming, pendingToolCallIds}`. Anchor
+point the **RecoveryPolicy** reads on session reopen to classify the
+crash state. Cheap, append-only, ignored by readers that don't know
+about it. _Avoid_: turn-checkpoint, durable-checkpoint, snapshot.
+
+**RecoveryPolicy**:
+Module that runs once on session reopen. Reads the session JSONL tail
+plus the latest `RecoveryMarker` and classifies the crash state into
+`safe` (resume idle), `mid-stream` (discard partial assistant message
+and re-`continue` from `messages.slice(0, -1)`), or `mid-tool` (append
+synthetic `tool_execution_end` with `isError: true,
+errorMessage: "interrupted by crash"`, then `continue`; **never
+re-runs the tool**). Lives in
+`packages/coding-agent/src/session/recovery-policy.ts`.
+The `mid-tool = no re-run` rule is load-bearing: tools are not
+idempotent, so auto-resuming a `bash`/`edit`/MCP call would silently
+double-apply side effects. _Avoid_: resume policy, restart policy,
+crash recovery (the latter is fine in prose but not as a code term).
+
+**effectFromSignal / signalFromFiber**:
+The two canonical workspace bridges between Effect's interrupt channel
+and the AbortSignal-threaded codebase (777 sites). Live in
+`packages/utils/src/effect-signal.ts`, re-exported via
+`@oh-my-pi/pi-utils/effect`. `effectFromSignal(signal, program)` runs
+`program` and interrupts its fiber when `signal` aborts — the listener
+is removed in a finalizer to avoid leaking on long-lived parent signals
+(e.g. session-wide AbortControllers). `signalFromFiber(fiber)` exposes
+a fiber's failure as an `AbortSignal` for legacy AbortSignal-taking
+APIs. _Avoid_: ad-hoc `addEventListener("abort", …)` blocks scattered
+through Effect programs.
+
+**LocalAbort** _(tagged error in `packages/agent/src/errors.ts`)_:
+Provider-local cancellation distinct from a caller-initiated abort.
+Carries `kind: "timeout" | "idle" | "stall"` plus `durationMs`. Surfaces
+when the streaming provider's watchdog Effect wins an `Effect.race`
+against the response stream — the request stalled in transport, the
+caller did not cancel. `errorToKind` maps to
+`{ kind: "transient", reason: "transport" }` so retry logic treats it
+as transient. Caller aborts surface through Effect's interrupt channel,
+not this tag. Introduced by ADR-0004; supersedes `AbortSourceTracker`
+(`packages/ai/src/utils/abort.ts`) once P4a lands.
+
+**UsageLimitError** _(tagged error in `packages/agent/src/errors.ts`)_:
+Provider rejected the request because a usage limit was hit (per-minute,
+per-hour, daily, monthly). Carries `provider`, `retryAfterMs`, and a
+`reason: "rate_limit" | "daily" | "unknown"`. Distinct from
+`ProviderHttpError` so `errorToKind` can map it to the existing
+`usage_limit` `AgentErrorKind` variant — closes a bridge gap where
+`errorToKind` previously had no tagged-error source for that kind.
+
+**AgentRunError** _(type alias in `packages/agent/src/errors.ts`)_:
+The full union of tagged errors that can surface from a single agent
+run — the failure channel for `Effect<void, AgentRunError, …>` programs
+in `packages/agent/src/run/`. Today identical to `AgentTaggedError`;
+may diverge if errors are introduced that fire only outside a run.
+Public type, re-exported from `packages/agent/src/index.ts`.
+
 ## Relationships
 
 - An **AgentEvent** of type `agent_end` or `message_end` carries an optional
