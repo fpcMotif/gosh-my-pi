@@ -7,6 +7,7 @@
 // re-exported until v4 GA.
 
 export * as Cause from "effect/Cause";
+export * as Context from "effect/Context";
 export * as Data from "effect/Data";
 export * as Duration from "effect/Duration";
 export * as Effect from "effect/Effect";
