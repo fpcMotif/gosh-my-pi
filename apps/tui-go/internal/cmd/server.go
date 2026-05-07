@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
@@ -18,6 +19,16 @@ import (
 )
 
 var serverHost string
+
+// safeNameRegexp matches characters that are unsafe in path segments.
+// Used to derive the per-host cache subdirectory name. (Was previously
+// in cmd/root.go; moved here as part of carve-out Phase 1 lite when
+// the only other caller — startDetachedServer — was deleted.)
+var safeNameRegexp = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
+
+func sanitizeHostForPath(host string) string {
+	return safeNameRegexp.ReplaceAllString(host, "_")
+}
 
 func init() {
 	serverCmd.Flags().StringVarP(&serverHost, "host", "H", server.DefaultHost(), "Server host (TCP or Unix socket)")
@@ -42,7 +53,7 @@ var serverCmd = &cobra.Command{
 			return fmt.Errorf("failed to load configuration: %v", err)
 		}
 
-		logFile := filepath.Join(config.GlobalCacheDir(), "server-"+safeNameRegexp.ReplaceAllString(serverHost, "_"), "crush.log")
+		logFile := filepath.Join(config.GlobalCacheDir(), "server-"+sanitizeHostForPath(serverHost), "crush.log")
 
 		if term.IsTerminal(os.Stderr.Fd()) {
 			crushlog.Setup(logFile, debug, os.Stderr)

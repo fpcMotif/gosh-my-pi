@@ -2,74 +2,57 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"charm.land/log/v2"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/client"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/event"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/format"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/proto"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/anim"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
-	"github.com/charmbracelet/x/term"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
 	"github.com/spf13/cobra"
 )
 
 var runCmd = &cobra.Command{
 	Aliases: []string{"r"},
 	Use:     "run [prompt...]",
-	Short:   "Run a single non-interactive prompt",
+	Short:   "Run a single non-interactive prompt against the gmp backend",
 	Long: `Run a single prompt in non-interactive mode and exit.
-The prompt can be provided as arguments or piped from stdin.`,
+
+The prompt can be provided as arguments or piped from stdin. The
+gmp coding-agent backend is spawned as a one-shot ` + "`gmp --mode rpc`" + ` subprocess, the prompt is dispatched, assistant
+text is streamed to stdout, and the process exits when the agent
+completes the turn. See ADR 0002.`,
 	Example: `
 # Run a simple prompt
-crush run "Guess my 5 favorite Pokémon"
+gmp-tui-go run "Guess my 5 favorite Pokémon"
 
 # Pipe input from stdin
-curl https://charm.land | crush run "Summarize this website"
+curl https://charm.land | gmp-tui-go run "Summarize this website"
 
 # Read from a file
-crush run "What is this code doing?" <<< prrr.go
+gmp-tui-go run "What is this code doing?" <<< prrr.go
 
 # Redirect output to a file
-crush run "Generate a hot README for this project" > MY_HOT_README.md
+gmp-tui-go run "Generate a hot README for this project" > MY_HOT_README.md
 
-# Run in quiet mode (hide the spinner)
-crush run --quiet "Generate a README for this project"
+# Run in verbose mode (show backend stderr inline)
+gmp-tui-go run --verbose "Generate a README for this project"
 
-# Run in verbose mode (show logs)
-crush run --verbose "Generate a README for this project"
-
-# Continue a previous session
-crush run --session {session-id} "Follow up on your last response"
-
-# Continue the most recent session
-crush run --continue "Follow up on your last response"
-
+# Pick a specific model
+gmp-tui-go run --model openai-codex/gpt-5 "Refactor this function"
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var (
-			quiet, _      = cmd.Flags().GetBool("quiet")
 			verbose, _    = cmd.Flags().GetBool("verbose")
 			largeModel, _ = cmd.Flags().GetString("model")
-			smallModel, _ = cmd.Flags().GetString("small-model")
-			sessionID, _  = cmd.Flags().GetString("session")
-			useLast, _    = cmd.Flags().GetBool("continue")
 		)
 
-		// Cancel on SIGINT or SIGTERM.
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 		defer cancel()
 
@@ -82,452 +65,231 @@ crush run --continue "Follow up on your last response"
 		}
 
 		if prompt == "" {
-			return fmt.Errorf("no prompt provided")
+			return errors.New("no prompt provided")
 		}
 
 		event.SetNonInteractive(true)
-
-		switch {
-		case sessionID != "":
-			event.SetContinueBySessionID(true)
-		case useLast:
-			event.SetContinueLastSession(true)
-		}
-
-		if useClientServer() {
-			c, ws, cleanup, err := connectToServer(cmd)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
-
-			event.AppInitialized()
-
-			if sessionID != "" {
-				sess, err := resolveSessionByID(ctx, c, ws.ID, sessionID)
-				if err != nil {
-					return err
-				}
-				sessionID = sess.ID
-			}
-
-			if !ws.Config.IsConfigured() {
-				return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
-			}
-
-			if verbose {
-				slog.SetDefault(slog.New(log.New(os.Stderr)))
-			}
-
-			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, quiet || verbose, sessionID, useLast)
-		}
-
-		ws, cleanup, err := setupLocalWorkspace(cmd)
-		if err != nil {
-			return err
-		}
-		defer cleanup()
-
 		event.AppInitialized()
-
-		if !ws.Config().IsConfigured() {
-			return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
-		}
 
 		if verbose {
 			slog.SetDefault(slog.New(log.New(os.Stderr)))
 		}
 
-		appWs := ws.(*workspace.AppWorkspace)
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, quiet || verbose, sessionID, useLast)
+		return runGmpPrompt(ctx, cmd, prompt, largeModel, verbose)
 	},
 }
 
 func init() {
-	runCmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
-	runCmd.Flags().BoolP("verbose", "v", false, "Show logs")
-	runCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
-	runCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
-	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
-	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
-	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
+	runCmd.Flags().BoolP("quiet", "q", false, "(Reserved; deprecated under the gmp RPC backend.)")
+	runCmd.Flags().BoolP("verbose", "v", false, "Tee backend stderr to this terminal")
+	runCmd.Flags().StringP("model", "m", "", "Model to use (provider/model, e.g. openai-codex/gpt-5)")
+	runCmd.Flags().String("small-model", "", "(Reserved; deprecated under the gmp RPC backend.)")
+	runCmd.Flags().StringP("session", "s", "", "(Reserved; the gmp backend manages session continuity itself.)")
+	runCmd.Flags().BoolP("continue", "C", false, "(Reserved; deprecated under the gmp RPC backend.)")
 }
 
-// runNonInteractive executes the agent via the server and streams output
-// to stdout.
-func runNonInteractive(
-	ctx context.Context,
-	c *client.Client,
-	ws *proto.Workspace,
-	prompt, largeModel, smallModel string,
-	hideSpinner bool,
-	continueSessionID string,
-	useLast bool,
-) error {
-	slog.Info("Running in non-interactive mode")
+// runGmpPrompt spawns a one-shot `gmp --mode rpc` subprocess, sends the
+// prompt, streams assistant text deltas to stdout, and returns when the
+// agent finishes the turn. Mirrors the contract of `gmp-tui-go login`'s
+// authCLIDriver: thin RPC wrapper over the same wire vocabulary the
+// interactive TUI uses.
+//
+// Differences from the legacy in-process / client-server flow:
+//   - No persistent session list management — the backend creates a
+//     fresh session on each invocation.
+//   - No model-search across catwalk providers — `--model` is
+//     forwarded verbatim to the backend's set_model RPC; backend
+//     reports unknown ids as a typed error.
+//   - No spinner — output streams as the agent emits text deltas.
+func runGmpPrompt(ctx context.Context, cmd *cobra.Command, prompt, modelStr string, verbose bool) error {
+	cwd, err := ResolveCwd(cmd)
+	if err != nil {
+		return err
+	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ompStderr, err := setupOmpLogging(verbose)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gmp-tui-go: warning: log setup failed: %v\n", err)
+	}
+
+	backend := resolveOmpBackend(cmd)
+	client, err := ompclient.Spawn(ctx, ompclient.Options{
+		Bin:        backend[0],
+		PrefixArgs: backend[1:],
+		Cwd:        cwd,
+		Env:        os.Environ(),
+		Stderr:     ompStderr,
+	})
+	if err != nil {
+		return fmt.Errorf("spawn gmp backend: %w", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	// Auto-cancel any extension_ui_request frames the backend emits
+	// (non-interactive run doesn't host dialogs).
+	go drainExtensionUIRequests(ctx, client)
+
+	if err := maybeSetModel(ctx, client, modelStr); err != nil {
+		return err
+	}
+
+	if err := dispatchPrompt(ctx, client, prompt); err != nil {
+		return err
+	}
+
+	return drainAssistantOutput(ctx, client, os.Stdout)
+}
+
+// maybeSetModel forwards the --model flag to the backend's set_model
+// RPC if specified. Format: "provider/modelId".
+func maybeSetModel(ctx context.Context, client *ompclient.Client, modelStr string) error {
+	if modelStr == "" {
+		return nil
+	}
+	provider, modelID, ok := strings.Cut(modelStr, "/")
+	if !ok || provider == "" || modelID == "" {
+		return fmt.Errorf("invalid --model %q: expected provider/modelId", modelStr)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-
-	if largeModel != "" || smallModel != "" {
-		if err := overrideModels(ctx, c, ws, largeModel, smallModel); err != nil {
-			return fmt.Errorf("failed to override models: %w", err)
-		}
-	}
-
-	var (
-		spinner   *format.Spinner
-		stdoutTTY bool
-		stderrTTY bool
-		stdinTTY  bool
-		progress  bool
-	)
-
-	stdoutTTY = term.IsTerminal(os.Stdout.Fd())
-	stderrTTY = term.IsTerminal(os.Stderr.Fd())
-	stdinTTY = term.IsTerminal(os.Stdin.Fd())
-	progress = ws.Config.Options.Progress == nil || *ws.Config.Options.Progress
-
-	if !hideSpinner && stderrTTY {
-		t := styles.ThemeForProvider(ws.Config.Models[config.SelectedModelTypeLarge].Provider)
-
-		hasDarkBG := true
-		if stdinTTY && stdoutTTY {
-			hasDarkBG = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
-		}
-		defaultFG := lipgloss.LightDark(hasDarkBG)(charmtone.Pepper, t.WorkingLabelColor)
-
-		spinner = format.NewSpinner(ctx, cancel, anim.Settings{
-			Size:        10,
-			Label:       "Generating",
-			LabelColor:  defaultFG,
-			GradColorA:  t.WorkingGradFromColor,
-			GradColorB:  t.WorkingGradToColor,
-			CycleColors: true,
-		})
-		spinner.Start()
-	}
-
-	stopSpinner := func() {
-		if !hideSpinner && spinner != nil {
-			spinner.Stop()
-			spinner = nil
-		}
-	}
-
-	// Wait for the agent to become ready (MCP init, etc).
-	if err := waitForAgent(ctx, c, ws.ID); err != nil {
-		stopSpinner()
-		return fmt.Errorf("agent not ready: %w", err)
-	}
-
-	// Force-update agent models so MCP tools are loaded.
-	if err := c.UpdateAgent(ctx, ws.ID); err != nil {
-		slog.Warn("Failed to update agent", "error", err)
-	}
-
-	defer stopSpinner()
-
-	sess, err := resolveSession(ctx, c, ws.ID, continueSessionID, useLast)
+	resp, err := client.Call(callCtx, ompclient.Command{
+		Type:     "set_model",
+		Provider: provider,
+		ModelID:  modelID,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to resolve session: %w", err)
+		return fmt.Errorf("set_model: %w", err)
 	}
-	if continueSessionID != "" || useLast {
-		slog.Info("Continuing session for non-interactive run", "session_id", sess.ID)
-	} else {
-		slog.Info("Created session for non-interactive run", "session_id", sess.ID)
+	if resp != nil && !resp.Success {
+		return fmt.Errorf("set_model: %s", resp.Error)
 	}
+	return nil
+}
 
-	events, err := c.SubscribeEvents(ctx, ws.ID)
+// dispatchPrompt sends the prompt and confirms the backend acked it.
+// The backend streams response events asynchronously after this returns.
+func dispatchPrompt(ctx context.Context, client *ompclient.Client, prompt string) error {
+	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	resp, err := client.Call(callCtx, ompclient.Command{
+		Type:    "prompt",
+		Message: prompt,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to events: %w", err)
+		return fmt.Errorf("prompt: %w", err)
 	}
-
-	if err := c.SendMessage(ctx, ws.ID, sess.ID, prompt); err != nil {
-		return fmt.Errorf("failed to send message: %w", err)
+	if resp != nil && !resp.Success {
+		return fmt.Errorf("prompt: %s", resp.Error)
 	}
+	return nil
+}
 
-	messageReadBytes := make(map[string]int)
-	var printed bool
-
-	defer func() {
-		if progress && stderrTTY {
-			_, _ = fmt.Fprintf(os.Stderr, ansi.ResetProgressBar)
-		}
-		_, _ = fmt.Fprintln(os.Stdout)
-	}()
-
+// drainAssistantOutput consumes agent events until agent_end and
+// streams the assistant's text_delta and thinking_delta payloads to
+// out. Returns nil on a clean turn end, or the surfaced error from a
+// message_update.error / agent_end.error frame.
+func drainAssistantOutput(ctx context.Context, client *ompclient.Client, out io.Writer) error {
+	defer fmt.Fprintln(out)
 	for {
-		if progress && stderrTTY {
-			_, _ = fmt.Fprintf(os.Stderr, ansi.SetIndeterminateProgressBar)
-		}
-
 		select {
-		case ev, ok := <-events:
+		case <-ctx.Done():
+			return ctx.Err()
+		case ev, ok := <-client.Events():
 			if !ok {
-				stopSpinner()
 				return nil
 			}
-
-			switch e := ev.(type) {
-			case pubsub.Event[proto.Message]:
-				msg := e.Payload
-				if msg.SessionID != sess.ID || msg.Role != proto.Assistant || len(msg.Parts) == 0 {
-					continue
-				}
-				stopSpinner()
-
-				content := msg.Content().String()
-				readBytes := messageReadBytes[msg.ID]
-
-				if len(content) < readBytes {
-					slog.Error("Non-interactive: message content shorter than read bytes",
-						"message_length", len(content), "read_bytes", readBytes)
-					return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
-				}
-
-				part := content[readBytes:]
-				if readBytes == 0 {
-					part = strings.TrimLeft(part, " \t")
-				}
-				if printed || strings.TrimSpace(part) != "" {
-					printed = true
-					fmt.Fprint(os.Stdout, part)
-				}
-				messageReadBytes[msg.ID] = len(content)
-
-				if msg.IsFinished() {
-					return nil
-				}
-
-			case pubsub.Event[proto.AgentEvent]:
-				if e.Payload.Error != nil {
-					stopSpinner()
-					return fmt.Errorf("agent error: %w", e.Payload.Error)
-				}
-			}
-
-		case <-ctx.Done():
-			stopSpinner()
-			return ctx.Err()
-		}
-	}
-}
-
-// waitForAgent polls GetAgentInfo until the agent is ready, with a
-// timeout.
-func waitForAgent(ctx context.Context, c *client.Client, wsID string) error {
-	timeout := time.After(30 * time.Second)
-	for {
-		info, err := c.GetAgentInfo(ctx, wsID)
-		if err == nil && info.IsReady {
-			return nil
-		}
-		select {
-		case <-timeout:
+			done, err := handleAgentEvent(ev, out)
 			if err != nil {
-				return fmt.Errorf("timeout waiting for agent: %w", err)
+				return err
 			}
-			return fmt.Errorf("timeout waiting for agent readiness")
+			if done {
+				return nil
+			}
+		}
+	}
+}
+
+// handleAgentEvent processes one agent event and returns (done,
+// error). done=true signals end-of-turn (agent_end). Errors come from
+// message_update.error or agent_end.error.
+func handleAgentEvent(ev *ompclient.AgentEvent, out io.Writer) (bool, error) {
+	switch ev.Kind {
+	case "agent_end":
+		return true, parseAgentEndError(ev.Payload)
+	case "message_update":
+		return false, handleMessageUpdate(ev.Payload, out)
+	}
+	return false, nil
+}
+
+// handleMessageUpdate writes text_delta payloads to out. Other delta
+// types (thinking_delta, tool calls) are silently dropped — a future
+// PR can expose them via a flag.
+func handleMessageUpdate(raw json.RawMessage, out io.Writer) error {
+	var msg struct {
+		AssistantMessageEvent struct {
+			Type  string `json:"type"`
+			Delta string `json:"delta"`
+			Error *struct {
+				ErrorMessage string `json:"errorMessage"`
+			} `json:"error"`
+		} `json:"assistantMessageEvent"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return nil //nolint:nilerr // malformed event => skip rather than fail the run
+	}
+	switch msg.AssistantMessageEvent.Type {
+	case "text_delta":
+		if msg.AssistantMessageEvent.Delta != "" {
+			_, _ = io.WriteString(out, msg.AssistantMessageEvent.Delta)
+		}
+	case "error":
+		text := "request failed"
+		if msg.AssistantMessageEvent.Error != nil && msg.AssistantMessageEvent.Error.ErrorMessage != "" {
+			text = msg.AssistantMessageEvent.Error.ErrorMessage
+		}
+		return fmt.Errorf("agent error: %s", text)
+	}
+	return nil
+}
+
+// parseAgentEndError surfaces a non-nil error if the agent_end event
+// reports a non-success stopReason. Treats any non-empty errorMessage
+// as fatal.
+func parseAgentEndError(raw json.RawMessage) error {
+	var payload struct {
+		ErrorMessage string `json:"errorMessage"`
+		StopReason   string `json:"stopReason"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil //nolint:nilerr // malformed agent_end => treat as clean
+	}
+	if payload.ErrorMessage != "" {
+		return fmt.Errorf("agent_end error: %s", payload.ErrorMessage)
+	}
+	return nil
+}
+
+// drainExtensionUIRequests auto-cancels any inbound extension_ui_request
+// frame. In non-interactive mode there is no dialog host, so dialogs
+// must default-cancel rather than stall the agent.
+func drainExtensionUIRequests(ctx context.Context, client *ompclient.Client) {
+	for {
+		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(200 * time.Millisecond):
-		}
-	}
-}
-
-// overrideModels resolves model strings and updates the workspace
-// configuration via the server.
-func overrideModels(
-	ctx context.Context,
-	c *client.Client,
-	ws *proto.Workspace,
-	largeModel, smallModel string,
-) error {
-	cfg, err := c.GetConfig(ctx, ws.ID)
-	if err != nil {
-		return fmt.Errorf("failed to get config: %w", err)
-	}
-
-	providers := cfg.Providers.Copy()
-
-	largeMatches, smallMatches := findModelMatches(providers, largeModel, smallModel)
-
-	var largeProviderID string
-
-	if largeModel != "" {
-		found, err := validateModelMatches(largeMatches, largeModel, "large")
-		if err != nil {
-			return err
-		}
-		largeProviderID = found.provider
-		slog.Info("Overriding large model", "provider", found.provider, "model", found.modelID)
-		if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeLarge, config.SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
-		}); err != nil {
-			return fmt.Errorf("failed to set large model: %w", err)
-		}
-	}
-
-	switch {
-	case smallModel != "":
-		found, err := validateModelMatches(smallMatches, smallModel, "small")
-		if err != nil {
-			return err
-		}
-		slog.Info("Overriding small model", "provider", found.provider, "model", found.modelID)
-		if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeSmall, config.SelectedModel{
-			Provider: found.provider,
-			Model:    found.modelID,
-		}); err != nil {
-			return fmt.Errorf("failed to set small model: %w", err)
-		}
-
-	case largeModel != "":
-		sm, err := c.GetDefaultSmallModel(ctx, ws.ID, largeProviderID)
-		if err != nil {
-			slog.Warn("Failed to get default small model", "error", err)
-		} else if sm != nil {
-			if err := c.UpdatePreferredModel(ctx, ws.ID, config.ScopeWorkspace, config.SelectedModelTypeSmall, *sm); err != nil {
-				return fmt.Errorf("failed to set small model: %w", err)
+			return
+		case req, ok := <-client.ExtensionUIRequests():
+			if !ok {
+				return
 			}
-		}
-	}
-
-	return c.UpdateAgent(ctx, ws.ID)
-}
-
-type modelMatch struct {
-	provider string
-	modelID  string
-}
-
-// findModelMatches searches providers for matching large/small model
-// strings.
-func findModelMatches(providers map[string]config.ProviderConfig, largeModel, smallModel string) ([]modelMatch, []modelMatch) {
-	largeFilter, largeID := parseModelString(largeModel)
-	smallFilter, smallID := parseModelString(smallModel)
-
-	var largeMatches, smallMatches []modelMatch
-	for name, provider := range providers {
-		if provider.Disable {
-			continue
-		}
-		for _, m := range provider.Models {
-			if matchesModel(largeID, largeFilter, m.ID, name) {
-				largeMatches = append(largeMatches, modelMatch{provider: name, modelID: m.ID})
+			if req == nil || req.ID == "" {
+				continue
 			}
-			if matchesModel(smallID, smallFilter, m.ID, name) {
-				smallMatches = append(smallMatches, modelMatch{provider: name, modelID: m.ID})
-			}
+			_ = client.Send(ompclient.ExtensionUIResp{
+				Type:      "extension_ui_response",
+				ID:        req.ID,
+				Cancelled: true,
+			})
 		}
-	}
-	return largeMatches, smallMatches
-}
-
-// parseModelString splits "provider/model" into (provider, model) or
-// ("", model).
-func parseModelString(s string) (string, string) {
-	if s == "" {
-		return "", ""
-	}
-	if idx := strings.Index(s, "/"); idx >= 0 {
-		return s[:idx], s[idx+1:]
-	}
-	return "", s
-}
-
-// matchesModel returns true if the model ID matches the filter
-// criteria.
-func matchesModel(wantID, wantProvider, modelID, providerName string) bool {
-	if wantID == "" {
-		return false
-	}
-	if wantProvider != "" && wantProvider != providerName {
-		return false
-	}
-	return strings.EqualFold(modelID, wantID)
-}
-
-// validateModelMatches ensures exactly one match exists.
-func validateModelMatches(matches []modelMatch, modelID, label string) (modelMatch, error) {
-	switch {
-	case len(matches) == 0:
-		return modelMatch{}, fmt.Errorf("%s model %q not found", label, modelID)
-	case len(matches) > 1:
-		names := make([]string, len(matches))
-		for i, m := range matches {
-			names[i] = m.provider
-		}
-		return modelMatch{}, fmt.Errorf(
-			"%s model: model %q found in multiple providers: %s. Please specify provider using 'provider/model' format",
-			label, modelID, strings.Join(names, ", "),
-		)
-	}
-	return matches[0], nil
-}
-
-// resolveSession returns the session to use for a non-interactive run.
-// If continueSessionID is set it fetches that session; if useLast is set it
-// returns the most recently updated top-level session; otherwise it creates a
-// new one.
-func resolveSession(ctx context.Context, c *client.Client, wsID, continueSessionID string, useLast bool) (*proto.Session, error) {
-	switch {
-	case continueSessionID != "":
-		sess, err := c.GetSession(ctx, wsID, continueSessionID)
-		if err != nil {
-			return nil, fmt.Errorf("session not found: %s", continueSessionID)
-		}
-		if sess.ParentSessionID != "" {
-			return nil, fmt.Errorf("cannot continue a child session: %s", continueSessionID)
-		}
-		return sess, nil
-
-	case useLast:
-		sessions, err := c.ListSessions(ctx, wsID)
-		if err != nil || len(sessions) == 0 {
-			return nil, fmt.Errorf("no sessions found to continue")
-		}
-		last := sessions[0]
-		for _, s := range sessions[1:] {
-			if s.UpdatedAt > last.UpdatedAt && s.ParentSessionID == "" {
-				last = s
-			}
-		}
-		return &last, nil
-
-	default:
-		return c.CreateSession(ctx, wsID, "non-interactive")
-	}
-}
-
-// resolveSessionByID resolves a session ID that may be a full UUID or a hash
-// prefix returned by crush session list.
-func resolveSessionByID(ctx context.Context, c *client.Client, wsID, id string) (*proto.Session, error) {
-	if sess, err := c.GetSession(ctx, wsID, id); err == nil {
-		return sess, nil
-	}
-
-	sessions, err := c.ListSessions(ctx, wsID)
-	if err != nil {
-		return nil, err
-	}
-
-	var matches []proto.Session
-	for _, s := range sessions {
-		hash := session.HashID(s.ID)
-		if hash == id || strings.HasPrefix(hash, id) {
-			matches = append(matches, s)
-		}
-	}
-
-	switch len(matches) {
-	case 0:
-		return nil, fmt.Errorf("session %q not found", id)
-	case 1:
-		return &matches[0], nil
-	default:
-		return nil, fmt.Errorf("session ID %q is ambiguous (%d matches)", id, len(matches))
 	}
 }

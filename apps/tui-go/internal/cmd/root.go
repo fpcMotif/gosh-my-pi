@@ -7,17 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	fang "charm.land/fang/v2"
@@ -28,15 +23,10 @@ import (
 	"github.com/charmbracelet/x/exp/charmtone"
 	xstrings "github.com/charmbracelet/x/exp/strings"
 	"github.com/charmbracelet/x/term"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/app"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/client"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/db"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/event"
 	crushlog "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/log"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/projects"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/proto"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/server"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
@@ -203,13 +193,6 @@ func supportsProgressBar() bool {
 	return isWindowsTerminal || xstrings.ContainsAnyOf(strings.ToLower(termProg), "ghostty", "iterm2", "rio")
 }
 
-// useClientServer returns true when the client/server architecture is
-// enabled via the CRUSH_CLIENT_SERVER environment variable.
-func useClientServer() bool {
-	v, _ := strconv.ParseBool(os.Getenv("CRUSH_CLIENT_SERVER"))
-	return v
-}
-
 // setupWorkspaceWithProgressBar wraps setupWorkspace with an optional
 // terminal progress bar shown during initialization.
 func setupWorkspaceWithProgressBar(cmd *cobra.Command) (workspace.Workspace, func(), error) {
@@ -350,263 +333,6 @@ func setupGmpWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) 
 	}
 	ws := workspace.NewGmpWorkspace(client, cwd)
 	return ws, ws.Shutdown, nil
-}
-
-// setupLocalWorkspace creates an in-process app.App and wraps it in an
-// AppWorkspace.
-func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
-	debug, _ := cmd.Flags().GetBool("debug")
-	yolo, _ := cmd.Flags().GetBool("yolo")
-	dataDir, _ := cmd.Flags().GetString("data-dir")
-	ctx := cmd.Context()
-
-	cwd, err := ResolveCwd(cmd)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	store, err := config.Init(cwd, dataDir, debug)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	cfg := store.Config()
-	store.Overrides().SkipPermissionRequests = yolo
-
-	if err := os.MkdirAll(cfg.Options.DataDirectory, 0o700); err != nil {
-		return nil, nil, fmt.Errorf("failed to create data directory: %q %w", cfg.Options.DataDirectory, err)
-	}
-
-	gitIgnorePath := filepath.Join(cfg.Options.DataDirectory, ".gitignore")
-	if _, err := os.Stat(gitIgnorePath); os.IsNotExist(err) {
-		if err := os.WriteFile(gitIgnorePath, []byte("*\n"), 0o644); err != nil {
-			return nil, nil, fmt.Errorf("failed to create .gitignore file: %q %w", gitIgnorePath, err)
-		}
-	}
-
-	if err := projects.Register(cwd, cfg.Options.DataDirectory); err != nil {
-		slog.Warn("Failed to register project", "error", err)
-	}
-
-	conn, err := db.Connect(ctx, cfg.Options.DataDirectory)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	logFile := filepath.Join(cfg.Options.DataDirectory, "logs", "crush.log")
-	crushlog.Setup(logFile, debug)
-
-	appInstance, err := app.New(ctx, conn, store)
-	if err != nil {
-		_ = conn.Close()
-		slog.Error("Failed to create app instance", "error", err)
-		return nil, nil, err
-	}
-
-	if shouldEnableMetrics(cfg) {
-		event.Init()
-	}
-
-	ws := workspace.NewAppWorkspace(appInstance, store)
-	cleanup := func() { appInstance.Shutdown() }
-	return ws, cleanup, nil
-}
-
-// connectToServer ensures the server is running, creates a client and
-// workspace, and returns a cleanup function that deletes the workspace.
-func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func(), error) {
-	hostURL, err := server.ParseHostURL(clientHost)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid host URL: %v", err)
-	}
-
-	if err := ensureServer(cmd, hostURL); err != nil {
-		return nil, nil, nil, err
-	}
-
-	debug, _ := cmd.Flags().GetBool("debug")
-	yolo, _ := cmd.Flags().GetBool("yolo")
-	dataDir, _ := cmd.Flags().GetString("data-dir")
-	ctx := cmd.Context()
-
-	cwd, err := ResolveCwd(cmd)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	c, err := client.NewClient(cwd, hostURL.Scheme, hostURL.Host)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	wsReq := proto.Workspace{
-		Path:    cwd,
-		DataDir: dataDir,
-		Debug:   debug,
-		YOLO:    yolo,
-		Version: version.Version,
-		Env:     os.Environ(),
-	}
-
-	ws, err := c.CreateWorkspace(ctx, wsReq)
-	if err != nil {
-		// The server socket may exist before the HTTP handler is ready.
-		// Retry a few times with a short backoff.
-		for range 5 {
-			select {
-			case <-ctx.Done():
-				return nil, nil, nil, ctx.Err()
-			case <-time.After(200 * time.Millisecond):
-			}
-			ws, err = c.CreateWorkspace(ctx, wsReq)
-			if err == nil {
-				break
-			}
-		}
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to create workspace: %v", err)
-		}
-	}
-
-	if shouldEnableMetrics(ws.Config) {
-		event.Init()
-	}
-
-	if ws.Config != nil {
-		logFile := filepath.Join(ws.Config.Options.DataDirectory, "logs", "crush.log")
-		crushlog.Setup(logFile, debug)
-	}
-
-	cleanup := func() { _ = c.DeleteWorkspace(context.Background(), ws.ID) }
-	return c, ws, cleanup, nil
-}
-
-// ensureServer auto-starts a detached server if the socket file does not
-// exist. When the socket exists, it verifies that the running server
-// version matches the client; on mismatch it shuts down the old server
-// and starts a fresh one.
-func ensureServer(cmd *cobra.Command, hostURL *url.URL) error {
-	switch hostURL.Scheme {
-	case "unix", "npipe":
-		needsStart := false
-		if _, err := os.Stat(hostURL.Host); err != nil && errors.Is(err, fs.ErrNotExist) {
-			needsStart = true
-		} else if err == nil {
-			if err := restartIfStale(cmd, hostURL); err != nil {
-				slog.Warn("Failed to check server version, restarting", "error", err)
-				needsStart = true
-			}
-		}
-
-		if needsStart {
-			if err := startDetachedServer(cmd); err != nil {
-				return err
-			}
-		}
-
-		var err error
-		for range 10 {
-			_, err = os.Stat(hostURL.Host)
-			if err == nil {
-				break
-			}
-			select {
-			case <-cmd.Context().Done():
-				return cmd.Context().Err()
-			case <-time.After(100 * time.Millisecond):
-			}
-		}
-		if err != nil {
-			return fmt.Errorf("failed to initialize crush server: %v", err)
-		}
-	}
-
-	return nil
-}
-
-// restartIfStale checks whether the running server matches the current
-// client version. When they differ, it sends a shutdown command and
-// removes the stale socket so the caller can start a fresh server.
-func restartIfStale(cmd *cobra.Command, hostURL *url.URL) error {
-	c, err := client.NewClient("", hostURL.Scheme, hostURL.Host)
-	if err != nil {
-		return err
-	}
-	vi, err := c.VersionInfo(cmd.Context())
-	if err != nil {
-		return err
-	}
-	if vi.Version == version.Version {
-		return nil
-	}
-	slog.Info("Server version mismatch, restarting",
-		"server", vi.Version,
-		"client", version.Version,
-	)
-	_ = c.ShutdownServer(cmd.Context())
-	// Give the old process a moment to release the socket.
-	for range 20 {
-		if _, err := os.Stat(hostURL.Host); errors.Is(err, fs.ErrNotExist) {
-			break
-		}
-		select {
-		case <-cmd.Context().Done():
-			return cmd.Context().Err()
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-	// Force-remove if the socket is still lingering.
-	_ = os.Remove(hostURL.Host)
-	return nil
-}
-
-var safeNameRegexp = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
-
-func startDetachedServer(cmd *cobra.Command) error {
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %v", err)
-	}
-
-	safeClientHost := safeNameRegexp.ReplaceAllString(clientHost, "_")
-	chDir := filepath.Join(config.GlobalCacheDir(), "server-"+safeClientHost)
-	if err := os.MkdirAll(chDir, 0o700); err != nil {
-		return fmt.Errorf("failed to create server working directory: %v", err)
-	}
-
-	cmdArgs := []string{"server"}
-	if clientHost != server.DefaultHost() {
-		cmdArgs = append(cmdArgs, "--host", clientHost)
-	}
-
-	c := exec.CommandContext(cmd.Context(), exe, cmdArgs...)
-	stdoutPath := filepath.Join(chDir, "stdout.log")
-	stderrPath := filepath.Join(chDir, "stderr.log")
-	detachProcess(c)
-
-	stdout, err := os.Create(stdoutPath)
-	if err != nil {
-		return fmt.Errorf("failed to create stdout log file: %v", err)
-	}
-	defer stdout.Close()
-	c.Stdout = stdout
-
-	stderr, err := os.Create(stderrPath)
-	if err != nil {
-		return fmt.Errorf("failed to create stderr log file: %v", err)
-	}
-	defer stderr.Close()
-	c.Stderr = stderr
-
-	if err := c.Start(); err != nil {
-		return fmt.Errorf("failed to start crush server: %v", err)
-	}
-
-	if err := c.Process.Release(); err != nil {
-		return fmt.Errorf("failed to detach crush server process: %v", err)
-	}
-
-	return nil
 }
 
 func shouldEnableMetrics(cfg *config.Config) bool {
