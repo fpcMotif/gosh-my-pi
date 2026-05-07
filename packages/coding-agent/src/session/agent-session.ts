@@ -139,6 +139,7 @@ import {
 import { DEFAULT_PRUNE_CONFIG, pruneToolOutputs } from "./compaction/pruning";
 import { type CompactionSummaryMessage, type CustomMessage, convertToLlm, type FileMentionMessage } from "./messages";
 import { ActiveRetryFallback } from "./active-retry-fallback";
+import { deriveAssistantStreamMessage } from "./assistant-stream-message";
 import { BackgroundExchangeQueue } from "./background-exchange-queue";
 import { BashController } from "./bash-controller";
 import { runCompactionWithRetry } from "./compaction-retry";
@@ -599,15 +600,9 @@ export class AgentSession {
 		this.#agentRegistry = config.agentRegistry;
 		this.#branchSummaryCompleter = config.branchSummaryCompleter;
 		this.agent.setAssistantMessageEventInterceptor(assistantMessageEvent => {
-			const message =
-				assistantMessageEvent.type === "done"
-					? assistantMessageEvent.message
-					: assistantMessageEvent.type === "error"
-						? assistantMessageEvent.error
-						: assistantMessageEvent.partial;
 			const event: AgentEvent = {
 				type: "message_update",
-				message,
+				message: deriveAssistantStreamMessage(assistantMessageEvent),
 				assistantMessageEvent,
 			};
 			this.#streamingEditGuard.preCache(event);
