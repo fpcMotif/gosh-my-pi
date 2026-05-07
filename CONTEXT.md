@@ -98,7 +98,7 @@ conversation. Public API: `getState` / `setState`, `markReferenceSent`,
 `setReferencePath`, `isEnabled`, `reset`, `buildReferenceMessage`,
 `buildActiveMessage`. Lives in
 `packages/coding-agent/src/session/plan-mode-controller.ts`. The
-orchestrators that *consume* plan-mode state (`sendPlanModeContext`, the
+orchestrators that _consume_ plan-mode state (`sendPlanModeContext`, the
 tool-decision enforcer) stay on AgentSession because they call `prompt()`
 and `sendCustomMessage`.
 
@@ -127,7 +127,7 @@ defaults used when restoring sessions. Public API: `isEnabled`,
 `captureSelectedSnapshot`, `restoreSelectedSnapshot`. Active-tool management
 (`setActiveToolsByName`, `#applyActiveToolsByName`) stays on AgentSession
 because it crosses concerns (system prompt rebuild, Auto-QA tool injection,
-agent-state mutation) — it *uses* this store to read/write the MCP-specific
+agent-state mutation) — it _uses_ this store to read/write the MCP-specific
 projection. Lives in
 `packages/coding-agent/src/session/mcp-selection-store.ts`.
 
@@ -181,6 +181,7 @@ Three processes for one session is wasteful; T2+ may optimize to direct
 stdio handoff. T_final removes the legacy fallback entirely.
 
 **Migration policy for new code**:
+
 - Don't import from `@oh-my-pi/pi-tui` for code that isn't legacy
   frontend (i.e., not in `modes/components/*`, `modes/controllers/*`,
   `modes/interactive-mode.ts`, `modes/theme/*`, `tools/renderers.ts`).
@@ -199,12 +200,13 @@ stdio handoff. T_final removes the legacy fallback entirely.
 **T2 — non-frontend pi-tui migrations (in progress)**:
 Target: extract pi-tui consumers that aren't legacy-frontend code.
 Done so far:
+
 - `getTerminalId` / `getTtyPath` → pi-utils (was in pi-tui's `ttyid.ts`)
 - `session-manager.ts` migrated to import `getTerminalId` from pi-utils
 - `edit/renderer-helpers.ts` migrated `visibleWidth` import to pi-utils
 - `edit/normalize.ts` migrated `padding` import to pi-utils (D-3 POC)
-Pending: `commit/agentic/agent.ts` (Markdown), extensibility type-only
-imports, autoresearch tools, debug viewer, session-picker.
+  Pending: `commit/agentic/agent.ts` (Markdown), extensibility type-only
+  imports, autoresearch tools, debug viewer, session-picker.
 
 **OMP-RPC v1** (the wire vocabulary between `omp --mode rpc` and tui-go):
 The frozen JSON-Lines protocol exchanged between the omp coding-agent
@@ -216,6 +218,7 @@ session extensions (`auto_compaction_*`, `auto_retry_*`,
 chokepoint.
 
 Architecture:
+
 - **Schema**: `omp-rpc/v1` declared on the `ready` frame at startup.
   Hosts SHOULD verify (soft buffer on mismatch — preserve unknown frames
   as raw, don't crash).
@@ -282,6 +285,7 @@ The session-level thinking selector. Wider than pi-ai's `Effort` — adds
 once a session has been resolved).
 
 The full thinking taxonomy now has one owner per layer:
+
 - **pi-ai/model-thinking.ts** — provider data + clamping: `Effort`,
   `THINKING_EFFORTS`, `ThinkingConfig`, `clampThinkingLevelForModel`,
   `getSupportedEfforts`, `requireSupportedEffort`, `enrichModelThinking`.
@@ -302,6 +306,7 @@ each package has implementation it actually uses.
 
 **TtsrEngine**:
 Owns the per-session TTSR (test-time self-rewrite) state cluster:
+
 - `manager`: TtsrManager (rule store + delta-checker)
 - `pending`: queued rules for next injection
 - `abortPending`: flag the message_update handler flips when aborting
@@ -338,7 +343,7 @@ event-bus is over-rigid for subsystems that need to mutate session state.
 The `Workspace` implementation that backs `gmp-tui-go` against an `omp
 --mode rpc` subprocess. Lives in
 `apps/tui-go/internal/workspace/gmp_workspace.go`. Owns the JSONL stdio
-bridge, message translation, the auth.* extension UI dispatcher
+bridge, message translation, the auth.\* extension UI dispatcher
 (`dispatchExtensionUIRequest`, `translateAuthRequest`, `HandleAuthReply`),
 and `SendAuthCommand` for outbound `/login` / `/logout`.
 
@@ -393,7 +398,7 @@ this turn only because deleting it touches every consumer site;
 removal is a follow-up sweep.
 
 **GmpAuth dialog** _(Bubble Tea)_:
-`apps/tui-go/internal/ui/dialog/gmp_auth.go`. Consumes the auth.*
+`apps/tui-go/internal/ui/dialog/gmp_auth.go`. Consumes the auth.\*
 `tea.Msg` types defined in `internal/auth/messages.go` (`ShowLoginURL`,
 `ShowProgress`, `PromptCode`, `PromptManualRedirect`, `PickProvider`,
 `ShowResult`) and emits `Submit` / `Confirm` / `Cancel` replies that
@@ -414,11 +419,11 @@ dispatcher (`GmpWorkspace.dispatchExtensionUIRequest`) routes those
 frames to the Bubble Tea `GmpAuth` dialog and ferries the responses
 back as `extension_ui_response` frames.
 
-The auth.* wire shape is type-locked on both sides: TS callers go
+The auth._ wire shape is type-locked on both sides: TS callers go
 through the derived `AuthRequestPayload` union (extracted from
 `RpcExtensionUIRequest` and stripped of `type`/`id`), and the Go
 dispatcher runs an init-time parity check that every `auth.MethodX`
-constant has an entry in `authDecoders`. Adding a new auth.* method
+constant has an entry in `authDecoders`. Adding a new auth._ method
 is a TypeScript compile error until the wire union is extended, and
 a Go startup panic until the per-method payload struct + decoder
 entry exist. This mirrors the compile-time guarantee that

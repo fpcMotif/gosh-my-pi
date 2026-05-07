@@ -24,18 +24,18 @@ function formatNumber(n) {
 }
 
 function formatCompact(n) {
-	if (n >= 1000000) return `${(n / 1000000).toFixed(1)  }M`;
-	if (n >= 1000) return `${(n / 1000).toFixed(1)  }k`;
+	if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+	if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
 	return Math.round(n).toString();
 }
 
 function formatCost(n) {
-	return `$${  n.toFixed(2)}`;
+	return `$${n.toFixed(2)}`;
 }
 
 function formatTime(ms) {
-	if (ms < 1000) return `${Math.round(ms)  }ms`;
-	return `${(ms / 1000).toFixed(1)  }s`;
+	if (ms < 1000) return `${Math.round(ms)}ms`;
+	return `${(ms / 1000).toFixed(1)}s`;
 }
 
 const charpleColor = { r: 107, g: 80, b: 255 };
@@ -69,9 +69,9 @@ document.getElementById("total-messages").textContent = formatCompact(stats.tota
 document.getElementById("total-tokens").textContent = formatCompact(stats.total.total_tokens);
 document.getElementById("total-cost").textContent = formatCost(stats.total.total_cost);
 document.getElementById("avg-tokens").innerHTML =
-	`<span title="Average">x̅</span> ${  formatCompact(stats.total.avg_tokens_per_session)}`;
+	`<span title="Average">x̅</span> ${formatCompact(stats.total.avg_tokens_per_session)}`;
 document.getElementById("avg-response").innerHTML =
-	`<span title="Average">x̅</span> ${  formatTime(stats.avg_response_time_ms)}`;
+	`<span title="Average">x̅</span> ${formatTime(stats.avg_response_time_ms)}`;
 
 // Chart defaults
 Chart.defaults.color = colors.squid;
@@ -175,7 +175,7 @@ if (stats.hour_day_heatmap?.length > 0) {
 				legend: { display: false },
 				tooltip: {
 					callbacks: {
-						label: ctx => `${dayLabels[ctx.raw.y]  } ${  ctx.raw.x  }:00 - ${  ctx.raw.count  } sessions`,
+						label: ctx => `${dayLabels[ctx.raw.y]} ${ctx.raw.x}:00 - ${ctx.raw.count} sessions`,
 					},
 				},
 			},

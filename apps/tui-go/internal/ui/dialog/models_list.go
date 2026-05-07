@@ -39,6 +39,12 @@ func (f *ModelsList) Len() int {
 	return n
 }
 
+// Groups returns the current model groups. Read-only snapshot used by
+// tests to assert picker scope; never mutated by callers.
+func (f *ModelsList) Groups() []ModelGroup {
+	return slices.Clone(f.groups)
+}
+
 // SetGroups sets the model groups and updates the list items.
 func (f *ModelsList) SetGroups(groups ...ModelGroup) {
 	f.groups = groups

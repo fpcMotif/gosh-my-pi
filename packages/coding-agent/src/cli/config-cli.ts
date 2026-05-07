@@ -20,12 +20,13 @@ import {
 import { SETTINGS_SCHEMA } from "../config/settings-schema";
 import { theme } from "../modes/theme/theme";
 import { initXdg } from "./commands/init-xdg";
+import { importCrushProviders } from "../config/import-crush-providers";
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export type ConfigAction = "list" | "get" | "set" | "reset" | "path" | "init-xdg";
+export type ConfigAction = "list" | "get" | "set" | "reset" | "path" | "init-xdg" | "import-crush-providers";
 
 export interface ConfigCommandArgs {
 	action: ConfigAction;
@@ -33,6 +34,7 @@ export interface ConfigCommandArgs {
 	value?: string;
 	flags: {
 		json?: boolean;
+		write?: boolean;
 	};
 }
 // =============================================================================
@@ -73,7 +75,7 @@ function getSettingValues(def: CliSettingDef): readonly string[] | undefined {
 // Argument Parser
 // =============================================================================
 
-const VALID_ACTIONS: ConfigAction[] = ["list", "get", "set", "reset", "path", "init-xdg"];
+const VALID_ACTIONS: ConfigAction[] = ["list", "get", "set", "reset", "path", "init-xdg", "import-crush-providers"];
 
 /**
  * Parse config subcommand arguments.
@@ -105,6 +107,8 @@ export function parseConfigArgs(args: string[]): ConfigCommandArgs | undefined {
 		const arg = args[i];
 		if (arg === "--json") {
 			result.flags.json = true;
+		} else if (arg === "--write") {
+			result.flags.write = true;
 		} else if (!arg.startsWith("-")) {
 			positionalArgs.push(arg);
 		}
@@ -254,6 +258,40 @@ export async function runConfigCommand(cmd: ConfigCommandArgs): Promise<void> {
 		case "init-xdg":
 			await initXdg();
 			break;
+		case "import-crush-providers":
+			await handleImportCrushProviders(cmd.key, cmd.flags);
+			break;
+	}
+}
+
+async function handleImportCrushProviders(sourcePath: string | undefined, flags: { json?: boolean; write?: boolean }) {
+	const result = await importCrushProviders({
+		sourcePath,
+		write: flags.write === true,
+	});
+
+	if (flags.json === true) {
+		process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+		return;
+	}
+
+	const mode = result.wrote ? "Imported" : "Previewing";
+	process.stdout.write(`${chalk.bold(`${mode} Crush provider migration`)}\n\n`);
+	process.stdout.write(`${chalk.dim("Source:")} ${result.sourcePath}\n`);
+	process.stdout.write(`${chalk.dim("Target:")} ${result.targetPath}\n\n`);
+	if (result.providers.length === 0) {
+		process.stdout.write("No importable custom providers found.\n");
+		return;
+	}
+	process.stdout.write(`${chalk.bold("Providers:")}\n`);
+	for (const provider of result.providers) {
+		const auth = provider.auth === "none" ? "no auth" : "api key";
+		process.stdout.write(
+			`  ${provider.id}: ${provider.models.length} model(s), ${auth}, ${provider.baseUrl ?? "no base URL"}\n`,
+		);
+	}
+	if (!result.wrote) {
+		process.stdout.write(`\nRun '${APP_NAME} config import-crush-providers --write' to write models.yml.\n`);
 	}
 }
 
@@ -398,9 +436,12 @@ ${chalk.bold("Commands:")}
   reset <key>        Reset a setting to its default value
   path               Print the config directory path
   init-xdg           Initialize XDG Base Directory structure
+  import-crush-providers [path]
+                     Preview/import Crush custom providers to backend models.yml
 
 ${chalk.bold("Options:")}
   --json             Output as JSON
+  --write            Write previewable import command output
 
 ${chalk.bold("Examples:")}
   ${APP_NAME} config list
@@ -411,6 +452,7 @@ ${chalk.bold("Examples:")}
   ${APP_NAME} config reset steeringMode
   ${APP_NAME} config list --json
   ${APP_NAME} config init-xdg
+  ${APP_NAME} config import-crush-providers --write
 
 ${chalk.bold("Boolean Values:")}
   true, false, yes, no, on, off, 1, 0

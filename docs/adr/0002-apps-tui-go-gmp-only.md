@@ -46,7 +46,7 @@ Trace:
    `AuthStorage.login(undefined as OAuthProviderId, …)`.
 4. `pi-ai/src/auth-storage.ts:248-250` falls through to its default
    branch: `getOAuthProvider(undefined) → null →
-   throw new Error("Unknown: ${p}")` — i.e. literally
+throw new Error("Unknown: ${p}")` — i.e. literally
    `Unknown: undefined`.
 
 The picker the docstring promised is not implemented. The wire
@@ -74,14 +74,14 @@ a backend-driven picker:
 1. Backend receives `auth.login` with no provider.
 2. Backend emits `auth.pick_provider` `extension_ui_request`,
    correlated through `RequestCorrelator` with the standard
-   timeout / signal semantics every other auth.* round-trip uses.
+   timeout / signal semantics every other auth.\* round-trip uses.
 3. Host (Bubble Tea dialog or CLI driver) replies with
    `extension_ui_response { value: "<chosen-provider-id>" }` or
    `{ cancelled: true }`.
 4. Backend proceeds with `AuthStorage.login(picked)` on success;
    returns a typed error response (`{ success: false, error:
-   "auth.login cancelled" }` or `{ success: false, error:
-   "auth.login: no providers available" }`) on cancel / empty.
+"auth.login cancelled" }` or `{ success: false, error:
+"auth.login: no providers available" }`) on cancel / empty.
 5. Same single response correlates back to the original
    `auth.login` request — picker is internal to the handler.
 
@@ -89,23 +89,23 @@ a backend-driven picker:
 
 Phase 1 lite deletes / rewrites:
 
-| File / symbol | Action |
-|---|---|
-| `internal/workspace/app_workspace.go` (393 LOC) | Delete |
-| `internal/workspace/client_workspace.go` (777 LOC) | Delete |
-| `cmd/root.go::setupAppWorkspace` | Delete |
-| `cmd/root.go::setupClientServerWorkspace` | Delete |
-| `cmd/root.go::setupLocalWorkspace` | Delete (after `cmd/run.go` rewrite) |
-| `cmd/run.go` (non-gmp branch) | Rewrite to use gmp RPC backend |
-| `cmd/login.go` (current shell, ~320 LOC) | Replace with thin gmp-RPC-only driver (~50 LOC) |
-| `cmd/oauth.go` | Delete |
-| `internal/ui/dialog/api_key_input.go` | Delete |
-| `internal/ui/dialog/oauth_hyper.go` | Delete |
-| `internal/ui/dialog/oauth_copilot.go` | Delete |
-| `Workspace.IsGmpMode()` interface method | Stays as constant `true` for one transition cycle; removed in a follow-up sweep when consumer sites are updated |
-| `cmd/ui.go::openAuthenticationDialog` legacy switch | Reduced to `runGmpAuthCommand` only |
-| `cmd/ui.go::runGmpAuthCommand` empty-provider guard | Removed; empty provider now triggers backend picker |
-| `Bridge Model Catalog`, `Synthetic gmp provider` adapters in `gmp_workspace.go` | Stay this turn; deleted when picker migrates to direct `RpcModelCatalog` consumption (separate PR) |
+| File / symbol                                                                   | Action                                                                                                          |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `internal/workspace/app_workspace.go` (393 LOC)                                 | Delete                                                                                                          |
+| `internal/workspace/client_workspace.go` (777 LOC)                              | Delete                                                                                                          |
+| `cmd/root.go::setupAppWorkspace`                                                | Delete                                                                                                          |
+| `cmd/root.go::setupClientServerWorkspace`                                       | Delete                                                                                                          |
+| `cmd/root.go::setupLocalWorkspace`                                              | Delete (after `cmd/run.go` rewrite)                                                                             |
+| `cmd/run.go` (non-gmp branch)                                                   | Rewrite to use gmp RPC backend                                                                                  |
+| `cmd/login.go` (current shell, ~320 LOC)                                        | Replace with thin gmp-RPC-only driver (~50 LOC)                                                                 |
+| `cmd/oauth.go`                                                                  | Delete                                                                                                          |
+| `internal/ui/dialog/api_key_input.go`                                           | Delete                                                                                                          |
+| `internal/ui/dialog/oauth_hyper.go`                                             | Delete                                                                                                          |
+| `internal/ui/dialog/oauth_copilot.go`                                           | Delete                                                                                                          |
+| `Workspace.IsGmpMode()` interface method                                        | Stays as constant `true` for one transition cycle; removed in a follow-up sweep when consumer sites are updated |
+| `cmd/ui.go::openAuthenticationDialog` legacy switch                             | Reduced to `runGmpAuthCommand` only                                                                             |
+| `cmd/ui.go::runGmpAuthCommand` empty-provider guard                             | Removed; empty provider now triggers backend picker                                                             |
+| `Bridge Model Catalog`, `Synthetic gmp provider` adapters in `gmp_workspace.go` | Stay this turn; deleted when picker migrates to direct `RpcModelCatalog` consumption (separate PR)              |
 
 ### Test contract
 
@@ -137,7 +137,7 @@ Three sequential PRs:
    fix without coupling to deletes.
 2. **Mechanical deletes.** Phase 1 lite removals listed above. No
    behavior change; gate is `bun check:ts` + `go build ./... && go
-   test ./...` green.
+test ./...` green.
 3. **`cmd/run.go` rewrite.** `gmp-tui-go run "<prompt>"` becomes a
    thin RPC driver: spawn `gmp --mode rpc`, send `prompt`, drain
    events to stdout, exit. Separate review surface because it's the
@@ -165,7 +165,7 @@ Three sequential PRs:
   0001's _Consequences_ paragraph beginning "Vanilla Crush still
   works" is the only clause superseded.
 - CONTEXT.md entries `Bridge Model Catalog`, `Synthetic gmp
-  provider`, and `Legacy Crush Catalog` are re-framed as adapter
+provider`, and `Legacy Crush Catalog` are re-framed as adapter
   scaffolding with explicit lifecycles; they remain accurate this
   turn and are deleted alongside the picker rewrite that retires
   the catwalk `cfg.Providers` adapter.
@@ -175,7 +175,7 @@ Three sequential PRs:
 - `packages/coding-agent/src/modes/rpc/rpc-mode.ts:773-799` —
   `auth.login` case; gets the empty-provider branch.
 - `packages/coding-agent/src/modes/rpc/rpc-types.ts:269-271,
-  369-374` — `AuthMethod.PickProvider` constant + frame type;
+369-374` — `AuthMethod.PickProvider` constant + frame type;
   already defined, ready to emit.
 - `apps/tui-go/internal/cmd/login.go:74-129` — `runGmpLogin`;
   drops the local empty-provider intercept.
@@ -190,8 +190,8 @@ Three sequential PRs:
 ## Out of scope
 
 - **Phase 1 full** (deleting `internal/{backend,server,client,db,
-  swagger}`): the type-surface dependencies into `internal/{agent,
-  session,message,…}` need separate analysis before those packages
+swagger}`): the type-surface dependencies into `internal/{agent,
+session,message,…}` need separate analysis before those packages
   go.
 - **Phase 2** (gutting Crush runtime, keeping type surfaces) — the
   multi-week per-package decomposition described in the carve-out

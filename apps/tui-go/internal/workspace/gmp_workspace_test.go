@@ -554,6 +554,125 @@ func TestConfigAccessors(t *testing.T) {
 	}
 }
 
+func TestGmpWorkspaceApplyModelCatalogBuildsBridgeConfig(t *testing.T) {
+	w := newTestGmpWorkspace()
+
+	w.mu.Lock()
+	w.applyModelCatalogLocked(gmpModelCatalogResponse{
+		Models: []GmpModelCatalogEntry{
+			{
+				Provider:       "chatgpt-sub",
+				ProviderName:   "ChatGPT subscription",
+				ID:             "gpt-5.5",
+				Name:           "GPT-5.5",
+				Available:      true,
+				Authenticated:  true,
+				Roles:          []string{"default"},
+				ContextWindow:  200000,
+				MaxTokens:      8192,
+				Reasoning:      true,
+				SupportsImages: true,
+			},
+			{
+				Provider:       "openai-codex",
+				ProviderName:   "OpenAI Codex",
+				ID:             "gpt-5.3-codex-spark",
+				Name:           "gpt-5.3-codex-spark",
+				Available:      false,
+				LoginSupported: true,
+				LoginAvailable: true,
+				Roles:          []string{"smol"},
+			},
+		},
+		Current: &struct {
+			Provider string `json:"provider"`
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+		}{
+			Provider: "chatgpt-sub",
+			ID:       "gpt-5.5",
+			Name:     "GPT-5.5",
+		},
+	})
+	w.mu.Unlock()
+
+	cfg := w.Config()
+	if got := cfg.Models[config.SelectedModelTypeLarge]; got.Provider != "chatgpt-sub" || got.Model != "gpt-5.5" {
+		t.Fatalf("large model = %#v, want chatgpt-sub/gpt-5.5", got)
+	}
+	if got := cfg.Models[config.SelectedModelTypeSmall]; got.Provider != "openai-codex" || got.Model != "gpt-5.3-codex-spark" {
+		t.Fatalf("small model = %#v, want openai-codex/gpt-5.3-codex-spark", got)
+	}
+	if _, ok := cfg.Providers.Get(gmpProviderID); ok {
+		t.Fatalf("bridge catalog should replace synthetic gmp provider")
+	}
+	chatgpt, ok := cfg.Providers.Get("chatgpt-sub")
+	if !ok || chatgpt.APIKey == "" || len(chatgpt.Models) != 1 {
+		t.Fatalf("chatgpt-sub provider = %#v, ok=%v", chatgpt, ok)
+	}
+	codex, ok := cfg.Providers.Get("openai-codex")
+	if !ok || codex.APIKey != "" || len(codex.Models) != 1 {
+		t.Fatalf("openai-codex provider = %#v, ok=%v", codex, ok)
+	}
+	if got := codex.Models[0].Name; got != "gpt-5.3-codex-spark (login required)" {
+		t.Fatalf("locked model display name = %q", got)
+	}
+	entry, ok := w.ModelCatalogEntry("openai-codex", "gpt-5.3-codex-spark")
+	if !ok || entry.Available || !entry.LoginAvailable {
+		t.Fatalf("catalog entry = %#v, ok=%v", entry, ok)
+	}
+}
+
+func TestGmpWorkspaceUpdatePreferredModelSendsRole(t *testing.T) {
+	w, pc := gmpWorkspaceWithClient(t)
+	defer pc.close()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- w.UpdatePreferredModel(
+			config.ScopeGlobal,
+			config.SelectedModelTypeSmall,
+			config.SelectedModel{Provider: "openai-codex", Model: "gpt-5.3-codex-spark"},
+		)
+	}()
+
+	frame := pc.waitForFrame(t, 2*time.Second)
+	if frame["type"] != "set_model" {
+		t.Fatalf("frame type = %v, want set_model", frame["type"])
+	}
+	if frame["provider"] != "openai-codex" || frame["modelId"] != "gpt-5.3-codex-spark" {
+		t.Fatalf("set_model frame = %#v", frame)
+	}
+	if frame["role"] != "smol" {
+		t.Fatalf("role = %v, want smol", frame["role"])
+	}
+	id, _ := frame["id"].(string)
+	if id == "" {
+		t.Fatalf("set_model frame missing id: %#v", frame)
+	}
+	if err := pc.writeInbound(map[string]any{
+		"id":      id,
+		"type":    "response",
+		"command": "set_model",
+		"success": true,
+		"data": map[string]any{
+			"provider": "openai-codex",
+			"id":       "gpt-5.3-codex-spark",
+		},
+	}); err != nil {
+		t.Fatalf("write response: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("UpdatePreferredModel err=%v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for UpdatePreferredModel")
+	}
+}
+
 func TestTrivialNoOps(t *testing.T) {
 	w := newTestGmpWorkspace()
 

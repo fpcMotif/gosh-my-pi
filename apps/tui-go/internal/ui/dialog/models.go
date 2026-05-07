@@ -10,11 +10,17 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/util"
-	uv "github.com/charmbracelet/ultraviolet"
 )
+
+// gmpVirtualProviderID names the legacy synthetic provider kept only as
+// a fallback while the backend catalog is unavailable. In normal gmp
+// bridge mode the picker should render real backend providers fetched
+// through models.catalog, not this placeholder.
+const gmpVirtualProviderID = "gmp"
 
 // ModelType represents the type of model to select.
 type ModelType int
@@ -142,10 +148,22 @@ func NewModels(com *common.Common, isOnboarding bool) (*Models, error) {
 	)
 	m.keyMap.Close = CloseKey
 
-	var err error
-	m.providers, err = config.Providers(m.com.Config())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get providers: %w", err)
+	cfg := m.com.Config()
+	// When disable_default_providers is set, the local config explicitly
+	// disclaims the catwalk catalog (e.g. gmp mode owns its own credential
+	// store via AuthStorage). Skip the catalog fetch entirely so the picker
+	// only surfaces what cfg.Providers actually contains. Gmp mode also
+	// implies the same suppression even if the flag was not propagated.
+	suppress := m.isGmpMode() ||
+		(cfg != nil && cfg.Options != nil && cfg.Options.DisableDefaultProviders)
+	if suppress {
+		m.providers = nil
+	} else {
+		var err error
+		m.providers, err = config.Providers(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get providers: %w", err)
+		}
 	}
 
 	if err := m.setProviderItems(); err != nil {
@@ -326,6 +344,16 @@ func (m *Models) FullHelp() [][]key.Binding {
 	return [][]key.Binding{m.ShortHelp()}
 }
 
+// isGmpMode reports whether the picker is running over the gmp RPC
+// bridge. Returns false when the workspace has not been wired (test
+// scaffolds that build a Models without going through Common).
+func (m *Models) isGmpMode() bool {
+	if m.com == nil || m.com.Workspace == nil {
+		return false
+	}
+	return m.com.Workspace.IsGmpMode()
+}
+
 func (m *Models) isSelectedConfigured() bool {
 	selectedItem := m.list.SelectedItem()
 	if selectedItem == nil {
@@ -338,6 +366,13 @@ func (m *Models) isSelectedConfigured() bool {
 	providerID := string(modelItem.prov.ID)
 	_, isConfigured := m.com.Config().Providers.Get(providerID)
 	return isConfigured
+}
+
+func (m *Models) providerConfiguredForDisplay(provider config.ProviderConfig, configured bool) bool {
+	if !m.isGmpMode() {
+		return configured
+	}
+	return provider.APIKey != ""
 }
 
 // setProviderItems sets the provider items in the list.
@@ -353,10 +388,16 @@ func (m *Models) setProviderItems() error {
 	// Track providers already added to avoid duplicates
 	addedProviders := make(map[string]bool)
 
-	// Get a list of known providers to compare against
-	knownProviders, err := config.Providers(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to get providers: %w", err)
+	// Get a list of known providers to compare against. Honor
+	// disable_default_providers so callers that opt out of the catwalk
+	// catalog (e.g. gmp mode) do not silently re-acquire it here.
+	var knownProviders []catwalk.Provider
+	if cfg.Options == nil || !cfg.Options.DisableDefaultProviders {
+		var err error
+		knownProviders, err = config.Providers(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to get providers: %w", err)
+		}
 	}
 
 	containsProviderFunc := func(id string) func(p catwalk.Provider) bool {
@@ -383,7 +424,7 @@ func (m *Models) setProviderItems() error {
 
 			addedProviders[id] = true
 
-			group := NewModelGroup(t, name, true)
+			group := NewModelGroup(t, name, m.providerConfiguredForDisplay(p, true))
 			for _, model := range p.Models {
 				item := NewModelItem(t, provider, model, m.modelType, false)
 				group.AppendItems(item)
@@ -448,7 +489,7 @@ func (m *Models) setProviderItems() error {
 
 		name := cmp.Or(displayProvider.Name, providerID)
 
-		group := NewModelGroup(t, name, providerConfigured)
+		group := NewModelGroup(t, name, m.providerConfiguredForDisplay(providerConfig, providerConfigured))
 		for _, model := range displayProvider.Models {
 			item := NewModelItem(t, provider, model, m.modelType, false)
 			group.AppendItems(item)

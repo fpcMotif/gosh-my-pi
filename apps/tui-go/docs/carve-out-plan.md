@@ -36,20 +36,20 @@ The carve-out keeps mode 1 and removes modes 2 and 3.
 
 **Selective deletes within `internal/proto/`:**
 
-| Keep | Delete |
-|---|---|
+| Keep                                                                                                        | Delete                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `proto.go`, `message.go`, `agent.go`, `tools.go`, `permission.go`, `session.go`, `history.go`, `version.go` | `requests.go` (HTTP request DTOs), `mcp.go` (MCP server config DTOs), `server.go` (HTTP server-control DTOs) |
 
 **Selective deletes within `internal/workspace/`:**
 
-| Keep | Delete |
-|---|---|
+| Keep                                                                                                | Delete                                    |
+| --------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | `workspace.go` (interface + shared types), `omp_workspace.go` (the bridge), `omp_workspace_test.go` | `client_workspace.go`, `app_workspace.go` |
 
 **Selective deletes within `internal/cmd/`:**
 
-| Keep | Delete |
-|---|---|
+| Keep                                                                                             | Delete                                                                              |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
 | `root.go` (after pruning), `run.go` (after pruning), `session.go` (read-only session UI command) | `server.go`, `login.go`, `logs.go`, `projects.go`, `dirs.go`, `update_providers.go` |
 
 **`cmd/root.go` and `cmd/run.go` pruning**: drop the `useClientServer()` and `setupLocalWorkspace()` branches; only keep `setupOmpWorkspace()`. Remove their imports of `internal/{client,server,backend,app}`.
@@ -73,24 +73,25 @@ The pattern for each:
 
 Per-package shape:
 
-| Package | Strategy | Approx delete % |
-|---|---|---|
-| `internal/agent/` | Keep `Agent` interface + types (`types.go`, `prompts.go`); delete `agent.go` (loop), `coordinator.go`, `agent/tools/*` (tool registry — gmp owns this), `agent/hyper`, `agent/notify`. | 70-80% |
-| `internal/session/` | Keep `Session` struct, IDs, status enum. Delete persistence (`store.go`), branch logic (`branch.go`) — UI only needs to display, not mutate. | 60-70% |
-| `internal/message/` | Keep all (`Message`, `ContentPart`, `ToolCall`, `ToolResult`, `Finish`, `MessageRole`, `FinishReason`). UI uses every type. | 0% |
-| `internal/oauth/` | Delete entirely. Crush's OAuth (Copilot, Hyper) is replaced by gmp's auth surface. UI dialogs that call into it (`dialog/oauth*.go`) are deleted. | 100% |
-| `internal/lsp/` | Keep types only (diagnostic, position) — UI displays them. Delete LSP client (`client.go`) + protocol. | 60% |
-| `internal/permission/` | Keep `PermissionRequest` type + the dialog rendering. Replace state machine with a JSONL request-out / response-in shim. | 50% |
-| `internal/hooks/` | Keep `Hook` type if UI references it; delete the runner. | 60% |
-| `internal/skills/` | Keep skill metadata types; delete loader. | 50% |
-| `internal/config/` | Keep model catalog (Catwalk integration is what feeds the cost/context display). Delete provider-key resolution, theme persistence (move to gmp), session config. | 50% |
-| `internal/commands/` | Keep slash-command types (the dialog renders them). Delete the executor — gmp dispatches commands by name via JSONL. | 70% |
-| `internal/history/` | Likely deletable. UI `history` reads come through `Workspace.History()` which `OmpWorkspace` satisfies via JSONL. Verify before cutting. | 90% |
-| `internal/app/` | Reduce to type aliases the UI uses. Delete `app.New`, `app.App` runtime. | 80% |
+| Package                | Strategy                                                                                                                                                                               | Approx delete % |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `internal/agent/`      | Keep `Agent` interface + types (`types.go`, `prompts.go`); delete `agent.go` (loop), `coordinator.go`, `agent/tools/*` (tool registry — gmp owns this), `agent/hyper`, `agent/notify`. | 70-80%          |
+| `internal/session/`    | Keep `Session` struct, IDs, status enum. Delete persistence (`store.go`), branch logic (`branch.go`) — UI only needs to display, not mutate.                                           | 60-70%          |
+| `internal/message/`    | Keep all (`Message`, `ContentPart`, `ToolCall`, `ToolResult`, `Finish`, `MessageRole`, `FinishReason`). UI uses every type.                                                            | 0%              |
+| `internal/oauth/`      | Delete entirely. Crush's OAuth (Copilot, Hyper) is replaced by gmp's auth surface. UI dialogs that call into it (`dialog/oauth*.go`) are deleted.                                      | 100%            |
+| `internal/lsp/`        | Keep types only (diagnostic, position) — UI displays them. Delete LSP client (`client.go`) + protocol.                                                                                 | 60%             |
+| `internal/permission/` | Keep `PermissionRequest` type + the dialog rendering. Replace state machine with a JSONL request-out / response-in shim.                                                               | 50%             |
+| `internal/hooks/`      | Keep `Hook` type if UI references it; delete the runner.                                                                                                                               | 60%             |
+| `internal/skills/`     | Keep skill metadata types; delete loader.                                                                                                                                              | 50%             |
+| `internal/config/`     | Keep model catalog (Catwalk integration is what feeds the cost/context display). Delete provider-key resolution, theme persistence (move to gmp), session config.                      | 50%             |
+| `internal/commands/`   | Keep slash-command types (the dialog renders them). Delete the executor — gmp dispatches commands by name via JSONL.                                                                   | 70%             |
+| `internal/history/`    | Likely deletable. UI `history` reads come through `Workspace.History()` which `OmpWorkspace` satisfies via JSONL. Verify before cutting.                                               | 90%             |
+| `internal/app/`        | Reduce to type aliases the UI uses. Delete `app.New`, `app.App` runtime.                                                                                                               | 80%             |
 
 **Phase 2 estimated impact**: another ~6,000-8,000 LOC removed. Risk is real because the UI depends on these type surfaces — the cut points need careful per-call-site review.
 
 **Per-package execution order** (lowest risk first):
+
 1. `oauth` (delete entirely, plus its three dialogs)
 2. `history` (verify deletion)
 3. `commands` (executor removal)
@@ -138,21 +139,21 @@ The Charm stack the upstream Crush already uses, with our recommendations on wha
 
 ### Per-feature mapping
 
-| Feature | Library / file | Notes |
-|---|---|---|
-| Streaming markdown | `glamour/v2` + per-width renderer cache (`internal/ui/common/markdown.go`) + per-message render cache (`chat/messages.go:153-181`) | Re-render full message through Glamour on each delta is fine up to ~10KB; throttle deltas at the runtime, not the renderer. |
-| Tool call cards | `internal/ui/chat/tools.go` (`ToolMessageItem` interface, per-tool `RenderTool` factory) | The status enum + `pendingTool`/`toolHeader`/`joinToolParts` helpers are the cleanest pattern; reuse wholesale and add new tool renderers as needed. |
-| Diff viewer | `internal/ui/diffview/diffview.go` (823 LOC) + `aymanbagabas/go-udiff` | Production-grade unified + split, syntax-highlighted, gutter, syntax-highlight cache keyed on `(content, bg)`. Reuse wholesale. Skip `sergi/go-diff`. |
-| Multi-pane layout | `uv.Rectangle` rects + per-component `Draw(scr, area)` (`internal/ui/model/ui.go::uiLayout`) | Beats nested `JoinVertical/Horizontal` past 3 panes; overlays draw last over the same screen. |
-| Status footer | `lipgloss` styled string + `bubbles/help.Model` | Compute tokens-per-second upstream of the model; UI just divides. Cost from Catwalk catalog. |
-| Slash command palette | `bubbles/textinput` + custom `list.FilterableList` + `sahilm/fuzzy` | Crush's `dialog/commands.go`. Avoid `bubbles/list` for filterable command sets — too slow + hard to style. |
-| Inline `/`-autocomplete | `internal/ui/completions/` (custom popup) anchored above `textarea` | Imperative `SetQuery` API, not a child `tea.Model`. |
-| Modal dialogs | `dialog.Dialog` interface (3 methods) + `Overlay` stack in `dialog/dialog.go:51` | Top dialog gets `HandleMsg`, all `Draw`. Don't try to make every dialog a `tea.Model`. |
-| External editor | `charmbracelet/x/editor` + `openEditorMsg` (Crush wires it through `model/ui.go:119`) | Suspends TUI, shells out to `$EDITOR`. |
-| File / image picker | `bubbles/filepicker` (`dialog/filepicker.go`) + Kitty graphics protocol via `internal/ui/image/` | Drag-drop = bracketed-paste detection of file URIs (`tea.PasteMsg`). |
-| Spinner + thinking | `internal/ui/anim/anim.go` (custom gradient spinner with `StepMsg{ID}` scoping) | Hard to beat. Reuse. |
-| Progress bar | `bubbles/progress` for definite progress only | Use only when the runtime emits real percentages. |
-| Keymap discoverability | `bubbles/key` + `bubbles/help` | Per-context keymaps; parent UI swaps which map the help bar reads. |
+| Feature                 | Library / file                                                                                                                     | Notes                                                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Streaming markdown      | `glamour/v2` + per-width renderer cache (`internal/ui/common/markdown.go`) + per-message render cache (`chat/messages.go:153-181`) | Re-render full message through Glamour on each delta is fine up to ~10KB; throttle deltas at the runtime, not the renderer.                           |
+| Tool call cards         | `internal/ui/chat/tools.go` (`ToolMessageItem` interface, per-tool `RenderTool` factory)                                           | The status enum + `pendingTool`/`toolHeader`/`joinToolParts` helpers are the cleanest pattern; reuse wholesale and add new tool renderers as needed.  |
+| Diff viewer             | `internal/ui/diffview/diffview.go` (823 LOC) + `aymanbagabas/go-udiff`                                                             | Production-grade unified + split, syntax-highlighted, gutter, syntax-highlight cache keyed on `(content, bg)`. Reuse wholesale. Skip `sergi/go-diff`. |
+| Multi-pane layout       | `uv.Rectangle` rects + per-component `Draw(scr, area)` (`internal/ui/model/ui.go::uiLayout`)                                       | Beats nested `JoinVertical/Horizontal` past 3 panes; overlays draw last over the same screen.                                                         |
+| Status footer           | `lipgloss` styled string + `bubbles/help.Model`                                                                                    | Compute tokens-per-second upstream of the model; UI just divides. Cost from Catwalk catalog.                                                          |
+| Slash command palette   | `bubbles/textinput` + custom `list.FilterableList` + `sahilm/fuzzy`                                                                | Crush's `dialog/commands.go`. Avoid `bubbles/list` for filterable command sets — too slow + hard to style.                                            |
+| Inline `/`-autocomplete | `internal/ui/completions/` (custom popup) anchored above `textarea`                                                                | Imperative `SetQuery` API, not a child `tea.Model`.                                                                                                   |
+| Modal dialogs           | `dialog.Dialog` interface (3 methods) + `Overlay` stack in `dialog/dialog.go:51`                                                   | Top dialog gets `HandleMsg`, all `Draw`. Don't try to make every dialog a `tea.Model`.                                                                |
+| External editor         | `charmbracelet/x/editor` + `openEditorMsg` (Crush wires it through `model/ui.go:119`)                                              | Suspends TUI, shells out to `$EDITOR`.                                                                                                                |
+| File / image picker     | `bubbles/filepicker` (`dialog/filepicker.go`) + Kitty graphics protocol via `internal/ui/image/`                                   | Drag-drop = bracketed-paste detection of file URIs (`tea.PasteMsg`).                                                                                  |
+| Spinner + thinking      | `internal/ui/anim/anim.go` (custom gradient spinner with `StepMsg{ID}` scoping)                                                    | Hard to beat. Reuse.                                                                                                                                  |
+| Progress bar            | `bubbles/progress` for definite progress only                                                                                      | Use only when the runtime emits real percentages.                                                                                                     |
+| Keymap discoverability  | `bubbles/key` + `bubbles/help`                                                                                                     | Per-context keymaps; parent UI swaps which map the help bar reads.                                                                                    |
 
 ### The differential rendering rules
 

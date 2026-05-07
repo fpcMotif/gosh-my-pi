@@ -5,7 +5,7 @@ import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
 import { type ConfigAction, type ConfigCommandArgs, runConfigCommand } from "../cli/config-cli";
 import { initTheme } from "../modes/theme/theme";
 
-const ACTIONS: ConfigAction[] = ["list", "get", "set", "reset", "path", "init-xdg"];
+const ACTIONS: ConfigAction[] = ["list", "get", "set", "reset", "path", "init-xdg", "import-crush-providers"];
 
 export default class Config extends Command {
 	static description = "Manage configuration settings";
@@ -29,6 +29,7 @@ export default class Config extends Command {
 
 	static flags = {
 		json: Flags.boolean({ description: "Output JSON" }),
+		write: Flags.boolean({ description: "Write changes for previewable import commands" }),
 	};
 
 	async run(): Promise<void> {
@@ -42,6 +43,7 @@ export default class Config extends Command {
 			value,
 			flags: {
 				json: flags.json,
+				write: flags.write,
 			},
 		};
 

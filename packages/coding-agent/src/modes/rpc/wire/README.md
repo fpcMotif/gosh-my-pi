@@ -17,25 +17,25 @@ enforce the contract.
 
 Every line on stdout is one JSON object with a `type` discriminator:
 
-| `type` | Direction | Description |
-|---|---|---|
-| `ready` | server → host | One-shot handshake on session startup. Carries `schema` field with version marker. |
-| `agent_start`, `agent_end`, `turn_start`, `turn_end`, `message_start`, `message_update`, `message_end`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end` | server → host | Streaming agent events. See [event vocabulary](#event-vocabulary) below. |
-| `response` | server → host | Reply to a host-issued command (id-correlated via `id` field). |
-| `extension_ui_request` | server → host | Server asks host for user-interaction (id-correlated). |
-| `host_tool_call` | server → host | Server asks host to execute a registered tool (id-correlated). |
-| `host_tool_cancel` | server → host | Server cancels a pending host tool call. |
-| (commands) | host → server | See [command vocabulary](#command-vocabulary) below. |
-| `extension_ui_response` | host → server | Reply to `extension_ui_request`. |
-| `host_tool_update` | host → server | Streaming partial result for an in-flight host tool call. |
-| `host_tool_result` | host → server | Final result for a host tool call. |
+| `type`                                                                                                                                                                        | Direction     | Description                                                                        |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------- |
+| `ready`                                                                                                                                                                       | server → host | One-shot handshake on session startup. Carries `schema` field with version marker. |
+| `agent_start`, `agent_end`, `turn_start`, `turn_end`, `message_start`, `message_update`, `message_end`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end` | server → host | Streaming agent events. See [event vocabulary](#event-vocabulary) below.           |
+| `response`                                                                                                                                                                    | server → host | Reply to a host-issued command (id-correlated via `id` field).                     |
+| `extension_ui_request`                                                                                                                                                        | server → host | Server asks host for user-interaction (id-correlated).                             |
+| `host_tool_call`                                                                                                                                                              | server → host | Server asks host to execute a registered tool (id-correlated).                     |
+| `host_tool_cancel`                                                                                                                                                            | server → host | Server cancels a pending host tool call.                                           |
+| (commands)                                                                                                                                                                    | host → server | See [command vocabulary](#command-vocabulary) below.                               |
+| `extension_ui_response`                                                                                                                                                       | host → server | Reply to `extension_ui_request`.                                                   |
+| `host_tool_update`                                                                                                                                                            | host → server | Streaming partial result for an in-flight host tool call.                          |
+| `host_tool_result`                                                                                                                                                            | host → server | Final result for a host tool call.                                                 |
 
 ## Handshake
 
 On startup, the server emits exactly one `ready` frame:
 
 ```json
-{"type":"ready","schema":"omp-rpc/v1"}
+{ "type": "ready", "schema": "omp-rpc/v1" }
 ```
 
 Hosts SHOULD verify `schema === "omp-rpc/v1"` and refuse or warn on
@@ -52,7 +52,7 @@ union, narrowed to fields tui-go consumes today.
 Emitted at the start of a prompt cycle. No payload.
 
 ```json
-{"type":"agent_start"}
+{ "type": "agent_start" }
 ```
 
 ### `agent_end`
@@ -68,6 +68,7 @@ Emitted when the prompt cycle terminates (success, abort, or error).
 ```
 
 `errorKind` is the typed retry classification added in #1a:
+
 - `{kind: "context_overflow", usedTokens?: number}`
 - `{kind: "usage_limit", retryAfterMs: number}`
 - `{kind: "transient", retryAfterMs?: number, reason?: TransientReason}`
@@ -110,16 +111,16 @@ streaming tools; `end` carries the final result.
 
 `WireMessageV1` is a discriminated union by `role`:
 
-| `role` | Description |
-|---|---|
-| `user` | User-authored prompt |
-| `developer` | Developer/system message (rare) |
-| `assistant` | Model-produced response with content blocks |
-| `toolResult` | Result of a tool invocation |
-| `bashExecution` | User-initiated bash command (`!cmd` syntax) |
-| `pythonExecution` | User-initiated Python (`$cmd` syntax) |
-| `custom` | Extension-injected message |
-| `hookMessage` | Legacy hook-system message |
+| `role`            | Description                                 |
+| ----------------- | ------------------------------------------- |
+| `user`            | User-authored prompt                        |
+| `developer`       | Developer/system message (rare)             |
+| `assistant`       | Model-produced response with content blocks |
+| `toolResult`      | Result of a tool invocation                 |
+| `bashExecution`   | User-initiated bash command (`!cmd` syntax) |
+| `pythonExecution` | User-initiated Python (`$cmd` syntax)       |
+| `custom`          | Extension-injected message                  |
+| `hookMessage`     | Legacy hook-system message                  |
 
 See [`v1.ts`](v1.ts) for exact field definitions per role.
 
@@ -132,6 +133,7 @@ variant is additive evolution within v1; renaming or removing requires
 a major bump.
 
 The command set covers:
+
 - Prompting: `prompt`, `steer`, `follow_up`, `abort`, `abort_and_prompt`, `new_session`
 - State queries: `get_state`, `set_todos`, `set_host_tools`
 - Model: `set_model`, `cycle_model`, `get_available_models`
@@ -152,12 +154,14 @@ frame echoes the `id` for correlation.
 ### Within `omp-rpc/v1` (additive only)
 
 Allowed without major bump:
+
 - Adding new optional fields to existing event/command/message variants
 - Adding new event variants (e.g., a future `auto_compaction_start` reaches v1)
 - Adding new command variants
 - Adding new optional content block types
 
 NOT allowed within v1:
+
 - Renaming any existing field or variant
 - Removing any field or variant
 - Changing a required field to a different type
@@ -166,6 +170,7 @@ NOT allowed within v1:
 ### Major bump (`omp-rpc/v2`)
 
 Required when:
+
 - Existing event type names change (e.g., `message_update` → `assistant_delta`)
 - Frame envelope shape changes (e.g., adding `version` per-frame)
 - A required field becomes optional or vice versa with semantic change
@@ -206,6 +211,7 @@ is handled. Forgetting a new variant is a compile-time error, not a
 silent leak.
 
 Tests in [`translate.test.ts`](translate.test.ts) verify:
+
 - All 10 v1 event types translate correctly with stable shapes
 - All 10 internal-only events return `null`
 - `errorKind` is preserved end-to-end (the #1a contract)
