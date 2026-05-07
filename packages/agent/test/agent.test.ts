@@ -379,4 +379,90 @@ describe("Agent", () => {
 			provider: "openai",
 		});
 	});
+
+	describe("steering and follow-up queues", () => {
+		it("hasQueuedMessages reflects pending steers and follow-ups", () => {
+			const agent = new Agent();
+			expect(agent.hasQueuedMessages()).toBe(false);
+
+			agent.steer({ role: "user", content: "steer-1" });
+			expect(agent.hasQueuedMessages()).toBe(true);
+
+			const popped = agent.popLastSteer();
+			expect(popped?.content).toBe("steer-1");
+			expect(agent.hasQueuedMessages()).toBe(false);
+
+			agent.followUp({ role: "user", content: "follow-1" });
+			expect(agent.hasQueuedMessages()).toBe(true);
+			expect(agent.popLastFollowUp()?.content).toBe("follow-1");
+			expect(agent.hasQueuedMessages()).toBe(false);
+		});
+
+		it("popLast* are LIFO", () => {
+			const agent = new Agent();
+			agent.steer({ role: "user", content: "s1" });
+			agent.steer({ role: "user", content: "s2" });
+			agent.steer({ role: "user", content: "s3" });
+			expect(agent.popLastSteer()?.content).toBe("s3");
+			expect(agent.popLastSteer()?.content).toBe("s2");
+			expect(agent.popLastSteer()?.content).toBe("s1");
+			expect(agent.popLastSteer()).toBeUndefined();
+
+			agent.followUp({ role: "user", content: "f1" });
+			agent.followUp({ role: "user", content: "f2" });
+			expect(agent.popLastFollowUp()?.content).toBe("f2");
+			expect(agent.popLastFollowUp()?.content).toBe("f1");
+			expect(agent.popLastFollowUp()).toBeUndefined();
+		});
+
+		it("clearAllQueues empties both queues", () => {
+			const agent = new Agent();
+			agent.steer({ role: "user", content: "s" });
+			agent.followUp({ role: "user", content: "f" });
+			expect(agent.hasQueuedMessages()).toBe(true);
+			agent.clearAllQueues();
+			expect(agent.hasQueuedMessages()).toBe(false);
+			expect(agent.popLastSteer()).toBeUndefined();
+			expect(agent.popLastFollowUp()).toBeUndefined();
+		});
+
+		it("popLast* return undefined on empty queue without throwing", () => {
+			const agent = new Agent();
+			expect(agent.popLastSteer()).toBeUndefined();
+			expect(agent.popLastFollowUp()).toBeUndefined();
+		});
+	});
+
+	describe("providerSessionState", () => {
+		it("getter and setter round-trip a Map", () => {
+			const agent = new Agent();
+			expect(agent.providerSessionState).toBeUndefined();
+			const state = new Map();
+			state.set("openai", { conversationId: "abc" });
+			agent.providerSessionState = state;
+			expect(agent.providerSessionState).toBe(state);
+			agent.providerSessionState = undefined;
+			expect(agent.providerSessionState).toBeUndefined();
+		});
+	});
+
+	describe("setAssistantMessageEventInterceptor signature", () => {
+		it("stores a one-argument function on the agent without invoking it eagerly", () => {
+			const agent = new Agent();
+			let calls = 0;
+			agent.setAssistantMessageEventInterceptor(() => {
+				calls++;
+			});
+			// Setting the interceptor should not call it. The agent runtime
+			// owns dispatch; this assertion guards against accidental sync
+			// invocation from inside the setter.
+			expect(calls).toBe(0);
+		});
+
+		it("accepts undefined to clear a previously set interceptor", () => {
+			const agent = new Agent();
+			agent.setAssistantMessageEventInterceptor(() => {});
+			expect(() => agent.setAssistantMessageEventInterceptor(undefined)).not.toThrow();
+		});
+	});
 });

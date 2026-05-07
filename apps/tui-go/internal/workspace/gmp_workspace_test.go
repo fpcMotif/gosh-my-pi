@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -785,5 +786,358 @@ func TestFinishAssistant_skipsTextAppendWhenContentExists(t *testing.T) {
 	ev := nextMessageEvent(t, w)
 	if ev.Payload.Content().Text != "existing" {
 		t.Fatalf("text=%q want existing", ev.Payload.Content().Text)
+	}
+}
+
+// recordingSender is a programSender that records every Send and can
+// optionally hold each call until released, simulating a full Bubble Tea
+// message channel. Used to pin the post-b83fca9 invariant that sendUI must
+// not block its caller even when program.Send blocks.
+type recordingSender struct {
+	mu   sync.Mutex
+	msgs []tea.Msg
+	hold chan struct{}
+}
+
+func (r *recordingSender) Send(msg tea.Msg) {
+	if r.hold != nil {
+		<-r.hold
+	}
+	r.mu.Lock()
+	r.msgs = append(r.msgs, msg)
+	r.mu.Unlock()
+}
+
+func (r *recordingSender) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.msgs)
+}
+
+// TestSendUI_DoesNotBlockCallerWhenProgramSendBlocks pins Bug A
+// (the synchronous program.Send deadlock fixed in b83fca9). Pre-fix,
+// program.Send was called synchronously, so a blocked Send would freeze
+// the caller. The fix dispatches via `go program.Send(msg)`. This test
+// blocks the sender and asserts the caller still returns within the
+// timeout. Without `go`, this test deadlocks until t.Fatal.
+func TestSendUI_DoesNotBlockCallerWhenProgramSendBlocks(t *testing.T) {
+	w := NewGmpWorkspace(nil, "/tmp/project")
+	sender := &recordingSender{hold: make(chan struct{})}
+	w.program = sender
+
+	done := make(chan struct{})
+	go func() {
+		w.sendUI(pubsub.Event[session.Session]{Type: pubsub.CreatedEvent})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(testEventTimeout):
+		t.Fatal("sendUI blocked the caller while program.Send was held; deadlock regression")
+	}
+
+	close(sender.hold)
+	deadline := time.Now().Add(testEventTimeout)
+	for sender.count() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("sender saw %d messages after release, want 1", sender.count())
+	}
+}
+
+// TestSendUI_NilMsgIsNoOp pins the early-return guard on nil messages.
+func TestSendUI_NilMsgIsNoOp(t *testing.T) {
+	w := newTestGmpWorkspace()
+	w.sendUI(nil)
+	select {
+	case msg := <-w.events:
+		t.Fatalf("nil sendUI produced an event: %v", msg)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// TestSendUI_NoSinkIsNoOp pins the path where neither program nor events
+// channel is set: sendUI must not panic.
+func TestSendUI_NoSinkIsNoOp(t *testing.T) {
+	w := NewGmpWorkspace(nil, "/tmp/project")
+	w.sendUI(pubsub.Event[session.Session]{Type: pubsub.CreatedEvent})
+}
+
+// TestAgentEnd_StreamingThenPayload_NoDuplicateAssistantRow pins Bug B”
+// (matchingAssistantIDLocked). Pre-fix, handleAgentEnd called
+// nextID("agent") for every payload message, creating a fresh row. The fix
+// reuses currentAssistantID or falls back to text-match against prior
+// assistant rows, so the streamed row is updated rather than duplicated.
+func TestAgentEnd_StreamingThenPayload_NoDuplicateAssistantRow(t *testing.T) {
+	w := newTestGmpWorkspace()
+	w.CreateSession(context.Background(), "s")
+	w.AgentRun(context.Background(), "", "ping")
+	nextUIEvent(t, w) // session
+	nextUIEvent(t, w) // optimistic user
+	nextUIEvent(t, w) // optimistic assistant
+
+	w.handleAgentEvent(&ompclient.AgentEvent{
+		Kind:    "message_update",
+		Payload: []byte(`{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"pong"}}`),
+	})
+	streamed := nextMessageEvent(t, w)
+	streamedID := streamed.Payload.ID
+	if streamedID == "" {
+		t.Fatal("streamed assistant id is empty")
+	}
+
+	w.handleAgentEvent(&ompclient.AgentEvent{
+		Kind:    "agent_end",
+		Payload: []byte(`{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"pong"}],"stopReason":"stop","timestamp":1700000000000}]}`),
+	})
+	final := nextMessageEvent(t, w)
+	if final.Payload.ID != streamedID {
+		t.Fatalf("agent_end created new row id=%s, want reuse of streamed id=%s", final.Payload.ID, streamedID)
+	}
+	if final.Type != pubsub.UpdatedEvent {
+		t.Fatalf("agent_end event type=%v, want UpdatedEvent (id reuse)", final.Type)
+	}
+
+	count := 0
+	for _, m := range w.messages {
+		if m.Role == message.Assistant {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("assistant row count=%d, want 1 (no duplicate from agent_end)", count)
+	}
+}
+
+// TestAgentEnd_NoStreamingFallback_ReusesIDByTextMatch pins the second
+// branch of matchingAssistantIDLocked: when currentAssistantID is empty
+// but a prior assistant row exists with matching text, the id is reused.
+// This covers the path where streaming finished (currentAssistantID
+// cleared) and a second agent_end arrives with the same text.
+func TestAgentEnd_NoStreamingFallback_ReusesIDByTextMatch(t *testing.T) {
+	w := newTestGmpWorkspace()
+	w.CreateSession(context.Background(), "s")
+	w.AgentRun(context.Background(), "", "ping")
+	nextUIEvent(t, w)
+	nextUIEvent(t, w)
+	nextUIEvent(t, w)
+
+	w.handleAgentEvent(&ompclient.AgentEvent{
+		Kind:    "agent_end",
+		Payload: []byte(`{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"first"}],"stopReason":"stop","timestamp":1700000000000}]}`),
+	})
+	first := nextMessageEvent(t, w)
+	nextNotificationEvent(t, w)
+	firstID := first.Payload.ID
+	if w.currentAssistantID != "" {
+		t.Fatalf("currentAssistantID not cleared after agent_end")
+	}
+
+	w.handleAgentEvent(&ompclient.AgentEvent{
+		Kind:    "agent_end",
+		Payload: []byte(`{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"first"}],"stopReason":"stop","timestamp":1700000000001}]}`),
+	})
+	second := nextMessageEvent(t, w)
+	if second.Payload.ID != firstID {
+		t.Fatalf("text-match reuse failed: second id=%s, want %s", second.Payload.ID, firstID)
+	}
+	if second.Type != pubsub.UpdatedEvent {
+		t.Fatalf("second event=%v, want UpdatedEvent", second.Type)
+	}
+}
+
+// TestHandleAgentEnd_ClearsCurrentAssistantID pins Bug C in isolation.
+// We call handleAgentEnd directly (not through translateEvent) so the
+// synthetic finishAssistant fallback cannot mask whether handleAgentEnd
+// itself clears currentAssistantID. Pre-fix, handleAgentEnd never touched
+// currentAssistantID, so this test would pass only because of the
+// translateEvent-level finishAssistant side effect.
+func TestHandleAgentEnd_ClearsCurrentAssistantID(t *testing.T) {
+	w := newTestGmpWorkspace()
+	w.CreateSession(context.Background(), "s")
+	w.AgentRun(context.Background(), "", "x")
+	nextUIEvent(t, w)
+	nextUIEvent(t, w)
+	nextUIEvent(t, w)
+
+	w.handleAgentEvent(&ompclient.AgentEvent{
+		Kind:    "message_update",
+		Payload: []byte(`{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"y"}}`),
+	})
+	nextMessageEvent(t, w)
+	if w.currentAssistantID == "" {
+		t.Fatal("precondition: currentAssistantID should be set by streaming partial")
+	}
+
+	events := w.handleAgentEnd([]byte(`{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"y"}],"stopReason":"stop","timestamp":1700000000000}]}`))
+	if len(events) == 0 {
+		t.Fatal("handleAgentEnd produced no events for assistant payload")
+	}
+	if w.currentAssistantID != "" {
+		t.Fatalf("handleAgentEnd did not clear currentAssistantID; got %q", w.currentAssistantID)
+	}
+}
+
+// TestHandleAgentEnd_InvalidPayloadReturnsNil pins the JSON unmarshal
+// error path of handleAgentEnd: malformed payload returns nil and does
+// not mutate state.
+func TestHandleAgentEnd_InvalidPayloadReturnsNil(t *testing.T) {
+	w := newTestGmpWorkspace()
+	if got := w.handleAgentEnd([]byte("not json")); got != nil {
+		t.Fatalf("handleAgentEnd(invalid)=%v, want nil", got)
+	}
+}
+
+// TestHandleAgentEnd_EmptyMessagesReturnsEmptyEvents covers the path
+// where the payload parses cleanly but contains no messages. The
+// translateEvent caller relies on this to fall through to the synthetic
+// finishAssistant marker.
+func TestHandleAgentEnd_EmptyMessagesReturnsEmptyEvents(t *testing.T) {
+	w := newTestGmpWorkspace()
+	events := w.handleAgentEnd([]byte(`{"type":"agent_end","messages":[]}`))
+	if len(events) != 0 {
+		t.Fatalf("len(events)=%d, want 0", len(events))
+	}
+	if w.currentAssistantID != "" {
+		t.Fatal("empty payload mutated currentAssistantID")
+	}
+}
+
+// TestTranslateAgentEnd_FallsBackToFinishAssistantWhenPayloadHasNoAssistant
+// pins the containsAssistantMessageEvent gate: if the payload only carries
+// a user message, the synthetic EndTurn marker must still fire.
+func TestTranslateAgentEnd_FallsBackToFinishAssistantWhenPayloadHasNoAssistant(t *testing.T) {
+	w := newTestGmpWorkspace()
+	w.CreateSession(context.Background(), "s")
+	w.AgentRun(context.Background(), "", "ping")
+	nextUIEvent(t, w)
+	nextUIEvent(t, w)
+	nextUIEvent(t, w)
+
+	w.handleAgentEvent(&ompclient.AgentEvent{
+		Kind:    "agent_end",
+		Payload: []byte(`{"type":"agent_end","messages":[{"role":"user","content":"ping","timestamp":1700000000000}]}`),
+	})
+
+	userEv := nextMessageEvent(t, w)
+	if userEv.Payload.Role != message.User {
+		t.Fatalf("first event role=%v, want user", userEv.Payload.Role)
+	}
+	finishEv := nextMessageEvent(t, w)
+	if finishEv.Payload.Role != message.Assistant {
+		t.Fatalf("second event role=%v, want assistant (synthetic finish marker)", finishEv.Payload.Role)
+	}
+	finish := finishEv.Payload.FinishPart()
+	if finish == nil || finish.Reason != message.FinishReasonEndTurn {
+		t.Fatalf("finish part=%v, want EndTurn marker", finish)
+	}
+}
+
+// TestMatchingAssistantIDLocked_NoMatchReturnsEmpty pins the negative
+// branch: walking the message order in reverse without finding an
+// assistant row whose text matches must return ("", false).
+func TestMatchingAssistantIDLocked_NoMatchReturnsEmpty(t *testing.T) {
+	w := newTestGmpWorkspace()
+	w.CreateSession(context.Background(), "s")
+	w.AgentRun(context.Background(), "", "ping")
+	nextUIEvent(t, w)
+	nextUIEvent(t, w)
+	nextUIEvent(t, w)
+
+	id, ok := w.matchingAssistantIDLocked("text that no assistant ever produced")
+	if ok || id != "" {
+		t.Fatalf("matchingAssistantIDLocked unexpectedly matched: id=%q ok=%v", id, ok)
+	}
+}
+
+// TestSubscribe_NormalizesNilProgram ensures Subscribe(nil) does not store
+// a typed-nil *tea.Program inside the programSender interface — that would
+// make `program != nil` true while program.Send panics on a nil receiver.
+func TestSubscribe_NormalizesNilProgram(t *testing.T) {
+	w := NewGmpWorkspace(nil, "/tmp/project")
+	w.events = make(chan tea.Msg, 4)
+	w.Subscribe(nil)
+	w.sendUI(pubsub.Event[session.Session]{Type: pubsub.CreatedEvent})
+	select {
+	case <-w.events:
+	case <-time.After(testEventTimeout):
+		t.Fatal("Subscribe(nil) caused sendUI to drop the event into the wrong sink")
+	}
+}
+
+// TestNoOpStubs covers the trivial no-op stubs that exist for interface
+// conformance: AgentClearQueue, Permission*, FileTrackerRecordRead,
+// LSP*, MCPRefresh*, RefreshMCPTools, Shutdown, GetDefaultSmallModel,
+// LSPGetStates, FileTrackerLastReadTime, FileTrackerListReadFiles,
+// AgentQueuedPromptsList, MCPGetStates, ReadMCPResource, GetMCPPrompt.
+func TestNoOpStubs(t *testing.T) {
+	w := newTestGmpWorkspace()
+	ctx := context.Background()
+
+	w.AgentClearQueue("any")
+	if got := w.AgentQueuedPromptsList("any"); got != nil {
+		t.Fatalf("AgentQueuedPromptsList=%v want nil", got)
+	}
+
+	w.PermissionGrant(permission.PermissionRequest{})
+	w.PermissionGrantPersistent(permission.PermissionRequest{})
+	w.PermissionDeny(permission.PermissionRequest{})
+
+	w.FileTrackerRecordRead(ctx, "s", "p")
+	if got := w.FileTrackerLastReadTime(ctx, "s", "p"); !got.IsZero() {
+		t.Fatalf("FileTrackerLastReadTime=%v want zero", got)
+	}
+	if got, err := w.FileTrackerListReadFiles(ctx, "s"); got != nil || err != nil {
+		t.Fatalf("FileTrackerListReadFiles=(%v,%v) want (nil,nil)", got, err)
+	}
+
+	w.LSPStart(ctx, "/tmp/x")
+	w.LSPStopAll(ctx)
+	if got := w.LSPGetStates(); got != nil {
+		t.Fatalf("LSPGetStates=%v want nil", got)
+	}
+
+	w.MCPRefreshPrompts(ctx, "n")
+	w.MCPRefreshResources(ctx, "n")
+	w.RefreshMCPTools(ctx, "n")
+	if got := w.MCPGetStates(); got != nil {
+		t.Fatalf("MCPGetStates=%v want nil", got)
+	}
+	if _, err := w.ReadMCPResource(ctx, "n", "u"); err == nil {
+		t.Fatal("ReadMCPResource want ErrUnsupported")
+	}
+	if _, err := w.GetMCPPrompt("n", "p", nil); err == nil {
+		t.Fatal("GetMCPPrompt want ErrUnsupported")
+	}
+
+	got := w.GetDefaultSmallModel("openai")
+	want := w.cfg.Models[config.SelectedModelTypeSmall]
+	if got.Provider != want.Provider || got.Model != want.Model {
+		t.Fatalf("GetDefaultSmallModel=%+v want %+v", got, want)
+	}
+
+	w.Shutdown()
+	w.Shutdown() // closeOnce: second call must be a no-op
+}
+
+// TestContainsAssistantMessageEvent_Negatives ensures the helper rejects
+// non-message events and message events whose role is not Assistant.
+func TestContainsAssistantMessageEvent_Negatives(t *testing.T) {
+	if containsAssistantMessageEvent(nil) {
+		t.Fatal("nil events returned true")
+	}
+	if containsAssistantMessageEvent([]tea.Msg{42}) {
+		t.Fatal("non-message tea.Msg returned true")
+	}
+	userEv := pubsub.Event[message.Message]{
+		Type: pubsub.CreatedEvent,
+		Payload: message.Message{
+			Role: message.User,
+		},
+	}
+	if containsAssistantMessageEvent([]tea.Msg{userEv}) {
+		t.Fatal("user role event returned true")
 	}
 }

@@ -57,11 +57,21 @@ type GmpWorkspace struct {
 
 	model AgentModel
 
-	program *tea.Program
+	// program receives every UI-bound message via sendUI. In production this
+	// is *tea.Program; tests can swap in a fake that satisfies programSender
+	// to exercise the program.Send branch without spinning up a real TUI.
+	program programSender
 	// events is a test-only seam: tests assign a buffered channel here and
 	// drain it in nextMessageEvent. In production sendUI always uses program.
 	events    chan tea.Msg
 	closeOnce sync.Once
+}
+
+// programSender is the subset of *tea.Program that GmpWorkspace.sendUI uses.
+// Defined as an interface so tests can substitute a fake that does not
+// require a real terminal program loop.
+type programSender interface {
+	Send(msg tea.Msg)
 }
 
 // NewGmpWorkspace creates a workspace backed by an omp RPC subprocess.
@@ -535,7 +545,15 @@ func (w *GmpWorkspace) DisableDockerMCP() error                   { return nil }
 
 func (w *GmpWorkspace) Subscribe(program *tea.Program) {
 	w.mu.Lock()
-	w.program = program
+	// Avoid storing a typed-nil *tea.Program inside the programSender
+	// interface — that produces a non-nil interface wrapping a nil
+	// pointer, which would slip past the `program != nil` guard in
+	// sendUI and panic when the runtime calls Send on a nil receiver.
+	if program == nil {
+		w.program = nil
+	} else {
+		w.program = program
+	}
 	w.mu.Unlock()
 	if w.client == nil {
 		return
