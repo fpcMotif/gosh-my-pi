@@ -73,7 +73,7 @@ function base64UrlDecode(input: string): string {
 	return Buffer.from(padded, "base64").toString("utf8");
 }
 
-function parseJwt(token: string): JwtPayload | null {
+export function parseJwt(token: string): JwtPayload | null {
 	const parts = token.split(".");
 	if (parts.length !== 3) return null;
 	try {
@@ -90,13 +90,13 @@ function normalizeEmail(email: string | undefined): string | undefined {
 	return normalized.length > 0 ? normalized : undefined;
 }
 
-function extractAccountId(token: string | undefined): string | undefined {
+export function extractAccountId(token: string | undefined): string | undefined {
 	if (token === null || token === undefined || token === "") return undefined;
 	const payload = parseJwt(token);
 	return payload?.[JWT_AUTH_CLAIM]?.chatgpt_account_id ?? undefined;
 }
 
-function extractEmail(token: string | undefined): string | undefined {
+export function extractEmail(token: string | undefined): string | undefined {
 	if (token === null || token === undefined || token === "") return undefined;
 	const payload = parseJwt(token);
 	return normalizeEmail(payload?.[JWT_PROFILE_CLAIM]?.email);
@@ -124,7 +124,7 @@ function parseUsageWindow(payload: unknown): ParsedUsageWindow | undefined {
 	};
 }
 
-function parseUsagePayload(payload: unknown): ParsedUsage | null {
+export function parseCodexUsagePayload(payload: unknown): ParsedUsage | null {
 	if (!isRecord(payload)) return null;
 	const planType = typeof payload.plan_type === "string" ? payload.plan_type : undefined;
 	const rateLimit = isRecord(payload.rate_limit) ? payload.rate_limit : undefined;
@@ -148,7 +148,7 @@ function parseUsagePayload(payload: unknown): ParsedUsage | null {
 	return parsed;
 }
 
-function normalizeCodexBaseUrl(baseUrl?: string): string {
+export function normalizeCodexBaseUrl(baseUrl?: string): string {
 	const fallback = CODEX_BASE_URL;
 	const trimmed = baseUrl !== undefined && baseUrl !== null && baseUrl.trim() !== "" ? baseUrl.trim() : fallback;
 	const base = trimmed.replace(/\/+$/, "");
@@ -306,7 +306,7 @@ export const openaiCodexUsageProvider: UsageProvider = {
 			return null;
 		}
 
-		const parsed = parseUsagePayload(payload);
+		const parsed = parseCodexUsagePayload(payload);
 		const planType =
 			parsed?.planType ??
 			(isRecord(payload) && typeof payload.plan_type === "string" ? payload.plan_type : undefined);
