@@ -499,8 +499,42 @@ func (w *GmpWorkspace) SetCompactMode(scope config.Scope, enabled bool) error {
 	w.cfg.Options.TUI.CompactMode = enabled
 	return nil
 }
+
+// SetProviderAPIKey forwards the API key entered through Crush's legacy
+// api_key_input dialog to the gmp backend so AuthStorage persists it in its
+// SQLite store. Without this, the key would terminate at Crush's local config
+// path (crush.json) and never reach the gmp resolver, which is the root cause
+// of "logged in via the dialog but the agent still has no credentials".
+//
+// OAuth tokens emitted by the legacy hyper/copilot dialogs (apiKey is
+// *oauth.Token) are intentionally ignored — gmp drives those providers through
+// its own auth.login flow + AuthStorage.upsertOAuthCredential, not via this
+// path. Non-string apiKey values are therefore a silent no-op rather than an
+// error, matching the previous behavior for those flows.
 func (w *GmpWorkspace) SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error {
-	return nil
+	if w.client == nil {
+		return nil
+	}
+	keyStr, ok := apiKey.(string)
+	if !ok {
+		slog.Debug("gmp workspace: SetProviderAPIKey ignoring non-string credential",
+			"provider", providerID, "type", fmt.Sprintf("%T", apiKey))
+		return nil
+	}
+	if providerID == "" || keyStr == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	resp, err := w.client.Call(ctx, ompclient.Command{
+		Type:     auth.CommandSetAPIKey,
+		Provider: providerID,
+		APIKey:   keyStr,
+	})
+	if err != nil {
+		return err
+	}
+	return interpretAuthResponse(resp)
 }
 func (w *GmpWorkspace) SetConfigField(scope config.Scope, key string, value any) error {
 	switch key {

@@ -15,10 +15,11 @@ const (
 	MethodPickProvider         = "auth.pick_provider"
 )
 
-// CommandLogin / CommandLogout are the RpcCommand `type` values for the
-// outbound /login / /logout slash commands. Mirror of AuthCommand in
-// rpc-types.ts.
+// CommandLogin / CommandLogout / CommandSetAPIKey are the RpcCommand `type`
+// values for the outbound /login, /logout, and api-key-write commands.
+// Mirror of AuthCommand in rpc-types.ts.
 const (
-	CommandLogin  = "auth.login"
-	CommandLogout = "auth.logout"
+	CommandLogin     = "auth.login"
+	CommandLogout    = "auth.logout"
+	CommandSetAPIKey = "auth.set_api_key"
 )

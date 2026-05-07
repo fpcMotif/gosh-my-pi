@@ -34,9 +34,12 @@ type Command struct {
 	// new_session
 	ParentSession string `json:"parentSession,omitempty"`
 
-	// set_model
+	// set_model / auth.login / auth.logout / auth.set_api_key
 	Provider string `json:"provider,omitempty"`
 	ModelID  string `json:"modelId,omitempty"`
+
+	// auth.set_api_key
+	APIKey string `json:"apiKey,omitempty"`
 
 	// set_thinking_level
 	Level string `json:"level,omitempty"`
