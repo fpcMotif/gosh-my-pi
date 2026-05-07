@@ -24,8 +24,10 @@ import type {
 import { runExtensionCompact, runExtensionSetModel } from "../../extensibility/extensions/compact-handler";
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
+import type { OAuthProviderId } from "@oh-my-pi/pi-ai/utils/oauth/types";
 import { isRpcHostToolResult, isRpcHostToolUpdate, RpcHostToolBridge } from "./host-tools";
 import { RequestCorrelator } from "./request-correlator";
+import { RpcOAuthController } from "./rpc-oauth-controller";
 import type {
 	RpcCommand,
 	RpcExtensionUIRequest,
@@ -149,6 +151,22 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 	const errorResp = (id: string | undefined, command: string, message: string): RpcResponse => {
 		return { id, type: "response", command, success: false, error: message };
+	};
+
+	const runAuthCommand = async <T extends RpcCommand["type"]>(
+		id: string | undefined,
+		command: T,
+		body: () => Promise<object | null | undefined>,
+		onError?: (message: string) => void,
+	): Promise<RpcResponse> => {
+		try {
+			const data = await body();
+			return success(id, command, data ?? null);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			onError?.(message);
+			return errorResp(id, command, message);
+		}
 	};
 
 	const extensionUIRequests = new RequestCorrelator();
@@ -677,6 +695,38 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			case "get_messages": {
 				return success(id, "get_messages", { messages: session.messages });
+			}
+
+			case "auth.login": {
+				const provider = command.provider;
+				const controller = new RpcOAuthController({
+					provider,
+					correlator: extensionUIRequests,
+					output,
+				});
+				return runAuthCommand(
+					id,
+					"auth.login",
+					async () => {
+						await session.modelRegistry.authStorage.login(provider as OAuthProviderId, {
+							onAuth: info => controller.onAuth(info),
+							onProgress: msg => controller.onProgress(msg),
+							onPrompt: prompt => controller.onPrompt(prompt),
+							onManualCodeInput: () => controller.onManualCodeInput(),
+						});
+						controller.emitResult(true);
+						return { provider, ok: true };
+					},
+					message => controller.emitResult(false, message),
+				);
+			}
+
+			case "auth.logout": {
+				const provider = command.provider;
+				return runAuthCommand(id, "auth.logout", async () => {
+					await session.modelRegistry.authStorage.logout(provider);
+					return { provider };
+				});
 			}
 
 			default: {

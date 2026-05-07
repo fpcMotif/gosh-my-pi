@@ -15,6 +15,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/notify"
 	mcptools "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools/mcp"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/auth"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/csync"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/history"
@@ -584,11 +585,15 @@ func (w *GmpWorkspace) Subscribe(program *tea.Program) {
 	w.setAgentBusy(false)
 }
 
-// drainExtensionUI consumes incoming UI prompts from the agent and
-// auto-responds with Cancelled: true. omp's RpcExtensionUIContext
-// already handles cancellation as the safe default (its built-in
-// timeout resolves to undefined / cancelled), so this preserves
-// agent-side correctness while we lack a real dialog binding.
+// drainExtensionUI consumes incoming UI prompts from the agent. For
+// auth-flow methods (auth.*), it forwards the request as a Bubble
+// Tea message so the model can open the existing OAuth / API-key
+// dialogs (apps/tui-go/internal/ui/dialog/oauth.go and
+// api_key_input.go); the dialog later sends back auth.Submit /
+// Confirm / Cancel which the workspace translates to an
+// extension_ui_response. For every other method it falls back to
+// the legacy "auto-cancel" behavior — gmp's RpcExtensionUIContext
+// already treats cancellation as the safe default.
 func (w *GmpWorkspace) drainExtensionUI() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -596,21 +601,167 @@ func (w *GmpWorkspace) drainExtensionUI() {
 		}
 	}()
 	for req := range w.client.ExtensionUIRequests() {
-		if req == nil || req.ID == "" {
-			continue
-		}
-		resp := ompclient.ExtensionUIResp{
-			Type:      "extension_ui_response",
-			ID:        req.ID,
-			Cancelled: true,
-		}
-		if err := w.client.Send(resp); err != nil {
-			slog.Debug("gmp workspace: extension_ui_response send failed",
-				"id", req.ID, "method", req.Method, "error", err)
-		} else {
-			slog.Debug("gmp workspace: auto-cancelled extension_ui_request",
-				"id", req.ID, "method", req.Method)
-		}
+		w.dispatchExtensionUIRequest(req)
+	}
+}
+
+// dispatchExtensionUIRequest handles one inbound extension_ui_request frame.
+// Extracted from drainExtensionUI for unit testability — the loop body is
+// the only state-mutating part of the drainer.
+func (w *GmpWorkspace) dispatchExtensionUIRequest(req *ompclient.ExtensionUIReq) {
+	if req == nil || req.ID == "" {
+		return
+	}
+	if msg := w.translateAuthRequest(req); msg != nil {
+		w.sendUI(msg)
+		return
+	}
+	w.sendCancelledExtensionUIResponse(req.ID, req.Method)
+}
+
+// authPayload is the union of every auth.* extension_ui_request payload.
+// Decoding into a single struct lets translateAuthRequest stay table-driven
+// — each entry only needs to map the parsed payload to its tea.Msg type.
+// Unknown JSON fields are ignored.
+type authPayload struct {
+	Provider     string   `json:"provider"`
+	URL          string   `json:"url"`
+	Instructions string   `json:"instructions"`
+	Message      string   `json:"message"`
+	Placeholder  string   `json:"placeholder"`
+	AllowEmpty   bool     `json:"allowEmpty"`
+	Success      bool     `json:"success"`
+	Error        string   `json:"error"`
+	Options      []string `json:"options"`
+	DefaultID    string   `json:"defaultId"`
+}
+
+// authDecoders maps each auth.* method to a builder that produces the tea.Msg
+// payload from a decoded authPayload. Keep the keys aligned with the constants
+// in apps/tui-go/internal/auth/methods.go and AuthMethod in rpc-types.ts.
+var authDecoders = map[string]func(id string, p authPayload) tea.Msg{
+	auth.MethodShowLoginURL: func(id string, p authPayload) tea.Msg {
+		return auth.ShowLoginURL{ID: id, Provider: p.Provider, URL: p.URL, Instructions: p.Instructions}
+	},
+	auth.MethodShowProgress: func(id string, p authPayload) tea.Msg {
+		return auth.ShowProgress{ID: id, Provider: p.Provider, Message: p.Message}
+	},
+	auth.MethodPromptCode: func(id string, p authPayload) tea.Msg {
+		return auth.PromptCode{ID: id, Provider: p.Provider, Placeholder: p.Placeholder, AllowEmpty: p.AllowEmpty}
+	},
+	auth.MethodPromptManualRedirect: func(id string, p authPayload) tea.Msg {
+		return auth.PromptManualRedirect{ID: id, Provider: p.Provider, Instructions: p.Instructions}
+	},
+	auth.MethodShowResult: func(id string, p authPayload) tea.Msg {
+		return auth.ShowResult{ID: id, Provider: p.Provider, Success: p.Success, Error: p.Error}
+	},
+	auth.MethodPickProvider: func(id string, p authPayload) tea.Msg {
+		return auth.PickProvider{ID: id, Options: p.Options, DefaultID: p.DefaultID}
+	},
+}
+
+// translateAuthRequest returns a Bubble Tea message for an inbound
+// auth.* extension_ui_request, or nil if the method is not a known auth
+// flow method (in which case drainExtensionUI falls back to its
+// default-cancel response).
+func (w *GmpWorkspace) translateAuthRequest(req *ompclient.ExtensionUIReq) tea.Msg {
+	if !strings.HasPrefix(req.Method, "auth.") {
+		return nil
+	}
+	build, ok := authDecoders[req.Method]
+	if !ok {
+		slog.Debug("gmp workspace: unknown auth.* method, falling back to cancel", "method", req.Method, "id", req.ID)
+		return nil
+	}
+	var p authPayload
+	if err := json.Unmarshal(req.Raw, &p); err != nil {
+		slog.Warn("gmp workspace: failed to parse auth payload", "method", req.Method, "id", req.ID, "error", err)
+		return nil
+	}
+	return build(req.ID, p)
+}
+
+func (w *GmpWorkspace) sendCancelledExtensionUIResponse(id string, method string) {
+	resp := buildCancelledExtensionUIResponse(id)
+	if err := w.client.Send(resp); err != nil {
+		slog.Debug("gmp workspace: extension_ui_response send failed",
+			"id", id, "method", method, "error", err)
+	} else {
+		slog.Debug("gmp workspace: auto-cancelled extension_ui_request",
+			"id", id, "method", method)
+	}
+}
+
+// buildCancelledExtensionUIResponse assembles a Cancelled=true response frame
+// for the given inbound id. Pure for testability.
+func buildCancelledExtensionUIResponse(id string) ompclient.ExtensionUIResp {
+	return ompclient.ExtensionUIResp{
+		Type:      "extension_ui_response",
+		ID:        id,
+		Cancelled: true,
+	}
+}
+
+// SendAuthCommand fires an auth.login or auth.logout Command at the
+// gmp backend. Returns when the backend acknowledges the command (the
+// actual login flow is driven asynchronously by extension_ui_request
+// frames once the dialog is open).
+func (w *GmpWorkspace) SendAuthCommand(method string, provider string) error {
+	if w.client == nil {
+		return errors.New("gmp client not initialised")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	resp, err := w.client.Call(ctx, buildAuthCommand(method, provider))
+	if err != nil {
+		return err
+	}
+	return interpretAuthResponse(resp)
+}
+
+// buildAuthCommand assembles the wire frame for an auth.login / auth.logout
+// command. Pure for testability.
+func buildAuthCommand(method, provider string) ompclient.Command {
+	return ompclient.Command{Type: method, Provider: provider}
+}
+
+// interpretAuthResponse converts an `auth.*` Response back into a Go error
+// (nil on success). Pure for testability.
+func interpretAuthResponse(resp *ompclient.Response) error {
+	if resp != nil && !resp.Success && resp.Error != "" {
+		return errors.New(resp.Error)
+	}
+	return nil
+}
+
+// HandleAuthReply translates a Bubble Tea reply (auth.Submit /
+// Confirm / Cancel) into the matching extension_ui_response on the
+// wire. The model layer calls this when the user dismisses an auth
+// dialog.
+func (w *GmpWorkspace) HandleAuthReply(msg tea.Msg) {
+	resp, ok := buildAuthReplyFrame(msg)
+	if !ok {
+		return
+	}
+	if err := w.client.Send(resp); err != nil {
+		slog.Debug("gmp workspace: auth reply send failed", "id", resp.ID, "error", err)
+	}
+}
+
+// buildAuthReplyFrame converts an inbound Bubble Tea auth reply message into
+// the wire-level ExtensionUIResp. Returns ok=false for any unrelated message.
+// Pure for testability.
+func buildAuthReplyFrame(msg tea.Msg) (ompclient.ExtensionUIResp, bool) {
+	switch m := msg.(type) {
+	case auth.Submit:
+		return ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Value: m.Value}, true
+	case auth.Confirm:
+		confirmed := true
+		return ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Confirmed: &confirmed}, true
+	case auth.Cancel:
+		return ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Cancelled: true}, true
+	default:
+		return ompclient.ExtensionUIResp{}, false
 	}
 }
 

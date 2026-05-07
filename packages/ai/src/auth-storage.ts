@@ -6,6 +6,7 @@ import { logger } from "@oh-my-pi/pi-utils";
 import { getEnvApiKey } from "./stream";
 import type { Provider } from "./types";
 import type { CredentialRankingStrategy, UsageLogger, UsageProvider, UsageReport } from "./usage";
+import { kimiRankingStrategy } from "./usage/kimi";
 import { codexRankingStrategy } from "./usage/openai-codex";
 import { getOAuthProvider } from "./utils/oauth";
 import { loginKagi } from "./utils/oauth/kagi";
@@ -30,6 +31,12 @@ import type { UsageCache } from "./auth-usage-cache";
 
 const USAGE_REPORT_TTL_MS = 30_000;
 const DEFAULT_USAGE_REQUEST_TIMEOUT_MS = 3_000;
+
+function defaultRankingStrategyResolver(p: Provider): CredentialRankingStrategy | undefined {
+	if (p === "openai-codex") return codexRankingStrategy;
+	if (p === "kimi-code") return kimiRankingStrategy;
+	return undefined;
+}
 
 export type AuthStorageOptions = {
 	usageProviderResolver?: (p: Provider) => UsageProvider | undefined;
@@ -63,8 +70,7 @@ export class AuthStorage {
 		this.#store = store;
 		this.#configValueResolver = opts.configValueResolver ?? (async c => process.env[c] ?? c);
 		this.#usageProviderResolver = opts.usageProviderResolver ?? (p => DEFAULT_USAGE_PROVIDER_MAP.get(p));
-		this.#rankingStrategyResolver =
-			opts.rankingStrategyResolver ?? (p => (p === "openai-codex" ? codexRankingStrategy : undefined));
+		this.#rankingStrategyResolver = opts.rankingStrategyResolver ?? defaultRankingStrategyResolver;
 		this.#usageCache = new AuthStorageUsageCache(this.#store);
 		this.#usageFetch = opts.usageFetch ?? fetch;
 		this.#usageRequestTimeoutMs = opts.usageRequestTimeoutMs ?? DEFAULT_USAGE_REQUEST_TIMEOUT_MS;

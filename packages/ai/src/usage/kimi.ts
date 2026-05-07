@@ -1,5 +1,6 @@
 import { $env } from "@oh-my-pi/pi-utils";
 import type {
+	CredentialRankingStrategy,
 	UsageAmount,
 	UsageFetchContext,
 	UsageFetchParams,
@@ -21,7 +22,7 @@ interface KimiUsagePayload {
 	limits?: unknown;
 }
 
-type KimiUsageRow = {
+export type KimiUsageRow = {
 	label: string;
 	used?: number;
 	limit?: number;
@@ -30,7 +31,7 @@ type KimiUsageRow = {
 	window?: UsageWindow;
 };
 
-function normalizeBaseUrl(baseUrl?: string): string {
+export function normalizeBaseUrl(baseUrl?: string): string {
 	const envBase = $env.KIMI_CODE_BASE_URL?.trim();
 	const candidate =
 		baseUrl !== undefined && baseUrl !== null && baseUrl.trim() !== ""
@@ -44,7 +45,7 @@ function buildUsageUrl(baseUrl: string): string {
 	return `${normalized}${USAGE_PATH}`;
 }
 
-function parseResetTime(data: Record<string, unknown>, nowMs: number): number | undefined {
+export function parseResetTime(data: Record<string, unknown>, nowMs: number): number | undefined {
 	const timeKeys = ["reset_at", "resetAt", "reset_time", "resetTime"] as const;
 	for (const key of timeKeys) {
 		const value = data[key];
@@ -69,7 +70,7 @@ function parseResetTime(data: Record<string, unknown>, nowMs: number): number | 
 	return undefined;
 }
 
-function formatDurationLabel(duration: number, timeUnit: string): string | undefined {
+export function formatDurationLabel(duration: number, timeUnit: string): string | undefined {
 	const upper = timeUnit.toUpperCase();
 	if (upper.includes("MINUTE")) {
 		if (duration >= 60 && duration % 60 === 0) return `${duration / 60}h limit`;
@@ -81,7 +82,7 @@ function formatDurationLabel(duration: number, timeUnit: string): string | undef
 	return undefined;
 }
 
-function buildWindow(windowData: Record<string, unknown>, nowMs: number): UsageWindow | undefined {
+export function buildWindow(windowData: Record<string, unknown>, nowMs: number): UsageWindow | undefined {
 	const duration = toNumber(windowData.duration);
 	const timeUnitValue = windowData.timeUnit;
 	const timeUnit = typeof timeUnitValue === "string" ? timeUnitValue : "";
@@ -111,7 +112,7 @@ function buildWindow(windowData: Record<string, unknown>, nowMs: number): UsageW
 	};
 }
 
-function buildUsageRow(data: Record<string, unknown>, defaultLabel: string, nowMs: number): KimiUsageRow | null {
+export function buildUsageRow(data: Record<string, unknown>, defaultLabel: string, nowMs: number): KimiUsageRow | null {
 	const limit = toNumber(data.limit);
 	let used = toNumber(data.used);
 	const remaining = toNumber(data.remaining);
@@ -185,7 +186,10 @@ function toUsageLimit(row: KimiUsageRow, provider: string, index: number, accoun
 	};
 }
 
-function parseUsagePayload(payload: unknown, nowMs: number): { rows: KimiUsageRow[]; raw: KimiUsagePayload } | null {
+export function parseKimiUsagePayload(
+	payload: unknown,
+	nowMs: number,
+): { rows: KimiUsageRow[]; raw: KimiUsagePayload } | null {
 	if (isRecord(payload) === false) return null;
 	const data = payload as KimiUsagePayload;
 	const rows: KimiUsageRow[] = [];
@@ -296,7 +300,7 @@ export const kimiUsageProvider: UsageProvider = {
 			return null;
 		}
 
-		const parsed = parseUsagePayload(payload, nowMs);
+		const parsed = parseKimiUsagePayload(payload, nowMs);
 		if (parsed === null || parsed.rows.length === 0) {
 			ctx.logger?.warn("Kimi usage response invalid", { provider: params.provider });
 			return null;
@@ -315,5 +319,33 @@ export const kimiUsageProvider: UsageProvider = {
 		};
 
 		return report;
+	},
+};
+
+const KIMI_PRIMARY_DEFAULT_MS = 60 * 60 * 1000;
+const KIMI_SECONDARY_DEFAULT_MS = 24 * 60 * 60 * 1000;
+
+function isWindowedLimit(limit: UsageLimit): boolean {
+	return typeof limit.window?.durationMs === "number";
+}
+
+export const kimiRankingStrategy: CredentialRankingStrategy = {
+	findWindowLimits(report) {
+		const windowed = report.limits.filter(isWindowedLimit);
+		if (windowed.length === 0) {
+			return { primary: report.limits[0], secondary: undefined };
+		}
+		const sorted = [...windowed].sort((a, b) => {
+			const ad = a.window?.durationMs ?? Number.POSITIVE_INFINITY;
+			const bd = b.window?.durationMs ?? Number.POSITIVE_INFINITY;
+			return ad - bd;
+		});
+		const primary = sorted[0];
+		const secondary = sorted.length > 1 ? sorted[sorted.length - 1] : undefined;
+		return { primary, secondary };
+	},
+	windowDefaults: {
+		primaryMs: KIMI_PRIMARY_DEFAULT_MS,
+		secondaryMs: KIMI_SECONDARY_DEFAULT_MS,
 	},
 };
