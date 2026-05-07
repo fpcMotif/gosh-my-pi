@@ -686,6 +686,27 @@ func (w *GmpWorkspace) sendCancelledExtensionUIResponse(id string, method string
 	}
 }
 
+// SendAuthCommand fires an auth.login or auth.logout Command at the
+// gmp backend. Returns when the backend acknowledges the command (the
+// actual login flow is driven asynchronously by extension_ui_request
+// frames once the dialog is open).
+func (w *GmpWorkspace) SendAuthCommand(method string, provider string) error {
+	if w.client == nil {
+		return errors.New("gmp client not initialised")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cmd := ompclient.Command{Type: method, Provider: provider}
+	resp, err := w.client.Call(ctx, cmd)
+	if err != nil {
+		return err
+	}
+	if resp != nil && !resp.Success && resp.Error != "" {
+		return errors.New(resp.Error)
+	}
+	return nil
+}
+
 // HandleAuthReply translates a Bubble Tea reply (auth.Submit /
 // Confirm / Cancel) into the matching extension_ui_response on the
 // wire. The model layer calls this when the user dismisses an auth

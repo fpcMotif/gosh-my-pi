@@ -25,11 +25,17 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/ultraviolet/layout"
+	"github.com/charmbracelet/ultraviolet/screen"
+	"github.com/charmbracelet/x/editor"
+	xstrings "github.com/charmbracelet/x/exp/strings"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/hyper"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/notify"
 	agenttools "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools/mcp"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/app"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/auth"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/commands"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/fsext"
@@ -53,11 +59,6 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/util"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/version"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
-	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/ultraviolet/layout"
-	"github.com/charmbracelet/ultraviolet/screen"
-	"github.com/charmbracelet/x/editor"
-	xstrings "github.com/charmbracelet/x/exp/strings"
 )
 
 // MouseScrollThreshold defines how many lines to scroll the chat when a mouse
@@ -677,6 +678,21 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case pubsub.Event[permission.PermissionNotification]:
 		m.handlePermissionNotification(msg.Payload)
+
+	// Auth flow messages (from gmp's AuthStorage.login routed via the
+	// extension_ui_request bridge). The first inbound auth.* message
+	// opens the GmpAuth dialog (or focuses it if already open); reply
+	// messages (auth.Submit / Confirm / Cancel) are sent back to gmp
+	// via the workspace.
+	case auth.ShowLoginURL, auth.ShowProgress, auth.PromptCode, auth.PromptManualRedirect, auth.PickProvider, auth.ShowResult:
+		if cmd := m.openOrUpdateGmpAuthDialog(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case auth.Submit, auth.Confirm, auth.Cancel:
+		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
+			gw.HandleAuthReply(msg)
+		}
+
 	case cancelTimerExpiredMsg:
 		m.isCanceling = false
 	case tea.TerminalVersionMsg:
@@ -2287,20 +2303,46 @@ func (m *UI) trapLocalSlash(content string) (tea.Cmd, bool) {
 	if !strings.HasPrefix(raw, "/") {
 		return nil, false
 	}
-	head, _, _ := strings.Cut(raw, " ")
+	head, rest, _ := strings.Cut(raw, " ")
 	switch head {
 	case "/quit", "/exit":
 		return tea.Quit, true
 	case "/help":
-		help := "Local commands: /quit /exit /help /clear /debug. Press / or Ctrl+P for the full palette. Anything else starting with / is sent to the omp agent."
+		help := "Local commands: /quit /exit /help /clear /debug /login /logout. Press / or Ctrl+P for the full palette. Anything else starting with / is sent to the omp agent."
 		return util.ReportInfo(help), true
 	case "/clear":
 		m.textarea.Reset()
 		return nil, true
 	case "/debug":
 		return util.ReportInfo("debug overlay deferred — tail ~/.gmp/tui.log or run with --debug to mirror to stderr"), true
+	case "/login":
+		m.textarea.Reset()
+		return m.runGmpAuthCommand("auth.login", strings.TrimSpace(rest)), true
+	case "/logout":
+		m.textarea.Reset()
+		return m.runGmpAuthCommand("auth.logout", strings.TrimSpace(rest)), true
 	}
 	return nil, false
+}
+
+// runGmpAuthCommand sends an auth.login / auth.logout RPC command to the
+// gmp backend if the active workspace is a GmpWorkspace; otherwise reports
+// the limitation. The actual UI flow (dialogs) is driven by inbound
+// extension_ui_request frames, not this command.
+func (m *UI) runGmpAuthCommand(method string, provider string) tea.Cmd {
+	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
+	if !ok {
+		return util.ReportInfo(method + " requires the gmp backend (apps/tui-go in gmp mode)")
+	}
+	if provider == "" {
+		return util.ReportInfo("usage: " + method + " <provider> (e.g. /login openai-codex)")
+	}
+	return func() tea.Msg {
+		if err := gw.SendAuthCommand(method, provider); err != nil {
+			return util.InfoMsg{Type: util.InfoTypeError, Msg: method + " failed: " + err.Error()}
+		}
+		return nil
+	}
 }
 
 // renderTooSmallBanner produces a centred "terminal too small" message that
@@ -3427,6 +3469,23 @@ func (m *UI) openFilesDialog() tea.Cmd {
 	m.dialog.OpenDialog(filePicker)
 
 	return cmd
+}
+
+// openOrUpdateGmpAuthDialog ensures a GmpAuth dialog is open and forwards
+// the inbound auth.* message to it. Reused for every auth.* frame so the
+// same dialog instance walks through ShowURL → PromptCode →
+// ShowResult during a single login.
+func (m *UI) openOrUpdateGmpAuthDialog(msg tea.Msg) tea.Cmd {
+	dlg := m.dialog.Dialog(dialog.GmpAuthID)
+	if dlg == nil {
+		dlg = dialog.NewGmpAuth(m.com)
+		m.dialog.OpenDialog(dlg)
+	}
+	action := dlg.HandleMsg(msg)
+	if cmdAction, ok := action.(dialog.ActionCmd); ok {
+		return cmdAction.Cmd
+	}
+	return nil
 }
 
 // openPermissionsDialog opens the permissions dialog for a permission request.
