@@ -9,6 +9,7 @@ import {
 import { buildRpcModelCatalog } from "@oh-my-pi/pi-coding-agent/modes/rpc/rpc-mode";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { fromAny } from "@total-typescript/shoehorn";
 
 function model(provider: string, id: string, input: Model<Api>["input"] = ["text"]): Model<Api> {
 	return {
@@ -35,7 +36,7 @@ function sessionStub(options: {
 	const settings = Settings.isolated({
 		modelRoles: options.modelRoles ?? {},
 	});
-	return {
+	return fromAny<AgentSession>({
 		getAvailableModels: () => options.availableModels,
 		modelRegistry: {
 			getAll: () => options.allModels,
@@ -45,7 +46,7 @@ function sessionStub(options: {
 		},
 		settings,
 		model: options.current,
-	} as unknown as AgentSession;
+	});
 }
 
 describe("buildRpcModelCatalog", () => {

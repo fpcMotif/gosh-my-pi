@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { Agent, type AgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { Effort, type Model } from "@oh-my-pi/pi-ai";
 import { Type } from "@sinclair/typebox";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { Settings } from "../src/config/settings";
 import type { CustomTool } from "../src/extensibility/custom-tools/types";
 import { AgentSession } from "../src/session/agent-session";
@@ -47,7 +48,7 @@ function createMcpTool(
 	schemaKeys: string[],
 ): AgentTool {
 	const properties = Object.fromEntries(schemaKeys.map(key => [key, Type.String()]));
-	return {
+	return fromPartial<AgentTool>({
 		name,
 		label: `${serverName}/${mcpToolName}`,
 		description,
@@ -58,7 +59,7 @@ function createMcpTool(
 		async execute() {
 			return { content: [{ type: "text", text: `${name} executed` }] };
 		},
-	} as AgentTool;
+	});
 }
 
 function createMcpCustomTool(
@@ -69,7 +70,7 @@ function createMcpCustomTool(
 	schemaKeys: string[],
 ): CustomTool {
 	const properties = Object.fromEntries(schemaKeys.map(key => [key, Type.String()]));
-	return {
+	return fromPartial<CustomTool>({
 		name,
 		label: `${serverName}/${mcpToolName}`,
 		description,
@@ -79,7 +80,7 @@ function createMcpCustomTool(
 		async execute() {
 			return { content: [{ type: "text", text: `${name} executed` }] };
 		},
-	} as CustomTool;
+	});
 }
 
 describe("AgentSession MCP discovery", () => {

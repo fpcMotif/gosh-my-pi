@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import "../../src/tools/renderers";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { Settings } from "../../src/config/settings";
 import { ReadTool } from "../../src/tools/read";
 import { parseSqlitePathCandidates, parseSqliteSelector, renderTable } from "../../src/tools/sqlite-reader";
@@ -23,7 +24,7 @@ function getText(result: ToolTextResult): string {
 }
 
 function createSession(cwd: string, overrides: Partial<SessionLike> = {}): SessionLike {
-	return {
+	return fromPartial<SessionLike>({
 		cwd,
 		hasUI: false,
 		enableLsp: false,
@@ -31,7 +32,7 @@ function createSession(cwd: string, overrides: Partial<SessionLike> = {}): Sessi
 		getSessionSpawns: () => "*",
 		settings: Settings.isolated(),
 		...overrides,
-	} as SessionLike;
+	});
 }
 
 function createFixtureDatabase(dbPath: string): void {

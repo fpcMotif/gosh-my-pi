@@ -22,6 +22,7 @@ import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/typ
 import { UiHelpers } from "@oh-my-pi/pi-coding-agent/modes/utils/ui-helpers";
 import type { SessionContext } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { fromAny } from "@total-typescript/shoehorn";
 
 beforeAll(() => {
 	void initTheme();
@@ -56,7 +57,7 @@ function makeCtx(sessionManager?: Pick<SessionManager, "buildSessionContext" | "
 		getCwd: vi.fn(() => "/tmp"),
 	};
 
-	const ctx = {
+	const ctx = fromAny<InteractiveModeContext>({
 		chatContainer: { clear: vi.fn(), addChild: vi.fn() },
 		pendingMessagesContainer: { clear: vi.fn() },
 		pendingBashComponents: [],
@@ -65,7 +66,7 @@ function makeCtx(sessionManager?: Pick<SessionManager, "buildSessionContext" | "
 		renderSessionContext: renderSessionContextSpy,
 		showStatus: vi.fn(),
 		ui: { requestRender: vi.fn() },
-	} as unknown as InteractiveModeContext;
+	});
 
 	return { ctx, buildSessionContextSpy, renderSessionContextSpy };
 }

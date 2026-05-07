@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { $ } from "bun";
 import { abandonUnloggedAutoresearchRuns, readPendingRunSummary } from "../src/autoresearch/helpers";
 import { createSessionRuntime } from "../src/autoresearch/state";
@@ -88,11 +89,11 @@ function createDashboardStub() {
 }
 
 function createContext(cwd: string): ExtensionContext {
-	return { cwd, hasUI: false } as ExtensionContext;
+	return fromPartial<ExtensionContext>({ cwd, hasUI: false });
 }
 
 function createGitApi(): ExtensionAPI {
-	return {
+	return fromAny<ExtensionAPI>({
 		exec: async (command: string, args: string[], options?: { cwd?: string }) => {
 			const result = Bun.spawnSync([command, ...args], {
 				cwd: options?.cwd ?? process.cwd(),
@@ -105,14 +106,14 @@ function createGitApi(): ExtensionAPI {
 				stderr: Buffer.from(result.stderr).toString("utf8"),
 			};
 		},
-	} as unknown as ExtensionAPI;
+	});
 }
 
 function createManagedGitApi(options?: { activeTools?: string[] }) {
 	const activeTools = [...(options?.activeTools ?? ["init_experiment", "run_experiment", "log_experiment"])];
 	const appendEntries: Array<{ customType: string; data: unknown }> = [];
 	const setActiveToolsCalls: string[][] = [];
-	const api = {
+	const api = fromAny<ExtensionAPI>({
 		appendEntry: (customType: string, data?: unknown) => {
 			appendEntries.push({ customType, data });
 		},
@@ -133,7 +134,7 @@ function createManagedGitApi(options?: { activeTools?: string[] }) {
 			setActiveToolsCalls.push([...toolNames]);
 			activeTools.splice(0, activeTools.length, ...toolNames);
 		},
-	} as unknown as ExtensionAPI;
+	});
 	return { activeTools, api, appendEntries, setActiveToolsCalls };
 }
 
@@ -169,7 +170,7 @@ describe("autoresearch tools", () => {
 		const tool = createRunExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 
 		const result = await tool.execute(
@@ -263,7 +264,7 @@ describe("autoresearch tools", () => {
 		const tool = createInitExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 
 		const result = await tool.execute(
@@ -341,7 +342,7 @@ describe("autoresearch tools", () => {
 		const tool = createInitExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 
 		const result = await tool.execute(
@@ -388,7 +389,7 @@ describe("autoresearch tools", () => {
 		const tool = createInitExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 
 		const result = await tool.execute(
@@ -430,7 +431,7 @@ describe("autoresearch tools", () => {
 		const tool = createRunExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 		const result = await tool.execute(
 			"call-1b",
@@ -461,7 +462,7 @@ describe("autoresearch tools", () => {
 		const tool = createRunExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 		const result = await tool.execute(
 			"call-3",
@@ -494,7 +495,7 @@ describe("autoresearch tools", () => {
 		const tool = createRunExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 		const controller = new AbortController();
 		setTimeout(() => controller.abort(), 100);
@@ -1061,7 +1062,7 @@ describe("autoresearch tools", () => {
 		const tool = createLogExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 		const result = await tool.execute(
 			"call-missing-secondary",
@@ -1293,7 +1294,7 @@ describe("autoresearch tools", () => {
 		const tool = createLogExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 		const result = await tool.execute(
 			"call-missing-asi",
@@ -1353,9 +1354,9 @@ describe("autoresearch tools", () => {
 		const tool = createLogExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {
+			pi: fromAny<ExtensionAPI>({
 				exec: async () => ({ code: 0, stderr: "", stdout: "autoresearch/test-20260323\n" }),
-			} as unknown as ExtensionAPI,
+			}),
 		});
 		const result = await tool.execute(
 			"call-status-crash",
@@ -1419,9 +1420,9 @@ describe("autoresearch tools", () => {
 		const tool = createLogExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {
+			pi: fromAny<ExtensionAPI>({
 				exec: async () => ({ code: 0, stderr: "", stdout: "autoresearch/test-20260323\n" }),
-			} as unknown as ExtensionAPI,
+			}),
 		});
 		const result = await tool.execute(
 			"call-status-checks",
@@ -1575,7 +1576,7 @@ describe("autoresearch tools", () => {
 		vi.spyOn(git, "status").mockResolvedValue("R  src/generated/index.ts\0src/index.ts\0");
 		vi.spyOn(git.show, "prefix").mockResolvedValue("");
 
-		const api = {} as ExtensionAPI;
+		const api = fromPartial<ExtensionAPI>({});
 
 		const tool = createLogExperimentTool({
 			dashboard: createDashboardStub(),
@@ -1749,7 +1750,7 @@ describe("autoresearch tools", () => {
 		const tool = createInitExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 
 		const blocked = await tool.execute(
@@ -1821,7 +1822,7 @@ describe("autoresearch tools", () => {
 		const tool = createInitExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 
 		const result = await tool.execute(
@@ -1860,7 +1861,7 @@ describe("autoresearch tools", () => {
 		const tool = createRunExperimentTool({
 			dashboard: createDashboardStub(),
 			getRuntime: () => runtime,
-			pi: {} as ExtensionAPI,
+			pi: fromPartial<ExtensionAPI>({}),
 		});
 
 		const result = await tool.execute(

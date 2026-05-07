@@ -6,6 +6,7 @@ import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/typ
 import type { SessionInfo } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { FileSessionStorage } from "@oh-my-pi/pi-coding-agent/session/session-storage";
+import { fromAny } from "@total-typescript/shoehorn";
 
 type TestContext = InteractiveModeContext & {
 	editorContainer: {
@@ -56,7 +57,7 @@ function createContext(currentSessionFile: string): {
 		sessionFile = "/tmp/project/sessions/detached.jsonl";
 		return true;
 	});
-	const ctx = {
+	const ctx = fromAny<TestContext>({
 		editorContainer,
 		editor: {},
 		ui: {
@@ -124,7 +125,7 @@ function createContext(currentSessionFile: string): {
 		showError: vi.fn(),
 		showHookConfirm,
 		shutdown: vi.fn(async () => undefined),
-	} as unknown as TestContext;
+	});
 
 	return {
 		ctx,

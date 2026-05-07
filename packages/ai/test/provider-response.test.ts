@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { getBundledModel } from "../src/models";
 import { streamSimple } from "../src/stream";
 import type { Context, Model, ProviderResponseMetadata } from "../src/types";
@@ -26,7 +27,7 @@ describe("provider response metadata", () => {
 
 	it("invokes the response callback with normalized metadata", async () => {
 		const seen: Array<{ response: ProviderResponseMetadata; model: Model | undefined }> = [];
-		const model = { provider: "openai", api: "openai-responses", id: "gpt-test" } as Model;
+		const model = fromPartial<Model>({ provider: "openai", api: "openai-responses", id: "gpt-test" });
 
 		await notifyProviderResponse(
 			{

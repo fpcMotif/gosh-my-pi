@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as typebox from "@sinclair/typebox";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { GreenCommand } from "../../../src/extensibility/custom-commands/bundled/ci-green";
 import type { CustomCommandAPI } from "../../../src/extensibility/custom-commands/types";
 import type { HookCommandContext } from "../../../src/extensibility/hooks/types";
@@ -35,7 +36,7 @@ describe("GreenCommand", () => {
 		vi.spyOn(git.ref, "tags").mockResolvedValue(["v0.1.0-alpha2"]);
 		const command = new GreenCommand(createApi());
 
-		const result = await command.execute([], {} as HookCommandContext);
+		const result = await command.execute([], fromPartial<HookCommandContext>({}));
 
 		expect(result).toContain("Keep going until the current branch CI is green.");
 		expect(result).toContain(
@@ -52,7 +53,7 @@ describe("GreenCommand", () => {
 		vi.spyOn(git.ref, "tags").mockResolvedValue([]);
 		const command = new GreenCommand(createApi());
 
-		const result = await command.execute([], {} as HookCommandContext);
+		const result = await command.execute([], fromPartial<HookCommandContext>({}));
 
 		expect(result).toContain("Do not stop after a single fix attempt.");
 		expect(result).toContain("Watch the workflow runs for the current HEAD commit.");
