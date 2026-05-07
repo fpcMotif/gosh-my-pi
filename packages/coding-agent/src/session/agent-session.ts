@@ -29,7 +29,6 @@ import {
 import type {
 	AssistantMessage,
 	Context,
-	Effort,
 	ImageContent,
 	Message,
 	MessageAttribution,
@@ -43,7 +42,7 @@ import type {
 	Usage,
 	UsageReport,
 } from "@oh-my-pi/pi-ai";
-import { getSupportedEfforts, isContextOverflow, modelsAreEqual, streamSimple } from "@oh-my-pi/pi-ai";
+import { Effort, getSupportedEfforts, isContextOverflow, modelsAreEqual, streamSimple } from "@oh-my-pi/pi-ai";
 import { killTree, MacOSPowerAssertion } from "@oh-my-pi/pi-natives";
 import {
 	abortableSleep,
