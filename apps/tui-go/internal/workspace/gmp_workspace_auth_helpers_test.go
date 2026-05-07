@@ -12,6 +12,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/auth"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
 )
 
@@ -458,6 +460,127 @@ func contains(haystack, needle string) bool {
 		}
 	}
 	return false
+}
+
+func TestSetProviderAPIKey_NilClientIsNoOp(t *testing.T) {
+	t.Parallel()
+	// Matches Crush's prior contract: callers may invoke SetProviderAPIKey
+	// before the gmp client is wired up (test rigs, very early onboarding),
+	// and the call must succeed silently rather than error.
+	w := &GmpWorkspace{}
+	if err := w.SetProviderAPIKey(config.ScopeGlobal, "openai", "sk-x"); err != nil {
+		t.Fatalf("SetProviderAPIKey nil client should be no-op, got %v", err)
+	}
+}
+
+func TestSetProviderAPIKey_HappyPath(t *testing.T) {
+	w, pc := gmpWorkspaceWithClient(t)
+	defer pc.close()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- w.SetProviderAPIKey(config.ScopeGlobal, "openai", "sk-test-1234")
+	}()
+
+	frame := pc.waitForFrame(t, 2*time.Second)
+	if frame["type"] != auth.CommandSetAPIKey {
+		t.Fatalf("expected outbound type %q, got %v", auth.CommandSetAPIKey, frame["type"])
+	}
+	if frame["provider"] != "openai" {
+		t.Fatalf("expected provider=openai, got %v", frame["provider"])
+	}
+	if frame["apiKey"] != "sk-test-1234" {
+		t.Fatalf("expected apiKey forwarded verbatim, got %v", frame["apiKey"])
+	}
+	id, _ := frame["id"].(string)
+	if id == "" {
+		t.Fatalf("expected non-empty id in outbound command")
+	}
+
+	if err := pc.writeInbound(map[string]any{
+		"type":    "response",
+		"id":      id,
+		"command": auth.CommandSetAPIKey,
+		"success": true,
+		"data":    map[string]any{"provider": "openai"},
+	}); err != nil {
+		t.Fatalf("write inbound: %v", err)
+	}
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("SetProviderAPIKey returned error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for SetProviderAPIKey")
+	}
+}
+
+func TestSetProviderAPIKey_BackendErrorPropagates(t *testing.T) {
+	w, pc := gmpWorkspaceWithClient(t)
+	defer pc.close()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- w.SetProviderAPIKey(config.ScopeGlobal, "openai", "sk-test")
+	}()
+
+	frame := pc.waitForFrame(t, 2*time.Second)
+	id, _ := frame["id"].(string)
+	_ = pc.writeInbound(map[string]any{
+		"type":    "response",
+		"id":      id,
+		"command": auth.CommandSetAPIKey,
+		"success": false,
+		"error":   "provider must be a non-empty string",
+	})
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatalf("expected error from backend, got nil")
+		}
+		if !contains(err.Error(), "provider must be a non-empty string") {
+			t.Fatalf("expected backend error to propagate, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for SetProviderAPIKey")
+	}
+}
+
+func TestSetProviderAPIKey_NonStringIsSilentNoOp(t *testing.T) {
+	w, pc := gmpWorkspaceWithClient(t)
+	defer pc.close()
+
+	// OAuth tokens (Hyper / Copilot legacy dialogs) flow through this method
+	// in Crush, but gmp drives those providers through auth.login. Anything
+	// other than a string credential should not produce a wire frame.
+	tok := &oauth.Token{AccessToken: "hyper-token"}
+	if err := w.SetProviderAPIKey(config.ScopeGlobal, "hyper", tok); err != nil {
+		t.Fatalf("non-string credential should be silent no-op, got %v", err)
+	}
+	// Give the (possibly faulty) write goroutine a moment to flush.
+	time.Sleep(20 * time.Millisecond)
+	if frames := pc.frames(); len(frames) != 0 {
+		t.Fatalf("expected no outbound frames for non-string credential, got %#v", frames)
+	}
+}
+
+func TestSetProviderAPIKey_EmptyArgsAreSilentNoOp(t *testing.T) {
+	w, pc := gmpWorkspaceWithClient(t)
+	defer pc.close()
+
+	if err := w.SetProviderAPIKey(config.ScopeGlobal, "", "sk-x"); err != nil {
+		t.Fatalf("empty providerID should be no-op, got %v", err)
+	}
+	if err := w.SetProviderAPIKey(config.ScopeGlobal, "openai", ""); err != nil {
+		t.Fatalf("empty apiKey should be no-op, got %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if frames := pc.frames(); len(frames) != 0 {
+		t.Fatalf("expected no outbound frames for empty args, got %#v", frames)
+	}
 }
 
 // silence unused-import lint

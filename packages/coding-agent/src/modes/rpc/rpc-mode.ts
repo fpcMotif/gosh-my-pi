@@ -729,6 +729,21 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				});
 			}
 
+			case "auth.set_api_key": {
+				const provider = command.provider.trim();
+				const apiKey = command.apiKey;
+				if (!provider) {
+					return errorResp(id, "auth.set_api_key", "provider must be a non-empty string");
+				}
+				if (typeof apiKey !== "string" || apiKey === "") {
+					return errorResp(id, "auth.set_api_key", "apiKey must be a non-empty string");
+				}
+				return runAuthCommand(id, "auth.set_api_key", async () => {
+					await session.modelRegistry.authStorage.set(provider, { type: "api_key", key: apiKey });
+					return { provider };
+				});
+			}
+
 			default: {
 				const unknownCommand = command as { type: string };
 				return errorResp(undefined, unknownCommand.type, `Unknown command: ${unknownCommand.type}`);

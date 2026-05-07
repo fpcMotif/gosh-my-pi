@@ -1728,6 +1728,19 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 }
 
 func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.SelectedModel, modelType config.SelectedModelType) tea.Cmd {
+	// gmp drives every provider's auth (OAuth subscription such as
+	// openai-codex, device-code login such as kimi, raw API-key paste for
+	// vanilla providers) through its own AuthStorage. Routing to auth.login
+	// lets the backend pick the correct flow per provider and stream the
+	// matching dialog state via auth.* extension_ui_request frames into the
+	// GmpAuth dialog. The legacy api_key_input / oauth.go dialogs only know
+	// how to write to Crush's local config (crush.json) and skip gmp's
+	// SQLite-backed AuthStorage entirely, which is why the previous "Enter
+	// your OpenAI Key" path silently dropped the credential before this fix.
+	if _, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
+		return m.runGmpAuthAndApplyModel(provider, model, modelType)
+	}
+
 	var (
 		dlg dialog.Dialog
 		cmd tea.Cmd
@@ -1751,6 +1764,46 @@ func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.Se
 
 	m.dialog.OpenDialog(dlg)
 	return cmd
+}
+
+// runGmpAuthAndApplyModel kicks off auth.login on the gmp backend for the
+// requested catwalk provider id and, on success, applies the user's model
+// selection. The auth.login command blocks until the OAuth flow finishes (the
+// GmpAuth dialog handles the user-facing steps via auth.* frames), so this
+// command goroutine effectively acts as the "save key and continue" callback
+// that api_key_input.go provides for Crush-native workspaces.
+//
+// The backend's AuthStorage.login throws "Unknown: <provider>" for providers
+// without a registered OAuth flow on gmp; that error surfaces as a normal
+// InfoMsg so the user can fall back to /login <gmp-provider> (e.g.
+// /login openai-codex for the ChatGPT subscription path).
+func (m *UI) runGmpAuthAndApplyModel(provider catwalk.Provider, model config.SelectedModel, modelType config.SelectedModelType) tea.Cmd {
+	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
+	if !ok {
+		return util.ReportError(errors.New("gmp auth requires the gmp backend workspace"))
+	}
+	providerID := strings.TrimSpace(string(provider.ID))
+	if providerID == "" {
+		return util.ReportError(errors.New("missing provider id for auth.login"))
+	}
+	return func() tea.Msg {
+		if err := gw.SendAuthCommand(auth.CommandLogin, providerID); err != nil {
+			return util.InfoMsg{
+				Type: util.InfoTypeError,
+				Msg:  "auth.login " + providerID + " failed: " + err.Error(),
+			}
+		}
+		// Apply the selection directly. handleSelectModel would otherwise
+		// re-trigger the auth dialog because gmp does not populate
+		// cfg.Providers when AuthStorage stores a credential.
+		if err := gw.UpdatePreferredModel(config.ScopeGlobal, modelType, model); err != nil {
+			return util.InfoMsg{
+				Type: util.InfoTypeError,
+				Msg:  "set_model " + model.Provider + "/" + model.Model + " failed: " + err.Error(),
+			}
+		}
+		return util.NewInfoMsg(string(modelType) + " model changed to " + model.Model)
+	}
 }
 
 func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {

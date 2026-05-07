@@ -69,7 +69,11 @@ export type RpcCommand =
 
 	// Auth (gmp providers via AuthStorage)
 	| { id?: string; type: "auth.login"; provider: string }
-	| { id?: string; type: "auth.logout"; provider: string };
+	| { id?: string; type: "auth.logout"; provider: string }
+	// Direct API-key write (used when the legacy Crush api_key_input dialog
+	// finishes; the gmp backend persists the key in its AuthStorage SQLite
+	// instead of letting the value drop on the floor).
+	| { id?: string; type: "auth.set_api_key"; provider: string; apiKey: string };
 
 // ============================================================================
 // RPC State
@@ -191,6 +195,7 @@ export type RpcResponse =
 	// Auth
 	| { id?: string; type: "response"; command: "auth.login"; success: true; data: { provider: string; ok: boolean } }
 	| { id?: string; type: "response"; command: "auth.logout"; success: true; data: { provider: string } }
+	| { id?: string; type: "response"; command: "auth.set_api_key"; success: true; data: { provider: string } }
 
 	// Error response (any command can fail)
 	| { id?: string; type: "response"; command: string; success: false; error: string };
@@ -215,6 +220,7 @@ export const AuthMethod = {
 export const AuthCommand = {
 	Login: "auth.login",
 	Logout: "auth.logout",
+	SetApiKey: "auth.set_api_key",
 } as const;
 
 // ============================================================================
