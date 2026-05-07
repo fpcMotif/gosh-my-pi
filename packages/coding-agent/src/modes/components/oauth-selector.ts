@@ -63,7 +63,11 @@ export class OAuthSelectorComponent extends Container {
 		this.#stopSpinner();
 	}
 	#loadProviders(): void {
-		this.#allProviders = getOAuthProviders();
+		this.#allProviders = getOAuthProviders().map(provider => ({
+			id: provider.id,
+			name: provider.name,
+			available: provider.available !== false,
+		}));
 	}
 
 	#startValidation(): void {

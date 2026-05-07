@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -147,4 +148,69 @@ func TestTranslateAuthRequest_MalformedJSONReturnsNil(t *testing.T) {
 	if got != nil {
 		t.Fatalf("expected nil for malformed JSON, got %#v", got)
 	}
+}
+
+// TestAuthDecoderParity is the runtime half of the type contract.
+// Pair-locked with the TS-side `AuthRequestPayload type contract` block
+// in packages/coding-agent/test/rpc-oauth-controller.test.ts. Each side
+// asserts the same shape: every auth.MethodX constant has a matching
+// decoder/payload variant. Drift on either side fails its own suite.
+func TestAuthDecoderParity(t *testing.T) {
+	t.Parallel()
+	if missing := missingAuthDecoders(authMethods, authDecoders); len(missing) > 0 {
+		t.Fatalf("authDecoders missing entries for: %v", missing)
+	}
+	// authMethods must also be a subset of authDecoders' keys (no orphan
+	// decoder allowed without a const). Catches the mirror drift case.
+	known := make(map[string]struct{}, len(authMethods))
+	for _, m := range authMethods {
+		known[m] = struct{}{}
+	}
+	for k := range authDecoders {
+		if _, ok := known[k]; !ok {
+			t.Errorf("authDecoders entry %q has no matching auth.MethodX in authMethods", k)
+		}
+	}
+}
+
+// TestAuthDecoderInitPanicsOnMissing exercises the init-time panic via
+// the extracted ensureAuthDecoderParity helper. We can't re-trigger
+// init() from a test, but the helper's body is the load-bearing part —
+// it's what would surface a wire-vs-decoder mismatch on a real binary
+// startup.
+func TestAuthDecoderInitPanicsOnMissing(t *testing.T) {
+	t.Parallel()
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatalf("expected ensureAuthDecoderParity to panic on missing decoder")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("panic value was not a string: %T %v", r, r)
+		}
+		if !strings.Contains(msg, "auth.synthetic_missing") {
+			t.Fatalf("panic message did not mention the missing method: %s", msg)
+		}
+	}()
+
+	// Synthetic pair: one method present, one method missing.
+	methods := []string{auth.MethodShowLoginURL, "auth.synthetic_missing"}
+	decoders := map[string]authDecoder{
+		auth.MethodShowLoginURL: authDecoders[auth.MethodShowLoginURL],
+	}
+	ensureAuthDecoderParity(methods, decoders)
+}
+
+// TestAuthDecoderInitNoPanicOnComplete confirms the helper is silent
+// when the pair is in sync — paired with the panic test, the two
+// together prove ensureAuthDecoderParity's full contract.
+func TestAuthDecoderInitNoPanicOnComplete(t *testing.T) {
+	t.Parallel()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("ensureAuthDecoderParity panicked unexpectedly: %v", r)
+		}
+	}()
+	ensureAuthDecoderParity(authMethods, authDecoders)
 }

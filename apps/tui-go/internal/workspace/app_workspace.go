@@ -254,6 +254,10 @@ func (w *AppWorkspace) Resolver() config.VariableResolver {
 	return w.store.Resolver()
 }
 
+// IsGmpMode reports false: AppWorkspace runs vanilla Crush against
+// local provider stores.
+func (*AppWorkspace) IsGmpMode() bool { return false }
+
 // -- Config mutations --
 
 func (w *AppWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {

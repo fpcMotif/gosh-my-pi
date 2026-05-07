@@ -1,10 +1,8 @@
 import { Snowflake } from "@oh-my-pi/pi-utils";
 import type { OAuthAuthInfo, OAuthController, OAuthPrompt } from "@oh-my-pi/pi-ai/utils/oauth/types";
 import type { RequestCorrelator } from "./request-correlator";
-import { AuthMethod, type RpcExtensionUIResponse } from "./rpc-types";
+import { AuthMethod, type AuthRequestPayload, type RpcExtensionUIResponse } from "./rpc-types";
 import type { WireFrame } from "./wire/v1";
-
-type AuthRequestPayload = Record<string, unknown> & { method: `auth.${string}` };
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -21,8 +19,8 @@ interface RpcOAuthControllerOptions {
  *
  * Each callback emits a method-discriminated `extension_ui_request` frame and
  * awaits the matching `extension_ui_response`. The Go-side `apps/tui-go/`
- * dispatcher routes these to the existing `oauth.go` / `api_key_input.go`
- * dialogs.
+ * dispatcher routes these to the `GmpAuth` dialog, keeping legacy Crush
+ * credential writers out of gmp bridge mode.
  */
 export class RpcOAuthController implements OAuthController {
 	#provider: string;
@@ -79,26 +77,38 @@ export class RpcOAuthController implements OAuthController {
 		);
 	}
 
-	/** Caller-side helper: emit auth.show_result after the login flow finishes. */
-	emitResult(success: boolean, error?: string): void {
+	/**
+	 * Caller-side helper: emit auth.show_result after the login flow
+	 * finishes. When success=true, callers should pass the post-login
+	 * authenticated provider list via `providers` so the Go-side workspace
+	 * can refresh its catalog without a separate providers.list round-trip.
+	 */
+	emitResult(success: boolean, error?: string, providers?: string[]): void {
 		this.#fireAndForget({
 			method: AuthMethod.ShowResult,
 			provider: this.#provider,
 			success,
 			error,
+			...(providers !== undefined ? { providers } : {}),
 		});
 	}
 
 	/** Fire-and-forget: gmp does not register a correlator entry for these
 	 * frames. We mint a fresh Snowflake id (matches RpcExtensionUIContext.notify
 	 * pattern) so the wire `id` is still unique without polluting the pending
-	 * map with a 1s timeout entry per frame. */
-	#fireAndForget(req: AuthRequestPayload): void {
+	 * map with a 1s timeout entry per frame.
+	 *
+	 * Generic over the concrete `AuthRequestPayload` variant so callsite
+	 * literals narrow to one variant (with its full per-method field set)
+	 * rather than the union — TypeScript's excess-property check otherwise
+	 * rejects fields like `provider` that exist in 5 of 6 variants but not all.
+	 */
+	#fireAndForget<P extends AuthRequestPayload>(req: P): void {
 		const id = Snowflake.next() as string;
 		this.#output({ type: "extension_ui_request", id, ...req });
 	}
 
-	async #awaitDialog(req: AuthRequestPayload, fallbackLabel: string): Promise<string> {
+	async #awaitDialog<P extends AuthRequestPayload>(req: P, fallbackLabel: string): Promise<string> {
 		const { id, promise } = this.#correlator.register<RpcExtensionUIResponse | undefined>({
 			signal: this.#signal,
 			timeoutMs: this.#timeoutMs,

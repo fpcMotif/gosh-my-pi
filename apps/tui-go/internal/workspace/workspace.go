@@ -114,6 +114,15 @@ type Workspace interface {
 	WorkingDir() string
 	Resolver() config.VariableResolver
 
+	// IsGmpMode reports whether this workspace is the gmp RPC bridge.
+	// Gmp mode owns its own credential store (gmp's AuthStorage) and the
+	// model registry, so the TUI must suppress every legacy provider /
+	// auth code path that would write into Crush's local stores. Picker
+	// scope, the api_key_input dialog, and `crush login` all branch on
+	// this. AppWorkspace and ClientWorkspace return false; GmpWorkspace
+	// returns true. See docs/adr/0001-gmp-mode-credential-store.md.
+	IsGmpMode() bool
+
 	// Config mutations (proxied to server in client mode)
 	UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error
 	SetCompactMode(scope config.Scope, enabled bool) error

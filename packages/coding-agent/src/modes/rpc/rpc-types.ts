@@ -30,7 +30,8 @@ export type RpcCommand =
 	| { id?: string; type: "set_host_tools"; tools: RpcHostToolDefinition[] }
 
 	// Model
-	| { id?: string; type: "set_model"; provider: string; modelId: string }
+	| { id?: string; type: "models.catalog" }
+	| { id?: string; type: "set_model"; provider: string; modelId: string; role?: string }
 	| { id?: string; type: "cycle_model" }
 	| { id?: string; type: "get_available_models" }
 
@@ -67,9 +68,15 @@ export type RpcCommand =
 	// Messages
 	| { id?: string; type: "get_messages" }
 
-	// Auth (gmp providers via AuthStorage)
-	| { id?: string; type: "auth.login"; provider: string }
-	| { id?: string; type: "auth.logout"; provider: string };
+	// Auth (gmp providers via AuthStorage). `auth.login.provider` is
+	// optional — empty / missing triggers a backend-driven picker
+	// (auth.pick_provider extension_ui_request); see ADR 0002.
+	| { id?: string; type: "auth.login"; provider?: string }
+	| { id?: string; type: "auth.logout"; provider: string }
+
+	// Providers
+	| { id?: string; type: "providers.list_supported" }
+	| { id?: string; type: "providers.list_authenticated" };
 
 // ============================================================================
 // RPC State
@@ -95,6 +102,36 @@ export interface RpcSessionState {
 	dumpTools?: Array<{ name: string; description: string; parameters: unknown }>;
 }
 
+export interface RpcModelCatalogRole {
+	role: string;
+	selector?: string;
+	provider?: string;
+	modelId?: string;
+}
+
+export interface RpcModelCatalogEntry {
+	provider: string;
+	providerName: string;
+	id: string;
+	name: string;
+	available: boolean;
+	authenticated: boolean;
+	loginSupported: boolean;
+	loginAvailable: boolean;
+	current: boolean;
+	roles: string[];
+	contextWindow?: number;
+	maxTokens?: number;
+	reasoning: boolean;
+	supportsImages: boolean;
+}
+
+export interface RpcModelCatalog {
+	models: RpcModelCatalogEntry[];
+	roles: RpcModelCatalogRole[];
+	current?: Model;
+}
+
 // ============================================================================
 // RPC Responses (stdout)
 // ============================================================================
@@ -118,9 +155,16 @@ export type RpcResponse =
 	| {
 			id?: string;
 			type: "response";
+			command: "models.catalog";
+			success: true;
+			data: RpcModelCatalog;
+	  }
+	| {
+			id?: string;
+			type: "response";
 			command: "set_model";
 			success: true;
-			data: Model;
+			data: Model | null;
 	  }
 	| {
 			id?: string;
@@ -191,6 +235,22 @@ export type RpcResponse =
 	// Auth
 	| { id?: string; type: "response"; command: "auth.login"; success: true; data: { provider: string; ok: boolean } }
 	| { id?: string; type: "response"; command: "auth.logout"; success: true; data: { provider: string } }
+
+	// Providers
+	| {
+			id?: string;
+			type: "response";
+			command: "providers.list_supported";
+			success: true;
+			data: { providers: Array<{ id: string; name: string; available: boolean }> };
+	  }
+	| {
+			id?: string;
+			type: "response";
+			command: "providers.list_authenticated";
+			success: true;
+			data: { providers: string[] };
+	  }
 
 	// Error response (any command can fail)
 	| { id?: string; type: "response"; command: string; success: false; error: string };
@@ -299,6 +359,13 @@ export type RpcExtensionUIRequest =
 			provider: string;
 			success: boolean;
 			error?: string;
+			/**
+			 * Snapshot of currently-authenticated providers immediately
+			 * after this login flow. Populated only on success=true so
+			 * the Go-side workspace can refresh its provider catalog
+			 * (and any open model picker) without an extra round-trip.
+			 */
+			providers?: string[];
 	  }
 	| {
 			type: "extension_ui_request";
@@ -307,6 +374,26 @@ export type RpcExtensionUIRequest =
 			options: string[];
 			defaultId?: string;
 	  };
+
+/**
+ * Derived from `RpcExtensionUIRequest` above. Type-locks every auth.* emit:
+ * `RpcOAuthController` accepts only `AuthRequestPayload`, which is the wire
+ * union minus the transport-metadata fields (`type`, `id`) the encoder fills
+ * in. Adding a new `auth.*` variant to `RpcExtensionUIRequest` automatically
+ * extends this type — the encoder never needs editing for new methods, only
+ * the wire vocabulary. The Go-side parity check in
+ * `gmp_workspace.go::init` is the matching guarantee on the decoder.
+ *
+ * `AuthRequestPayload` uses a distributive conditional (`F extends F ?`) so
+ * `Omit` is applied per-variant; otherwise it would collapse the union to
+ * the intersection of its members and lose every per-method field.
+ */
+export type AuthRequestFrame = Extract<RpcExtensionUIRequest, { method: `auth.${string}` }>;
+export type AuthRequestPayload = AuthRequestFrame extends infer F
+	? F extends AuthRequestFrame
+		? Omit<F, "type" | "id">
+		: never
+	: never;
 
 // ============================================================================
 // Host Tool Frames (bidirectional)

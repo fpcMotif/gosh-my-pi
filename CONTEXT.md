@@ -334,6 +334,138 @@ controller. Some subsystems will subscribe to `AgentEvent` directly via
 that AgentSession calls at known hook points. Hybrid by design — pure
 event-bus is over-rigid for subsystems that need to mutate session state.
 
+**GmpWorkspace** (canonical owner: apps/tui-go):
+The `Workspace` implementation that backs `gmp-tui-go` against an `omp
+--mode rpc` subprocess. Lives in
+`apps/tui-go/internal/workspace/gmp_workspace.go`. Owns the JSONL stdio
+bridge, message translation, the auth.* extension UI dispatcher
+(`dispatchExtensionUIRequest`, `translateAuthRequest`, `HandleAuthReply`),
+and `SendAuthCommand` for outbound `/login` / `/logout`.
+
+**Backend Model Catalog/AuthStorage**:
+The canonical model and credential source for gmp bridge mode. Lives in
+`packages/coding-agent` as `ModelRegistry` plus its `AuthStorage`; exposed
+to tui-go over RPC through `models.catalog`, `set_model`, and `auth.*`.
+All gmp model availability, login state, and role selection state must come
+from this pair.
+
+**Bridge Model Catalog** _(adapter — to be deleted as picker migrates to direct `RpcModelCatalog` consumption; see ADR 0002)_:
+The Go-side, render-only projection of `Backend Model Catalog/AuthStorage`
+inside `GmpWorkspace`. `RefreshModelCatalog` calls `models.catalog`,
+rebuilds `cfg.Providers` with real backend providers/models, and marks
+unavailable entries for `GmpAuth` login/retry. It exists only to satisfy
+the inherited Crush picker's `cfg.Providers` shape (catwalk's data
+structure); it is not a separate source of truth and will be removed when
+the picker is rewritten to consume `RpcModelCatalog` directly.
+
+**Synthetic gmp provider** _(adapter scaffolding — same lifecycle as Bridge Model Catalog)_:
+The fallback `ProviderConfig` `GmpWorkspace.newOmpConfig` injects before
+the first backend catalog refresh. ID `"gmp"` (exported as
+`workspace.GmpProviderID`), single model `"gmp-backend"` displayed as
+"gmp backend". Normal gmp runtime must replace it with the Bridge Model
+Catalog before opening the model picker; it is not a real selectable
+catalog entry. Disappears with the Bridge Model Catalog adapter — once
+the picker reads `RpcModelCatalog` directly there is nothing to
+pre-populate.
+
+**Legacy Crush Catalog** _(out of `apps/tui-go` scope after Phase 1 lite)_:
+The Catwalk/Crush provider catalog and `crush.json` config path. After
+Phase 1 lite (ADR 0002), `apps/tui-go` is gmp-only and never reads
+this catalog as live runtime state — it remains as the upstream Crush
+on-disk format that vanilla `crush` (a separate binary) consumes, and
+as input for one-time `models.yml` imports on the backend side.
+
+**IsGmpMode() bool** _(scheduled for collapse in carve-out Phase 1 lite — see ADR 0002)_:
+The `Workspace`-interface discriminator that gates every gmp-specific
+branch in the TUI: picker scope (`internal/ui/dialog/models.go`), auth
+dialog routing (`openAuthenticationDialog` →
+`runGmpAuthCommand`), and `gmp-tui-go login` (one-shot RPC driver).
+`*GmpWorkspace` returns `true`; `*AppWorkspace` and `*ClientWorkspace`
+return `false`. Decoupled from `Options.DisableDefaultProviders` —
+that flag also suppresses the catwalk catalog but does not imply gmp
+ownership.
+
+After Phase 1 lite lands, `*AppWorkspace` and `*ClientWorkspace` are
+deleted, `setupAppWorkspace` / `setupClientServerWorkspace` go with
+them (already-unreachable from any cobra path), and `IsGmpMode()`
+collapses to a constant `true`. The discriminator pattern survives
+this turn only because deleting it touches every consumer site;
+removal is a follow-up sweep.
+
+**GmpAuth dialog** _(Bubble Tea)_:
+`apps/tui-go/internal/ui/dialog/gmp_auth.go`. Consumes the auth.*
+`tea.Msg` types defined in `internal/auth/messages.go` (`ShowLoginURL`,
+`ShowProgress`, `PromptCode`, `PromptManualRedirect`, `PickProvider`,
+`ShowResult`) and emits `Submit` / `Confirm` / `Cancel` replies that
+`GmpWorkspace.HandleAuthReply` converts back into
+`extension_ui_response` wire frames. Distinct from
+`dialog.NewAPIKeyInput` / `dialog.NewOAuthHyper` — those terminate by
+writing Crush local config, which is wrong in gmp mode.
+
+**RpcOAuthController** (canonical owner: pi-coding-agent):
+The TS-side `OAuthController` implementation at
+`packages/coding-agent/src/modes/rpc/rpc-oauth-controller.ts`. Used
+by every gmp provider integration when running under
+`omp --mode rpc`. Each callback (`onAuth`, `onProgress`, `onPrompt`,
+`onManualCodeInput`, `emitResult`) emits a
+method-discriminated `extension_ui_request` frame; correlated awaits
+go through `RequestCorrelator`. The Go-side `apps/tui-go` workspace
+dispatcher (`GmpWorkspace.dispatchExtensionUIRequest`) routes those
+frames to the Bubble Tea `GmpAuth` dialog and ferries the responses
+back as `extension_ui_response` frames.
+
+The auth.* wire shape is type-locked on both sides: TS callers go
+through the derived `AuthRequestPayload` union (extracted from
+`RpcExtensionUIRequest` and stripped of `type`/`id`), and the Go
+dispatcher runs an init-time parity check that every `auth.MethodX`
+constant has an entry in `authDecoders`. Adding a new auth.* method
+is a TypeScript compile error until the wire union is extended, and
+a Go startup panic until the per-method payload struct + decoder
+entry exist. This mirrors the compile-time guarantee that
+`wire/translate.ts` already gives `AgentSessionEvent`. The contract
+tests are at `rpc-oauth-controller.test.ts` (TS-side per-`AuthMethod`
+shape table + `@ts-expect-error` block) and
+`gmp_workspace_auth_test.go` (`TestAuthDecoderParity` over the const
+list + `TestAuthDecoderInitPanicsOnMissing`). Deleting either test
+makes the seam bypassable, which is the deletion-test bar this
+deepening was designed to pass.
+
+**authCLIDriver** _(`gmp-tui-go login`)_:
+The shell-friendly counterpart to `GmpAuth`, in
+`apps/tui-go/internal/cmd/login.go`. Spawns a one-shot
+`omp --mode rpc` subprocess, sends `auth.login <provider>`, and walks
+the resulting `auth.*` frames as `Println` / `fmt.Scanln` prompts.
+Same wire contract as the TUI, separate UX. Both terminate by
+returning the gmp-side `auth.show_result`.
+
+**Provider-required contract** _(see ADR 0002)_: `auth.login` requires a
+non-empty `provider` field on the wire. The Go `Command.Provider`
+JSON tag must drop `omitempty` for this command, and the backend
+returns a typed error if `provider` is missing. When the user invokes
+`gmp-tui-go login` with no argument, the picker is driven by a
+correlated `auth.pick_provider` extension_ui_request emitted by the
+backend before AuthStorage.login is called — the picker frame and
+its routing already exist on both sides; only the emit-when-empty
+branch was missing. The TUI's `/login` slash command takes the same
+wire path: provider required, picker via extension_ui_request when
+the user types `/login` bare.
+
+**Runtime mode** _(post-ADR 0002)_:
+`apps/tui-go` is gmp-only. `setupWorkspace()` always returns
+`*GmpWorkspace`; the unreachable `setupAppWorkspace` /
+`setupClientServerWorkspace` branches are deleted along with
+`AppWorkspace` (393 LOC), `ClientWorkspace` (777 LOC), the legacy
+auth dialogs (`api_key_input.go`, `oauth_hyper.go`,
+`oauth_copilot.go`), and the legacy CLI commands they back
+(`cmd/login.go` is replaced with a thin RPC-only shell, `cmd/oauth.go`
+deleted). `gmp-tui-go run` (non-interactive prompt mode) is rewritten
+to use the gmp RPC backend rather than `setupLocalWorkspace`. The full
+carve-out (Phase 1 in `apps/tui-go/docs/carve-out-plan.md` —
+`internal/{backend,server,client,db,swagger}` deletion + the type-
+surface work in Phase 2) remains the north star; Phase 1 lite is the
+bounded next step that sheds the obviously-unreachable code without
+touching the type surface the UI shares with Crush internals.
+
 ## Relationships
 
 - An **AgentEvent** of type `agent_end` or `message_end` carries an optional

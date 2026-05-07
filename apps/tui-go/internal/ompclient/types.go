@@ -37,6 +37,7 @@ type Command struct {
 	// set_model
 	Provider string `json:"provider,omitempty"`
 	ModelID  string `json:"modelId,omitempty"`
+	Role     string `json:"role,omitempty"`
 
 	// set_thinking_level
 	Level string `json:"level,omitempty"`

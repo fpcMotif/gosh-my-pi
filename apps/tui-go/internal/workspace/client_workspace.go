@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/notify"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools/mcp"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/client"
@@ -22,7 +23,6 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/proto"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
-	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
 
 // ClientWorkspace implements the Workspace interface by delegating all
@@ -396,6 +396,10 @@ func (w *ClientWorkspace) WorkingDir() string {
 func (w *ClientWorkspace) Resolver() config.VariableResolver {
 	return config.IdentityResolver()
 }
+
+// IsGmpMode reports false: ClientWorkspace fronts a remote Crush
+// daemon over HTTP, not the gmp RPC bridge.
+func (*ClientWorkspace) IsGmpMode() bool { return false }
 
 // -- Config mutations --
 

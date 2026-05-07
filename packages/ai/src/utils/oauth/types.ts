@@ -55,6 +55,7 @@ export interface OAuthLoginCallbacks extends OAuthController {
 export interface OAuthProviderInterface {
 	readonly id: OAuthProviderId;
 	readonly name: string;
+	readonly available?: boolean;
 	readonly sourceId?: string;
 	login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials | string>;
 	refreshToken?(credentials: OAuthCredentials): Promise<OAuthCredentials>;

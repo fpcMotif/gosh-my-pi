@@ -1,210 +1,320 @@
 package cmd
 
 import (
-	"cmp"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/client"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth/copilot"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth/hyper"
-	"github.com/charmbracelet/x/ansi"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/auth"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 )
 
+// loginCmd drives gmp's AuthStorage.login flow over a one-shot RPC
+// subprocess. Credentials persist in gmp's SQLite (via AuthStorage),
+// never in Crush's local crush.json — see
+// docs/adr/0001-gmp-mode-credential-store.md. The TUI's `/login` slash
+// command shares the same RPC contract; this command is the
+// non-interactive (CLI) entry point.
 var loginCmd = &cobra.Command{
 	Aliases: []string{"auth"},
-	Use:     "login [platform]",
-	Short:   "Login Crush to a platform",
-	Long: `Login Crush to a specified platform.
-The platform should be provided as an argument.
-Available platforms are: hyper, copilot.`,
-	Example: `
-# Authenticate with Charm Hyper
-crush login
+	Use:     "login [provider]",
+	Short:   "Sign in to a gmp-managed provider",
+	Long: `Sign in to a gmp-managed provider.
 
-# Authenticate with GitHub Copilot
-crush login copilot
+Spawns a one-shot gmp RPC subprocess and dispatches an auth.login
+command. The CLI consumes the resulting auth.* extension_ui_request
+frames (URL, code prompts, picker, final result) interactively over
+stdin/stdout. Credentials are stored by gmp's AuthStorage; nothing
+is written to Crush's local config.
+
+When invoked without a provider, gmp opens its provider picker.`,
+	Example: `
+# Pick interactively
+gmp-tui-go login
+
+# Sign in to a specific provider
+gmp-tui-go login openai-codex
   `,
-	ValidArgs: []cobra.Completion{
-		"hyper",
-		"copilot",
-		"github",
-		"github-copilot",
-	},
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, ws, cleanup, err := connectToServer(cmd)
-		if err != nil {
-			return err
-		}
-		defer cleanup()
-
-		progressEnabled := ws.Config.Options.Progress == nil || *ws.Config.Options.Progress
-		if progressEnabled && supportsProgressBar() {
-			_, _ = fmt.Fprintf(os.Stderr, ansi.SetIndeterminateProgressBar)
-			defer func() { _, _ = fmt.Fprintf(os.Stderr, ansi.ResetProgressBar) }()
-		}
-
-		provider := "hyper"
+		provider := ""
 		if len(args) > 0 {
 			provider = args[0]
 		}
-		switch provider {
-		case "hyper":
-			return loginHyper(c, ws.ID)
-		case "copilot", "github", "github-copilot":
-			return loginCopilot(cmd.Context(), c, ws.ID)
-		default:
-			return fmt.Errorf("unknown platform: %s", args[0])
-		}
+		return runGmpLogin(cmd, auth.CommandLogin, provider)
 	},
 }
 
-func loginHyper(c *client.Client, wsID string) error {
-	ctx := getLoginContext()
-
-	resp, err := hyper.InitiateDeviceAuth(ctx)
-	if err != nil {
-		return err
-	}
-
-	if clipboard.WriteAll(resp.UserCode) == nil {
-		fmt.Println("The following code should be on clipboard already:")
-	} else {
-		fmt.Println("Copy the following code:")
-	}
-
-	fmt.Println()
-	fmt.Println(lipgloss.NewStyle().Bold(true).Render(resp.UserCode))
-	fmt.Println()
-	fmt.Println("Press enter to open this URL, and then paste it there:")
-	fmt.Println()
-	fmt.Println(lipgloss.NewStyle().Hyperlink(resp.VerificationURL, "id=hyper").Render(resp.VerificationURL))
-	fmt.Println()
-	waitEnter()
-	if err := browser.OpenURL(resp.VerificationURL); err != nil {
-		fmt.Println("Could not open the URL. You'll need to manually open the URL in your browser.")
-	}
-
-	fmt.Println("Exchanging authorization code...")
-	refreshToken, err := hyper.PollForToken(ctx, resp.DeviceCode, resp.ExpiresIn)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Exchanging refresh token for access token...")
-	token, err := hyper.ExchangeToken(ctx, refreshToken)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Verifying access token...")
-	introspect, err := hyper.IntrospectToken(ctx, token.AccessToken)
-	if err != nil {
-		return fmt.Errorf("token introspection failed: %w", err)
-	}
-	if !introspect.Active {
-		return fmt.Errorf("access token is not active")
-	}
-
-	if err := cmp.Or(
-		c.SetConfigField(ctx, wsID, config.ScopeGlobal, "providers.hyper.api_key", token.AccessToken),
-		c.SetConfigField(ctx, wsID, config.ScopeGlobal, "providers.hyper.oauth", token),
-	); err != nil {
-		return err
-	}
-
-	fmt.Println()
-	fmt.Println("You're now authenticated with Hyper!")
-	return nil
+// logoutCmd is the symmetric counterpart for clearing a provider
+// credential. Identical RPC contract; gmp side handles the deletion
+// against AuthStorage.
+var logoutCmd = &cobra.Command{
+	Use:   "logout <provider>",
+	Short: "Sign out of a gmp-managed provider",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runGmpLogin(cmd, auth.CommandLogout, args[0])
+	},
 }
 
-func loginCopilot(ctx context.Context, c *client.Client, wsID string) error {
-	loginCtx := getLoginContext()
+// runGmpLogin spawns a one-shot RPC client, sends the auth command,
+// and drives the resulting extension_ui_request flow on the terminal
+// until the gmp side emits auth.show_result. Returns the surfaced
+// error (if any) so the CLI exits non-zero on failure.
+func runGmpLogin(cmd *cobra.Command, method, provider string) error {
+	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, os.Kill)
+	defer cancel()
 
-	cfg, err := c.GetConfig(ctx, wsID)
-	if err == nil && cfg != nil {
-		if pc, ok := cfg.Providers.Get("copilot"); ok && pc.OAuthToken != nil {
-			fmt.Println("You are already logged in to GitHub Copilot.")
-			return nil
-		}
-	}
-
-	diskToken, hasDiskToken := copilot.RefreshTokenFromDisk()
-	var token *oauth.Token
-
-	switch {
-	case hasDiskToken:
-		fmt.Println("Found existing GitHub Copilot token on disk. Using it to authenticate...")
-
-		t, err := copilot.RefreshToken(loginCtx, diskToken)
-		if err != nil {
-			return fmt.Errorf("unable to refresh token from disk: %w", err)
-		}
-		token = t
-	default:
-		fmt.Println("Requesting device code from GitHub...")
-		dc, err := copilot.RequestDeviceCode(loginCtx)
-		if err != nil {
-			return err
-		}
-
-		fmt.Println()
-		fmt.Println("Open the following URL and follow the instructions to authenticate with GitHub Copilot:")
-		fmt.Println()
-		fmt.Println(lipgloss.NewStyle().Hyperlink(dc.VerificationURI, "id=copilot").Render(dc.VerificationURI))
-		fmt.Println()
-		fmt.Println("Code:", lipgloss.NewStyle().Bold(true).Render(dc.UserCode))
-		fmt.Println()
-		fmt.Println("Waiting for authorization...")
-
-		t, err := copilot.PollForToken(loginCtx, dc)
-		if err == copilot.ErrNotAvailable {
-			fmt.Println()
-			fmt.Println("GitHub Copilot is unavailable for this account. To signup, go to the following page:")
-			fmt.Println()
-			fmt.Println(lipgloss.NewStyle().Hyperlink(copilot.SignupURL, "id=copilot-signup").Render(copilot.SignupURL))
-			fmt.Println()
-			fmt.Println("You may be able to request free access if eligible. For more information, see:")
-			fmt.Println()
-			fmt.Println(lipgloss.NewStyle().Hyperlink(copilot.FreeURL, "id=copilot-free").Render(copilot.FreeURL))
-		}
-		if err != nil {
-			return err
-		}
-		token = t
-	}
-
-	if err := cmp.Or(
-		c.SetConfigField(loginCtx, wsID, config.ScopeGlobal, "providers.copilot.api_key", token.AccessToken),
-		c.SetConfigField(loginCtx, wsID, config.ScopeGlobal, "providers.copilot.oauth", token),
-	); err != nil {
+	cwd, err := ResolveCwd(cmd)
+	if err != nil {
 		return err
 	}
+	debug, _ := cmd.Flags().GetBool("debug")
+	ompStderr, err := setupOmpLogging(debug)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gmp-tui-go: warning: log setup failed: %v\n", err)
+	}
+	backend := resolveOmpBackend(cmd)
+	client, err := ompclient.Spawn(ctx, ompclient.Options{
+		Bin:        backend[0],
+		PrefixArgs: backend[1:],
+		Cwd:        cwd,
+		Env:        os.Environ(),
+		Stderr:     ompStderr,
+	})
+	if err != nil {
+		return fmt.Errorf("spawn gmp backend: %w", err)
+	}
+	defer func() { _ = client.Close() }()
 
-	fmt.Println()
-	fmt.Println("You're now authenticated with GitHub Copilot!")
-	return nil
+	driver := newAuthCLIDriver(client)
+	driverDone := driver.run(ctx)
+
+	callCtx, callCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer callCancel()
+	resp, err := client.Call(callCtx, ompclient.Command{Type: method, Provider: provider})
+	if err != nil {
+		return fmt.Errorf("gmp %s ack: %w", method, err)
+	}
+	if resp != nil && !resp.Success && resp.Error != "" {
+		return errors.New(resp.Error)
+	}
+
+	// Wait for the driver to receive auth.show_result (or for ctx to
+	// fire). The driver returns the result on driverDone.
+	select {
+	case res := <-driverDone:
+		if res != nil && !res.success {
+			if res.errMsg != "" {
+				return fmt.Errorf("auth flow failed: %s", res.errMsg)
+			}
+			return errors.New("auth flow failed")
+		}
+		fmt.Println()
+		fmt.Println("You're signed in.")
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
-func getLoginContext() context.Context {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+// authCLIDriver consumes auth.* extension_ui_request frames from the
+// gmp backend and drives the flow on the terminal. The TUI uses the
+// GmpAuth Bubble Tea dialog for the same wire contract; this is the
+// shell-friendly version for `gmp-tui-go login`.
+type authCLIDriver struct {
+	client *ompclient.Client
+}
+
+type authCLIResult struct {
+	success bool
+	errMsg  string
+}
+
+func newAuthCLIDriver(c *ompclient.Client) *authCLIDriver {
+	return &authCLIDriver{client: c}
+}
+
+// run consumes extension_ui_request frames in a goroutine and returns
+// a channel that emits exactly one authCLIResult once the flow ends
+// (auth.show_result observed, channel closed, or ctx cancelled).
+func (d *authCLIDriver) run(ctx context.Context) <-chan *authCLIResult {
+	out := make(chan *authCLIResult, 1)
 	go func() {
-		<-ctx.Done()
-		cancel()
-		os.Exit(1)
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case req, ok := <-d.client.ExtensionUIRequests():
+				if !ok {
+					return
+				}
+				if req == nil || req.ID == "" {
+					continue
+				}
+				done, res := d.handle(req)
+				if done {
+					out <- res
+					return
+				}
+			}
+		}
 	}()
-	return ctx
+	return out
 }
 
-func waitEnter() {
-	_, _ = fmt.Scanln()
+// handle processes one inbound auth.* request and posts the matching
+// extension_ui_response. Returns done=true when the flow has reached
+// its terminal state (show_result), so the caller stops consuming.
+// Non-auth methods auto-cancel — same default as the GmpWorkspace
+// dispatcher.
+func (d *authCLIDriver) handle(req *ompclient.ExtensionUIReq) (bool, *authCLIResult) {
+	if !strings.HasPrefix(req.Method, "auth.") {
+		_ = d.client.Send(ompclient.ExtensionUIResp{
+			Type: "extension_ui_response", ID: req.ID, Cancelled: true,
+		})
+		return false, nil
+	}
+
+	var p struct {
+		Provider     string   `json:"provider"`
+		URL          string   `json:"url"`
+		Instructions string   `json:"instructions"`
+		Message      string   `json:"message"`
+		Placeholder  string   `json:"placeholder"`
+		AllowEmpty   bool     `json:"allowEmpty"`
+		Success      bool     `json:"success"`
+		Error        string   `json:"error"`
+		Options      []string `json:"options"`
+		DefaultID    string   `json:"defaultId"`
+	}
+	if err := json.Unmarshal(req.Raw, &p); err != nil {
+		fmt.Fprintf(os.Stderr, "auth: failed to parse %s payload: %v\n", req.Method, err)
+		_ = d.client.Send(ompclient.ExtensionUIResp{
+			Type: "extension_ui_response", ID: req.ID, Cancelled: true,
+		})
+		return false, nil
+	}
+
+	switch req.Method {
+	case auth.MethodShowLoginURL:
+		return false, d.handleShowLoginURL(req.ID, p.URL, p.Instructions)
+	case auth.MethodShowProgress:
+		fmt.Println(p.Message)
+		return false, nil
+	case auth.MethodPromptCode:
+		return false, d.handlePromptCode(req.ID, p.Placeholder, p.AllowEmpty)
+	case auth.MethodPromptManualRedirect:
+		return false, d.handlePromptCode(req.ID, "Paste the full callback URL", true)
+	case auth.MethodPickProvider:
+		return false, d.handlePickProvider(req.ID, p.Options, p.DefaultID)
+	case auth.MethodShowResult:
+		return true, &authCLIResult{success: p.Success, errMsg: p.Error}
+	default:
+		_ = d.client.Send(ompclient.ExtensionUIResp{
+			Type: "extension_ui_response", ID: req.ID, Cancelled: true,
+		})
+		return false, nil
+	}
+}
+
+func (d *authCLIDriver) handleShowLoginURL(id, url, instructions string) *authCLIResult {
+	if instructions != "" {
+		fmt.Println(instructions)
+	}
+	fmt.Println()
+	fmt.Println("Open this URL in your browser:")
+	fmt.Println(lipgloss.NewStyle().Bold(true).Render(url))
+	if clipboard.WriteAll(url) == nil {
+		fmt.Println("(URL copied to clipboard.)")
+	}
+	if err := browser.OpenURL(url); err != nil {
+		fmt.Println("Could not open browser; copy the URL above manually.")
+	}
+	confirmed := true
+	_ = d.client.Send(ompclient.ExtensionUIResp{
+		Type: "extension_ui_response", ID: id, Confirmed: &confirmed,
+	})
+	return nil
+}
+
+func (d *authCLIDriver) handlePromptCode(id, placeholder string, allowEmpty bool) *authCLIResult {
+	prompt := placeholder
+	if prompt == "" {
+		prompt = "Enter value"
+	}
+	for {
+		fmt.Printf("%s: ", prompt)
+		var line string
+		if _, err := fmt.Scanln(&line); err != nil {
+			line = ""
+		}
+		line = strings.TrimSpace(line)
+		if line == "" && !allowEmpty {
+			fmt.Println("(value cannot be empty)")
+			continue
+		}
+		_ = d.client.Send(ompclient.ExtensionUIResp{
+			Type: "extension_ui_response", ID: id, Value: line,
+		})
+		return nil
+	}
+}
+
+func (d *authCLIDriver) handlePickProvider(id string, options []string, defaultID string) *authCLIResult {
+	if len(options) == 0 {
+		_ = d.client.Send(ompclient.ExtensionUIResp{
+			Type: "extension_ui_response", ID: id, Cancelled: true,
+		})
+		return nil
+	}
+	fmt.Println("Pick a provider:")
+	for i, opt := range options {
+		marker := "  "
+		if opt == defaultID {
+			marker = "* "
+		}
+		fmt.Printf("  %d) %s%s\n", i+1, marker, opt)
+	}
+	for {
+		fmt.Print("Selection: ")
+		var line string
+		if _, err := fmt.Scanln(&line); err != nil {
+			line = ""
+		}
+		line = strings.TrimSpace(line)
+		if line == "" && defaultID != "" {
+			line = defaultID
+		}
+		// Accept either index or literal id.
+		if idx, err := strconv.Atoi(line); err == nil && idx >= 1 && idx <= len(options) {
+			line = options[idx-1]
+		}
+		valid := false
+		for _, opt := range options {
+			if opt == line {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			fmt.Println("(unknown selection, try again)")
+			continue
+		}
+		_ = d.client.Send(ompclient.ExtensionUIResp{
+			Type: "extension_ui_response", ID: id, Value: line,
+		})
+		return nil
+	}
 }

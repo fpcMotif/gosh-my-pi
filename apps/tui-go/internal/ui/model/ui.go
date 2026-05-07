@@ -287,6 +287,8 @@ type UI struct {
 		index    int
 		draft    string
 	}
+
+	pendingGmpModelSelection *dialog.ActionSelectModel
 }
 
 // New creates a new instance of the [UI] model.
@@ -687,6 +689,11 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case auth.ShowLoginURL, auth.ShowProgress, auth.PromptCode, auth.PromptManualRedirect, auth.PickProvider, auth.ShowResult:
 		if cmd := m.openOrUpdateGmpAuthDialog(msg); cmd != nil {
 			cmds = append(cmds, cmd)
+		}
+		if result, ok := msg.(auth.ShowResult); ok && result.Success {
+			if cmd := m.retryPendingGmpModelSelection(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 	case auth.Submit, auth.Confirm, auth.Cancel:
 		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
@@ -1653,6 +1660,10 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 		return util.ReportError(errors.New("configuration not found"))
 	}
 
+	if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
+		return m.handleGmpSelectModel(gw, msg)
+	}
+
 	var (
 		providerID   = msg.Model.Provider
 		isCopilot    = providerID == string(catwalk.InferenceProviderCopilot)
@@ -1727,7 +1738,95 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+func (m *UI) handleGmpSelectModel(gw *workspace.GmpWorkspace, msg dialog.ActionSelectModel) tea.Cmd {
+	entry, ok := gw.ModelCatalogEntry(msg.Model.Provider, msg.Model.Model)
+	if !ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := gw.RefreshModelCatalog(ctx); err != nil {
+			return util.ReportError(err)
+		}
+		entry, ok = gw.ModelCatalogEntry(msg.Model.Provider, msg.Model.Model)
+	}
+	if ok && (!entry.Available || msg.ReAuthenticate) {
+		if !entry.LoginAvailable {
+			return util.ReportError(fmt.Errorf("model unavailable: %s/%s", msg.Model.Provider, msg.Model.Model))
+		}
+		pending := msg
+		m.pendingGmpModelSelection = &pending
+		m.dialog.CloseDialog(dialog.ModelsID)
+		return m.runGmpAuthCommand(auth.CommandLogin, entry.Provider)
+	}
+	return m.applyGmpModelSelection(gw, msg)
+}
+
+func (m *UI) applyGmpModelSelection(gw *workspace.GmpWorkspace, msg dialog.ActionSelectModel) tea.Cmd {
+	var cmds []tea.Cmd
+	isOnboarding := m.state == uiOnboarding
+	providerID := msg.Model.Provider
+
+	if err := gw.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
+		return util.ReportError(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := gw.RefreshModelCatalog(ctx); err != nil {
+		cmds = append(cmds, util.ReportError(err))
+	}
+	cancel()
+
+	if msg.ModelType == config.SelectedModelTypeLarge {
+		m.applyTheme(styles.ThemeForProvider(providerID))
+	}
+
+	m.dialog.CloseDialog(dialog.APIKeyInputID)
+	m.dialog.CloseDialog(dialog.OAuthID)
+	m.dialog.CloseDialog(dialog.GmpAuthID)
+	m.dialog.CloseDialog(dialog.ModelsID)
+
+	if isOnboarding {
+		m.setState(uiLanding, uiFocusEditor)
+		m.com.Config().SetupAgents()
+		if err := gw.InitCoderAgent(context.TODO()); err != nil {
+			cmds = append(cmds, util.ReportError(err))
+		}
+	}
+
+	modelMsg := fmt.Sprintf("%s model changed to %s", msg.ModelType, msg.Model.Model)
+	cmds = append(cmds, util.ReportInfo(modelMsg))
+	return tea.Batch(cmds...)
+}
+
+func (m *UI) retryPendingGmpModelSelection() tea.Cmd {
+	if m.pendingGmpModelSelection == nil {
+		return nil
+	}
+	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
+	if !ok {
+		m.pendingGmpModelSelection = nil
+		return nil
+	}
+	pending := *m.pendingGmpModelSelection
+	m.pendingGmpModelSelection = nil
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := gw.RefreshModelCatalog(ctx); err != nil {
+		return util.ReportError(err)
+	}
+	return m.handleGmpSelectModel(gw, pending)
+}
+
 func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.SelectedModel, modelType config.SelectedModelType) tea.Cmd {
+	// Gmp mode owns the credential store. Routing through Crush's
+	// legacy NewAPIKeyInput / NewOAuthHyper / NewOAuthCopilot would
+	// terminate by writing to local crush.json (or, in GmpWorkspace's
+	// case, into a no-op SetProviderAPIKey stub) and never reach gmp's
+	// AuthStorage. Instead, dispatch auth.login over RPC; the gmp side
+	// drives the flow back via extension_ui_request frames into the
+	// GmpAuth dialog. See docs/adr/0001-gmp-mode-credential-store.md.
+	if m.com.Workspace != nil && m.com.Workspace.IsGmpMode() {
+		return m.runGmpAuthCommand(auth.CommandLogin, string(provider.ID))
+	}
+
 	var (
 		dlg dialog.Dialog
 		cmd tea.Cmd
@@ -2329,13 +2428,18 @@ func (m *UI) trapLocalSlash(content string) (tea.Cmd, bool) {
 // gmp backend if the active workspace is a GmpWorkspace; otherwise reports
 // the limitation. The actual UI flow (dialogs) is driven by inbound
 // extension_ui_request frames, not this command.
+//
+// Provider may be empty for auth.login — the backend emits a correlated
+// auth.pick_provider extension_ui_request and the GmpAuth dialog drives
+// the picker. See ADR 0002. auth.logout still requires an explicit
+// provider id.
 func (m *UI) runGmpAuthCommand(method string, provider string) tea.Cmd {
 	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
 	if !ok {
 		return util.ReportInfo(method + " requires the gmp backend (apps/tui-go in gmp mode)")
 	}
-	if provider == "" {
-		return util.ReportInfo("usage: " + method + " <provider> (e.g. /login openai-codex)")
+	if provider == "" && method != auth.CommandLogin {
+		return util.ReportInfo("usage: " + method + " <provider> (e.g. /logout openai-codex)")
 	}
 	return func() tea.Msg {
 		if err := gw.SendAuthCommand(method, provider); err != nil {
@@ -3377,6 +3481,14 @@ func (m *UI) openModelsDialog() tea.Cmd {
 		// Bring to front
 		m.dialog.BringToFront(dialog.ModelsID)
 		return nil
+	}
+
+	if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := gw.RefreshModelCatalog(ctx); err != nil {
+			return util.ReportError(err)
+		}
 	}
 
 	isOnboarding := m.state == uiOnboarding

@@ -24,11 +24,18 @@ import type {
 import { runExtensionCompact, runExtensionSetModel } from "../../extensibility/extensions/compact-handler";
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
+import { getOAuthProviders } from "@oh-my-pi/pi-ai";
 import type { OAuthProviderId } from "@oh-my-pi/pi-ai/utils/oauth/types";
+import { formatModelString, parseModelString } from "../../config/model-resolver";
+import { getKnownRoleIds } from "../../config/model-registry";
 import { isRpcHostToolResult, isRpcHostToolUpdate, RpcHostToolBridge } from "./host-tools";
 import { RequestCorrelator } from "./request-correlator";
 import { RpcOAuthController } from "./rpc-oauth-controller";
+import { AuthMethod } from "./rpc-types";
 import type {
+	RpcModelCatalog,
+	RpcModelCatalogEntry,
+	RpcModelCatalogRole,
 	RpcCommand,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
@@ -45,6 +52,107 @@ import { OMP_RPC_SCHEMA_V1, type WireFrame } from "./wire/v1";
 export type * from "./rpc-types";
 
 type RpcOutput = (frame: WireFrame) => void;
+
+type AuthProviderMetadata = {
+	id: string;
+	name: string;
+	available: boolean;
+};
+
+const BUILTIN_AUTH_PROVIDERS: readonly AuthProviderMetadata[] = [
+	{ id: "openai-codex", name: "OpenAI Codex", available: true },
+	{ id: "kimi", name: "Kimi", available: true },
+	{ id: "moonshot", name: "Moonshot", available: true },
+	{ id: "zai", name: "zAI", available: true },
+	{ id: "kagi", name: "Kagi", available: true },
+	{ id: "parallel", name: "Parallel", available: true },
+	{ id: "tavily", name: "Tavily", available: true },
+	{ id: "minimax-code", name: "MiniMax Code", available: true },
+];
+
+function oauthProviderAvailable(provider: unknown): boolean {
+	if (provider === null || provider === undefined || typeof provider !== "object") return true;
+	if (!("available" in provider)) return true;
+	return provider.available !== false;
+}
+
+function getAuthProviderMetadata(): AuthProviderMetadata[] {
+	const providers = new Map<string, AuthProviderMetadata>();
+	for (const provider of BUILTIN_AUTH_PROVIDERS) {
+		providers.set(provider.id, provider);
+	}
+	for (const provider of getOAuthProviders()) {
+		providers.set(String(provider.id), {
+			id: String(provider.id),
+			name: provider.name,
+			available: oauthProviderAvailable(provider),
+		});
+	}
+	return Array.from(providers.values());
+}
+
+export function buildRpcModelCatalog(session: AgentSession): RpcModelCatalog {
+	const availableModels = session.getAvailableModels();
+	const available = new Set(availableModels.map(formatModelString));
+	const authenticated = new Set(session.modelRegistry.authStorage.list());
+	const oauthProviders = new Map(
+		getAuthProviderMetadata().map(provider => [
+			provider.id,
+			{
+				name: provider.name,
+				available: provider.available,
+			},
+		]),
+	);
+
+	const roles: RpcModelCatalogRole[] = getKnownRoleIds(session.settings).map(role => {
+		const selector = session.settings.getModelRole(role);
+		const parsed = selector ? parseModelString(selector) : undefined;
+		return {
+			role,
+			selector,
+			provider: parsed?.provider,
+			modelId: parsed?.id,
+		};
+	});
+
+	const rolesByModel = new Map<string, string[]>();
+	for (const role of roles) {
+		if (!role.provider || !role.modelId) continue;
+		const key = `${role.provider}/${role.modelId}`;
+		const roleList = rolesByModel.get(key) ?? [];
+		roleList.push(role.role);
+		rolesByModel.set(key, roleList);
+	}
+
+	const current = session.model;
+	const models: RpcModelCatalogEntry[] = session.modelRegistry.getAll().map(model => {
+		const key = formatModelString(model);
+		const oauthProvider = oauthProviders.get(model.provider);
+		return {
+			provider: model.provider,
+			providerName: oauthProvider?.name ?? model.provider,
+			id: model.id,
+			name: model.name,
+			available: available.has(key),
+			authenticated: authenticated.has(model.provider),
+			loginSupported: oauthProvider !== undefined,
+			loginAvailable: oauthProvider?.available === true,
+			current: current?.provider === model.provider && current.id === model.id,
+			roles: rolesByModel.get(key) ?? [],
+			contextWindow: model.contextWindow,
+			maxTokens: model.maxTokens,
+			reasoning: model.reasoning,
+			supportsImages: model.input.includes("image"),
+		};
+	});
+
+	return {
+		models,
+		roles,
+		current,
+	};
+}
 
 function normalizeHostToolDefinitions(tools: RpcHostToolDefinition[]): RpcHostToolDefinition[] {
 	return tools.map((tool, index) => {
@@ -123,6 +231,64 @@ export async function requestRpcEditor(
 	if ("cancelled" in response && response.cancelled) return undefined;
 	if ("value" in response) return response.value;
 	return undefined;
+}
+
+/**
+ * Outcome of resolving the `auth.login` provider when none was supplied
+ * on the command. Either a usable provider id (direct or picker-driven)
+ * or a typed error suitable for an `RpcResponse.error` payload.
+ */
+export type AuthLoginProviderResolution = { ok: true; provider: string } | { ok: false; error: string };
+
+/**
+ * Resolve the provider id for an `auth.login` dispatch.
+ *
+ * - Non-empty `commandProvider` → return it directly.
+ * - Empty / missing `commandProvider` → emit a correlated
+ *   `auth.pick_provider` extension_ui_request, await the host's
+ *   reply, and return the picked id (or a typed error if the picker
+ *   was cancelled or the reply was malformed).
+ *
+ * Extracted as a free function so the picker choreography is unit
+ * testable without an `AgentSession`. The wire shape produced here is
+ * type-locked against `RpcExtensionUIRequest`'s `auth.pick_provider`
+ * variant: any drift in the frame fields becomes a TS compile error.
+ *
+ * See ADR 0002 for the wire contract; see CONTEXT.md
+ * "authCLIDriver / Provider-required contract" for the host-side
+ * routing.
+ */
+export async function resolveAuthLoginProvider(
+	commandProvider: string | undefined,
+	correlator: RequestCorrelator,
+	output: RpcOutput,
+	listAvailableProviderIds: () => string[],
+): Promise<AuthLoginProviderResolution> {
+	if (commandProvider !== undefined && commandProvider !== "") {
+		return { ok: true, provider: commandProvider };
+	}
+	const options = listAvailableProviderIds();
+	if (options.length === 0) {
+		return { ok: false, error: "no providers available" };
+	}
+	const { id, promise } = correlator.register<RpcExtensionUIResponse | undefined>({
+		defaultValue: undefined,
+	});
+	output({
+		type: "extension_ui_request",
+		id,
+		method: AuthMethod.PickProvider,
+		options,
+		defaultId: options[0],
+	} as RpcExtensionUIRequest);
+	const reply = await promise;
+	if (reply === undefined || ("cancelled" in reply && reply.cancelled === true)) {
+		return { ok: false, error: "auth.login cancelled" };
+	}
+	if (!("value" in reply) || typeof reply.value !== "string" || reply.value === "") {
+		return { ok: false, error: "auth.login picker returned invalid response" };
+	}
+	return { ok: true, provider: reply.value };
 }
 
 /**
@@ -560,23 +726,21 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return success(id, "set_host_tools", { toolNames: tools.map(tool => tool.name) });
 			}
 
+			case "models.catalog": {
+				return success(id, "models.catalog", buildRpcModelCatalog(session));
+			}
+
 			case "set_model": {
-				// The Go TUI (apps/tui-go) registers a single placeholder
-				// model "gmp/gmp-backend" so it can reuse Crush's model-
-				// picker plumbing without duplicating the backend's full
-				// model registry. When it sends that pair, treat it as a
-				// no-op meaning "keep whatever model the backend already
-				// has" and echo the current model back so the TUI can
-				// label its header correctly.
+				// Backward compatibility for older Go bridge builds that used
+				// a synthetic placeholder before models.catalog existed.
 				if (command.provider === "gmp" && command.modelId === "gmp-backend") {
 					return success(id, "set_model", session.model ?? null);
 				}
-				const models = session.getAvailableModels();
-				const model = models.find(m => m.provider === command.provider && m.id === command.modelId);
+				const model = session.modelRegistry.find(command.provider, command.modelId);
 				if (!model) {
 					return errorResp(id, "set_model", `Model not found: ${command.provider}/${command.modelId}`);
 				}
-				await session.setModel(model);
+				await session.setModel(model, command.role ?? "default");
 				return success(id, "set_model", model);
 			}
 
@@ -698,7 +862,20 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			}
 
 			case "auth.login": {
-				const provider = command.provider;
+				// Empty / missing provider triggers backend-driven picker via
+				// correlated auth.pick_provider extension_ui_request. The Go
+				// side (Bubble Tea dialog.GmpAuth and CLI authCLIDriver) both
+				// already route this method; only the backend emit was missing.
+				// See ADR 0002.
+				const resolved = await resolveAuthLoginProvider(command.provider, extensionUIRequests, output, () =>
+					getAuthProviderMetadata()
+						.filter(p => p.available)
+						.map(p => p.id),
+				);
+				if (!resolved.ok) {
+					return errorResp(id, "auth.login", resolved.error);
+				}
+				const provider = resolved.provider;
 				const controller = new RpcOAuthController({
 					provider,
 					correlator: extensionUIRequests,
@@ -714,7 +891,11 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 							onPrompt: prompt => controller.onPrompt(prompt),
 							onManualCodeInput: () => controller.onManualCodeInput(),
 						});
-						controller.emitResult(true);
+						// Snapshot the post-login authenticated provider list so
+						// the Go-side workspace refreshes its catalog without an
+						// extra round-trip. AuthStorage.list() is the source of
+						// truth for "who has stored credentials".
+						controller.emitResult(true, undefined, session.modelRegistry.authStorage.list());
 						return { provider, ok: true };
 					},
 					message => controller.emitResult(false, message),
@@ -726,6 +907,23 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return runAuthCommand(id, "auth.logout", async () => {
 					await session.modelRegistry.authStorage.logout(provider);
 					return { provider };
+				});
+			}
+
+			case "providers.list_supported": {
+				// All OAuth providers gmp can authenticate. The Go-side TUI
+				// uses this to populate its interactive /login picker so the
+				// list always tracks pi-ai's known providers.
+				return success(id, "providers.list_supported", { providers: getAuthProviderMetadata() });
+			}
+
+			case "providers.list_authenticated": {
+				// Currently-authenticated providers (i.e. those with stored
+				// credentials in AuthStorage). Returned as raw ids; the
+				// caller pairs them with the supported list when display
+				// names are needed.
+				return success(id, "providers.list_authenticated", {
+					providers: session.modelRegistry.authStorage.list(),
 				});
 			}
 

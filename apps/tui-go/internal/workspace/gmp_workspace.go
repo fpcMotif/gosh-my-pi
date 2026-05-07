@@ -1,11 +1,13 @@
 package workspace
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,12 +31,69 @@ import (
 )
 
 const (
-	gmpProviderID       = "gmp"
+	// GmpProviderID is the canonical id of the virtual provider that
+	// stands in for the gmp RPC bridge in Crush's provider map. Exported
+	// so the model picker, auth dialog router, and `crush login`
+	// command can recognise gmp-bridge entries without hard-coding the
+	// string.
+	GmpProviderID = "gmp"
+
+	gmpProviderID       = GmpProviderID
 	gmpModelID          = "gmp-backend"
 	gmpToolSessionDelim = "$$"
 )
 
 var ErrUnsupported = errors.New("gmp backend: operation not supported in MVP")
+
+// GmpModelCatalogEntry is the Go-side projection of the backend-owned
+// models.catalog entry. It is intentionally provider/model centric:
+// GmpWorkspace uses it to build the Bridge Model Catalog that the Crush
+// picker renders, and the UI uses it to decide whether a selection needs
+// GmpAuth before set_model can succeed.
+type GmpModelCatalogEntry struct {
+	Provider       string   `json:"provider"`
+	ProviderName   string   `json:"providerName"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Available      bool     `json:"available"`
+	Authenticated  bool     `json:"authenticated"`
+	LoginSupported bool     `json:"loginSupported"`
+	LoginAvailable bool     `json:"loginAvailable"`
+	Current        bool     `json:"current"`
+	Roles          []string `json:"roles"`
+	ContextWindow  int64    `json:"contextWindow,omitempty"`
+	MaxTokens      int64    `json:"maxTokens,omitempty"`
+	Reasoning      bool     `json:"reasoning"`
+	SupportsImages bool     `json:"supportsImages"`
+}
+
+func (e GmpModelCatalogEntry) key() string {
+	return gmpModelCatalogKey(e.Provider, e.ID)
+}
+
+func gmpModelCatalogKey(providerID, modelID string) string {
+	if providerID == "" || modelID == "" {
+		return ""
+	}
+	return providerID + "/" + modelID
+}
+
+type gmpModelCatalogRole struct {
+	Role     string `json:"role"`
+	Selector string `json:"selector,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	ModelID  string `json:"modelId,omitempty"`
+}
+
+type gmpModelCatalogResponse struct {
+	Models  []GmpModelCatalogEntry `json:"models"`
+	Roles   []gmpModelCatalogRole  `json:"roles"`
+	Current *struct {
+		Provider string `json:"provider"`
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+	} `json:"current,omitempty"`
+}
 
 // GmpWorkspace implements the Workspace interface by talking to an
 // external `gmp --mode rpc` process over JSONL stdio.
@@ -57,6 +116,8 @@ type GmpWorkspace struct {
 	msgCounter         atomic.Uint64
 
 	model AgentModel
+
+	modelCatalog map[string]GmpModelCatalogEntry
 
 	// program receives every UI-bound message via sendUI. In production this
 	// is *tea.Program; tests can swap in a fake that satisfies programSender
@@ -85,6 +146,7 @@ func NewGmpWorkspace(client *ompclient.Client, cwd string) *GmpWorkspace {
 		resolver:           config.IdentityResolver(),
 		messages:           make(map[string]message.Message),
 		toolResultMessages: make(map[string]string),
+		modelCatalog:       make(map[string]GmpModelCatalogEntry),
 		model: AgentModel{
 			CatwalkCfg: catwalk.Model{ID: gmpModelID, Name: "gmp backend"},
 			ModelCfg:   cfg.Models[config.SelectedModelTypeLarge],
@@ -93,6 +155,7 @@ func NewGmpWorkspace(client *ompclient.Client, cwd string) *GmpWorkspace {
 	// Best-effort initial state sync so the UI has a session ID immediately.
 	if client != nil {
 		w.syncState(context.Background())
+		_ = w.RefreshModelCatalog(context.Background())
 	}
 	return w
 }
@@ -129,16 +192,148 @@ func (w *GmpWorkspace) syncState(ctx context.Context) {
 	}
 	if st.Model.ID != "" {
 		modelName := st.Model.ID
+		providerID := cmp.Or(st.Model.Provider, gmpProviderID)
 		w.model = AgentModel{
 			CatwalkCfg: catwalk.Model{ID: st.Model.ID, Name: modelName},
 			ModelCfg: config.SelectedModel{
-				Provider: gmpProviderID,
+				Provider: providerID,
 				Model:    st.Model.ID,
 			},
 		}
 	}
 	w.mu.Unlock()
 	w.syncMessages(ctx)
+}
+
+// RefreshModelCatalog reloads the Bridge Model Catalog from the backend
+// ModelRegistry/AuthStorage over RPC. In gmp mode this is the only model
+// picker source of truth; the legacy Crush catalog is deliberately ignored.
+func (w *GmpWorkspace) RefreshModelCatalog(ctx context.Context) error {
+	if w.client == nil {
+		return nil
+	}
+	resp, err := w.client.Call(ctx, ompclient.Command{Type: "models.catalog"})
+	if err != nil {
+		return err
+	}
+	var catalog gmpModelCatalogResponse
+	if err := json.Unmarshal(resp.Data, &catalog); err != nil {
+		return fmt.Errorf("parse models.catalog response: %w", err)
+	}
+	w.mu.Lock()
+	w.applyModelCatalogLocked(catalog)
+	w.mu.Unlock()
+	return nil
+}
+
+// ModelCatalogEntry returns the last refreshed backend catalog entry for
+// provider/model. The UI consults this before set_model so unavailable
+// entries can route through GmpAuth instead of the legacy API-key dialog.
+func (w *GmpWorkspace) ModelCatalogEntry(providerID, modelID string) (GmpModelCatalogEntry, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	entry, ok := w.modelCatalog[gmpModelCatalogKey(providerID, modelID)]
+	return entry, ok
+}
+
+func (w *GmpWorkspace) applyModelCatalogLocked(catalog gmpModelCatalogResponse) {
+	if w.modelCatalog == nil {
+		w.modelCatalog = make(map[string]GmpModelCatalogEntry)
+	} else {
+		for key := range w.modelCatalog {
+			delete(w.modelCatalog, key)
+		}
+	}
+
+	providerModels := make(map[string][]catwalk.Model)
+	providerNames := make(map[string]string)
+	providerConfigured := make(map[string]bool)
+	selectedByRole := make(map[string]config.SelectedModel)
+
+	models := slices.Clone(catalog.Models)
+	slices.SortFunc(models, func(a, b GmpModelCatalogEntry) int {
+		if n := cmp.Compare(cmp.Or(a.ProviderName, a.Provider), cmp.Or(b.ProviderName, b.Provider)); n != 0 {
+			return n
+		}
+		return cmp.Compare(cmp.Or(a.Name, a.ID), cmp.Or(b.Name, b.ID))
+	})
+
+	for _, entry := range models {
+		if entry.Provider == "" || entry.ID == "" {
+			continue
+		}
+		w.modelCatalog[entry.key()] = entry
+		providerNames[entry.Provider] = cmp.Or(entry.ProviderName, entry.Provider)
+		if entry.Available || entry.Authenticated {
+			providerConfigured[entry.Provider] = true
+		}
+		displayName := cmp.Or(entry.Name, entry.ID)
+		if !entry.Available {
+			if entry.LoginAvailable {
+				displayName += " (login required)"
+			} else {
+				displayName += " (unavailable)"
+			}
+		}
+		providerModels[entry.Provider] = append(providerModels[entry.Provider], catwalk.Model{
+			ID:               entry.ID,
+			Name:             displayName,
+			ContextWindow:    entry.ContextWindow,
+			DefaultMaxTokens: entry.MaxTokens,
+			CanReason:        entry.Reasoning,
+			SupportsImages:   entry.SupportsImages,
+		})
+		selected := config.SelectedModel{Provider: entry.Provider, Model: entry.ID}
+		for _, role := range entry.Roles {
+			selectedByRole[role] = selected
+		}
+		if entry.Current {
+			selectedByRole["current"] = selected
+		}
+	}
+
+	providers := make(map[string]config.ProviderConfig, len(providerModels))
+	providerIDs := make([]string, 0, len(providerModels))
+	for providerID := range providerModels {
+		providerIDs = append(providerIDs, providerID)
+	}
+	slices.Sort(providerIDs)
+	for _, providerID := range providerIDs {
+		apiKey := ""
+		if providerConfigured[providerID] {
+			apiKey = "gmp-authenticated"
+		}
+		providers[providerID] = config.ProviderConfig{
+			ID:     providerID,
+			Name:   providerNames[providerID],
+			Type:   catwalk.TypeOpenAI,
+			APIKey: apiKey,
+			Models: providerModels[providerID],
+		}
+	}
+
+	w.cfg.Providers.Reset(providers)
+	if selected, ok := selectedByRole["default"]; ok {
+		w.cfg.Models[config.SelectedModelTypeLarge] = selected
+	} else if selected, ok := selectedByRole["current"]; ok {
+		w.cfg.Models[config.SelectedModelTypeLarge] = selected
+	}
+	if selected, ok := selectedByRole["smol"]; ok {
+		w.cfg.Models[config.SelectedModelTypeSmall] = selected
+	}
+	if selected, ok := selectedByRole["current"]; ok {
+		w.model = AgentModel{
+			CatwalkCfg: catwalk.Model{ID: selected.Model, Name: selected.Model},
+			ModelCfg:   selected,
+		}
+	} else if catalog.Current != nil && catalog.Current.ID != "" {
+		name := cmp.Or(catalog.Current.Name, catalog.Current.ID)
+		selected := config.SelectedModel{Provider: catalog.Current.Provider, Model: catalog.Current.ID}
+		w.model = AgentModel{
+			CatwalkCfg: catwalk.Model{ID: catalog.Current.ID, Name: name},
+			ModelCfg:   selected,
+		}
+	}
 }
 
 func (w *GmpWorkspace) syncMessages(ctx context.Context) {
@@ -403,11 +598,8 @@ func (w *GmpWorkspace) AgentSummarize(ctx context.Context, sessionID string) err
 }
 
 func (w *GmpWorkspace) UpdateAgentModel(ctx context.Context) error {
-	if w.client == nil {
-		return nil
-	}
-	_, err := w.client.Call(ctx, ompclient.Command{Type: "cycle_model"})
-	return err
+	w.syncState(ctx)
+	return nil
 }
 
 func (w *GmpWorkspace) InitCoderAgent(ctx context.Context) error {
@@ -474,6 +666,12 @@ func (w *GmpWorkspace) Resolver() config.VariableResolver {
 	return w.resolver
 }
 
+// IsGmpMode reports true: GmpWorkspace IS the gmp RPC bridge. Callers
+// use this to short-circuit Crush legacy code paths that would write
+// credentials into local stores instead of routing through gmp's
+// AuthStorage over the auth.* RPC frames.
+func (*GmpWorkspace) IsGmpMode() bool { return true }
+
 // -- Config mutations --
 
 func (w *GmpWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
@@ -491,8 +689,18 @@ func (w *GmpWorkspace) UpdatePreferredModel(scope config.Scope, modelType config
 		Type:     "set_model",
 		Provider: model.Provider,
 		ModelID:  model.Model,
+		Role:     gmpRoleForModelType(modelType),
 	})
 	return err
+}
+
+func gmpRoleForModelType(modelType config.SelectedModelType) string {
+	switch modelType {
+	case config.SelectedModelTypeSmall:
+		return "smol"
+	default:
+		return "default"
+	}
 }
 
 func (w *GmpWorkspace) SetCompactMode(scope config.Scope, enabled bool) error {
@@ -619,45 +827,133 @@ func (w *GmpWorkspace) dispatchExtensionUIRequest(req *ompclient.ExtensionUIReq)
 	w.sendCancelledExtensionUIResponse(req.ID, req.Method)
 }
 
-// authPayload is the union of every auth.* extension_ui_request payload.
-// Decoding into a single struct lets translateAuthRequest stay table-driven
-// — each entry only needs to map the parsed payload to its tea.Msg type.
-// Unknown JSON fields are ignored.
-type authPayload struct {
-	Provider     string   `json:"provider"`
-	URL          string   `json:"url"`
-	Instructions string   `json:"instructions"`
-	Message      string   `json:"message"`
-	Placeholder  string   `json:"placeholder"`
-	AllowEmpty   bool     `json:"allowEmpty"`
-	Success      bool     `json:"success"`
-	Error        string   `json:"error"`
-	Options      []string `json:"options"`
-	DefaultID    string   `json:"defaultId"`
+// Per-method auth.* extension_ui_request payloads. Each variant in the
+// TS-side `RpcExtensionUIRequest.method: "auth.*"` union has a matching
+// struct here, so JSON unmarshal targets the actual wire shape rather
+// than a flat catch-all. Pair-locked with the TS-side `AuthRequestPayload`
+// derived type (packages/coding-agent/src/modes/rpc/rpc-types.ts) and
+// asserted at startup by the init() parity check below.
+type (
+	authShowLoginURLPayload struct {
+		Provider     string `json:"provider"`
+		URL          string `json:"url"`
+		Instructions string `json:"instructions,omitempty"`
+	}
+	authShowProgressPayload struct {
+		Provider string `json:"provider"`
+		Message  string `json:"message"`
+	}
+	authPromptCodePayload struct {
+		Provider    string `json:"provider"`
+		Placeholder string `json:"placeholder,omitempty"`
+		AllowEmpty  bool   `json:"allowEmpty,omitempty"`
+	}
+	authPromptManualRedirectPayload struct {
+		Provider     string `json:"provider"`
+		Instructions string `json:"instructions"`
+	}
+	authShowResultPayload struct {
+		Provider  string   `json:"provider"`
+		Success   bool     `json:"success"`
+		Error     string   `json:"error,omitempty"`
+		Providers []string `json:"providers,omitempty"`
+	}
+	authPickProviderPayload struct {
+		Options   []string `json:"options"`
+		DefaultID string   `json:"defaultId,omitempty"`
+	}
+)
+
+// authDecoder is the shared shape of an authDecoders entry: a function
+// that consumes the inbound id + raw JSON for one auth.* method and
+// produces either a typed tea.Msg or a decode error. The decodeAuth[T]
+// helper builds these from a typed builder closure so each entry's
+// payload is statically known.
+type authDecoder func(id string, raw json.RawMessage) (tea.Msg, error)
+
+// decodeAuth wires a typed payload builder into the authDecoder shape.
+// Generic over the payload struct so each map entry can be written with
+// its actual decoded type rather than a flat catch-all. Pure for
+// testability.
+func decodeAuth[T any](build func(id string, p T) tea.Msg) authDecoder {
+	return func(id string, raw json.RawMessage) (tea.Msg, error) {
+		var p T
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, err
+		}
+		return build(id, p), nil
+	}
 }
 
-// authDecoders maps each auth.* method to a builder that produces the tea.Msg
-// payload from a decoded authPayload. Keep the keys aligned with the constants
-// in apps/tui-go/internal/auth/methods.go and AuthMethod in rpc-types.ts.
-var authDecoders = map[string]func(id string, p authPayload) tea.Msg{
-	auth.MethodShowLoginURL: func(id string, p authPayload) tea.Msg {
+// authMethods is the canonical list of auth.* method constants this
+// dispatcher must support. Sourced once so the init() parity check
+// and TestAuthDecoderParity drive off the same set. Adding a new
+// auth.MethodX constant requires appending to this list AND adding a
+// decoder; the init() check turns either omission into a startup
+// panic.
+var authMethods = []string{
+	auth.MethodShowLoginURL,
+	auth.MethodShowProgress,
+	auth.MethodPromptCode,
+	auth.MethodPromptManualRedirect,
+	auth.MethodShowResult,
+	auth.MethodPickProvider,
+}
+
+// authDecoders maps each auth.* method constant to its decoder. Pair-
+// locked with the TS-side AuthRequestPayload union; the init() block
+// below ensures every authMethods entry has a matching decoder.
+var authDecoders = map[string]authDecoder{
+	auth.MethodShowLoginURL: decodeAuth(func(id string, p authShowLoginURLPayload) tea.Msg {
 		return auth.ShowLoginURL{ID: id, Provider: p.Provider, URL: p.URL, Instructions: p.Instructions}
-	},
-	auth.MethodShowProgress: func(id string, p authPayload) tea.Msg {
+	}),
+	auth.MethodShowProgress: decodeAuth(func(id string, p authShowProgressPayload) tea.Msg {
 		return auth.ShowProgress{ID: id, Provider: p.Provider, Message: p.Message}
-	},
-	auth.MethodPromptCode: func(id string, p authPayload) tea.Msg {
+	}),
+	auth.MethodPromptCode: decodeAuth(func(id string, p authPromptCodePayload) tea.Msg {
 		return auth.PromptCode{ID: id, Provider: p.Provider, Placeholder: p.Placeholder, AllowEmpty: p.AllowEmpty}
-	},
-	auth.MethodPromptManualRedirect: func(id string, p authPayload) tea.Msg {
+	}),
+	auth.MethodPromptManualRedirect: decodeAuth(func(id string, p authPromptManualRedirectPayload) tea.Msg {
 		return auth.PromptManualRedirect{ID: id, Provider: p.Provider, Instructions: p.Instructions}
-	},
-	auth.MethodShowResult: func(id string, p authPayload) tea.Msg {
-		return auth.ShowResult{ID: id, Provider: p.Provider, Success: p.Success, Error: p.Error}
-	},
-	auth.MethodPickProvider: func(id string, p authPayload) tea.Msg {
+	}),
+	auth.MethodShowResult: decodeAuth(func(id string, p authShowResultPayload) tea.Msg {
+		return auth.ShowResult{ID: id, Provider: p.Provider, Success: p.Success, Error: p.Error, Providers: p.Providers}
+	}),
+	auth.MethodPickProvider: decodeAuth(func(id string, p authPickProviderPayload) tea.Msg {
 		return auth.PickProvider{ID: id, Options: p.Options, DefaultID: p.DefaultID}
-	},
+	}),
+}
+
+// init enforces every entry in authMethods has a decoder. Without this
+// check, a method added to the const list but forgotten in authDecoders
+// would silently fall through to auto-cancel at runtime. The matching
+// guarantee on the TS side is `AuthRequestPayload` rejecting unknown
+// methods at compile time.
+func init() {
+	ensureAuthDecoderParity(authMethods, authDecoders)
+}
+
+// ensureAuthDecoderParity panics if any entry in `methods` lacks an
+// entry in `decoders`. Extracted for testability; the production
+// init() block calls this with the package-level maps, while
+// TestAuthDecoderInitPanicsOnMissing passes a synthesized pair to
+// exercise the panic path.
+func ensureAuthDecoderParity(methods []string, decoders map[string]authDecoder) {
+	if missing := missingAuthDecoders(methods, decoders); len(missing) > 0 {
+		panic("gmp workspace: auth decoder missing for: " + strings.Join(missing, ", "))
+	}
+}
+
+// missingAuthDecoders returns the entries in `methods` that have no
+// entry in `decoders`. Pure for testability.
+func missingAuthDecoders(methods []string, decoders map[string]authDecoder) []string {
+	var missing []string
+	for _, m := range methods {
+		if _, ok := decoders[m]; !ok {
+			missing = append(missing, m)
+		}
+	}
+	return missing
 }
 
 // translateAuthRequest returns a Bubble Tea message for an inbound
@@ -668,17 +964,17 @@ func (w *GmpWorkspace) translateAuthRequest(req *ompclient.ExtensionUIReq) tea.M
 	if !strings.HasPrefix(req.Method, "auth.") {
 		return nil
 	}
-	build, ok := authDecoders[req.Method]
+	decode, ok := authDecoders[req.Method]
 	if !ok {
 		slog.Debug("gmp workspace: unknown auth.* method, falling back to cancel", "method", req.Method, "id", req.ID)
 		return nil
 	}
-	var p authPayload
-	if err := json.Unmarshal(req.Raw, &p); err != nil {
+	msg, err := decode(req.ID, req.Raw)
+	if err != nil {
 		slog.Warn("gmp workspace: failed to parse auth payload", "method", req.Method, "id", req.ID, "error", err)
 		return nil
 	}
-	return build(req.ID, p)
+	return msg
 }
 
 func (w *GmpWorkspace) sendCancelledExtensionUIResponse(id string, method string) {
@@ -1440,6 +1736,14 @@ func newOmpConfig() *config.Config {
 			DataDirectory: ".omp",
 			Progress:      &progress,
 			TUI:           &config.TUIOptions{},
+			// gmp owns the provider/credential store via its own
+			// AuthStorage. Suppress the catwalk catalog so the model
+			// picker and the legacy APIKey/OAuth dialogs cannot offer
+			// providers gmp has not registered, which would otherwise
+			// route credentials into Crush's local config and diverge
+			// from gmp's SQLite-backed credential store.
+			DisableDefaultProviders:   true,
+			DisableProviderAutoUpdate: true,
 		},
 		Permissions: &config.Permissions{},
 	}

@@ -7,9 +7,9 @@
 // workspace bridge (internal/workspace/gmp_workspace.go drainExtensionUI)
 // converts those frames into the message types defined here and posts
 // them to the Bubble Tea program. Higher layers (internal/ui/model)
-// route them to the existing oauth.go and api_key_input.go dialogs and
-// send a Submit / Cancel message back, which the workspace then
-// translates into an extension_ui_response frame on the wire.
+// route them to the GmpAuth dialog and send a Submit / Cancel message
+// back, which the workspace then translates into an extension_ui_response
+// frame on the wire.
 package auth
 
 // ShowLoginURL signals that an OAuth flow has surfaced a verification
@@ -58,10 +58,11 @@ type PromptManualRedirect struct {
 // dialog should transition to its "success" state and self-dismiss.
 // Success=false carries an error string for display.
 type ShowResult struct {
-	ID       string
-	Provider string
-	Success  bool
-	Error    string
+	ID        string
+	Provider  string
+	Success   bool
+	Error     string
+	Providers []string
 }
 
 // PickProvider asks the user to choose one of Options. Used when
