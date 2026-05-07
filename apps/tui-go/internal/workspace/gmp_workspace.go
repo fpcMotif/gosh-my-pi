@@ -583,15 +583,22 @@ func (w *GmpWorkspace) drainExtensionUI() {
 		}
 	}()
 	for req := range w.client.ExtensionUIRequests() {
-		if req == nil || req.ID == "" {
-			continue
-		}
-		if msg := w.translateAuthRequest(req); msg != nil {
-			w.sendUI(msg)
-			continue
-		}
-		w.sendCancelledExtensionUIResponse(req.ID, req.Method)
+		w.dispatchExtensionUIRequest(req)
 	}
+}
+
+// dispatchExtensionUIRequest handles one inbound extension_ui_request frame.
+// Extracted from drainExtensionUI for unit testability — the loop body is
+// the only state-mutating part of the drainer.
+func (w *GmpWorkspace) dispatchExtensionUIRequest(req *ompclient.ExtensionUIReq) {
+	if req == nil || req.ID == "" {
+		return
+	}
+	if msg := w.translateAuthRequest(req); msg != nil {
+		w.sendUI(msg)
+		return
+	}
+	w.sendCancelledExtensionUIResponse(req.ID, req.Method)
 }
 
 // authPayload is the union of every auth.* extension_ui_request payload.
@@ -657,17 +664,23 @@ func (w *GmpWorkspace) translateAuthRequest(req *ompclient.ExtensionUIReq) tea.M
 }
 
 func (w *GmpWorkspace) sendCancelledExtensionUIResponse(id string, method string) {
-	resp := ompclient.ExtensionUIResp{
-		Type:      "extension_ui_response",
-		ID:        id,
-		Cancelled: true,
-	}
+	resp := buildCancelledExtensionUIResponse(id)
 	if err := w.client.Send(resp); err != nil {
 		slog.Debug("gmp workspace: extension_ui_response send failed",
 			"id", id, "method", method, "error", err)
 	} else {
 		slog.Debug("gmp workspace: auto-cancelled extension_ui_request",
 			"id", id, "method", method)
+	}
+}
+
+// buildCancelledExtensionUIResponse assembles a Cancelled=true response frame
+// for the given inbound id. Pure for testability.
+func buildCancelledExtensionUIResponse(id string) ompclient.ExtensionUIResp {
+	return ompclient.ExtensionUIResp{
+		Type:      "extension_ui_response",
+		ID:        id,
+		Cancelled: true,
 	}
 }
 
@@ -681,11 +694,22 @@ func (w *GmpWorkspace) SendAuthCommand(method string, provider string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	cmd := ompclient.Command{Type: method, Provider: provider}
-	resp, err := w.client.Call(ctx, cmd)
+	resp, err := w.client.Call(ctx, buildAuthCommand(method, provider))
 	if err != nil {
 		return err
 	}
+	return interpretAuthResponse(resp)
+}
+
+// buildAuthCommand assembles the wire frame for an auth.login / auth.logout
+// command. Pure for testability.
+func buildAuthCommand(method, provider string) ompclient.Command {
+	return ompclient.Command{Type: method, Provider: provider}
+}
+
+// interpretAuthResponse converts an `auth.*` Response back into a Go error
+// (nil on success). Pure for testability.
+func interpretAuthResponse(resp *ompclient.Response) error {
 	if resp != nil && !resp.Success && resp.Error != "" {
 		return errors.New(resp.Error)
 	}
@@ -697,20 +721,29 @@ func (w *GmpWorkspace) SendAuthCommand(method string, provider string) error {
 // wire. The model layer calls this when the user dismisses an auth
 // dialog.
 func (w *GmpWorkspace) HandleAuthReply(msg tea.Msg) {
-	var resp ompclient.ExtensionUIResp
-	switch m := msg.(type) {
-	case auth.Submit:
-		resp = ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Value: m.Value}
-	case auth.Confirm:
-		confirmed := true
-		resp = ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Confirmed: &confirmed}
-	case auth.Cancel:
-		resp = ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Cancelled: true}
-	default:
+	resp, ok := buildAuthReplyFrame(msg)
+	if !ok {
 		return
 	}
 	if err := w.client.Send(resp); err != nil {
 		slog.Debug("gmp workspace: auth reply send failed", "id", resp.ID, "error", err)
+	}
+}
+
+// buildAuthReplyFrame converts an inbound Bubble Tea auth reply message into
+// the wire-level ExtensionUIResp. Returns ok=false for any unrelated message.
+// Pure for testability.
+func buildAuthReplyFrame(msg tea.Msg) (ompclient.ExtensionUIResp, bool) {
+	switch m := msg.(type) {
+	case auth.Submit:
+		return ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Value: m.Value}, true
+	case auth.Confirm:
+		confirmed := true
+		return ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Confirmed: &confirmed}, true
+	case auth.Cancel:
+		return ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: m.ID, Cancelled: true}, true
+	default:
+		return ompclient.ExtensionUIResp{}, false
 	}
 }
 

@@ -142,6 +142,27 @@ func Spawn(ctx context.Context, opts Options) (*Client, error) {
 	return c, nil
 }
 
+// NewWithIO constructs a Client wired directly to the given stdin / stdout
+// pipes. There is no subprocess; callers (typically tests) own both ends and
+// must implement the peer side themselves.
+//
+// This is intended for unit tests that want to drive Send / Call against a
+// fake peer instead of forking a real gmp process.
+func NewWithIO(stdin io.WriteCloser, stdout io.ReadCloser) *Client {
+	c := &Client{
+		stdin:          stdin,
+		stdout:         stdout,
+		pending:        make(map[string]chan *Response),
+		events:         make(chan *AgentEvent, eventsBufferSize),
+		extensionUI:    make(chan *ExtensionUIReq, sideChannelBufferSize),
+		hostToolCall:   make(chan *HostToolCallReq, sideChannelBufferSize),
+		hostToolCancel: make(chan *HostToolCancelReq, sideChannelBufferSize),
+		done:           make(chan struct{}),
+	}
+	go c.readLoop()
+	return c
+}
+
 // Events returns the agent event channel. Closed when the subprocess
 // exits or Close is called.
 func (c *Client) Events() <-chan *AgentEvent { return c.events }
