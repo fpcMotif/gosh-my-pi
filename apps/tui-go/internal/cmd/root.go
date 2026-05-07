@@ -412,25 +412,6 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	return ws, cleanup, nil
 }
 
-// setupClientServerWorkspace connects to a server process and wraps the
-// result in a ClientWorkspace.
-func setupClientServerWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
-	c, protoWs, cleanupServer, err := connectToServer(cmd)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	clientWs := workspace.NewClientWorkspace(c, *protoWs)
-
-	if protoWs.Config.IsConfigured() {
-		if err := clientWs.InitCoderAgent(cmd.Context()); err != nil {
-			slog.Error("Failed to initialize coder agent", "error", err)
-		}
-	}
-
-	return clientWs, cleanupServer, nil
-}
-
 // connectToServer ensures the server is running, creates a client and
 // workspace, and returns a cleanup function that deletes the workspace.
 func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func(), error) {

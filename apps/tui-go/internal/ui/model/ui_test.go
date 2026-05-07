@@ -140,14 +140,13 @@ func (w *testWorkspace) ProjectNeedsInitialization() (bool, error) {
 
 func (w *testWorkspace) IsGmpMode() bool { return w.gmp }
 
-// TestOpenAuthenticationDialog_GmpModeShortCircuits asserts the
-// gmp-mode contract from docs/adr/0001-gmp-mode-credential-store.md:
-// in gmp mode, openAuthenticationDialog must NOT open any Crush
-// legacy auth dialog (NewAPIKeyInput / NewOAuthHyper /
-// NewOAuthCopilot). Those dialogs terminate by writing Crush local
-// config, which would diverge from gmp's AuthStorage. Instead, the
-// flow must dispatch through runGmpAuthCommand → SendAuthCommand.
-func TestOpenAuthenticationDialog_GmpModeShortCircuits(t *testing.T) {
+// TestOpenAuthenticationDialog_DispatchesGmpAuth asserts the
+// gmp-only contract from ADR 0002: openAuthenticationDialog
+// dispatches through runGmpAuthCommand → SendAuthCommand. The
+// legacy Crush auth dialogs (NewAPIKeyInput / NewOAuthHyper /
+// NewOAuthCopilot) and the non-gmp branch were deleted in
+// carve-out Phase 1 lite — there is no path that opens them.
+func TestOpenAuthenticationDialog_DispatchesGmpAuth(t *testing.T) {
 	t.Parallel()
 
 	providers := csync.NewMap[string, config.ProviderConfig]()
@@ -158,33 +157,13 @@ func TestOpenAuthenticationDialog_GmpModeShortCircuits(t *testing.T) {
 
 	ui := New(common.DefaultCommon(&testWorkspace{cfg: cfg, gmp: true}), "", false)
 
-	// Pick a provider that would otherwise route to NewAPIKeyInput
+	// Pick a provider that historically routed to NewAPIKeyInput
 	// (openai is not "hyper" / not catwalk.InferenceProviderCopilot).
 	prov := catwalk.Provider{ID: "openai", Name: "OpenAI"}
 	cmd := ui.openAuthenticationDialog(prov, config.SelectedModel{}, config.SelectedModelTypeLarge)
 
-	require.NotNil(t, cmd, "gmp mode should produce a non-nil cmd (gmp auth dispatch or info)")
-	require.False(t, ui.dialog.ContainsDialog(dialog.APIKeyInputID), "gmp mode must not open NewAPIKeyInput dialog")
-	require.False(t, ui.dialog.ContainsDialog(dialog.OAuthID), "gmp mode must not open NewOAuthHyper / NewOAuthCopilot dialog")
-}
-
-// TestOpenAuthenticationDialog_NonGmpModeOpensLegacyDialog asserts the
-// inverse: in non-gmp mode, NewAPIKeyInput is still opened for
-// providers that don't have a dedicated OAuth controller. Guards
-// against accidental over-broad short-circuiting.
-func TestOpenAuthenticationDialog_NonGmpModeOpensLegacyDialog(t *testing.T) {
-	t.Parallel()
-
-	providers := csync.NewMap[string, config.ProviderConfig]()
-	cfg := &config.Config{
-		Providers: providers,
-		Options:   &config.Options{TUI: &config.TUIOptions{}},
-	}
-
-	ui := New(common.DefaultCommon(&testWorkspace{cfg: cfg, gmp: false}), "", false)
-
-	prov := catwalk.Provider{ID: "openai", Name: "OpenAI"}
-	_ = ui.openAuthenticationDialog(prov, config.SelectedModel{}, config.SelectedModelTypeLarge)
-
-	require.True(t, ui.dialog.ContainsDialog(dialog.APIKeyInputID), "non-gmp mode should open NewAPIKeyInput dialog for openai provider")
+	require.NotNil(t, cmd, "openAuthenticationDialog should produce a gmp auth dispatch cmd")
+	// GmpAuth dialog opens later, when the backend's first
+	// extension_ui_request frame arrives — not synchronously here.
+	require.False(t, ui.dialog.ContainsDialog(dialog.GmpAuthID), "GmpAuth dialog should be opened by the inbound frame, not the dispatch")
 }

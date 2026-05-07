@@ -1721,8 +1721,7 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 		return util.NewInfoMsg(modelMsg)
 	})
 
-	m.dialog.CloseDialog(dialog.APIKeyInputID)
-	m.dialog.CloseDialog(dialog.OAuthID)
+	m.dialog.CloseDialog(dialog.GmpAuthID)
 	m.dialog.CloseDialog(dialog.ModelsID)
 
 	if isOnboarding {
@@ -1778,8 +1777,6 @@ func (m *UI) applyGmpModelSelection(gw *workspace.GmpWorkspace, msg dialog.Actio
 		m.applyTheme(styles.ThemeForProvider(providerID))
 	}
 
-	m.dialog.CloseDialog(dialog.APIKeyInputID)
-	m.dialog.CloseDialog(dialog.OAuthID)
 	m.dialog.CloseDialog(dialog.GmpAuthID)
 	m.dialog.CloseDialog(dialog.ModelsID)
 
@@ -1815,41 +1812,15 @@ func (m *UI) retryPendingGmpModelSelection() tea.Cmd {
 	return m.handleGmpSelectModel(gw, pending)
 }
 
-func (m *UI) openAuthenticationDialog(provider catwalk.Provider, model config.SelectedModel, modelType config.SelectedModelType) tea.Cmd {
-	// Gmp mode owns the credential store. Routing through Crush's
-	// legacy NewAPIKeyInput / NewOAuthHyper / NewOAuthCopilot would
-	// terminate by writing to local crush.json (or, in GmpWorkspace's
-	// case, into a no-op SetProviderAPIKey stub) and never reach gmp's
-	// AuthStorage. Instead, dispatch auth.login over RPC; the gmp side
-	// drives the flow back via extension_ui_request frames into the
-	// GmpAuth dialog. See docs/adr/0001-gmp-mode-credential-store.md.
-	if m.com.Workspace != nil && m.com.Workspace.IsGmpMode() {
-		return m.runGmpAuthCommand(auth.CommandLogin, string(provider.ID))
-	}
-
-	var (
-		dlg dialog.Dialog
-		cmd tea.Cmd
-
-		isOnboarding = m.state == uiOnboarding
-	)
-
-	switch provider.ID {
-	case "hyper":
-		dlg, cmd = dialog.NewOAuthHyper(m.com, isOnboarding, provider, model, modelType)
-	case catwalk.InferenceProviderCopilot:
-		dlg, cmd = dialog.NewOAuthCopilot(m.com, isOnboarding, provider, model, modelType)
-	default:
-		dlg, cmd = dialog.NewAPIKeyInput(m.com, isOnboarding, provider, model, modelType)
-	}
-
-	if m.dialog.ContainsDialog(dlg.ID()) {
-		m.dialog.BringToFront(dlg.ID())
-		return nil
-	}
-
-	m.dialog.OpenDialog(dlg)
-	return cmd
+func (m *UI) openAuthenticationDialog(provider catwalk.Provider, _ config.SelectedModel, _ config.SelectedModelType) tea.Cmd {
+	// apps/tui-go is gmp-only (ADR 0002). Auth always flows through
+	// the RPC bridge: dispatch auth.login, the gmp backend drives the
+	// flow back via extension_ui_request frames into the GmpAuth
+	// dialog. The legacy Crush dialogs (NewAPIKeyInput / NewOAuthHyper
+	// / NewOAuthCopilot) and the IsGmpMode == false branch were
+	// removed in carve-out Phase 1 lite — they wrote to local
+	// crush.json which is the wrong store for this fork.
+	return m.runGmpAuthCommand(auth.CommandLogin, string(provider.ID))
 }
 
 func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {

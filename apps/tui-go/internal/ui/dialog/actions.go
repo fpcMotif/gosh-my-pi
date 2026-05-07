@@ -11,7 +11,6 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/commands"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/oauth"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
@@ -87,35 +86,11 @@ type (
 	ActionDisableDockerMCP struct{}
 )
 
-// Messages for API key input dialog.
-type (
-	ActionChangeAPIKeyState struct {
-		State APIKeyInputState
-	}
-)
-
-// Messages for OAuth2 device flow dialog.
-type (
-	// ActionInitiateOAuth is sent when the device auth is initiated
-	// successfully.
-	ActionInitiateOAuth struct {
-		DeviceCode      string
-		UserCode        string
-		ExpiresIn       int
-		VerificationURL string
-		Interval        int
-	}
-
-	// ActionCompleteOAuth is sent when the device flow completes successfully.
-	ActionCompleteOAuth struct {
-		Token *oauth.Token
-	}
-
-	// ActionOAuthErrored is sent when the device flow encounters an error.
-	ActionOAuthErrored struct {
-		Error error
-	}
-)
+// Note: ActionChangeAPIKeyState / ActionInitiateOAuth / ActionCompleteOAuth /
+// ActionOAuthErrored were removed in carve-out Phase 1 lite (ADR 0002)
+// alongside their producing dialogs (api_key_input.go, oauth_hyper.go,
+// oauth_copilot.go, oauth.go). gmp's auth flow drives Bubble Tea
+// messages through internal/auth instead.
 
 // ActionCmd represents an action that carries a [tea.Cmd] to be passed to the
 // Bubble Tea program loop.
