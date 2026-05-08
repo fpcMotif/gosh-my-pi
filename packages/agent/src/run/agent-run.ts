@@ -23,9 +23,10 @@
 //
 // CONTEXT.md:474-484 documents the term + the avoid list.
 
-import { Effect } from "@oh-my-pi/pi-utils/effect";
+import * as crypto from "node:crypto";
+import { Cause, Effect, effectFromSignal } from "@oh-my-pi/pi-utils/effect";
 import type { Agent } from "../agent";
-import { AgentBusy, type AgentRunError, ConfigInvalid } from "../errors";
+import { AgentBusy, type AgentRunError, ConfigInvalid, TurnAborted } from "../errors";
 import type { AgentMessage, AgentPromptOptions, ImageContent } from "../types";
 import type { Clock } from "./clock";
 import type { RecoveryMarker } from "./recovery-marker";
@@ -89,14 +90,20 @@ export class AgentRunController {
 
 	/**
 	 * Wrap an Agent.prompt or Agent.continue call as an Effect. Failures
-	 * surface in the typed channel as AgentRunError; interrupts come from
-	 * Effect's interrupt channel (caller-aborted via `effectFromSignal` at
-	 * the seam).
+	 * surface in the typed channel as AgentRunError. Caller-initiated aborts
+	 * (via `agent.abort(reason)`) interrupt the body fiber through
+	 * `effectFromSignal(agent.turnSignal, ...)` and the resulting interrupt-only
+	 * cause is converted to `TurnAborted({turnId, reason})` by `Effect.catchCause`
+	 * — preserving the caller-vs-local distinction in the typed channel without
+	 * forcing every consumer to inspect `Cause`.
 	 */
 	run(request: AgentRunRequest): Effect.Effect<void, AgentRunError, RecoveryMarker | Clock> {
 		const agent = this.#agent;
-		return Effect.tryPromise({
-			try: async signal => {
+		const turnId = crypto.randomUUID();
+		const turnSignal = agent.turnSignal;
+
+		const body = Effect.tryPromise({
+			try: async () => {
 				if (request.kind === "prompt") {
 					const { input, images, options } = request;
 					const promptOptions: AgentPromptOptions | undefined = options;
@@ -112,9 +119,16 @@ export class AgentRunController {
 					return;
 				}
 				await agent.continue();
-				return;
 			},
 			catch: mapToAgentRunError,
 		});
+
+		return effectFromSignal(turnSignal, body).pipe(
+			Effect.catchCause(cause =>
+				Cause.hasInterruptsOnly(cause)
+					? Effect.fail(new TurnAborted({ turnId, reason: agent.lastAbortReason }))
+					: Effect.failCause(cause),
+			),
+		);
 	}
 }
