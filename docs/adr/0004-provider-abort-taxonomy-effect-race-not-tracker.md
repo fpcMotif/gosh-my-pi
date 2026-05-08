@@ -37,15 +37,20 @@ caller has to inspect.
 P4a retires `createAbortSourceTracker` in favour of:
 
 1. A new tagged error
-   [`LocalAbort`](../../packages/agent/src/errors.ts) — `kind: "timeout" |
-"idle" | "stall"` plus `durationMs`. Lives in the agent runtime's
-   tagged-error tree alongside `ProviderHttpError`, `UsageLimitError`,
-   etc.
-2. `Effect.race` at the provider boundary: the streaming Effect program
-   races the SSE response stream against an `effectFromSignal(callerSignal)`
-   Effect (defined in `packages/utils/src/effect-signal.ts`, P3a) and an
-   idle/stall watchdog Effect. The first to fire decides the failure
-   shape:
+   [`LocalAbort`](../../packages/ai/src/errors.ts) — `kind: "timeout" |
+"idle" | "stall"` plus `durationMs`. Lives in `pi-ai` (package graph
+   runs `pi-agent-core -> pi-ai`, so provider code in `pi-ai` cannot
+   import upward) and is re-exported from `packages/agent/src/errors.ts`
+   so the tagged-error tree's imports continue to resolve unchanged.
+2. `Effect.raceFirst` at the provider boundary: the streaming Effect
+   program races the SSE response stream against an idle/stall watchdog
+   Effect; `effectFromSignal(callerSignal)` (defined in
+   `packages/utils/src/effect-signal.ts`, P3a) wraps the race so caller
+   aborts arrive as fiber interrupts. `raceFirst` (not `race`) is the
+   correct primitive here — `Effect.race` only takes the first
+   *success*, but the watchdog can only fail, so we need
+   first-to-complete-either-way semantics. The first participant to
+   fire decides the failure shape:
    - Caller signal wins → fiber interrupts → Promise rejects with
      Effect's interrupt cause; catch boundary maps to `stopReason: "aborted"`.
    - Watchdog wins → Effect fails with `LocalAbort({ kind, durationMs })`;
