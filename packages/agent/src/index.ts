@@ -10,6 +10,9 @@ export * from "./error-kind";
 export * from "./errors";
 // Proxy utilities
 export * from "./proxy";
+// Effect run surface (P3b — AgentRunController + RecoveryMarker + Clock)
+export * from "./run/clock";
+export * from "./run/recovery-marker";
 // Thinking selectors
 export * from "./thinking";
 // Types

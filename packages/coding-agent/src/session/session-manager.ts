@@ -206,6 +206,26 @@ export interface CustomMessageEntry<T = unknown> extends SessionEntryBase {
 }
 
 /** Session entry - has id/parentId for tree structure (returned by "read" methods in SessionManager) */
+/**
+ * RecoveryMarker JSONL entry — appended by AgentRunController at three
+ * safe points (post-`message_end`, post-`tool_execution_end`, post-
+ * `turn_end`) when `OMP_RECOVERY_POLICY=1`. Read once on session reopen by
+ * `RecoveryPolicy` to classify the prior process exit into
+ * `safe`/`mid-stream`/`mid-tool`. Skipped by LLM-context construction
+ * (same family as `CustomEntry`). See ADR-0003 + CONTEXT.md:486.
+ */
+export interface RecoveryMarkerEntry extends SessionEntryBase {
+	type: "recovery-marker";
+	/** Monotonic per-session counter; the latest marker has the highest value. */
+	generation: number;
+	/** Sequence number of the most recent AgentEvent before this marker. */
+	lastEventSeq: number;
+	/** `true` if appended mid-stream (between message_start and message_end). */
+	isStreaming: boolean;
+	/** Tool calls dispatched but not yet `tool_execution_end`-d at marker time. */
+	pendingToolCallIds: string[];
+}
+
 export type SessionEntry =
 	| SessionMessageEntry
 	| ThinkingLevelChangeEntry
@@ -219,7 +239,8 @@ export type SessionEntry =
 	| TtsrInjectionEntry
 	| MCPToolSelectionEntry
 	| SessionInitEntry
-	| ModeChangeEntry;
+	| ModeChangeEntry
+	| RecoveryMarkerEntry;
 
 /** Raw file entry (includes header) */
 export type FileEntry = SessionHeader | SessionEntry;
@@ -2430,6 +2451,31 @@ export class SessionManager {
 			type: "custom",
 			customType,
 			data,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
+			timestamp: new Date().toISOString(),
+		};
+		this.#appendEntry(entry);
+		return entry.id;
+	}
+
+	/**
+	 * Append a recovery-marker entry as child of current leaf, then advance leaf.
+	 * Used by `RecoveryMarker` Live Layer (P3b). Skipped by LLM-context construction
+	 * — only `RecoveryPolicy` reads it on session reopen. Returns entry id.
+	 */
+	appendRecoveryMarker(payload: {
+		generation: number;
+		lastEventSeq: number;
+		isStreaming: boolean;
+		pendingToolCallIds: string[];
+	}): string {
+		const entry: RecoveryMarkerEntry = {
+			type: "recovery-marker",
+			generation: payload.generation,
+			lastEventSeq: payload.lastEventSeq,
+			isStreaming: payload.isStreaming,
+			pendingToolCallIds: payload.pendingToolCallIds,
 			id: generateId(this.#byId),
 			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
