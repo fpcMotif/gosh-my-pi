@@ -3,11 +3,12 @@ import { BashExecutionComponent } from "@oh-my-pi/pi-coding-agent/modes/componen
 import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { TUI } from "@oh-my-pi/pi-tui";
 import { visibleWidth } from "@oh-my-pi/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 
 const MAX_DISPLAY_LINE_CHARS = 4000;
 
 describe("BashExecutionComponent #clampDisplayLine", () => {
-	const ui = { requestRender: () => {} } as unknown as TUI;
+	const ui = fromPartial<TUI>({ requestRender: () => {} });
 
 	beforeEach(async () => {
 		const theme = await getThemeByName("dark");

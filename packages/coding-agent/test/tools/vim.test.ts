@@ -11,6 +11,7 @@ import { VimBuffer } from "@oh-my-pi/pi-coding-agent/vim/buffer";
 import { VimEngine } from "@oh-my-pi/pi-coding-agent/vim/engine";
 import { parseKeySequences } from "@oh-my-pi/pi-coding-agent/vim/parser";
 import type { TUI } from "@oh-my-pi/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 
 function textResult(result: { content: Array<{ type: string; text?: string }> }): string {
 	return result.content
@@ -664,7 +665,7 @@ describe("vim renderer", () => {
 		const theme = await themeModule.getThemeByName("dark");
 		expect(theme).toBeDefined();
 		await themeModule.initTheme(false, undefined, undefined, "dark", "light");
-		const uiStub = { requestRender() {} } as unknown as TUI;
+		const uiStub = fromPartial<TUI>({ requestRender() {} });
 
 		const component = new ToolExecutionComponent(
 			"edit",

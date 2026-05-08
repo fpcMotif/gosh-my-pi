@@ -5,6 +5,7 @@ import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-regis
 import type { CustomToolContext } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools";
 import type { ReadonlySessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { imageGenTool, setPreferredImageProvider } from "@oh-my-pi/pi-coding-agent/tools/image-gen";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 
 const originalFetch = global.fetch;
 const originalOpenRouterKey = Bun.env.OPENROUTER_API_KEY;
@@ -61,13 +62,13 @@ describe("imageGenTool", () => {
 		global.fetch = fetchMock;
 
 		const ctx: CustomToolContext = {
-			sessionManager: {
+			sessionManager: fromAny<ReadonlySessionManager>({
 				getCwd: () => "/tmp",
 				getSessionId: () => "test-session",
-			} as unknown as ReadonlySessionManager,
-			modelRegistry: {
+			}),
+			modelRegistry: fromAny<ModelRegistry>({
 				getApiKeyForProvider: async () => undefined,
-			} as unknown as ModelRegistry,
+			}),
 			model: undefined,
 			isIdle: () => true,
 			hasQueuedMessages: () => false,
@@ -104,22 +105,22 @@ describe("imageGenTool", () => {
 		fetchMock.preconnect = originalFetch.preconnect;
 		global.fetch = fetchMock;
 
-		const model = {
+		const model = fromPartial<Model>({
 			api: "openai-responses",
 			provider: "openai",
 			id: "gpt-5.5",
 			name: "GPT 5.5",
 			baseUrl: "https://api.openai.com/v1",
-		} as Model;
+		});
 		const ctx: CustomToolContext = {
-			sessionManager: {
+			sessionManager: fromAny<ReadonlySessionManager>({
 				getCwd: () => "/tmp",
 				getSessionId: () => "test-session",
-			} as unknown as ReadonlySessionManager,
-			modelRegistry: {
+			}),
+			modelRegistry: fromAny<ModelRegistry>({
 				getApiKey: async () => "test-openai-key",
 				getApiKeyForProvider: async () => undefined,
-			} as unknown as ModelRegistry,
+			}),
 			model,
 			isIdle: () => true,
 			hasQueuedMessages: () => false,

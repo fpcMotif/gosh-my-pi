@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { fromAny } from "@total-typescript/shoehorn";
 import { InternalUrlRouter, McpProtocolHandler } from "../../src/internal-urls";
 import type { MCPManager } from "../../src/mcp/manager";
 import type { MCPResource, MCPResourceReadResult, MCPResourceTemplate } from "../../src/mcp/types";
@@ -9,14 +10,14 @@ function createMockManager(opts: {
 	readResult?: MCPResourceReadResult | undefined;
 	readError?: Error;
 }) {
-	return {
+	return fromAny<MCPManager>({
 		getConnectedServers: () => opts.servers ?? [],
 		getServerResources: (name: string) => opts.resources?.get(name),
 		readServerResource: async (_name: string, _uri: string) => {
 			if (opts.readError) throw opts.readError;
 			return opts.readResult;
 		},
-	} as unknown as MCPManager;
+	});
 }
 
 function createRouter(manager?: MCPManager): InternalUrlRouter {

@@ -1,10 +1,11 @@
 import type { Model } from "@oh-my-pi/pi-ai";
 import { Effort } from "@oh-my-pi/pi-ai/model-thinking";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "bun:test";
 import { parseThinkingLevel, resolveThinkingLevelForModel, ThinkingLevel, toReasoningEffort } from "../src/thinking";
 
 function reasoningModel(thinkingMin: Effort, thinkingMax: Effort): Model {
-	return {
+	return fromAny<Model>({
 		id: "test-model",
 		name: "Test Model",
 		api: "openai-responses",
@@ -16,11 +17,11 @@ function reasoningModel(thinkingMin: Effort, thinkingMax: Effort): Model {
 		cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
 		contextWindow: 200000,
 		maxTokens: 64000,
-	} as unknown as Model;
+	});
 }
 
 function nonReasoningModel(): Model {
-	return {
+	return fromAny<Model>({
 		id: "test-model",
 		name: "Test Model",
 		api: "openai-responses",
@@ -31,7 +32,7 @@ function nonReasoningModel(): Model {
 		cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
 		contextWindow: 200000,
 		maxTokens: 64000,
-	} as unknown as Model;
+	});
 }
 
 describe("parseThinkingLevel", () => {

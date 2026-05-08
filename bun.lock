@@ -6,6 +6,7 @@
       "name": "omp-monorepo",
       "devDependencies": {
         "@bufbuild/protoc-gen-es": "catalog:",
+        "@total-typescript/shoehorn": "catalog:",
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
         "lint-staged": "catalog:",
@@ -24,6 +25,7 @@
         "@oh-my-pi/pi-ai": "catalog:",
         "@oh-my-pi/pi-natives": "catalog:",
         "@oh-my-pi/pi-utils": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@sinclair/typebox": "catalog:",
@@ -79,6 +81,7 @@
         "ajv": "catalog:",
         "chalk": "catalog:",
         "diff": "catalog:",
+        "effect": "catalog:",
         "fflate": "catalog:",
         "handlebars": "catalog:",
         "linkedom": "catalog:",
@@ -188,6 +191,7 @@
       "version": "14.5.11",
       "dependencies": {
         "beautiful-mermaid": "catalog:",
+        "effect": "catalog:",
         "handlebars": "catalog:",
         "winston": "catalog:",
         "winston-daily-rotate-file": "catalog:",
@@ -231,6 +235,7 @@
     "@sinclair/typebox": "^0.34.49",
     "@smithy/node-http-handler": "^4.6.1",
     "@tailwindcss/node": "^4.2.4",
+    "@total-typescript/shoehorn": "^0.1.2",
     "@types/babel__generator": "^7.27.0",
     "@types/babel__traverse": "^7.28.0",
     "@types/bun": "^1.3",
@@ -817,6 +822,8 @@
     "@tokenizer/token": ["@tokenizer/token@0.3.0", "", {}, "sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A=="],
 
     "@tootallnate/quickjs-emscripten": ["@tootallnate/quickjs-emscripten@0.23.0", "", {}, "sha512-C5Mc6rdnsaJDjO3UpGW/CQTHtCKaYlScZTly4JIu97Jxo/odCiH0ITnDXSJPTOrEKk/ycSZ0AOgTmkDtkOsvIA=="],
+
+    "@total-typescript/shoehorn": ["@total-typescript/shoehorn@0.1.2", "", {}, "sha512-p7nNZbOZIofpDNyP0u1BctFbjxD44Qc+oO5jufgQdFdGIXJLc33QRloJpq7k5T59CTgLWfQSUxsuqLcmeurYRw=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="],
 

@@ -4,6 +4,7 @@ import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/typ
 import { UiHelpers } from "@oh-my-pi/pi-coding-agent/modes/utils/ui-helpers";
 import { buildSessionContext } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { Container } from "@oh-my-pi/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 
 function renderLastLine(container: Container, width = 120): string {
 	const last = container.children[container.children.length - 1];
@@ -18,13 +19,13 @@ describe("InteractiveMode.showStatus", () => {
 	});
 
 	test("coalesces immediately-sequential status messages", () => {
-		const ctx = {
+		const ctx = fromAny<InteractiveModeContext>({
 			chatContainer: new Container(),
 			ui: { requestRender: vi.fn() },
 			isBackgrounded: false,
 			lastStatusSpacer: undefined,
 			lastStatusText: undefined,
-		} as unknown as InteractiveModeContext;
+		});
 		const helpers = new UiHelpers(ctx);
 
 		helpers.showStatus("STATUS_ONE");
@@ -39,13 +40,13 @@ describe("InteractiveMode.showStatus", () => {
 	});
 
 	test("appends a new status line if something else was added in between", () => {
-		const ctx = {
+		const ctx = fromAny<InteractiveModeContext>({
 			chatContainer: new Container(),
 			ui: { requestRender: vi.fn() },
 			isBackgrounded: false,
 			lastStatusSpacer: undefined,
 			lastStatusText: undefined,
-		} as unknown as InteractiveModeContext;
+		});
 		const helpers = new UiHelpers(ctx);
 
 		helpers.showStatus("STATUS_ONE");
@@ -62,12 +63,12 @@ describe("InteractiveMode.showStatus", () => {
 	});
 
 	test("preserves optimistic user signatures when rebuilding transcript state", () => {
-		const ctx = {
+		const ctx = fromAny<InteractiveModeContext>({
 			chatContainer: new Container(),
 			pendingTools: new Map(),
 			ui: { requestRender: vi.fn() },
 			optimisticUserMessageSignature: "hello\u00001",
-		} as unknown as InteractiveModeContext;
+		});
 		const helpers = new UiHelpers(ctx);
 
 		helpers.renderSessionContext(buildSessionContext([]));

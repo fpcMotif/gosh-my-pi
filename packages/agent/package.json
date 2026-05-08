@@ -52,7 +52,8 @@
 	"dependencies": {
 		"@oh-my-pi/pi-ai": "catalog:",
 		"@oh-my-pi/pi-natives": "catalog:",
-		"@oh-my-pi/pi-utils": "catalog:"
+		"@oh-my-pi/pi-utils": "catalog:",
+		"effect": "catalog:"
 	},
 	"devDependencies": {
 		"@sinclair/typebox": "catalog:",

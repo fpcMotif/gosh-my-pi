@@ -5,6 +5,7 @@ import { ExtensionUiController } from "@oh-my-pi/pi-coding-agent/modes/controlle
 import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { setKeybindings, type TUI } from "@oh-my-pi/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 
 beforeAll(async () => {
 	const theme = await getThemeByName("dark");
@@ -20,13 +21,13 @@ afterEach(() => {
 });
 
 function createTui(): TUI {
-	return {
+	return fromAny<TUI>({
 		requestRender: vi.fn(),
 		setFocus: vi.fn(),
 		start: vi.fn(),
 		stop: vi.fn(),
 		terminal: { columns: 120 },
-	} as unknown as TUI;
+	});
 }
 
 function renderText(component: HookEditorComponent, width = 120): string {
@@ -56,22 +57,24 @@ function createControllerContext() {
 			this.children.push(child);
 		},
 	};
-	const ui = {
+	const ui = fromAny<
+		TestContext["ui"] & {
+			setFocus: ReturnType<typeof vi.fn>;
+			requestRender: ReturnType<typeof vi.fn>;
+		}
+	>({
 		requestRender: vi.fn(),
 		setFocus: vi.fn(),
 		start: vi.fn(),
 		stop: vi.fn(),
 		terminal: { columns: 120 },
-	} as unknown as TestContext["ui"] & {
-		setFocus: ReturnType<typeof vi.fn>;
-		requestRender: ReturnType<typeof vi.fn>;
-	};
-	const ctx = {
+	});
+	const ctx = fromAny<TestContext>({
 		editor,
 		editorContainer,
 		ui,
 		hookEditor: undefined,
-	} as unknown as TestContext;
+	});
 
 	return { ctx, editor, editorContainer, ui };
 }

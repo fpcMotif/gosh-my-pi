@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "bun:test";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { executeBuiltinSlashCommand } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-registry";
+import { fromAny } from "@total-typescript/shoehorn";
 
 function createRuntime() {
 	const handleBtwCommand = vi.fn(async () => {});
@@ -9,10 +10,10 @@ function createRuntime() {
 		handleBtwCommand,
 		setText,
 		runtime: {
-			ctx: {
-				editor: { setText } as unknown as InteractiveModeContext["editor"],
+			ctx: fromAny<InteractiveModeContext>({
+				editor: fromAny<InteractiveModeContext["editor"]>({ setText }),
 				handleBtwCommand,
-			} as unknown as InteractiveModeContext,
+			}),
 			handleBackgroundCommand: () => {},
 		},
 	};

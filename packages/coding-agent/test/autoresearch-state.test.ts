@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { parseAutoresearchContract } from "../src/autoresearch/contract";
 import { isAutoresearchShCommand } from "../src/autoresearch/helpers";
 import { createAutoresearchExtension } from "../src/autoresearch/index";
@@ -383,7 +384,7 @@ function createAutoresearchCommandHarness(
 		}
 	});
 
-	const api = {
+	const api = fromAny<ExtensionAPI>({
 		appendEntry(_customType: string, _data?: unknown): void {},
 		exec: async (commandName: string, args: string[]) => {
 			execCalls.push({ args: [...args], command: commandName });
@@ -408,11 +409,11 @@ function createAutoresearchCommandHarness(
 			}
 			sentMessages.push(content);
 		},
-	} as unknown as ExtensionAPI;
+	});
 	void createAutoresearchExtension(api);
 	if (!command) throw new Error("Expected autoresearch command to register");
 
-	const ctx = {
+	const ctx = fromAny<ExtensionCommandContext>({
 		abort(): void {},
 		branch: async () => ({ cancelled: false }),
 		compact: async () => {},
@@ -451,7 +452,7 @@ function createAutoresearchCommandHarness(
 			setWorkingMessage(): void {},
 		},
 		waitForIdle: async () => {},
-	} as unknown as ExtensionCommandContext;
+	});
 
 	return { command, ctx, execCalls, sentMessages, inputCalls, notifications };
 }
@@ -480,7 +481,7 @@ function createAutoresearchLifecycleHarness(options: {
 	const setActiveToolsCalls: string[][] = [];
 	const sentMessages: Array<{ message: unknown; options: unknown }> = [];
 
-	const api = {
+	const api = fromAny<ExtensionAPI>({
 		appendEntry(_customType: string, _data?: unknown): void {},
 		on(event: string, handler: (...args: unknown[]) => Promise<void> | void): void {
 			handlers.set(event, handler);
@@ -499,10 +500,10 @@ function createAutoresearchLifecycleHarness(options: {
 			activeTools.splice(0, activeTools.length, ...toolNames);
 		},
 		sendUserMessage(): void {},
-	} as unknown as ExtensionAPI;
+	});
 	void createAutoresearchExtension(api);
 
-	const ctx = {
+	const ctx = fromAny<ExtensionContext>({
 		abort(): void {},
 		compact: async () => {},
 		cwd: options.cwd ?? makeTempDir(),
@@ -538,7 +539,7 @@ function createAutoresearchLifecycleHarness(options: {
 			setWidget(): void {},
 			setWorkingMessage(): void {},
 		},
-	} as unknown as ExtensionContext;
+	});
 
 	return {
 		beforeAgentStartHandler: handlers.get("before_agent_start") as
@@ -866,7 +867,7 @@ describe("autoresearch tool-call guard", () => {
 			cwd: dir,
 		});
 
-		await harness.sessionStartHandler?.({ type: "session_start" } as SessionStartEvent, harness.ctx);
+		await harness.sessionStartHandler?.(fromPartial<SessionStartEvent>({ type: "session_start" }), harness.ctx);
 
 		const blockedScope = await harness.toolCallHandler?.(
 			{
@@ -922,7 +923,7 @@ describe("autoresearch tool-call guard", () => {
 			cwd: dir,
 		});
 
-		await harness.sessionStartHandler?.({ type: "session_start" } as SessionStartEvent, harness.ctx);
+		await harness.sessionStartHandler?.(fromPartial<SessionStartEvent>({ type: "session_start" }), harness.ctx);
 
 		const blocked = await harness.toolCallHandler?.(
 			{
@@ -956,7 +957,7 @@ describe("autoresearch tool-call guard", () => {
 			cwd: dir,
 		});
 
-		await harness.sessionStartHandler?.({ type: "session_start" } as SessionStartEvent, harness.ctx);
+		await harness.sessionStartHandler?.(fromPartial<SessionStartEvent>({ type: "session_start" }), harness.ctx);
 
 		const blocked = await harness.toolCallHandler?.(
 			{
@@ -1006,7 +1007,7 @@ describe("autoresearch auto-resume", () => {
 			cwd: dir,
 		});
 
-		await harness.sessionStartHandler?.({ type: "session_start" } as SessionStartEvent, harness.ctx);
+		await harness.sessionStartHandler?.(fromPartial<SessionStartEvent>({ type: "session_start" }), harness.ctx);
 		await harness.agentEndHandler?.({}, harness.ctx);
 
 		expect(harness.sentMessages).toHaveLength(1);
@@ -1034,7 +1035,7 @@ describe("autoresearch auto-resume", () => {
 			cwd: dir,
 		});
 
-		await harness.sessionStartHandler?.({ type: "session_start" } as SessionStartEvent, harness.ctx);
+		await harness.sessionStartHandler?.(fromPartial<SessionStartEvent>({ type: "session_start" }), harness.ctx);
 		await harness.agentEndHandler?.({}, harness.ctx);
 
 		expect(harness.sentMessages).toEqual([]);
@@ -1098,7 +1099,7 @@ describe("autoresearch auto-resume", () => {
 			cwd: dir,
 		});
 
-		await harness.sessionStartHandler?.({ type: "session_start" } as SessionStartEvent, harness.ctx);
+		await harness.sessionStartHandler?.(fromPartial<SessionStartEvent>({ type: "session_start" }), harness.ctx);
 		const result = await harness.beforeAgentStartHandler?.({ systemPrompt: "BASE" }, harness.ctx);
 		const systemPrompt =
 			typeof result === "object" && result !== null && "systemPrompt" in result

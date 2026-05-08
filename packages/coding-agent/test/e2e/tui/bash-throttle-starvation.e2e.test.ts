@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import type { TUI } from "@oh-my-pi/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { BashExecutionComponent } from "../../../src/modes/components/bash-execution";
 import { getThemeByName, setThemeInstance } from "../../../src/modes/theme/theme";
 
@@ -28,7 +29,7 @@ beforeAll(async () => {
 	setThemeInstance(theme);
 });
 
-const ui = { requestRender: () => {} } as unknown as TUI;
+const ui = fromPartial<TUI>({ requestRender: () => {} });
 
 describe("BashExecutionComponent — chunk throttling and final flush", () => {
 	it("renders a single chunk verbatim into the output buffer", () => {

@@ -1,5 +1,6 @@
+import { Effect } from "@oh-my-pi/pi-utils/effect";
 import { z } from "zod";
-import { Effect } from "effect";
+import { Http, makeHttpLayer } from "../../layers/http";
 import { CODEX_BASE_URL, OPENAI_HEADER_VALUES, OPENAI_HEADERS } from "../../providers/openai-codex/constants";
 import type { Model } from "../../types";
 import { isRecord } from "../../utils";
@@ -90,6 +91,7 @@ export async function fetchCodexModels(options: CodexModelDiscoveryOptions): Pro
 	const headers = buildCodexHeaders(options);
 
 	const program = Effect.gen(function* () {
+		const http = yield* Http;
 		const clientVersion = yield* Effect.promise(() =>
 			resolveCodexClientVersion(options.clientVersion, options.registryFetchFn ?? fetchFn, options.signal),
 		);
@@ -100,19 +102,21 @@ export async function fetchCodexModels(options: CodexModelDiscoveryOptions): Pro
 		// `Effect.forEach` would lose this short-circuit, so use a generator loop.
 		for (const path of paths) {
 			const requestUrl = buildModelsUrl(baseUrl, path, clientVersion);
-			const result = yield* Effect.promise(async () => {
-				try {
-					const response = await fetchFn(requestUrl, { method: "GET", headers, signal: options.signal });
-					if (!response.ok) return null;
-					const payload = await response.json();
-					const models = normalizeCodexModels(payload, baseUrl);
-					if (models === null) return null;
-					const etag = getResponseEtag(response.headers);
-					return etag !== null && etag !== undefined && etag !== "" ? { models, etag } : { models };
-				} catch {
-					return null;
-				}
+			const attempt = Effect.gen(function* () {
+				const response = yield* http.request(requestUrl, { method: "GET", headers, signal: options.signal });
+				if (!response.ok) return null;
+				const payload: unknown = yield* Effect.tryPromise({
+					try: () => response.json() as Promise<unknown>,
+					catch: cause => (cause instanceof Error ? cause : new Error(String(cause))),
+				});
+				const models = normalizeCodexModels(payload, baseUrl);
+				if (models === null) return null;
+				const etag = getResponseEtag(response.headers);
+				return etag !== null && etag !== undefined && etag !== "" ? { models, etag } : { models };
 			});
+			const result: CodexModelDiscoveryResult | null = yield* attempt.pipe(
+				Effect.orElseSucceed(() => null as CodexModelDiscoveryResult | null),
+			);
 			if (result !== null) {
 				sawSuccessfulResponse = true;
 				return result;
@@ -122,7 +126,7 @@ export async function fetchCodexModels(options: CodexModelDiscoveryOptions): Pro
 		return sawSuccessfulResponse ? { models: [] } : null;
 	});
 
-	return Effect.runPromise(program, { signal: options.signal });
+	return Effect.runPromise(program.pipe(Effect.provide(makeHttpLayer(fetchFn))), { signal: options.signal });
 }
 
 function normalizeBaseUrl(baseUrl: string | undefined): string {

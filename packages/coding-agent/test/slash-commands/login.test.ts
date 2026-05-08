@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { OAuthManualInputManager } from "@oh-my-pi/pi-coding-agent/modes/oauth-manual-input";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { executeBuiltinSlashCommand } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-registry";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 
 type RuntimeHarness = {
 	runtime: { ctx: InteractiveModeContext; handleBackgroundCommand: () => void };
@@ -16,11 +17,11 @@ const createRuntimeHarness = (manualInput: OAuthManualInputManager): RuntimeHarn
 	let warningMessage: string | undefined;
 	let selectorMode: "login" | "logout" | undefined;
 	let selectorProvider: string | undefined;
-	const ctx = {
+	const ctx = fromPartial<InteractiveModeContext>({
 		oauthManualInput: manualInput,
-		editor: {
+		editor: fromAny<InteractiveModeContext["editor"]>({
 			setText: () => {},
-		} as unknown as InteractiveModeContext["editor"],
+		}),
 		showStatus: (message: string) => {
 			statusMessage = message;
 		},
@@ -31,7 +32,7 @@ const createRuntimeHarness = (manualInput: OAuthManualInputManager): RuntimeHarn
 			selectorMode = mode;
 			selectorProvider = providerId;
 		},
-	} as InteractiveModeContext;
+	});
 
 	return {
 		runtime: {

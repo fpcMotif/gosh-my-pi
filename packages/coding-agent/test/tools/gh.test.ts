@@ -8,6 +8,7 @@ import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manage
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { GithubTool, selectPrCloneUrl } from "@oh-my-pi/pi-coding-agent/tools/gh";
 import { wrapToolWithMetaNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import * as git from "@oh-my-pi/pi-coding-agent/utils/git";
 import { getAgentDir, setAgentDir } from "@oh-my-pi/pi-utils";
 
@@ -38,19 +39,19 @@ function createSession(
 }
 
 function createToolContext(settings: Settings): AgentToolContext {
-	return {
+	return fromPartial<AgentToolContext>({
 		sessionManager: SessionManager.inMemory(),
 		settings,
-		modelRegistry: {
+		modelRegistry: fromAny<AgentToolContext["modelRegistry"]>({
 			find: () => undefined,
 			getAll: () => [],
 			getApiKey: async () => undefined,
-		} as unknown as AgentToolContext["modelRegistry"],
+		}),
 		model: undefined,
 		isIdle: () => true,
 		hasQueuedMessages: () => false,
 		abort: () => {},
-	} as AgentToolContext;
+	});
 }
 
 function runGit(cwd: string, args: string[]): string {

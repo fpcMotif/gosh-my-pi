@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { visibleWidth } from "@oh-my-pi/pi-tui";
 import { getProjectDir, setProjectDir } from "@oh-my-pi/pi-utils";
+import { fromAny } from "@total-typescript/shoehorn";
 import type { StatusLineSegmentId } from "../src/config/settings-schema";
 import type { SegmentContext } from "../src/modes/components/status-line/segments";
 import { renderSegment } from "../src/modes/components/status-line/segments";
@@ -22,12 +23,12 @@ afterAll(() => {
 /** Minimal SegmentContext factory — only path/git fields matter for these tests. */
 function createCtx(overrides?: { pathMaxLength?: number; branch?: string | null }): SegmentContext {
 	return {
-		session: {
+		session: fromAny<SegmentContext["session"]>({
 			state: {},
 			isFastModeEnabled: () => false,
 			modelRegistry: { isUsingOAuth: () => false },
 			sessionManager: undefined,
-		} as unknown as SegmentContext["session"],
+		}),
 		width: 120,
 		options: {
 			path: {
