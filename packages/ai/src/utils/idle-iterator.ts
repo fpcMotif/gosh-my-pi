@@ -3,6 +3,11 @@ import { $env } from "@oh-my-pi/pi-utils";
 const DEFAULT_OPENAI_STREAM_IDLE_TIMEOUT_MS = 120_000;
 const DEFAULT_STREAM_FIRST_EVENT_TIMEOUT_MS = 100_000;
 
+// Shared suffix used by every provider's idle-timeout `errorMessage`. Lets the
+// abort-effect helper detect an idle-timeout throw without parsing per-provider
+// prose. Each provider builds its message as `${prefix} ${STREAM_STALLED_SUFFIX}`.
+export const STREAM_STALLED_SUFFIX = "stream stalled while waiting for the next event";
+
 function normalizeIdleTimeoutMs(value: string | undefined, fallback: number): number | undefined {
 	if (value === undefined) return fallback;
 	const parsed = Number(value);
