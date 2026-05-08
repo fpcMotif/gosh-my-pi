@@ -480,7 +480,10 @@ seam instead of inline `try/catch`. Public surface stays
 `Promise<void>` — `Effect.runPromise` lives at the seam. Lives in
 `packages/agent/src/run/agent-run.ts`. Sits inside the existing
 `RetryController`/`ActiveRetryFallback` boundary; does **not**
-replace them. _Avoid_: turn pump, turn driver, AgentTurnRunner,
+replace them. Production callers reach the controller through
+**runAgentRequest** (in coding-agent), which gates on
+`OMP_RECOVERY_POLICY` and provides the Live `RecoveryMarker` + `Clock`
+Layers. _Avoid_: turn pump, turn driver, AgentTurnRunner,
 durable workflow, Workflow.
 
 **RecoveryMarker**:
@@ -505,6 +508,25 @@ The `mid-tool = no re-run` rule is load-bearing: tools are not
 idempotent, so auto-resuming a `bash`/`edit`/MCP call would silently
 double-apply side effects. _Avoid_: resume policy, restart policy,
 crash recovery (the latter is fine in prose but not as a code term).
+
+**RecoveryDriver**:
+The layer that turns a classified `CrashState` (from **RecoveryPolicy**)
+into mutations on a live `Agent`. Pure decision (`decideRecoveryAction`)
+returns one of `{kind: "none"}`, `{kind: "mid-stream",
+replacementMessages}`, or `{kind: "mid-tool", syntheticResults}`; the
+apply layer (`applyRecoveryAction`) calls `agent.replaceMessages` for
+`mid-stream` and one `agent.appendMessage` per synthetic for
+`mid-tool`. The orchestrator (`recoverIfNeeded`) wires policy → driver
+and is invoked from `createAgentSession` (sdk.ts) when
+`OMP_RECOVERY_POLICY === "1"` and the session is being reopened. Per
+ADR-0003, the original tool is **never** re-run — synthetic
+toolResults carry `isError: true` and the literal text
+`"interrupted by crash"`. Lives in
+`packages/coding-agent/src/session/recovery-driver.ts`. The driver does
+NOT call `agent.continue()`; the caller (CLI / SDK consumer / test
+harness) decides whether to resume after seeing a non-`none` action
+exposed on `CreateAgentSessionResult.recoveryAction`. _Avoid_:
+auto-recovery, crash-resume, restart-driver.
 
 **effectFromSignal / signalFromFiber**:
 The two canonical workspace bridges between Effect's interrupt channel
@@ -543,6 +565,28 @@ run — the failure channel for `Effect<void, AgentRunError, …>` programs
 in `packages/agent/src/run/`. Today identical to `AgentTaggedError`;
 may diverge if errors are introduced that fire only outside a run.
 Public type, re-exported from `packages/agent/src/index.ts`.
+
+**runAgentRequest** _(`packages/coding-agent/src/session/run-bridge.ts`)_:
+The `OMP_RECOVERY_POLICY`-gated wrapper around `Agent.prompt` /
+`Agent.continue`. Signature
+`runAgentRequest(agent, sessionManager, request, { enabled })`. When
+`enabled: false`, dispatches directly to the agent's methods
+(byte-for-byte the path the codebase used pre-P3). When `enabled:
+true`, builds an **AgentRunController**, provides the Live
+**RecoveryMarker** Layer (via `makeRecoveryMarkerLayer(sessionManager)`)
+plus `LiveClock`, runs via `Effect.runPromiseExit`, and unwraps the
+Exit so callers see the same `Promise<void>` contract — typed
+`AgentRunError` instances re-throw verbatim through
+`Cause.findErrorOption`, so `instanceof AgentBusy` /
+`instanceof ContextOverflow` checks at every existing throw site keep
+working. Test seam: `enabled` is an explicit parameter (not
+`process.env`) so contract tests can pin both branches without
+mutating globals (per AGENTS.md "Testing Guidance"). **Wiring status
+(2026-05-08)**: the bridge function is shipped but **not yet wired**
+into the 5 `this.agent.prompt(...)` / `this.agent.continue()` call
+sites inside `packages/coding-agent/src/session/agent-session.ts`;
+production callers therefore continue to take the direct path until
+that wiring is added. _Avoid_: turn-runner, agent-driver, run-wrapper.
 
 ## Relationships
 
