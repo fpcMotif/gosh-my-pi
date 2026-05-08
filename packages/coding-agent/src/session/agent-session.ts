@@ -451,6 +451,14 @@ export class AgentSession {
 	#lastSuccessfulYieldToolCallId: string | undefined = undefined;
 	#promptGeneration = 0;
 	#providerSessions = new ProviderSessionPool();
+	// P3b RecoveryPolicy state. Tracks per-session counters that get
+	// stamped onto every recovery-marker JSONL line so the
+	// classifyCrashState helper (./recovery-policy.ts) can pick the latest
+	// marker on session reopen and distinguish safe / mid-stream / mid-tool.
+	// Only the marker emission code below mutates these.
+	#recoveryMarkerGeneration = 0;
+	#recoveryMarkerEventSeq = 0;
+	#recoveryMarkerPendingToolCallIds = new Set<string>();
 
 	#startPowerAssertion(): void {
 		if (process.platform !== "darwin") {
@@ -727,8 +735,45 @@ export class AgentSession {
 	// Track last assistant message for auto-compaction check
 	#lastAssistantMessage: AssistantMessage | undefined = undefined;
 
+	/**
+	 * P3b: write a `recovery-marker` JSONL line at one of the three safe
+	 * points (post-`message_end`, post-`tool_execution_end`, post-`turn_end`).
+	 * Gated on `OMP_RECOVERY_POLICY === "1"` so production traffic stays on
+	 * the legacy path until dogfooding confirms the new flow. See ADR-0003
+	 * + CONTEXT.md:486.
+	 */
+	#emitRecoveryMarker(isStreaming: boolean): void {
+		if (process.env.OMP_RECOVERY_POLICY !== "1") return;
+		this.#recoveryMarkerGeneration += 1;
+		this.sessionManager.appendRecoveryMarker({
+			generation: this.#recoveryMarkerGeneration,
+			lastEventSeq: this.#recoveryMarkerEventSeq,
+			isStreaming,
+			pendingToolCallIds: [...this.#recoveryMarkerPendingToolCallIds],
+		});
+	}
+
 	/** Internal handler for agent events - shared by subscribe and reconnect */
 	#handleAgentEvent = async (event: AgentEvent): Promise<void> => {
+		// P3b: per-event sequence counter for recovery markers. Incremented on
+		// every event so each marker payload's `lastEventSeq` is monotonic
+		// across the session lifetime.
+		this.#recoveryMarkerEventSeq += 1;
+
+		// P3b: marker emission for tool_execution_end + turn_end. Handled at
+		// the top of the dispatcher so they fire regardless of any later
+		// early-return in this method. The post-message_end marker for an
+		// assistant message lives further down (after appendMessage) so the
+		// pending-tool-call set has been initialised from the message content
+		// before the marker is written.
+		if (event.type === "tool_execution_end") {
+			this.#recoveryMarkerPendingToolCallIds.delete(event.toolCallId);
+			this.#emitRecoveryMarker(false);
+		} else if (event.type === "turn_end") {
+			this.#recoveryMarkerPendingToolCallIds.clear();
+			this.#emitRecoveryMarker(false);
+		}
+
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
@@ -922,6 +967,21 @@ export class AgentSession {
 				this.sessionManager.appendMessage(event.message);
 			}
 			// Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
+
+			// P3b: capture pending tool calls from this assistant message and emit
+			// the post-message_end recovery-marker. The pending set seeds the
+			// `mid-tool` recovery branch — a process killed before any
+			// `tool_execution_end` will leave these ids unfinished and
+			// RecoveryPolicy.classifyCrashState will flag them.
+			if (event.message.role === "assistant") {
+				this.#recoveryMarkerPendingToolCallIds.clear();
+				for (const content of event.message.content) {
+					if (content.type === "toolCall") {
+						this.#recoveryMarkerPendingToolCallIds.add(content.id);
+					}
+				}
+				this.#emitRecoveryMarker(true);
+			}
 
 			// Track assistant message for auto-compaction (checked on agent_end)
 			if (event.message.role === "assistant") {
