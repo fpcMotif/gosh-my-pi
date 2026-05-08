@@ -88,7 +88,8 @@ import { AgentSession } from "./session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-ai";
 import { convertToLlm } from "./session/messages";
 import { type RecoveryAction, recoverIfNeeded } from "./session/recovery-driver";
-import { type SessionEntry, SessionManager } from "./session/session-manager";
+import { isRecoveryPolicyEnabled } from "./session/run-bridge";
+import { SessionManager } from "./session/session-manager";
 import { closeAllConnections } from "./ssh/connection-manager";
 import { unmountAll } from "./ssh/sshfs-mount";
 import {
@@ -1612,18 +1613,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			sessionManager.appendThinkingLevelChange(thinkingLevel);
 		}
 
-		// Apply crash recovery if enabled and we're reopening an existing session.
-		// Per ADR-0003: classifies safe / mid-stream / mid-tool from the session
-		// log + latest RecoveryMarker, then drops the partial assistant message
-		// (mid-stream) or appends synthetic toolResult entries with isError: true
-		// (mid-tool). NEVER re-runs the tool itself. The caller is responsible
-		// for following up with `session.prompt()` / `agent.continue()` if the
-		// returned action is non-`none`.
+		// Apply crash recovery on session reopen when OMP_RECOVERY_POLICY is set.
+		// Per ADR-0003 the caller drives `agent.continue()` after a non-`none`
+		// action; the SDK only exposes the applied action on the result.
 		let recoveryAction: RecoveryAction | undefined;
-		if (hasExistingSession && process.env.OMP_RECOVERY_POLICY === "1") {
+		if (hasExistingSession && isRecoveryPolicyEnabled()) {
 			try {
-				const sessionEntries = sessionManager.fileEntries.filter((e): e is SessionEntry => e.type !== "session");
-				recoveryAction = recoverIfNeeded(sessionEntries, agent.messages, agent);
+				recoveryAction = recoverIfNeeded(sessionManager.getEntries(), agent.messages, agent);
 				if (recoveryAction.kind !== "none") {
 					logger.info("Applied crash recovery on session reopen", { kind: recoveryAction.kind });
 				}

@@ -28,10 +28,19 @@ import { Cause, Effect, Layer, Option } from "@oh-my-pi/pi-utils/effect";
 import { makeRecoveryMarkerLayer } from "./recovery-marker-live";
 import type { SessionManager } from "./session-manager";
 
+/** Env var name + on-value for the gated runtime path. Single source of truth. */
+export const RECOVERY_POLICY_ENV_VAR = "OMP_RECOVERY_POLICY";
+export const RECOVERY_POLICY_ENABLED = "1";
+
+/** Returns true when `OMP_RECOVERY_POLICY` is set to `"1"` in the current process. */
+export function isRecoveryPolicyEnabled(): boolean {
+	return process.env[RECOVERY_POLICY_ENV_VAR] === RECOVERY_POLICY_ENABLED;
+}
+
 /**
  * Runtime options for the bridge. `enabled` is normally
- * `process.env.OMP_RECOVERY_POLICY === "1"` but is taken as an explicit
- * parameter so tests can pin both branches deterministically.
+ * `isRecoveryPolicyEnabled()` but is taken as an explicit parameter so tests
+ * can pin both branches deterministically.
  */
 export interface RunAgentRequestOptions {
 	/** When `true`, route through `AgentRunController.run` + `Effect.runPromiseExit`. */
@@ -83,12 +92,11 @@ async function runDirect(agent: Agent, request: AgentRunRequest): Promise<void> 
 		return;
 	}
 	const { input, images, options } = request;
+	// Only the (string, images, options) overload accepts the images parameter;
+	// for everything else (string-without-images, AgentMessage, AgentMessage[])
+	// the (input, options) overload covers all union variants of `input`.
 	if (typeof input === "string" && images !== undefined) {
 		await agent.prompt(input, images, options);
-		return;
-	}
-	if (typeof input === "string") {
-		await agent.prompt(input, options);
 		return;
 	}
 	await agent.prompt(input, options);

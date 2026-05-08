@@ -1,22 +1,10 @@
-// RecoveryDriver — applies the recovery action implied by `RecoveryPolicy`'s
-// classified `CrashState` to a live `Agent` instance. The split between the
-// policy (pure classifier) and the driver (mutating actions) follows ADR-0003:
-// the policy decides what happened, the driver decides what to do.
-//
-// Per ADR-0003, the load-bearing safety property is the `mid-tool` branch:
-// for each pending tool call we synthesize a `toolResult` AgentMessage with
-// `isError: true` and the literal text "interrupted by crash", then append it
-// to the agent's history. The original tool is **never re-run** — tools are
-// not idempotent so auto-resuming a `bash`/`edit`/MCP call would silently
-// double-apply side effects.
-//
-// `decideRecoveryAction` is pure (modulo `Date.now()` for the synthetic
-// timestamps); `applyRecoveryAction` is the trivial side-effect wrapper that
-// pokes the supplied `Agent`. The split keeps the testable shape:
-// `decideRecoveryAction` covers every observable contract; `applyRecoveryAction`
-// is exercised once at the orchestrator (`recoverIfNeeded`) layer.
-//
-// CONTEXT.md:495-507 documents the `RecoveryPolicy` term + avoid list.
+// RecoveryDriver — turns a classified `CrashState` (from `RecoveryPolicy`)
+// into mutations on a live `Agent`. Per ADR-0003, the load-bearing safety
+// property is `mid-tool`: every pending tool call gets a synthetic
+// `toolResult` with `isError: true` and the literal text `"interrupted by
+// crash"`; the original tool is **never** re-run because tools are not
+// idempotent — auto-resuming would silently double-apply side effects.
+// CONTEXT.md:495-507 documents the term + avoid list.
 
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage } from "@oh-my-pi/pi-ai";
