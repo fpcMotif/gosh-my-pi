@@ -2,9 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Wired the `TurnAborted` typed-error bridge at `AgentRunController.run`'s catch boundary. `agent.abort(reason?: "user" | "ttsr" | "streaming-edit-guard" | "unknown")` now records the reason on the Agent and aborts a long-lived `agent.turnSignal`; the controller wraps the body Effect in `effectFromSignal(turnSignal, ...)` so caller-initiated aborts surface as `TurnAborted({turnId, reason})` in the typed channel instead of as raw Effect interrupts. `errorToKind` continues to classify `TurnAborted` as `{ kind: "transient" }`.
+
 ### Changed
 
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
+- Retired the `"Request was aborted"` / `"Request aborted"` sentinel error strings produced on caller abort. The synthesized assistant-message `errorMessage` is now empty when `stopReason === "aborted"`; the typed `TurnAborted` failure surfaces through the `AgentRunController` bridge and downstream UIs default to `"Operation aborted"` for empty errorMessage values.
 
 ## [14.5.10] - 2026-04-30
 

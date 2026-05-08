@@ -7,15 +7,25 @@ import { Effect, Exit, Layer, Option } from "@oh-my-pi/pi-utils/effect";
 import { Cause } from "@oh-my-pi/pi-utils/effect";
 import { fromPartial } from "@total-typescript/shoehorn";
 import type { Agent } from "../../src/agent";
-import { AgentBusy, ContextOverflow, ProviderHttpError } from "../../src/errors";
+import { AgentBusy, ContextOverflow, ProviderHttpError, TurnAborted } from "../../src/errors";
 import { AgentRunController } from "../../src/run/agent-run";
 import { LiveClock } from "../../src/run/clock";
 import { NoopRecoveryMarker } from "../../src/run/recovery-marker";
 
 const TestLayer = Layer.mergeAll(NoopRecoveryMarker, LiveClock);
 
-function controllerFor(stub: { prompt?: unknown; continue?: unknown }): AgentRunController {
-	const agent = fromPartial<Agent>(stub);
+function controllerFor(stub: {
+	prompt?: unknown;
+	continue?: unknown;
+	abort?: unknown;
+	turnSignal?: AbortSignal;
+	lastAbortReason?: "user" | "ttsr" | "streaming-edit-guard" | "unknown";
+}): AgentRunController {
+	const agent = fromPartial<Agent>({
+		turnSignal: stub.turnSignal ?? new AbortController().signal,
+		lastAbortReason: stub.lastAbortReason ?? "user",
+		...stub,
+	});
 	return new AgentRunController(agent);
 }
 
@@ -147,5 +157,31 @@ describe("AgentRunController.run — non-tagged errors get wrapped", () => {
 		expect(error._tag).toBe("ConfigInvalid");
 		expect(error.message).toBe("raw string");
 		expect(error.cause).toBe("raw string");
+	});
+});
+
+describe("AgentRunController.run — caller abort bridges to TurnAborted", () => {
+	it("aborting via the captured turn signal mid-run produces a TurnAborted carrying the agent's lastAbortReason", async () => {
+		const turnAbortController = new AbortController();
+		const { promise: hangingPrompt, resolve: resolveHangingPrompt } = Promise.withResolvers<void>();
+		const controller = controllerFor({
+			turnSignal: turnAbortController.signal,
+			lastAbortReason: "ttsr",
+			prompt: async () => {
+				await hangingPrompt;
+			},
+		});
+		const program = controller.run({ kind: "prompt", input: "x" }).pipe(Effect.provide(TestLayer));
+		const promise = runUnwrap(program);
+		await Bun.sleep(5);
+		turnAbortController.abort();
+		resolveHangingPrompt();
+		const result = await promise;
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.error).toBeInstanceOf(TurnAborted);
+		const tagged = result.error as TurnAborted;
+		expect(tagged.reason).toBe("ttsr");
+		expect(tagged.turnId).toMatch(/^[\w-]{8,}$/);
 	});
 });
