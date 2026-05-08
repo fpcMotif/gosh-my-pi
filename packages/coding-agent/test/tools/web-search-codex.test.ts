@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { hookFetch } from "@oh-my-pi/pi-utils";
+import { fromAny } from "@total-typescript/shoehorn";
 import { AgentStorage } from "../../src/session/agent-storage";
 import { searchCodex } from "../../src/web/search/providers/codex";
 
@@ -178,19 +179,21 @@ describe("searchCodex model selection", () => {
 
 	function mockCodexFetch(responseModel: string, responseBody?: string): Disposable {
 		capturedRequest = null;
-		vi.spyOn(AgentStorage, "open").mockResolvedValue({
-			listAuthCredentials: () => [
-				{
-					id: 1,
-					credential: {
-						type: "oauth",
-						access: "test-access-token",
-						expires: Date.now() + 600_000,
-						accountId: "acct-test",
+		vi.spyOn(AgentStorage, "open").mockResolvedValue(
+			fromAny<AgentStorage>({
+				listAuthCredentials: () => [
+					{
+						id: 1,
+						credential: {
+							type: "oauth",
+							access: "test-access-token",
+							expires: Date.now() + 600_000,
+							accountId: "acct-test",
+						},
 					},
-				},
-			],
-		} as unknown as AgentStorage);
+				],
+			}),
+		);
 		return hookFetch((url, init) => {
 			capturedRequest = {
 				url: typeof url === "string" ? url : url.toString(),
@@ -300,19 +303,21 @@ describe("searchCodex model selection", () => {
 	});
 
 	it("prefers streamed text when the final item only contains an image placeholder", async () => {
-		vi.spyOn(AgentStorage, "open").mockResolvedValue({
-			listAuthCredentials: () => [
-				{
-					id: 1,
-					credential: {
-						type: "oauth",
-						access: "test-access-token",
-						expires: Date.now() + 600_000,
-						accountId: "acct-test",
+		vi.spyOn(AgentStorage, "open").mockResolvedValue(
+			fromAny<AgentStorage>({
+				listAuthCredentials: () => [
+					{
+						id: 1,
+						credential: {
+							type: "oauth",
+							access: "test-access-token",
+							expires: Date.now() + 600_000,
+							accountId: "acct-test",
+						},
 					},
-				},
-			],
-		} as unknown as AgentStorage);
+				],
+			}),
+		);
 		using _hook = hookFetch(() => {
 			return new Response(makeImagePlaceholderSseResponse("gpt-5.4-mini"), {
 				status: 200,

@@ -19,6 +19,7 @@ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { startMemoryStartupTask } from "@oh-my-pi/pi-coding-agent/memories";
 import * as memoryStorage from "@oh-my-pi/pi-coding-agent/memories/storage";
 import { getAgentDbPath, logger, Snowflake } from "@oh-my-pi/pi-utils";
+import { fromAny } from "@total-typescript/shoehorn";
 
 interface SessionLike {
 	sessionManager: {
@@ -49,12 +50,12 @@ async function makeTempDir(prefix: string): Promise<string> {
 }
 
 function createModel(): Model {
-	return {
+	return fromAny<Model>({
 		provider: "openai",
 		id: "test-model",
 		name: "test-model",
 		contextWindow: 32_000,
-	} as unknown as Model;
+	});
 }
 
 function createModelRegistry(model: Model): ModelRegistryLike {

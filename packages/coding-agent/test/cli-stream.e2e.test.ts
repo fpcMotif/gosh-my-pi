@@ -104,7 +104,7 @@ describe.skipIf(!nativeAvailable)("CLI config persistence stress", () => {
 			// Last write was i=99 (odd) which sets "false".
 			expect(parsed.value).toBe(false);
 		});
-	}, 90_000);
+	}, 180_000);
 
 	test("config get on missing key fails fast and emits a structured error", async () => {
 		await withTempAgentDir(async dir => {

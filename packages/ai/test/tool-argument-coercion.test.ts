@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Tool, ToolCall } from "@oh-my-pi/pi-ai/types";
 import { validateToolArguments } from "@oh-my-pi/pi-ai/utils/validation";
 import { Type } from "@sinclair/typebox";
+import { fromAny } from "@total-typescript/shoehorn";
 
 describe("Tool argument coercion", () => {
 	it("coerces numeric strings when schema expects number", () => {
@@ -139,7 +140,7 @@ describe("Tool argument coercion", () => {
 			type: "toolCall",
 			id: "call-10",
 			name: "t10",
-			arguments: '{"a":"hello","b":"[{\\"k\\":\\"y\\"}]"}' as unknown as Record<string, unknown>,
+			arguments: fromAny<Record<string, unknown>>('{"a":"hello","b":"[{\\"k\\":\\"y\\"}]"}'),
 		};
 		const result = validateToolArguments(tool, toolCall);
 		expect(result).toEqual({
@@ -167,11 +168,9 @@ describe("Tool argument coercion", () => {
 			type: "toolCall",
 			id: "call-7",
 			name: "t7",
-			arguments:
-				'{"path":"somefile.js","edits":"[{\\"target\\":\\"13#cf\\",\\"new_content\\":\\"...\\"}]"}' as unknown as Record<
-					string,
-					unknown
-				>,
+			arguments: fromAny<Record<string, unknown>>(
+				'{"path":"somefile.js","edits":"[{\\"target\\":\\"13#cf\\",\\"new_content\\":\\"...\\"}]"}',
+			),
 		};
 
 		const result = validateToolArguments(tool, toolCall);

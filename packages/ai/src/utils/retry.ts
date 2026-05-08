@@ -1,4 +1,4 @@
-import * as Effect from "effect/Effect";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
 import { withCopilotRetry } from "../effect-utils";
 
 type ErrorLike = {

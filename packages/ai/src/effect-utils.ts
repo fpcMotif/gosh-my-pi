@@ -1,16 +1,20 @@
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Duration from "effect/Duration";
+import { Duration, Effect, Schedule } from "@oh-my-pi/pi-utils/effect";
 import { isCopilotRetryableError } from "./utils/retry";
+
+/**
+ * Two-retry base schedule (3 total attempts) used as the seed for
+ * provider-specific retry policies. Future workflows compose this with
+ * `Schedule.addDelay`, `Schedule.intersect`, etc.
+ */
+export const basicRetryPolicy = Schedule.recurs(2);
 
 /**
  * Creates an Effect retry policy for Copilot model errors.
  *
- * `recurs(2)` = 2 retries on top of the initial attempt = 3 total calls,
- * matching the previous hand-rolled loop's MAX_ATTEMPTS = 3.
- * Delays: 400 ms, 800 ms (matches `BASE_DELAY * (attempt + 1)`).
+ * Composes `basicRetryPolicy` (recurs 2) with a linear back-off matching the
+ * previous hand-rolled loop: delays 400 ms, 800 ms (`BASE_DELAY * (attempt + 1)`).
  */
-export const copilotRetryPolicy = Schedule.recurs(2).pipe(
+export const copilotRetryPolicy = basicRetryPolicy.pipe(
 	Schedule.addDelay(attempt => Effect.succeed(Duration.millis(400 * (attempt + 1)))),
 );
 

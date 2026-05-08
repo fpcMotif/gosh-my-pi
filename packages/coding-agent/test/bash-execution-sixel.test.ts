@@ -4,13 +4,14 @@ import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/mode
 import { sanitizeWithOptionalSixelPassthrough } from "@oh-my-pi/pi-coding-agent/utils/sixel";
 import { sanitizeText } from "@oh-my-pi/pi-natives";
 import type { TUI } from "@oh-my-pi/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 
 const SIXEL = "\x1bPqabc\x1b\\";
 
 describe("BashExecutionComponent SIXEL sanitization", () => {
 	const originalForceProtocol = Bun.env.PI_FORCE_IMAGE_PROTOCOL;
 	const originalAllowPassthrough = Bun.env.PI_ALLOW_SIXEL_PASSTHROUGH;
-	const ui = { requestRender: () => {} } as unknown as TUI;
+	const ui = fromPartial<TUI>({ requestRender: () => {} });
 
 	beforeEach(async () => {
 		const theme = await getThemeByName("dark");
@@ -81,7 +82,7 @@ describe("BashExecutionComponent SIXEL sanitization", () => {
 });
 
 describe("BashExecutionComponent streaming throttle", () => {
-	const ui = { requestRender: () => {} } as unknown as TUI;
+	const ui = fromPartial<TUI>({ requestRender: () => {} });
 
 	beforeEach(async () => {
 		const theme = await getThemeByName("dark");

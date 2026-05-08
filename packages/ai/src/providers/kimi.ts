@@ -6,7 +6,7 @@
  * Note: Kimi calculates TPM rate limits based on max_tokens, not actual output.
  */
 
-import { Effect, Stream } from "effect";
+import { Effect, Stream } from "@oh-my-pi/pi-utils/effect";
 import { runEffectStream } from "../effect-stream";
 import type { Api, AssistantMessageEvent, Context, Model, SimpleStreamOptions } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";

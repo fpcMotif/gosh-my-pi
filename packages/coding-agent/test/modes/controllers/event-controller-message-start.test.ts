@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 import type { TextContent, UserMessage } from "@oh-my-pi/pi-ai";
 import { EventController } from "@oh-my-pi/pi-coding-agent/modes/controllers/event-controller";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
+import { fromAny } from "@total-typescript/shoehorn";
 
 function createUserMessage(text: string): UserMessage {
 	return {
@@ -27,7 +28,7 @@ function createContext(options: {
 	};
 	const addMessageToChat = vi.fn();
 	const updatePendingMessagesDisplay = vi.fn();
-	const ctx = {
+	const ctx = fromAny<InteractiveModeContext>({
 		isInitialized: true,
 		statusLine: { invalidate: vi.fn() },
 		updateEditorTopBorder: vi.fn(),
@@ -44,7 +45,7 @@ function createContext(options: {
 						.join(""),
 		optimisticUserMessageSignature: options.optimisticSignature,
 		locallySubmittedUserSignatures: new Set<string>(options.locallySubmittedSignatures ?? []),
-	} as unknown as InteractiveModeContext;
+	});
 	return { ctx, editor, setText, addMessageToChat, updatePendingMessagesDisplay };
 }
 
