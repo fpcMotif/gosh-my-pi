@@ -137,12 +137,13 @@ export async function listSessionFiles(folderPath: string): Promise<string[]> {
  */
 export async function listAllSessionFiles(): Promise<string[]> {
 	const folders = await listSessionFolders();
-	const allFiles: string[] = [];
 
-	for (const folder of folders) {
-		const files = await listSessionFiles(folder);
-		allFiles.push(...files);
-	}
+	// ⚡ Bolt: Fetch session files concurrently using Promise.all
+	// 🎯 Why: Previously looped over folders sequentially, causing a blocking lookup for each folder.
+	// 📊 Impact: Significantly reduces waiting time when syncing the database on startup.
+	const allFilesPromises = folders.map(folder => listSessionFiles(folder));
+	const filesArrays = await Promise.all(allFilesPromises);
+	const allFiles = filesArrays.flat();
 
 	return allFiles;
 }
