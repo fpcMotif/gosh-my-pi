@@ -20,14 +20,15 @@ import {
 	type ToolChoice,
 } from "../types";
 import { createOpenAIResponsesHistoryPayload, sanitizeOpenAIResponsesHistoryItemsForReplay } from "../utils";
-import { createAbortSourceTracker } from "../utils/abort";
+import { LocalAbort } from "../errors";
+import { runWithLocalAbortWatchdog } from "../utils/abort-effect";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import {
-	createWatchdog,
 	getOpenAIStreamIdleTimeoutMs,
 	getStreamFirstEventTimeoutMs,
 	iterateWithIdleTimeout,
+	STREAM_STALLED_SUFFIX,
 } from "../utils/idle-iterator";
 import { notifyProviderResponse } from "../utils/provider-response";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
@@ -45,8 +46,6 @@ export interface OpenAIResponsesOptions extends StreamOptions {
 }
 
 const OPENAI_RESPONSES_PROVIDER_SESSION_STATE_PREFIX = "openai-responses:";
-const OPENAI_RESPONSES_FIRST_EVENT_TIMEOUT_MESSAGE =
-	"OpenAI responses stream timed out while waiting for the first event";
 
 interface OpenAIResponsesProviderSessionState extends ProviderSessionState {
 	nativeHistoryReplayWarmed: boolean;
@@ -126,14 +125,13 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			timestamp: Date.now(),
 		};
 		let rawRequestDump: RawHttpRequestDump | undefined;
-		const abortTracker = createAbortSourceTracker(options?.signal);
-		const firstEventTimeoutAbortError = new Error(OPENAI_RESPONSES_FIRST_EVENT_TIMEOUT_MESSAGE);
-		const { requestAbortController, requestSignal } = abortTracker;
+		const nativeOutputItems: Array<Record<string, unknown>> = [];
+		let providerSessionState: OpenAIResponsesProviderSessionState | undefined;
 
 		try {
 			const apiKey = options?.apiKey ?? getEnvApiKey(model.provider) ?? "";
 			const { client, baseUrl } = await createClient(model, apiKey, options?.headers, options?.sessionId);
-			const providerSessionState = getOpenAIResponsesProviderSessionState(model, options?.providerSessionState);
+			providerSessionState = getOpenAIResponsesProviderSessionState(model, options?.providerSessionState);
 			const { params } = buildParams(model, context, options, providerSessionState);
 			const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
 			options?.onPayload?.(params);
@@ -147,47 +145,43 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				body: params,
 			};
 
-			const { data, response, request_id } = await client.chat.completions
-				.create(params as any, { signal: requestSignal })
-				.withResponse();
-			await notifyProviderResponse(options, response, model, request_id);
-			const openaiStream = data;
-
-			const firstEventWatchdog = createWatchdog(
-				options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs),
-				() => abortTracker.abortLocally(firstEventTimeoutAbortError),
-			);
-			stream.push({ type: "start", partial: output });
-
-			const nativeOutputItems: Array<Record<string, unknown>> = [];
-			await processResponsesStream(
-				iterateWithIdleTimeout(openaiStream as any, {
-					idleTimeoutMs,
-					watchdog: firstEventWatchdog,
-					errorMessage: "OpenAI responses stream stalled while waiting for the next event",
-					onIdle: () => requestAbortController.abort(),
-				}),
-				output,
-				stream,
-				model,
-				{
-					onFirstToken: () => {
-						if (firstTokenTime === null || firstTokenTime === undefined || firstTokenTime === 0)
-							firstTokenTime = Date.now();
-					},
-					onOutputItemDone: item => {
-						nativeOutputItems.push(structuredCloneJSON<unknown>(item) as unknown as Record<string, unknown>);
-					},
+			await runWithLocalAbortWatchdog({
+				callerSignal: options?.signal,
+				firstEventWatchdog: {
+					kind: "timeout",
+					timeoutMs: options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs) ?? 0,
 				},
-			);
+				body: async signal => {
+					const { data, response, request_id } = await client.chat.completions
+						.create(params as any, { signal })
+						.withResponse();
+					await notifyProviderResponse(options, response, model, request_id);
+					const openaiStream = data;
 
-			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
-			if (firstEventTimeoutError) {
-				throw firstEventTimeoutError;
-			}
-			if (abortTracker.wasCallerAbort()) {
-				throw new Error("Request was aborted");
-			}
+					stream.push({ type: "start", partial: output });
+
+					await processResponsesStream(
+						iterateWithIdleTimeout(openaiStream as any, {
+							idleTimeoutMs,
+							errorMessage: `OpenAI responses ${STREAM_STALLED_SUFFIX}`,
+						}),
+						output,
+						stream,
+						model,
+						{
+							onFirstToken: () => {
+								if (firstTokenTime === null || firstTokenTime === undefined || firstTokenTime === 0)
+									firstTokenTime = Date.now();
+							},
+							onOutputItemDone: item => {
+								nativeOutputItems.push(
+									structuredCloneJSON<unknown>(item) as unknown as Record<string, unknown>,
+								);
+							},
+						},
+					);
+				},
+			});
 
 			if (output.stopReason === "aborted" || output.stopReason === "error") {
 				throw new Error("An unknown error occurred");
@@ -206,9 +200,16 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			for (const block of output.content) {
 				delete (block as { index?: number }).index;
 			}
-			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
-			output.stopReason = abortTracker.wasCallerAbort() ? "aborted" : "error";
-			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
+			if (error instanceof LocalAbort) {
+				output.stopReason = "error";
+				output.errorMessage = `OpenAI responses stream ${error.kind} after ${error.durationMs}ms`;
+			} else if (options?.signal?.aborted === true) {
+				output.stopReason = "aborted";
+				output.errorMessage = await finalizeErrorMessage(error, rawRequestDump);
+			} else {
+				output.stopReason = "error";
+				output.errorMessage = await finalizeErrorMessage(error, rawRequestDump);
+			}
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime !== null && firstTokenTime !== undefined && firstTokenTime > 0)
 				output.ttft = firstTokenTime - startTime;

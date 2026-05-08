@@ -25,7 +25,7 @@ describe("runWithLocalAbortWatchdog", () => {
 				observed = signal;
 				await new Promise(() => {});
 			},
-		}).catch((err: unknown) => err);
+		}).catch((error: unknown) => error);
 		const elapsed = Date.now() - start;
 		expect(result).toBeInstanceOf(LocalAbort);
 		expect((result as LocalAbort).kind).toBe("timeout");
@@ -46,7 +46,7 @@ describe("runWithLocalAbortWatchdog", () => {
 		});
 		await Bun.sleep(10);
 		caller.abort();
-		const result = await promise.catch((err: unknown) => err);
+		const result = await promise.catch((error: unknown) => error);
 		expect(result).toBeDefined();
 		expect(observed?.aborted).toBe(true);
 	});
@@ -57,7 +57,7 @@ describe("runWithLocalAbortWatchdog", () => {
 				await Bun.sleep(5);
 				throw new Error(`OpenAI responses ${STREAM_STALLED_SUFFIX}`);
 			},
-		}).catch((err: unknown) => err);
+		}).catch((error: unknown) => error);
 		expect(result).toBeInstanceOf(LocalAbort);
 		expect((result as LocalAbort).kind).toBe("idle");
 		expect((result as LocalAbort).durationMs).toBeGreaterThanOrEqual(0);
@@ -69,7 +69,7 @@ describe("runWithLocalAbortWatchdog", () => {
 			body: async () => {
 				throw sentinel;
 			},
-		}).catch((err: unknown) => err);
+		}).catch((error: unknown) => error);
 		expect(result).toBe(sentinel);
 	});
 
