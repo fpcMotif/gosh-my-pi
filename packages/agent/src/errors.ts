@@ -87,20 +87,9 @@ export class LocalAbort extends Data.TaggedError("LocalAbort")<{
 }> {}
 
 /**
- * Replay refused: a non-idempotent tool call was encountered while resuming a
- * turn after a mid-turn restart. The pump escalates so the UI can ask the user
- * what to do (retry manually, drop, etc.).
- */
-export class TurnReplayRefused extends Data.TaggedError("TurnReplayRefused")<{
-	readonly toolCallId: string;
-	readonly toolName: string;
-	readonly turnId: string;
-}> {}
-
-/**
  * Turn aborted: the active AbortSignal was raised mid-turn. Bridges from
- * `effectFromSignal` so the pump can fail with a typed error rather than a
- * generic interruption.
+ * `effectFromSignal` so an `AgentRunController.run` can fail with a typed
+ * error rather than a generic Effect interruption.
  */
 export class TurnAborted extends Data.TaggedError("TurnAborted")<{
 	readonly turnId: string;
@@ -121,7 +110,6 @@ export type AgentTaggedError =
 	| SessionStorageError
 	| SubprocessAborted
 	| ContextOverflow
-	| TurnReplayRefused
 	| TurnAborted;
 
 /**
