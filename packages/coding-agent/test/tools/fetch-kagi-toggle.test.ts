@@ -483,7 +483,7 @@ describe("read tool URL handling", () => {
 		const requestedUrls = loadPageSpy.mock.calls.map(([requestedUrl]) => requestedUrl);
 		const textBlock = result.content.find(content => content.type === "text");
 
-		expect(result.details?.method).toBe("native");
+		expect(result.details?.method).toBe("lynx");
 		expect(textBlock?.type).toBe("text");
 		expect(textBlock?.text).toContain("UnixSocketOptions");
 		expect(requestedUrls).not.toContain("https://bun.com/.well-known/llms.txt");
