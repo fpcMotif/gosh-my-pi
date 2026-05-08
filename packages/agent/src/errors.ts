@@ -12,6 +12,12 @@
 // throw site.
 
 import { Data } from "@oh-my-pi/pi-utils/effect";
+import { LocalAbort } from "@oh-my-pi/pi-ai";
+
+// Re-export so existing imports (`@oh-my-pi/pi-agent-core`'s LocalAbort) keep
+// resolving. Canonical definition lives in `pi-ai` because the package graph
+// runs pi-agent-core -> pi-ai and provider code there can't import upward.
+export { LocalAbort };
 
 /** Concurrent operation attempted while the agent was already running. */
 export class AgentBusy extends Data.TaggedError("AgentBusy")<{
@@ -70,20 +76,6 @@ export class UsageLimitError extends Data.TaggedError("UsageLimitError")<{
 	readonly retryAfterMs: number;
 	readonly reason: "rate_limit" | "daily" | "unknown";
 	readonly cause?: unknown;
-}> {}
-
-/**
- * Provider-local abort: the request was cancelled by infrastructure rather
- * than by the caller. Distinguishes timeout (no first-event within the
- * configured budget), idle (stream went silent past the inter-event
- * threshold), and stall (handshake or TLS negotiation never completed) so
- * the UI can surface "request stalled" instead of mis-labelling everything
- * as a user abort. Caller-initiated aborts surface as Effect's interrupt
- * channel, not this tag.
- */
-export class LocalAbort extends Data.TaggedError("LocalAbort")<{
-	readonly kind: "timeout" | "idle" | "stall";
-	readonly durationMs: number;
 }> {}
 
 /**
