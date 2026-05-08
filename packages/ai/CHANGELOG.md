@@ -5,6 +5,7 @@
 ### Changed
 
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
+- Replaced `createAbortSourceTracker` (deleted) with `Effect.raceFirst` and the `LocalAbort` tagged error in OpenAI Responses and Completions streaming providers; provider-local stalls now surface as a typed `LocalAbort({ kind, durationMs })` instead of a generic `Error` parsed by string match. Idle-stream aborts are now classified as `transient/transport` instead of falling through to "unknown error" — a pre-existing classification gap closed by this change. ([ADR-0004](../../docs/adr/0004-provider-abort-taxonomy-effect-race-not-tracker.md))
 
 ### Fixed
 
