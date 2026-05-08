@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import type { TUI } from "@oh-my-pi/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { ToolExecutionComponent } from "../../../src/modes/components/tool-execution";
 import { getThemeByName, setThemeInstance } from "../../../src/modes/theme/theme";
 
@@ -23,7 +24,7 @@ beforeAll(async () => {
 	setThemeInstance(theme);
 });
 
-const ui = { requestRender: () => {} } as unknown as TUI;
+const ui = fromPartial<TUI>({ requestRender: () => {} });
 
 function makeComponent(toolName = "read"): ToolExecutionComponent {
 	return new ToolExecutionComponent(toolName, { path: "/tmp/foo" }, {}, undefined, ui, "/tmp", "tc-1");

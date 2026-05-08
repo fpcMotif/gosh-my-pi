@@ -6,6 +6,7 @@ import { type AssistantMessageEventStream, clearCustomApis, getCustomApi } from 
 import { ModelRegistry, type ProviderConfigInput } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-ai";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { fromAny } from "@total-typescript/shoehorn";
 
 describe("ModelRegistry runtime source cleanup", () => {
 	let tempDir: string;
@@ -24,7 +25,7 @@ describe("ModelRegistry runtime source cleanup", () => {
 	};
 
 	const streamSimple: NonNullable<ProviderConfigInput["streamSimple"]> = () =>
-		({}) as unknown as AssistantMessageEventStream;
+		fromAny<AssistantMessageEventStream>({});
 
 	beforeEach(async () => {
 		tempDir = path.join(os.tmpdir(), `pi-test-model-registry-runtime-cleanup-${Snowflake.next()}`);

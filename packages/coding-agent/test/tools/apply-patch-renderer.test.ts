@@ -6,6 +6,7 @@ import { ToolExecutionComponent } from "@oh-my-pi/pi-coding-agent/modes/componen
 import * as themeModule from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { toolRenderers } from "@oh-my-pi/pi-coding-agent/tools/renderers";
 import type { TUI } from "@oh-my-pi/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 
 async function getUiTheme() {
 	await themeModule.initTheme(false, undefined, undefined, "dark", "light");
@@ -21,7 +22,7 @@ describe("apply_patch rendering", () => {
 
 	it("renders apply_patch results through edit UI instead of generic fallback", async () => {
 		await getUiTheme();
-		const uiStub = { requestRender() {} } as unknown as TUI;
+		const uiStub = fromPartial<TUI>({ requestRender() {} });
 
 		const component = new ToolExecutionComponent(
 			"apply_patch",
@@ -100,7 +101,7 @@ describe("apply_patch rendering", () => {
 
 	it("shows apply_patch preview diffs after args complete", async () => {
 		await getUiTheme();
-		const uiStub = { requestRender() {} } as unknown as TUI;
+		const uiStub = fromPartial<TUI>({ requestRender() {} });
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "apply-patch-preview-"));
 		try {
 			await Bun.write(path.join(tmpDir, "preview.ts"), "const value = 1;\n");
@@ -130,7 +131,7 @@ describe("apply_patch rendering", () => {
 
 	it("aligns rendered edit diff separators", async () => {
 		await getUiTheme();
-		const uiStub = { requestRender() {} } as unknown as TUI;
+		const uiStub = fromPartial<TUI>({ requestRender() {} });
 		const component = new ToolExecutionComponent(
 			"edit",
 			{ path: "packages/coding-agent/src/tools/image-gen.ts" },
