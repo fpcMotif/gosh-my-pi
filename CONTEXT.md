@@ -555,17 +555,22 @@ replaced `AbortSourceTracker` in P4a (helper at
 `packages/ai/src/utils/abort-effect.ts`).
 
 **TurnAborted** _(tagged error in `packages/agent/src/errors.ts`)_:
-Planned typed bridge for caller-initiated aborts at the
-`AgentRunController.run` boundary. Carries `turnId` and
-`reason: "user" | "ttsr" | "streaming-edit-guard" | "unknown"`.
-**No constructor wired today** — the tag is reserved for a follow-up
-that converts Effect interrupts (raised by `effectFromSignal` when the
-caller's `AbortSignal` aborts) into a typed failure on the agent-run
-seam. `errorToKind` already classifies it `{ kind: "transient" }` so
-the switch stays exhaustive when the bridge lands. Distinct from
-`LocalAbort`: that one fires inside a provider Effect for transport
-stalls; this one will fire at the agent-run seam when a caller signal
-aborts the active turn.
+Typed bridge for caller-initiated aborts at the `AgentRunController.run`
+boundary. Carries `turnId` (a per-`run()` UUID minted by the controller
+via `crypto.randomUUID()`) and `reason: "user" | "ttsr" |
+"streaming-edit-guard" | "unknown"`. Wired in P4b/P4c: every
+`agent.abort(reason?)` call sets `agent.lastAbortReason` and aborts
+`agent.turnSignal`; the controller wraps its body Effect in
+`effectFromSignal(turnSignal, body)` so the abort surfaces as a fiber
+interrupt, then `Effect.catchCause(Cause.hasInterruptsOnly(...))`
+rewrites the interrupt-only cause into `Effect.fail(new TurnAborted(...))`.
+`errorToKind` classifies it `{ kind: "transient" }` so the retry
+policy treats user aborts the same as transport-layer failures.
+Distinct from `LocalAbort`: that one fires inside a provider Effect
+for transport stalls; this one fires at the agent-run seam when a
+caller signal aborts the active turn. Caller-side `reason` plumbing:
+`StreamingEditGuard` passes `"streaming-edit-guard"`, TTSR triggers
+pass `"ttsr"`, everything else defaults to `"user"`.
 
 **UsageLimitError** _(tagged error in `packages/agent/src/errors.ts`)_:
 Provider rejected the request because a usage limit was hit (per-minute,

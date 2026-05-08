@@ -104,7 +104,9 @@ async function processStream(
 
 	if (options.signal !== undefined && options.signal.aborted && !sawTerminalEvent) {
 		const reason = options.signal.reason;
-		throw reason instanceof Error ? reason : new Error(String(reason ?? "Request aborted"));
+		// Empty fallback — typed abort surfaces through AgentRunController; this
+		// throw exists only so the proxy mode propagates abort upstream.
+		throw reason instanceof Error ? reason : new Error(typeof reason === "string" ? reason : "");
 	}
 
 	stream.end();

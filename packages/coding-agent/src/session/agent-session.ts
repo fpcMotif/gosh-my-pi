@@ -535,7 +535,7 @@ export class AgentSession {
 		});
 		this.#streamingEditGuard = new StreamingEditGuard({
 			settings: this.settings,
-			abortAgent: () => this.agent.abort(),
+			abortAgent: () => this.agent.abort("streaming-edit-guard"),
 			resolveFsPath: filePath => this.#resolveSessionFsPath(filePath),
 			getCwd: () => this.sessionManager.getCwd(),
 			getObfuscator: () => this.#obfuscator,
@@ -854,7 +854,7 @@ export class AgentSession {
 						// Abort the stream immediately — do not gate on extension callbacks
 						this.#ttsr.setAbortPending(true);
 						this.#ttsr.ensureResumePromise();
-						this.agent.abort();
+						this.agent.abort("ttsr");
 						// Notify extensions (fire-and-forget, does not block abort)
 						this.#emitSessionEvent({ type: "ttsr_triggered", rules: matches }).catch(() => {});
 						// Schedule retry after a short delay
