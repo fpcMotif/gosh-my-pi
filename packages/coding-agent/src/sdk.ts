@@ -87,7 +87,8 @@ import {
 import { AgentSession } from "./session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-ai";
 import { convertToLlm } from "./session/messages";
-import { SessionManager } from "./session/session-manager";
+import { type RecoveryAction, recoverIfNeeded } from "./session/recovery-driver";
+import { type SessionEntry, SessionManager } from "./session/session-manager";
 import { closeAllConnections } from "./ssh/connection-manager";
 import { unmountAll } from "./ssh/sshfs-mount";
 import {
@@ -246,6 +247,15 @@ export interface CreateAgentSessionResult {
 	lspServers?: LspStartupServerInfo[];
 	/** Shared event bus for tool/extension communication */
 	eventBus: EventBus;
+	/**
+	 * Recovery action applied on reopen when `OMP_RECOVERY_POLICY === "1"`.
+	 * `undefined` if the env flag is unset or the session is fresh; `{ kind: "none" }`
+	 * if the flag is set but the classifier saw no recoverable state. Non-`"none"`
+	 * variants mean the session was reopened mid-stream or mid-tool and the
+	 * agent's message history was mutated to make `agent.continue()` safe to
+	 * call. Per ADR-0003, the original tool is **never** re-run.
+	 */
+	recoveryAction?: RecoveryAction;
 }
 
 // Re-exports
@@ -1602,6 +1612,28 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			sessionManager.appendThinkingLevelChange(thinkingLevel);
 		}
 
+		// Apply crash recovery if enabled and we're reopening an existing session.
+		// Per ADR-0003: classifies safe / mid-stream / mid-tool from the session
+		// log + latest RecoveryMarker, then drops the partial assistant message
+		// (mid-stream) or appends synthetic toolResult entries with isError: true
+		// (mid-tool). NEVER re-runs the tool itself. The caller is responsible
+		// for following up with `session.prompt()` / `agent.continue()` if the
+		// returned action is non-`none`.
+		let recoveryAction: RecoveryAction | undefined;
+		if (hasExistingSession && process.env.OMP_RECOVERY_POLICY === "1") {
+			try {
+				const sessionEntries = sessionManager.fileEntries.filter((e): e is SessionEntry => e.type !== "session");
+				recoveryAction = recoverIfNeeded(sessionEntries, agent.messages, agent);
+				if (recoveryAction.kind !== "none") {
+					logger.info("Applied crash recovery on session reopen", { kind: recoveryAction.kind });
+				}
+			} catch (error) {
+				logger.warn("Crash recovery failed; continuing without recovery", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
+
 		session = new AgentSession({
 			agent,
 			thinkingLevel,
@@ -1792,6 +1824,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			modelFallbackMessage,
 			lspServers,
 			eventBus,
+			recoveryAction,
 		};
 	} catch (error) {
 		try {
