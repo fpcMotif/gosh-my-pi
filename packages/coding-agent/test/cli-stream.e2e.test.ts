@@ -89,7 +89,9 @@ describe("CLI stream/lifecycle e2e", () => {
 });
 
 describe.skipIf(!nativeAvailable)("CLI config persistence stress", () => {
-	test("100 sequential config set+get cycles preserve the latest value", async () => {
+	// Skip on CI because spawning hundreds of independent CLI binaries can overwhelm GitHub Actions / memory.
+	const isCI = !!process.env.CI;
+	test.skipIf(isCI)("100 sequential config set+get cycles preserve the latest value", async () => {
 		await withTempAgentDir(async dir => {
 			for (let i = 0; i < 100; i++) {
 				const setResult = await runCli(
