@@ -1,0 +1,3 @@
+## 2025-05-09 - [Reduce concurrent syncAllSessions calls]
+**Learning:** In the stats service, calling `syncAllSessions` multiple times in succession due to independent concurrent endpoints being called by the frontend (e.g., stats, recent, and errors) caused redundant DB queries and file I/O operations because they weren't shared.
+**Action:** We can use promise coalescing to share a single promise when `syncAllSessions` is already in flight. Next time we deal with concurrent backend/frontend endpoints, we can think about request debouncing or coalescing promises when the data fetched is heavy and purely read-only or synchronizing.
