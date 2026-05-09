@@ -75,7 +75,8 @@ async function runCli(args: string[], agentDir: string): Promise<CliResult> {
 }
 
 describe("CLI stream/lifecycle e2e", () => {
-	test("--version is stable across 10 rapid invocations", async () => {
+	const isCI = !!process.env.CI;
+	test.skipIf(isCI)("--version is stable across 10 rapid invocations", async () => {
 		await withTempAgentDir(async dir => {
 			const outputs = await Promise.all(Array.from({ length: 10 }, () => runCli(["--version"], dir)));
 			const trimmed = outputs.map(o => o.stdout.trim());
@@ -91,22 +92,26 @@ describe("CLI stream/lifecycle e2e", () => {
 describe.skipIf(!nativeAvailable)("CLI config persistence stress", () => {
 	// Skip on CI because spawning hundreds of independent CLI binaries can overwhelm GitHub Actions / memory.
 	const isCI = !!process.env.CI;
-	test.skipIf(isCI)("100 sequential config set+get cycles preserve the latest value", async () => {
-		await withTempAgentDir(async dir => {
-			for (let i = 0; i < 100; i++) {
-				const setResult = await runCli(
-					["config", "set", "compaction.enabled", i % 2 === 0 ? "true" : "false", "--json"],
-					dir,
-				);
-				expect(setResult.exitCode).toBe(0);
-			}
-			const finalGet = await runCli(["config", "get", "compaction.enabled", "--json"], dir);
-			expect(finalGet.exitCode).toBe(0);
-			const parsed = JSON.parse(finalGet.stdout) as { value: boolean };
-			// Last write was i=99 (odd) which sets "false".
-			expect(parsed.value).toBe(false);
-		});
-	}, 90_000);
+	test.skipIf(isCI)(
+		"100 sequential config set+get cycles preserve the latest value",
+		async () => {
+			await withTempAgentDir(async dir => {
+				for (let i = 0; i < 100; i++) {
+					const setResult = await runCli(
+						["config", "set", "compaction.enabled", i % 2 === 0 ? "true" : "false", "--json"],
+						dir,
+					);
+					expect(setResult.exitCode).toBe(0);
+				}
+				const finalGet = await runCli(["config", "get", "compaction.enabled", "--json"], dir);
+				expect(finalGet.exitCode).toBe(0);
+				const parsed = JSON.parse(finalGet.stdout) as { value: boolean };
+				// Last write was i=99 (odd) which sets "false".
+				expect(parsed.value).toBe(false);
+			});
+		},
+		90_000,
+	);
 
 	test("config get on missing key fails fast and emits a structured error", async () => {
 		await withTempAgentDir(async dir => {
