@@ -25,11 +25,17 @@ export function Header({ activeTab, onTabChange, onSync, syncing }: HeaderProps)
 			</div>
 
 			<div className="flex items-center gap-3">
-				<div className="flex bg-[var(--bg-surface)] rounded-[var(--radius-md)] p-1 border border-[var(--border-subtle)]">
+				<div
+					role="tablist"
+					aria-label="Dashboard sections"
+					className="flex bg-[var(--bg-surface)] rounded-[var(--radius-md)] p-1 border border-[var(--border-subtle)]"
+				>
 					{tabs.map(tab => (
 						<button
 							key={tab}
 							type="button"
+							role="tab"
+							aria-selected={activeTab === tab}
 							onClick={() => onTabChange(tab)}
 							className={`tab-btn capitalize ${activeTab === tab ? "active" : ""}`}
 						>
