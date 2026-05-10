@@ -1,0 +1,3 @@
+## 2026-05-10 - [Request Coalescing for Backend Synchronization]
+**Learning:** In backend read-only/synchronizing operations (e.g., syncAllSessions which parses sessions from disk to a DB), uncoordinated concurrent API requests (such as fetching stats, recent requests, and errors simultaneously on frontend dashboard load) will trigger redundant execution of expensive I/O operations.
+**Action:** Use request coalescing (e.g. caching the promise of the ongoing execution in a module-level variable) to deduplicate these concurrent executions, preventing race conditions and unnecessary I/O overhead.
