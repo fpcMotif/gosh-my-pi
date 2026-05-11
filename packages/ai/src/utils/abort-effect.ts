@@ -28,13 +28,13 @@ export interface WatchdogConfig {
 	readonly timeoutMs: number;
 }
 
-export interface RunWithWatchdogOptions {
+export interface RunWithWatchdogOptions<T> {
 	readonly callerSignal?: AbortSignal;
 	readonly firstEventWatchdog?: WatchdogConfig;
-	readonly body: (signal: AbortSignal) => Promise<void>;
+	readonly body: (signal: AbortSignal) => Promise<T>;
 }
 
-export function runWithLocalAbortWatchdog(opts: RunWithWatchdogOptions): Promise<void> {
+export function runWithLocalAbortWatchdog<T = void>(opts: RunWithWatchdogOptions<T>): Promise<T> {
 	const { callerSignal, firstEventWatchdog, body } = opts;
 	const program = Effect.scoped(
 		Effect.gen(function* () {
@@ -88,5 +88,5 @@ export function runWithLocalAbortWatchdog(opts: RunWithWatchdogOptions): Promise
 			return yield* callerSignal ? effectFromSignal(callerSignal, raced) : raced;
 		}),
 	);
-	return Effect.runPromise(program);
+	return Effect.runPromise(program) as Promise<T>;
 }
