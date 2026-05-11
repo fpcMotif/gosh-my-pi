@@ -54,42 +54,75 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
+let currentSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+let currentDashboardStatsPromise: Promise<DashboardStats> | null = null;
+
 /**
  * Sync all session files to the database.
  * Returns the number of new entries processed.
+ *
+ * ⚡ Bolt: Implements promise coalescing to prevent redundant file I/O and DB contention
+ * during concurrent API requests (e.g. from the dashboard).
  */
 export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
-	await initDb();
-
-	const files = await listAllSessionFiles();
-	const counts = await Promise.all(files.map(file => syncSessionFile(file)));
-	let totalProcessed = 0;
-	let filesProcessed = 0;
-	for (const count of counts) {
-		if (count > 0) {
-			totalProcessed += count;
-			filesProcessed++;
-		}
+	if (currentSyncPromise) {
+		return currentSyncPromise;
 	}
 
-	return { processed: totalProcessed, files: filesProcessed };
+	currentSyncPromise = (async () => {
+		try {
+			await initDb();
+
+			const files = await listAllSessionFiles();
+			const counts = await Promise.all(files.map(file => syncSessionFile(file)));
+			let totalProcessed = 0;
+			let filesProcessed = 0;
+			for (const count of counts) {
+				if (count > 0) {
+					totalProcessed += count;
+					filesProcessed++;
+				}
+			}
+
+			return { processed: totalProcessed, files: filesProcessed };
+		} finally {
+			currentSyncPromise = null;
+		}
+	})();
+
+	return currentSyncPromise;
 }
 
 /**
  * Get all dashboard stats.
+ *
+ * ⚡ Bolt: Implements promise coalescing to prevent redundant heavy SQLite aggregations
+ * during concurrent API requests.
  */
 export async function getDashboardStats(): Promise<DashboardStats> {
-	await initDb();
+	if (currentDashboardStatsPromise) {
+		return currentDashboardStatsPromise;
+	}
 
-	return {
-		overall: getOverallStats(),
-		byModel: getStatsByModel(),
-		byFolder: getStatsByFolder(),
-		timeSeries: getTimeSeries(24),
-		modelSeries: getModelTimeSeries(14),
-		modelPerformanceSeries: getModelPerformanceSeries(14),
-		costSeries: getCostTimeSeries(90),
-	};
+	currentDashboardStatsPromise = (async () => {
+		try {
+			await initDb();
+
+			return {
+				overall: getOverallStats(),
+				byModel: getStatsByModel(),
+				byFolder: getStatsByFolder(),
+				timeSeries: getTimeSeries(24),
+				modelSeries: getModelTimeSeries(14),
+				modelPerformanceSeries: getModelPerformanceSeries(14),
+				costSeries: getCostTimeSeries(90),
+			};
+		} finally {
+			currentDashboardStatsPromise = null;
+		}
+	})();
+
+	return currentDashboardStatsPromise;
 }
 export async function getRecentRequests(limit?: number): Promise<MessageStats[]> {
 	await initDb();
