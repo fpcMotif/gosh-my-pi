@@ -4,13 +4,18 @@
 
 ### Added
 
-- Added `HttpShape.requestStream<T>(opts)` to the `Http` service — owns the per-call AbortController, caller-signal forwarding, first-event watchdog Effect, `STREAM_STALLED_SUFFIX` rewrap to `LocalAbort({ kind: "idle" })`, and the scope finalizer that aborts the underlying fetch on non-success exit. Migrated `openai-codex-responses.ts`'s SSE transport onto it; the previous `wrapCodexSseStream` builder and the fetch-side leg of the codex-owned `AbortSignal.any` merge are retired. P4e will migrate `openai-responses.ts` and `openai-completions.ts` from their direct `runWithLocalAbortWatchdog` calls; P4f will delete the helper module. ([ADR-0005](../../docs/adr/0005-http-stream-watchdog-lift.md))
+- Added `HttpShape.requestStream<T>(opts)` to the `Http` service — owns the per-call AbortController, caller-signal forwarding, first-event watchdog Effect, `STREAM_STALLED_SUFFIX` rewrap to `LocalAbort({ kind: "idle" })`, and the scope finalizer that aborts the underlying fetch on non-success exit. All three streaming providers (`openai-responses`, `openai-completions`, `openai-codex-responses`) now route through this method. ([ADR-0005](../../docs/adr/0005-http-stream-watchdog-lift.md))
+
+### Removed
+
+- Removed `packages/ai/src/utils/abort-effect.ts` (P4f). The `runWithLocalAbortWatchdog` building block moved into `packages/ai/src/layers/http.ts` as a private `runStreamProgram` function (used only by `LiveHttp.requestStream`). All previous callers of the helper now go through `http.requestStream` instead. The associated `packages/ai/test/abort-effect.test.ts` is also removed — its contracts are covered by `packages/ai/test/http-request-stream.test.ts`.
 
 ### Changed
 
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
 - Replaced `createAbortSourceTracker` (deleted) with `Effect.raceFirst` and the `LocalAbort` tagged error in OpenAI Responses and Completions streaming providers; provider-local stalls now surface as a typed `LocalAbort({ kind, durationMs })` instead of a generic `Error` parsed by string match. Idle-stream aborts are now classified as `transient/transport` instead of falling through to "unknown error" — a pre-existing classification gap closed by this change. ([ADR-0004](../../docs/adr/0004-provider-abort-taxonomy-effect-race-not-tracker.md))
 - Codex SSE idle/timeout aborts now surface as a typed `LocalAbort` and produce `errorMessage: "OpenAI Codex stream <kind> after <N>ms"` (was: generic transport error message). Caller aborts still surface as `stopReason: "aborted"` via the existing `signal.aborted` path.
+- `openai-responses` and `openai-codex-responses` rewrap mid-iteration idle throws (`STREAM_STALLED_SUFFIX`-suffixed `Error`) into `LocalAbort({ kind: "idle", durationMs })` at the catch boundary so the typed-error contract from ADR-0004 holds whether iteration happens inside the `http.requestStream` body (`openai-completions`) or outside it (`openai-responses`, `openai-codex-responses`). Both code paths now produce `errorMessage: "<provider> stream idle after <N>ms"`.
 
 ### Fixed
 

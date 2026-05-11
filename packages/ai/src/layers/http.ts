@@ -7,17 +7,20 @@
 //     NOT raised here — callers inspect `Response.ok` themselves so retry /
 //     fallback logic stays explicit.
 //   - `requestStream`: streaming variant introduced in P4d (ADR-0005).
-//     Wraps `runWithLocalAbortWatchdog` so all three streaming providers
-//     (openai-responses, openai-completions, openai-codex-responses) share
-//     one transport seam for per-call AbortController + caller-signal
-//     forwarding + first-event watchdog + STREAM_STALLED_SUFFIX rewrap +
-//     scope finalizer that aborts the underlying fetch on non-success exit.
-//     P4e migrates the first two providers; P4f deletes the helper module
-//     once it has no public callers.
+//     Bundles the per-call AbortController + caller-signal forwarding +
+//     first-event watchdog + STREAM_STALLED_SUFFIX rewrap + scope finalizer
+//     that aborts the underlying fetch on non-success exit. All three
+//     streaming providers (openai-responses, openai-completions,
+//     openai-codex-responses) route through this method as of P4e.
+//
+// The `runStreamProgram` helper below is the building block that drives
+// `LiveHttp.requestStream`. Lifted from `packages/ai/src/utils/abort-effect.ts`
+// in P4f when the helper module was deleted (it had no callers outside this
+// module).
 
-import { Context, Data, Effect, Layer } from "@oh-my-pi/pi-utils/effect";
-import type { LocalAbort } from "../errors";
-import { runWithLocalAbortWatchdog } from "../utils/abort-effect";
+import { Context, Data, Effect, effectFromSignal, Layer } from "@oh-my-pi/pi-utils/effect";
+import { LocalAbort } from "../errors";
+import { STREAM_STALLED_SUFFIX } from "../utils/idle-iterator";
 
 /**
  * Tagged error raised by the Http service when the underlying `fetch` rejects
@@ -31,9 +34,9 @@ export class HttpError extends Data.TaggedError("HttpError")<{
 }> {}
 
 /**
- * Watchdog config for `HttpShape.requestStream`. Duplicates the helper's
- * shape so callers don't need to import from the helper module (which will
- * become private after P4f).
+ * Watchdog config for `HttpShape.requestStream`. The watchdog fires once,
+ * after `timeoutMs`, failing the Effect with `LocalAbort({ kind, durationMs })`.
+ * Setting `timeoutMs <= 0` disables it.
  */
 export interface FirstEventWatchdogConfig {
 	readonly kind: "timeout" | "idle" | "stall";
@@ -53,11 +56,17 @@ export interface RequestStreamOptions<T> {
 	 * The returned `AsyncIterable<T>` is the stream the caller consumes via
 	 * `for await`. First-event timing is enforced by `firstEventWatchdog`;
 	 * inter-event idle stalls stay the caller's responsibility (typically
-	 * via `iterateWithIdleTimeout` wrapped around the returned iterable).
-	 * Idle throws matching `STREAM_STALLED_SUFFIX` are rewrapped to
-	 * `LocalAbort({ kind: "idle" })` only if they happen INSIDE the body's
-	 * Promise (i.e. before the iterable is returned); throws DURING iteration
-	 * propagate to the caller's `for await` boundary unchanged.
+	 * via `iterateWithIdleTimeout` wrapped around the returned iterable or
+	 * inside the body). Idle throws matching `STREAM_STALLED_SUFFIX` are
+	 * rewrapped to `LocalAbort({ kind: "idle" })` only if they happen
+	 * INSIDE the body's Promise; throws DURING iteration propagate to the
+	 * caller's `for await` boundary unchanged, and providers that iterate
+	 * outside the body rewrap them in their catch boundary.
+	 *
+	 * Providers that consume the stream inside the body (option-A pattern,
+	 * used by openai-responses + openai-completions) can return an empty
+	 * iterable as a no-op sentinel; the body-time rewrap covers idle stalls
+	 * via the helper itself.
 	 */
 	readonly body: (signal: AbortSignal) => Promise<AsyncIterable<T>>;
 }
@@ -79,15 +88,74 @@ function buildRequester(fetchFn: typeof fetch): HttpShape["request"] {
 		});
 }
 
+/**
+ * Build the streaming runner. Wraps a Promise-returning body in an Effect
+ * scope: the scope owns a per-call `AbortController`, races the body against
+ * an optional first-event watchdog Effect, and aborts the controller on any
+ * non-success exit. Caller signal abort interrupts the fiber via
+ * `effectFromSignal`, which the scope finalizer observes.
+ */
+function runStreamProgram<T>(opts: RequestStreamOptions<T>): Promise<AsyncIterable<T>> {
+	const { callerSignal, firstEventWatchdog, body } = opts;
+	const program = Effect.scoped(
+		Effect.gen(function* () {
+			const controller = new AbortController();
+			yield* Effect.addFinalizer(exit =>
+				Effect.sync(() => {
+					if (exit._tag !== "Success" && !controller.signal.aborted) {
+						controller.abort();
+					}
+				}),
+			);
+
+			const startedAt = Date.now();
+
+			const bodyEffect = Effect.tryPromise({
+				try: effectSignal => {
+					if (effectSignal.aborted) {
+						controller.abort();
+					} else {
+						effectSignal.addEventListener(
+							"abort",
+							() => {
+								if (!controller.signal.aborted) controller.abort();
+							},
+							{ once: true },
+						);
+					}
+					return body(controller.signal);
+				},
+				catch: (cause: unknown): LocalAbort | unknown => {
+					if (cause instanceof Error && cause.message.endsWith(STREAM_STALLED_SUFFIX)) {
+						return new LocalAbort({ kind: "idle", durationMs: Date.now() - startedAt });
+					}
+					return cause;
+				},
+			});
+
+			const watchdogEffect: Effect.Effect<never, LocalAbort> =
+				firstEventWatchdog && firstEventWatchdog.timeoutMs > 0
+					? Effect.flatMap(Effect.sleep(`${firstEventWatchdog.timeoutMs} millis`), () =>
+							Effect.fail(
+								new LocalAbort({
+									kind: firstEventWatchdog.kind,
+									durationMs: firstEventWatchdog.timeoutMs,
+								}),
+							),
+						)
+					: Effect.never;
+
+			const raced = Effect.raceFirst(bodyEffect, watchdogEffect);
+			return yield* callerSignal ? effectFromSignal(callerSignal, raced) : raced;
+		}),
+	);
+	return Effect.runPromise(program) as Promise<AsyncIterable<T>>;
+}
+
 function buildStreamRequester(): HttpShape["requestStream"] {
 	return <T>(opts: RequestStreamOptions<T>) =>
 		Effect.tryPromise({
-			try: () =>
-				runWithLocalAbortWatchdog<AsyncIterable<T>>({
-					callerSignal: opts.callerSignal,
-					firstEventWatchdog: opts.firstEventWatchdog,
-					body: opts.body,
-				}),
+			try: () => runStreamProgram<T>(opts),
 			catch: (cause: unknown): LocalAbort | unknown => cause,
 		});
 }

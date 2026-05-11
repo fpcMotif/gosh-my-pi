@@ -1399,12 +1399,21 @@ async function handleCodexStreamFailure(
 		resetCodexWebSocketAppendState(context.requestContext.websocketState);
 		resetCodexSessionMetadata(context.requestContext.websocketState);
 	}
-	if (error instanceof LocalAbort) {
+	// Idle throws from `iterateWithIdleTimeout` propagate up from the caller-side
+	// `for await` (P4d: iteration is outside `http.requestStream`'s body, so the
+	// helper's body-time rewrap doesn't fire on mid-iteration stalls). Rewrap
+	// here so the typed `LocalAbort` contract from ADR-0004 holds across all
+	// three streaming providers.
+	const typedError =
+		error instanceof Error && error.message.endsWith(STREAM_STALLED_SUFFIX)
+			? new LocalAbort({ kind: "idle", durationMs: Date.now() - context.startTime })
+			: error;
+	if (typedError instanceof LocalAbort) {
 		output.stopReason = "error";
-		output.errorMessage = `OpenAI Codex stream ${error.kind} after ${error.durationMs}ms`;
+		output.errorMessage = `OpenAI Codex stream ${typedError.kind} after ${typedError.durationMs}ms`;
 	} else {
 		output.stopReason = context.options?.signal?.aborted ? "aborted" : "error";
-		output.errorMessage = await finalizeErrorMessage(error, context.requestContext.rawRequestDump);
+		output.errorMessage = await finalizeErrorMessage(typedError, context.requestContext.rawRequestDump);
 	}
 	output.duration = Date.now() - context.startTime;
 	if (context.firstTokenTime) {
