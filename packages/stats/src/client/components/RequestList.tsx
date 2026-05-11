@@ -31,7 +31,15 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 							<tr
 								key={`${req.sessionFile}-${req.entryId}`}
 								onClick={() => onSelect(req)}
-								className="table-row cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0"
+								onKeyDown={e => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										onSelect(req);
+									}
+								}}
+								tabIndex={0}
+								aria-label={`View details for request to ${req.model}`}
+								className="table-row cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0 focus:outline-none focus:bg-[var(--bg-hover)] focus:ring-2 focus:ring-inset focus:ring-[var(--accent-cyan)]"
 							>
 								<td className="py-3 px-4">
 									<div className="font-medium text-[var(--text-primary)] text-sm">{req.model}</div>
