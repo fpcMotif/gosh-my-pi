@@ -20,8 +20,9 @@ import {
 	type ToolChoice,
 } from "../types";
 import { createOpenAIResponsesHistoryPayload, sanitizeOpenAIResponsesHistoryItemsForReplay } from "../utils";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
 import { LocalAbort } from "../errors";
-import { runWithLocalAbortWatchdog } from "../utils/abort-effect";
+import { Http, LiveHttp } from "../layers/http";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import {
@@ -145,41 +146,38 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				body: params,
 			};
 
-			await runWithLocalAbortWatchdog({
-				callerSignal: options?.signal,
-				firstEventWatchdog: {
-					kind: "timeout",
-					timeoutMs: options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs) ?? 0,
-				},
-				body: async signal => {
-					const { data, response, request_id } = await client.chat.completions
-						.create(params as any, { signal })
-						.withResponse();
-					await notifyProviderResponse(options, response, model, request_id);
-					const openaiStream = data;
-
-					stream.push({ type: "start", partial: output });
-
-					await processResponsesStream(
-						iterateWithIdleTimeout(openaiStream as any, {
-							idleTimeoutMs,
-							errorMessage: `OpenAI responses ${STREAM_STALLED_SUFFIX}`,
-						}),
-						output,
-						stream,
-						model,
-						{
-							onFirstToken: () => {
-								if (firstTokenTime === null || firstTokenTime === undefined || firstTokenTime === 0)
-									firstTokenTime = Date.now();
-							},
-							onOutputItemDone: item => {
-								nativeOutputItems.push(
-									structuredCloneJSON<unknown>(item) as unknown as Record<string, unknown>,
-								);
-							},
+			const eventStream = await Effect.runPromise(
+				Effect.gen(function* () {
+					const http = yield* Http;
+					return yield* http.requestStream<unknown>({
+						callerSignal: options?.signal,
+						firstEventWatchdog: {
+							kind: "timeout",
+							timeoutMs: options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs) ?? 0,
 						},
-					);
+						body: async signal => {
+							const { data, response, request_id } = await client.chat.completions
+								.create(params as any, { signal })
+								.withResponse();
+							await notifyProviderResponse(options, response, model, request_id);
+							return iterateWithIdleTimeout(data as any, {
+								idleTimeoutMs,
+								errorMessage: `OpenAI responses ${STREAM_STALLED_SUFFIX}`,
+							});
+						},
+					});
+				}).pipe(Effect.provide(LiveHttp)),
+			);
+
+			stream.push({ type: "start", partial: output });
+
+			await processResponsesStream(eventStream as AsyncIterable<any>, output, stream, model, {
+				onFirstToken: () => {
+					if (firstTokenTime === null || firstTokenTime === undefined || firstTokenTime === 0)
+						firstTokenTime = Date.now();
+				},
+				onOutputItemDone: item => {
+					nativeOutputItems.push(structuredCloneJSON<unknown>(item) as unknown as Record<string, unknown>);
 				},
 			});
 
@@ -196,10 +194,18 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "done", reason: output.stopReason as "stop" | "length" | "toolUse", message: output });
 			stream.end();
-		} catch (error) {
+		} catch (rawError) {
 			for (const block of output.content) {
 				delete (block as { index?: number }).index;
 			}
+			// Idle throws from `iterateWithIdleTimeout` propagate up from the
+			// caller-side `for await` (P4e: iteration is now outside `http.requestStream`'s
+			// body, so the helper's body-time rewrap doesn't fire). Rewrap here so
+			// the typed `LocalAbort` contract from P4a/ADR-0004 survives.
+			const error =
+				rawError instanceof Error && rawError.message.endsWith(STREAM_STALLED_SUFFIX)
+					? new LocalAbort({ kind: "idle", durationMs: Date.now() - startTime })
+					: rawError;
 			if (error instanceof LocalAbort) {
 				output.stopReason = "error";
 				output.errorMessage = `OpenAI responses stream ${error.kind} after ${error.durationMs}ms`;
