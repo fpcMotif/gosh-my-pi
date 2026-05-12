@@ -540,16 +540,37 @@ a fiber's failure as an `AbortSignal` for legacy AbortSignal-taking
 APIs. _Avoid_: ad-hoc `addEventListener("abort", …)` blocks scattered
 through Effect programs.
 
-**LocalAbort** _(tagged error in `packages/agent/src/errors.ts`)_:
+**LocalAbort** _(tagged error in `packages/ai/src/errors.ts`, re-exported from `packages/agent/src/errors.ts`)_:
 Provider-local cancellation distinct from a caller-initiated abort.
 Carries `kind: "timeout" | "idle" | "stall"` plus `durationMs`. Surfaces
-when the streaming provider's watchdog Effect wins an `Effect.race`
+when the streaming provider's watchdog Effect wins an `Effect.raceFirst`
 against the response stream — the request stalled in transport, the
 caller did not cancel. `errorToKind` maps to
 `{ kind: "transient", reason: "transport" }` so retry logic treats it
 as transient. Caller aborts surface through Effect's interrupt channel,
-not this tag. Introduced by ADR-0004; supersedes `AbortSourceTracker`
-(`packages/ai/src/utils/abort.ts`) once P4a lands.
+not this tag. Lives in `pi-ai` because the package graph runs
+`pi-agent-core -> pi-ai`; the agent package re-exports the symbol so
+existing import sites continue to resolve. Introduced by ADR-0004;
+replaced `AbortSourceTracker` in P4a (helper at
+`packages/ai/src/utils/abort-effect.ts`).
+
+**TurnAborted** _(tagged error in `packages/agent/src/errors.ts`)_:
+Typed bridge for caller-initiated aborts at the `AgentRunController.run`
+boundary. Carries `turnId` (a per-`run()` UUID minted by the controller
+via `crypto.randomUUID()`) and `reason: "user" | "ttsr" |
+"streaming-edit-guard" | "unknown"`. Wired in P4b/P4c: every
+`agent.abort(reason?)` call sets `agent.lastAbortReason` and aborts
+`agent.turnSignal`; the controller wraps its body Effect in
+`effectFromSignal(turnSignal, body)` so the abort surfaces as a fiber
+interrupt, then `Effect.catchCause(Cause.hasInterruptsOnly(...))`
+rewrites the interrupt-only cause into `Effect.fail(new TurnAborted(...))`.
+`errorToKind` classifies it `{ kind: "transient" }` so the retry
+policy treats user aborts the same as transport-layer failures.
+Distinct from `LocalAbort`: that one fires inside a provider Effect
+for transport stalls; this one fires at the agent-run seam when a
+caller signal aborts the active turn. Caller-side `reason` plumbing:
+`StreamingEditGuard` passes `"streaming-edit-guard"`, TTSR triggers
+pass `"ttsr"`, everything else defaults to `"user"`.
 
 **UsageLimitError** _(tagged error in `packages/agent/src/errors.ts`)_:
 Provider rejected the request because a usage limit was hit (per-minute,

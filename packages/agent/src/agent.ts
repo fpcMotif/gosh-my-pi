@@ -58,6 +58,14 @@ function refreshToolChoiceForActiveTools(
 	return tools.some(tool => tool.name === toolName) ? toolChoice : undefined;
 }
 
+/**
+ * Caller-side classification of an abort. The `AgentRunController` bridge
+ * (P4b/P4c) reads `agent.lastAbortReason` after a fiber interrupt to construct
+ * a typed `TurnAborted({turnId, reason})` failure. Defaults to "user" because
+ * most production aborts originate from the human-driven UI path.
+ */
+export type TurnAbortReason = "user" | "ttsr" | "streaming-edit-guard" | "unknown";
+
 export class Agent {
 	#state: AgentState;
 	#listeners = new Set<AgentListener>();
@@ -66,6 +74,13 @@ export class Agent {
 	#runningPrompt?: Promise<void>;
 	#resolveRunningPrompt?: () => void;
 	#abortController?: AbortController;
+	// Long-lived signal that fires on every `abort()` call. Reset to a fresh
+	// AbortController after each abort so subsequent turns see an unaborted
+	// signal. The Effect-side bridge in `AgentRunController.run` captures
+	// `turnSignal` at the start of each run and uses `effectFromSignal` to
+	// surface aborts as fiber interrupts (then typed `TurnAborted`).
+	#turnAbortController = new AbortController();
+	#lastAbortReason: TurnAbortReason = "user";
 
 	#opts: AgentOptions;
 	#onAssistantMessageEvent?: (event: AssistantMessageEvent) => void;
@@ -297,10 +312,31 @@ export class Agent {
 	}
 
 	/**
-	 * Abort the current request.
+	 * Abort the current request. The optional `reason` is exposed via
+	 * `lastAbortReason` so the Effect-side bridge in `AgentRunController.run`
+	 * can build a typed `TurnAborted({turnId, reason})` failure without
+	 * inspecting `signal.reason` (which is unreliable — defaults to a
+	 * `DOMException` when no argument is passed to `controller.abort()`).
 	 */
-	abort() {
+	abort(reason?: TurnAbortReason) {
+		this.#lastAbortReason = reason ?? "user";
 		this.#abortController?.abort();
+		this.#turnAbortController.abort();
+		this.#turnAbortController = new AbortController();
+	}
+
+	/**
+	 * AbortSignal that fires on every `agent.abort()` call. The `AgentRunController`
+	 * bridge captures this at the start of `run()` and wraps the effect with
+	 * `effectFromSignal(turnSignal, body)` so aborts surface as fiber interrupts.
+	 */
+	get turnSignal(): AbortSignal {
+		return this.#turnAbortController.signal;
+	}
+
+	/** The `reason` argument passed to the most recent `abort()` call (default: "user"). */
+	get lastAbortReason(): TurnAbortReason {
+		return this.#lastAbortReason;
 	}
 
 	waitForIdle(): Promise<void> {
@@ -534,7 +570,11 @@ export class Agent {
 			if (hasContent) {
 				this.appendMessage(partial);
 			} else if (this.#abortController?.signal.aborted === true) {
-				throw new Error("Request was aborted");
+				// Empty message — the assistant-message synthesis path picks up
+				// `stopReason: "aborted"` from the signal check below. The
+				// AgentRunController bridge separately surfaces a typed
+				// TurnAborted via `agent.turnSignal`.
+				throw new Error("");
 			}
 		}
 	}
