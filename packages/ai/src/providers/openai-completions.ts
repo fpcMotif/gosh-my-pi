@@ -29,9 +29,9 @@ import {
 	type ToolChoice,
 	type ToolResultMessage,
 } from "../types";
-import { LocalAbort } from "../errors";
+import { formatLocalAbortMessage, LocalAbort } from "../errors";
 import { Effect } from "@oh-my-pi/pi-utils/effect";
-import { Http, LiveHttp } from "../layers/http";
+import { EMPTY_STREAM_SENTINEL, Http, LiveHttp } from "../layers/http";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { type CapturedHttpErrorResponse, finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import {
@@ -576,10 +576,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 							}
 
 							finishCurrentBlock(currentBlock);
-							// `http.requestStream`'s body signature requires returning an
-							// AsyncIterable; consumption already happened inline above, so
-							// return an empty iterable as a no-op sentinel.
-							return (async function* (): AsyncGenerator<never> {})();
+							return EMPTY_STREAM_SENTINEL;
 						},
 					});
 				}).pipe(Effect.provide(LiveHttp)),
@@ -601,12 +598,9 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			for (const block of output.content) delete (block as { index?: number }).index;
 			if (error instanceof LocalAbort) {
 				output.stopReason = "error";
-				output.errorMessage = `OpenAI completions stream ${error.kind} after ${error.durationMs}ms`;
-			} else if (options?.signal?.aborted === true) {
-				output.stopReason = "aborted";
-				output.errorMessage = await finalizeErrorMessage(error, rawRequestDump, getCapturedErrorResponse?.());
+				output.errorMessage = formatLocalAbortMessage("OpenAI completions", error);
 			} else {
-				output.stopReason = "error";
+				output.stopReason = options?.signal?.aborted === true ? "aborted" : "error";
 				output.errorMessage = await finalizeErrorMessage(error, rawRequestDump, getCapturedErrorResponse?.());
 			}
 			output.duration = Date.now() - startTime;

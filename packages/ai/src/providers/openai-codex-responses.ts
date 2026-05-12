@@ -38,7 +38,7 @@ import {
 	normalizeResponsesToolCallId,
 } from "../utils";
 import { Effect } from "@oh-my-pi/pi-utils/effect";
-import { LocalAbort } from "../errors";
+import { formatLocalAbortMessage, LocalAbort, rewrapStalledStream } from "../errors";
 import { Http, LiveHttp } from "../layers/http";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
@@ -578,7 +578,7 @@ async function openInitialCodexEventStream(
 			}
 		}
 	}
-	return openCodexSseTransport(requestContext, requestSetup, options, websocketState, transformedBody);
+	return openCodexSseTransport(requestContext, options, websocketState, transformedBody);
 }
 async function openCodexWebSocketTransport(
 	requestContext: CodexRequestContext,
@@ -624,7 +624,6 @@ async function openCodexWebSocketTransport(
 
 async function openCodexSseTransport(
 	requestContext: CodexRequestContext,
-	_requestSetup: CodexRequestSetup,
 	options: OpenAICodexResponsesOptions | undefined,
 	state: CodexWebSocketSessionState | undefined,
 	body = requestContext.transformedBody,
@@ -651,6 +650,11 @@ async function openCodexSseTransport(
 			callerSignal: options?.signal,
 			firstEventWatchdog: { kind: "timeout", timeoutMs: firstEventTimeoutMs },
 			body: async signal => {
+				// Merge caller signal with the http-owned signal: iteration outlives
+				// `http.requestStream`'s scope (option-B pattern), so caller-abort
+				// during iteration needs a direct path into the SSE fetch beyond
+				// the scope's lifetime.
+				const sdkSignal = options?.signal ? AbortSignal.any([options.signal, signal]) : signal;
 				const source = await openCodexSseEventStream(
 					requestContext.url,
 					requestContext.requestHeaders,
@@ -659,7 +663,7 @@ async function openCodexSseTransport(
 					options?.sessionId,
 					body,
 					state,
-					signal,
+					sdkSignal,
 				);
 				return iterateWithIdleTimeout(source, {
 					idleTimeoutMs,
@@ -711,7 +715,7 @@ async function reopenCodexSseRuntimeStream(
 	runtime: CodexStreamRuntime,
 	state: CodexWebSocketSessionState | undefined,
 ): Promise<void> {
-	const next = await openCodexSseTransport(context.requestContext, context.requestSetup, context.options, state);
+	const next = await openCodexSseTransport(context.requestContext, context.options, state);
 	runtime.eventStream = next.eventStream;
 	runtime.requestBodyForState = next.requestBodyForState;
 	runtime.transport = next.transport;
@@ -1399,18 +1403,10 @@ async function handleCodexStreamFailure(
 		resetCodexWebSocketAppendState(context.requestContext.websocketState);
 		resetCodexSessionMetadata(context.requestContext.websocketState);
 	}
-	// Idle throws from `iterateWithIdleTimeout` propagate up from the caller-side
-	// `for await` (P4d: iteration is outside `http.requestStream`'s body, so the
-	// helper's body-time rewrap doesn't fire on mid-iteration stalls). Rewrap
-	// here so the typed `LocalAbort` contract from ADR-0004 holds across all
-	// three streaming providers.
-	const typedError =
-		error instanceof Error && error.message.endsWith(STREAM_STALLED_SUFFIX)
-			? new LocalAbort({ kind: "idle", durationMs: Date.now() - context.startTime })
-			: error;
+	const typedError = rewrapStalledStream(error, context.startTime);
 	if (typedError instanceof LocalAbort) {
 		output.stopReason = "error";
-		output.errorMessage = `OpenAI Codex stream ${typedError.kind} after ${typedError.durationMs}ms`;
+		output.errorMessage = formatLocalAbortMessage("OpenAI Codex", typedError);
 	} else {
 		output.stopReason = context.options?.signal?.aborted ? "aborted" : "error";
 		output.errorMessage = await finalizeErrorMessage(typedError, context.requestContext.rawRequestDump);

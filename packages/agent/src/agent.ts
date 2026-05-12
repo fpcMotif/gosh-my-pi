@@ -322,13 +322,16 @@ export class Agent {
 		this.#lastAbortReason = reason ?? "user";
 		this.#abortController?.abort();
 		this.#turnAbortController.abort();
-		this.#turnAbortController = new AbortController();
 	}
 
 	/**
-	 * AbortSignal that fires on every `agent.abort()` call. The `AgentRunController`
-	 * bridge captures this at the start of `run()` and wraps the effect with
-	 * `effectFromSignal(turnSignal, body)` so aborts surface as fiber interrupts.
+	 * AbortSignal for the current turn. Aborts when `agent.abort()` is called;
+	 * a fresh, unaborted controller is installed at the start of every
+	 * `#runLoop` invocation so each new run sees a clean signal. The
+	 * AgentRunController bridge captures this inside `run()` (i.e., after
+	 * `#runLoop` has reset it) and wraps the effect with
+	 * `effectFromSignal(turnSignal, body)` so aborts surface as fiber
+	 * interrupts.
 	 */
 	get turnSignal(): AbortSignal {
 		return this.#turnAbortController.signal;
@@ -422,6 +425,12 @@ export class Agent {
 		this.#resolveRunningPrompt = resolve;
 
 		this.#abortController = new AbortController();
+		// Reset the turn signal so a new run sees an unaborted controller. Done
+		// at run-start (rather than at `abort()`-time) so callers that captured
+		// `agent.turnSignal` before `abort()` see the aborted signal — the
+		// AgentRunController bridge captures it INSIDE `run()`, so the capture
+		// always reflects the live turn.
+		this.#turnAbortController = new AbortController();
 		this.#state.isStreaming = true;
 		this.#state.streamMessage = null;
 		this.#state.error = undefined;

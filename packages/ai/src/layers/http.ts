@@ -12,15 +12,9 @@
 //     that aborts the underlying fetch on non-success exit. All three
 //     streaming providers (openai-responses, openai-completions,
 //     openai-codex-responses) route through this method as of P4e.
-//
-// The `runStreamProgram` helper below is the building block that drives
-// `LiveHttp.requestStream`. Lifted from `packages/ai/src/utils/abort-effect.ts`
-// in P4f when the helper module was deleted (it had no callers outside this
-// module).
 
 import { Context, Data, Effect, effectFromSignal, Layer } from "@oh-my-pi/pi-utils/effect";
-import { LocalAbort } from "../errors";
-import { STREAM_STALLED_SUFFIX } from "../utils/idle-iterator";
+import { LocalAbort, rewrapStalledStream } from "../errors";
 
 /**
  * Tagged error raised by the Http service when the underlying `fetch` rejects
@@ -34,12 +28,15 @@ export class HttpError extends Data.TaggedError("HttpError")<{
 }> {}
 
 /**
- * Watchdog config for `HttpShape.requestStream`. The watchdog fires once,
- * after `timeoutMs`, failing the Effect with `LocalAbort({ kind, durationMs })`.
- * Setting `timeoutMs <= 0` disables it.
+ * Watchdog config for `HttpShape.requestStream`. Fires once after `timeoutMs`,
+ * failing the Effect with `LocalAbort({ kind: "timeout", durationMs })`.
+ * Setting `timeoutMs <= 0` disables it. The `kind` field exists so future
+ * watchdog variants (e.g., TLS-handshake stall detection) can reuse the same
+ * config shape; today the only producer is the first-event watchdog and the
+ * only kind used is `"timeout"`.
  */
 export interface FirstEventWatchdogConfig {
-	readonly kind: "timeout" | "idle" | "stall";
+	readonly kind: "timeout";
 	readonly timeoutMs: number;
 }
 
@@ -61,15 +58,24 @@ export interface RequestStreamOptions<T> {
 	 * rewrapped to `LocalAbort({ kind: "idle" })` only if they happen
 	 * INSIDE the body's Promise; throws DURING iteration propagate to the
 	 * caller's `for await` boundary unchanged, and providers that iterate
-	 * outside the body rewrap them in their catch boundary.
+	 * outside the body rewrap them in their catch boundary via
+	 * `rewrapStalledStream`.
 	 *
-	 * Providers that consume the stream inside the body (option-A pattern,
-	 * used by openai-responses + openai-completions) can return an empty
-	 * iterable as a no-op sentinel; the body-time rewrap covers idle stalls
-	 * via the helper itself.
+	 * Option-A providers that consume the stream inside the body (e.g.,
+	 * `openai-completions`) return `EMPTY_STREAM_SENTINEL` as a no-op return
+	 * value; the body-time rewrap covers idle stalls via the helper itself.
 	 */
 	readonly body: (signal: AbortSignal) => Promise<AsyncIterable<T>>;
 }
+
+/**
+ * No-op iterable returned by option-A providers that consume the stream
+ * inside the `body` callback. `http.requestStream`'s caller iterates this
+ * and immediately gets `{ done: true }`.
+ */
+export const EMPTY_STREAM_SENTINEL: AsyncIterable<never> = {
+	async *[Symbol.asyncIterator]() {},
+};
 
 /** Public shape of the Http service. */
 export interface HttpShape {
@@ -89,75 +95,64 @@ function buildRequester(fetchFn: typeof fetch): HttpShape["request"] {
 }
 
 /**
- * Build the streaming runner. Wraps a Promise-returning body in an Effect
- * scope: the scope owns a per-call `AbortController`, races the body against
- * an optional first-event watchdog Effect, and aborts the controller on any
- * non-success exit. Caller signal abort interrupts the fiber via
- * `effectFromSignal`, which the scope finalizer observes.
+ * Streaming requester. Wraps `body` in an Effect scope that owns a per-call
+ * `AbortController`, races the body against an optional first-event watchdog
+ * Effect, and aborts the controller on any non-success exit. Caller-signal
+ * abort interrupts the fiber via `effectFromSignal`, which the scope
+ * finalizer observes. Body-time `STREAM_STALLED_SUFFIX` throws are rewrapped
+ * as `LocalAbort({ kind: "idle" })` via the shared helper in `../errors`.
  */
-function runStreamProgram<T>(opts: RequestStreamOptions<T>): Promise<AsyncIterable<T>> {
-	const { callerSignal, firstEventWatchdog, body } = opts;
-	const program = Effect.scoped(
-		Effect.gen(function* () {
-			const controller = new AbortController();
-			yield* Effect.addFinalizer(exit =>
-				Effect.sync(() => {
-					if (exit._tag !== "Success" && !controller.signal.aborted) {
-						controller.abort();
-					}
-				}),
-			);
-
-			const startedAt = Date.now();
-
-			const bodyEffect = Effect.tryPromise({
-				try: effectSignal => {
-					if (effectSignal.aborted) {
-						controller.abort();
-					} else {
-						effectSignal.addEventListener(
-							"abort",
-							() => {
-								if (!controller.signal.aborted) controller.abort();
-							},
-							{ once: true },
-						);
-					}
-					return body(controller.signal);
-				},
-				catch: (cause: unknown): LocalAbort | unknown => {
-					if (cause instanceof Error && cause.message.endsWith(STREAM_STALLED_SUFFIX)) {
-						return new LocalAbort({ kind: "idle", durationMs: Date.now() - startedAt });
-					}
-					return cause;
-				},
-			});
-
-			const watchdogEffect: Effect.Effect<never, LocalAbort> =
-				firstEventWatchdog && firstEventWatchdog.timeoutMs > 0
-					? Effect.flatMap(Effect.sleep(`${firstEventWatchdog.timeoutMs} millis`), () =>
-							Effect.fail(
-								new LocalAbort({
-									kind: firstEventWatchdog.kind,
-									durationMs: firstEventWatchdog.timeoutMs,
-								}),
-							),
-						)
-					: Effect.never;
-
-			const raced = Effect.raceFirst(bodyEffect, watchdogEffect);
-			return yield* callerSignal ? effectFromSignal(callerSignal, raced) : raced;
-		}),
-	);
-	return Effect.runPromise(program) as Promise<AsyncIterable<T>>;
-}
-
 function buildStreamRequester(): HttpShape["requestStream"] {
-	return <T>(opts: RequestStreamOptions<T>) =>
-		Effect.tryPromise({
-			try: () => runStreamProgram<T>(opts),
-			catch: (cause: unknown): LocalAbort | unknown => cause,
-		});
+	return <T>(opts: RequestStreamOptions<T>) => {
+		const { callerSignal, firstEventWatchdog, body } = opts;
+		return Effect.scoped(
+			Effect.gen(function* () {
+				const controller = new AbortController();
+				yield* Effect.addFinalizer(exit =>
+					Effect.sync(() => {
+						if (exit._tag !== "Success" && !controller.signal.aborted) {
+							controller.abort();
+						}
+					}),
+				);
+
+				const startedAt = Date.now();
+
+				const bodyEffect = Effect.tryPromise({
+					try: effectSignal => {
+						if (effectSignal.aborted) {
+							controller.abort();
+						} else {
+							effectSignal.addEventListener(
+								"abort",
+								() => {
+									if (!controller.signal.aborted) controller.abort();
+								},
+								{ once: true },
+							);
+						}
+						return body(controller.signal);
+					},
+					catch: (cause: unknown): LocalAbort | unknown => rewrapStalledStream(cause, startedAt),
+				});
+
+				const watchdogEffect: Effect.Effect<never, LocalAbort> =
+					firstEventWatchdog && firstEventWatchdog.timeoutMs > 0
+						? Effect.flatMap(Effect.sleep(`${firstEventWatchdog.timeoutMs} millis`), () =>
+								Effect.fail(
+									new LocalAbort({
+										kind: firstEventWatchdog.kind,
+										durationMs: firstEventWatchdog.timeoutMs,
+									}),
+								),
+							)
+						: Effect.never;
+
+				const raced = Effect.raceFirst(bodyEffect, watchdogEffect);
+				return yield* callerSignal ? effectFromSignal(callerSignal, raced) : raced;
+			}),
+		);
+	};
 }
 
 /** Live Layer — uses the global `fetch` and the production watchdog. */

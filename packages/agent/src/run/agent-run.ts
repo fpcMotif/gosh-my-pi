@@ -23,7 +23,6 @@
 //
 // CONTEXT.md:474-484 documents the term + the avoid list.
 
-import * as crypto from "node:crypto";
 import { Cause, Effect, effectFromSignal } from "@oh-my-pi/pi-utils/effect";
 import type { Agent } from "../agent";
 import { AgentBusy, type AgentRunError, ConfigInvalid, TurnAborted } from "../errors";

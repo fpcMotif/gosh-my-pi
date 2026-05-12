@@ -21,7 +21,7 @@ import {
 } from "../types";
 import { createOpenAIResponsesHistoryPayload, sanitizeOpenAIResponsesHistoryItemsForReplay } from "../utils";
 import { Effect } from "@oh-my-pi/pi-utils/effect";
-import { LocalAbort } from "../errors";
+import { formatLocalAbortMessage, LocalAbort, rewrapStalledStream } from "../errors";
 import { Http, LiveHttp } from "../layers/http";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
@@ -156,8 +156,13 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 							timeoutMs: options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs) ?? 0,
 						},
 						body: async signal => {
+							// Merge caller signal with the http-owned signal: option-B
+							// iterates after `http.requestStream`'s scope closes, so
+							// caller-abort during iteration needs a direct path into the
+							// SDK fetch beyond the scope's lifetime.
+							const sdkSignal = options?.signal ? AbortSignal.any([options.signal, signal]) : signal;
 							const { data, response, request_id } = await client.chat.completions
-								.create(params as any, { signal })
+								.create(params as any, { signal: sdkSignal })
 								.withResponse();
 							await notifyProviderResponse(options, response, model, request_id);
 							return iterateWithIdleTimeout(data as any, {
@@ -198,22 +203,12 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			for (const block of output.content) {
 				delete (block as { index?: number }).index;
 			}
-			// Idle throws from `iterateWithIdleTimeout` propagate up from the
-			// caller-side `for await` (P4e: iteration is now outside `http.requestStream`'s
-			// body, so the helper's body-time rewrap doesn't fire). Rewrap here so
-			// the typed `LocalAbort` contract from P4a/ADR-0004 survives.
-			const error =
-				rawError instanceof Error && rawError.message.endsWith(STREAM_STALLED_SUFFIX)
-					? new LocalAbort({ kind: "idle", durationMs: Date.now() - startTime })
-					: rawError;
+			const error = rewrapStalledStream(rawError, startTime);
 			if (error instanceof LocalAbort) {
 				output.stopReason = "error";
-				output.errorMessage = `OpenAI responses stream ${error.kind} after ${error.durationMs}ms`;
-			} else if (options?.signal?.aborted === true) {
-				output.stopReason = "aborted";
-				output.errorMessage = await finalizeErrorMessage(error, rawRequestDump);
+				output.errorMessage = formatLocalAbortMessage("OpenAI responses", error);
 			} else {
-				output.stopReason = "error";
+				output.stopReason = options?.signal?.aborted === true ? "aborted" : "error";
 				output.errorMessage = await finalizeErrorMessage(error, rawRequestDump);
 			}
 			output.duration = Date.now() - startTime;
