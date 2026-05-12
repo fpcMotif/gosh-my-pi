@@ -1,0 +1,3 @@
+## 2025-05-15 - Promise Coalescing for File I/O
+**Learning:** The React frontend dashboard makes multiple concurrent API calls (`/api/stats`, `/api/stats/recent`, `/api/stats/errors`) on load, which all independently call the backend's `syncAllSessions()`. This caused redundant `readdir` and `stat` calls across all session files simultaneously.
+**Action:** Implemented a promise coalescing (request deduplication) pattern in the backend (`packages/stats/src/aggregator.ts`). By storing the active execution promise in a module-level variable and returning it for concurrent requests, we avoid redundant filesystem I/O. Use this pattern for any expensive backend operations that might be triggered concurrently by multiple frontend widget queries.
