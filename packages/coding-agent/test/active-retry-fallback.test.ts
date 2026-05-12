@@ -1,11 +1,12 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Model } from "@oh-my-pi/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "bun:test";
 import { ActiveRetryFallback, type ActiveRetryFallbackContext } from "../src/session/active-retry-fallback";
 import type { RetryFallbackPolicy, RetryFallbackSelector } from "../src/session/retry-fallback-policy";
 
 function makeModel(provider: string, id: string): Model {
-	return {
+	return fromAny<Model>({
 		provider,
 		id,
 		api: "openai-responses",
@@ -15,7 +16,7 @@ function makeModel(provider: string, id: string): Model {
 		costOutputPerToken: 0,
 		costCacheReadPerToken: 0,
 		costCacheWritePerToken: 0,
-	} as unknown as Model;
+	});
 }
 
 interface FakeContextOverrides {
@@ -48,16 +49,16 @@ function makeContext(opts: FakeContextOverrides = {}): {
 	};
 	const ctx: ActiveRetryFallbackContext = {
 		sessionId: "test-session",
-		modelRegistry: {
+		modelRegistry: fromAny<ActiveRetryFallbackContext["modelRegistry"]>({
 			find: (provider: string, id: string) => makeModel(provider, id),
 			getApiKey: opts.getApiKey ?? (async () => "fake-key"),
-		} as unknown as ActiveRetryFallbackContext["modelRegistry"],
-		sessionManager: {
+		}),
+		sessionManager: fromAny<ActiveRetryFallbackContext["sessionManager"]>({
 			appendModelChange: () => "msg-id",
-		} as unknown as ActiveRetryFallbackContext["sessionManager"],
-		settings: {
+		}),
+		settings: fromAny<ActiveRetryFallbackContext["settings"]>({
 			getStorage: () => undefined,
-		} as unknown as ActiveRetryFallbackContext["settings"],
+		}),
 		policy: policy as RetryFallbackPolicy,
 		getModel: () => currentModel,
 		getThinkingLevel: () => undefined,

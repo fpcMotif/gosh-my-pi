@@ -10,6 +10,7 @@ import type { AuthStorage } from "@oh-my-pi/pi-ai";
 import { runSubprocess, SUBAGENT_WARNING_MISSING_YIELD } from "../../src/task/executor";
 import type { AgentDefinition } from "../../src/task/types";
 import { EventBus } from "../../src/utils/event-bus";
+import { fromAny } from "@total-typescript/shoehorn";
 
 function createAssistantStopMessage(text: string): AssistantMessage {
 	return {
@@ -81,7 +82,7 @@ function createMockSession(
 function createSessionResult(session: AgentSession): CreateAgentSessionResult {
 	return {
 		session,
-		extensionsResult: {} as unknown as LoadExtensionsResult,
+		extensionsResult: fromAny<LoadExtensionsResult>({}),
 		setToolUIContext: () => {},
 		eventBus: new EventBus(),
 	};
@@ -110,8 +111,8 @@ describe("runSubprocess yield reminders", () => {
 		index: 0,
 		id: "subagent-1",
 		settings: Settings.isolated(),
-		authStorage: {} as unknown as AuthStorage,
-		modelRegistry: { refresh: async () => {} } as unknown as import("../../src/config/model-registry").ModelRegistry,
+		authStorage: fromAny<AuthStorage>({}),
+		modelRegistry: fromAny<ModelRegistry>({ refresh: async () => {} }),
 		enableLsp: false,
 	};
 
@@ -233,10 +234,10 @@ describe("runSubprocess yield reminders", () => {
 
 		const createAgentSessionSpy = mockCreateAgentSession(session);
 
-		const modelRegistry = {
+		const modelRegistry = fromAny<ModelRegistry>({
 			refresh: async () => {},
 			getAvailable: () => [{ provider: "openai", id: "gpt-4o", name: "GPT-4o" }],
-		} as unknown as ModelRegistry;
+		});
 
 		await runSubprocess({
 			...baseOptions,
@@ -252,10 +253,10 @@ describe("runSubprocess yield reminders", () => {
 
 	it("prefers explicit modelOverride thinking suffix over provided thinking level, including off", async () => {
 		vi.clearAllMocks();
-		const modelRegistry = {
+		const modelRegistry = fromAny<ModelRegistry>({
 			refresh: async () => {},
 			getAvailable: () => [{ provider: "openai", id: "gpt-4o", name: "GPT-4o" }],
-		} as unknown as ModelRegistry;
+		});
 
 		const cases = [
 			{ modelOverride: "openai/gpt-4o:low", expectedThinkingLevel: Effort.Low },

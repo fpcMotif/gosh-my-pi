@@ -7,6 +7,7 @@ import {
 } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import type { Context, Model, ProviderSessionState } from "@oh-my-pi/pi-ai/types";
 import { getAgentDir, setAgentDir, TempDir } from "@oh-my-pi/pi-utils";
+import { fromAny } from "@total-typescript/shoehorn";
 
 const originalFetch = global.fetch;
 const originalAgentDir = getAgentDir();
@@ -947,45 +948,63 @@ describe("openai-codex streaming", () => {
 			}
 
 			send(): void {
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: { type: "message", id: "msg_ws", role: "assistant", status: "in_progress", content: [] },
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: { type: "message", id: "msg_ws", role: "assistant", status: "in_progress", content: [] },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: "Hello WS" }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.done",
-						item: {
-							type: "message",
-							id: "msg_ws",
-							role: "assistant",
-							status: "completed",
-							content: [{ type: "output_text", text: "Hello WS" }],
-						},
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.content_part.added",
+							part: { type: "output_text", text: "" },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.done",
-						response: {
-							id: "resp_ws",
-							status: "completed",
-							usage: {
-								input_tokens: 5,
-								output_tokens: 3,
-								total_tokens: 8,
-								input_tokens_details: { cached_tokens: 0 },
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.output_text.delta", delta: "Hello WS" }),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.done",
+							item: {
+								type: "message",
+								id: "msg_ws",
+								role: "assistant",
+								status: "completed",
+								content: [{ type: "output_text", text: "Hello WS" }],
 							},
-						},
+						}),
 					}),
-				} as unknown as Event);
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.done",
+							response: {
+								id: "resp_ws",
+								status: "completed",
+								usage: {
+									input_tokens: 5,
+									output_tokens: 3,
+									total_tokens: 8,
+									input_tokens_details: { cached_tokens: 0 },
+								},
+							},
+						}),
+					}),
+				);
 			}
 
 			close(): void {
@@ -1085,48 +1104,69 @@ describe("openai-codex streaming", () => {
 
 			send(data: string): void {
 				sentRequests.push(JSON.parse(data) as Record<string, unknown>);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: { type: "message", id: "msg_ws", role: "assistant", status: "in_progress", content: [] },
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: { type: "message", id: "msg_ws", role: "assistant", status: "in_progress", content: [] },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: "Hello WS" }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.done",
-						item: {
-							type: "message",
-							id: "msg_ws",
-							role: "assistant",
-							status: "completed",
-							content: [{ type: "output_text", text: "Hello WS" }],
-						},
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.content_part.added",
+							part: { type: "output_text", text: "" },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.created", response: { id: "resp_ws" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.done",
-						response: {
-							id: "resp_ws",
-							status: "completed",
-							usage: {
-								input_tokens: 5,
-								output_tokens: 3,
-								total_tokens: 8,
-								input_tokens_details: { cached_tokens: 0 },
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.output_text.delta", delta: "Hello WS" }),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.done",
+							item: {
+								type: "message",
+								id: "msg_ws",
+								role: "assistant",
+								status: "completed",
+								content: [{ type: "output_text", text: "Hello WS" }],
 							},
-						},
+						}),
 					}),
-				} as unknown as Event);
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.created", response: { id: "resp_ws" } }),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.done",
+							response: {
+								id: "resp_ws",
+								status: "completed",
+								usage: {
+									input_tokens: 5,
+									output_tokens: 3,
+									total_tokens: 8,
+									input_tokens_details: { cached_tokens: 0 },
+								},
+							},
+						}),
+					}),
+				);
 			}
 
 			close(): void {
@@ -1223,45 +1263,63 @@ describe("openai-codex streaming", () => {
 			}
 
 			send(): void {
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: { type: "message", id: "msg_v2", role: "assistant", status: "in_progress", content: [] },
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: { type: "message", id: "msg_v2", role: "assistant", status: "in_progress", content: [] },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: "Hello v2" }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.done",
-						item: {
-							type: "message",
-							id: "msg_v2",
-							role: "assistant",
-							status: "completed",
-							content: [{ type: "output_text", text: "Hello v2" }],
-						},
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.content_part.added",
+							part: { type: "output_text", text: "" },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.done",
-						response: {
-							id: "resp_v2",
-							status: "completed",
-							usage: {
-								input_tokens: 5,
-								output_tokens: 3,
-								total_tokens: 8,
-								input_tokens_details: { cached_tokens: 0 },
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.output_text.delta", delta: "Hello v2" }),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.done",
+							item: {
+								type: "message",
+								id: "msg_v2",
+								role: "assistant",
+								status: "completed",
+								content: [{ type: "output_text", text: "Hello v2" }],
 							},
-						},
+						}),
 					}),
-				} as unknown as Event);
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.done",
+							response: {
+								id: "resp_v2",
+								status: "completed",
+								usage: {
+									input_tokens: 5,
+									output_tokens: 3,
+									total_tokens: 8,
+									input_tokens_details: { cached_tokens: 0 },
+								},
+							},
+						}),
+					}),
+				);
 			}
 
 			close(): void {
@@ -1473,54 +1531,72 @@ describe("openai-codex streaming", () => {
 				requestTypes.push(typeof request.type === "string" ? request.type : "");
 				if (requestTypes.length === 1) {
 					this.readyState = FlakyCloseWebSocket.CLOSED;
-					this.#emit("close", { code: 1012 } as unknown as Event);
+					this.#emit("close", fromAny<Event>({ code: 1012 }));
 					return;
 				}
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: {
-							type: "message",
-							id: "msg_retry_close",
-							role: "assistant",
-							status: "in_progress",
-							content: [],
-						},
-					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: "Hello retry close" }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.done",
-						item: {
-							type: "message",
-							id: "msg_retry_close",
-							role: "assistant",
-							status: "completed",
-							content: [{ type: "output_text", text: "Hello retry close" }],
-						},
-					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.done",
-						response: {
-							id: "resp_retry_close",
-							status: "completed",
-							usage: {
-								input_tokens: 5,
-								output_tokens: 3,
-								total_tokens: 8,
-								input_tokens_details: { cached_tokens: 0 },
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: {
+								type: "message",
+								id: "msg_retry_close",
+								role: "assistant",
+								status: "in_progress",
+								content: [],
 							},
-						},
+						}),
 					}),
-				} as unknown as Event);
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.content_part.added",
+							part: { type: "output_text", text: "" },
+						}),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.output_text.delta", delta: "Hello retry close" }),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.done",
+							item: {
+								type: "message",
+								id: "msg_retry_close",
+								role: "assistant",
+								status: "completed",
+								content: [{ type: "output_text", text: "Hello retry close" }],
+							},
+						}),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.done",
+							response: {
+								id: "resp_retry_close",
+								status: "completed",
+								usage: {
+									input_tokens: 5,
+									output_tokens: 3,
+									total_tokens: 8,
+									input_tokens_details: { cached_tokens: 0 },
+								},
+							},
+						}),
+					}),
+				);
 			}
 
 			close(): void {
@@ -1612,7 +1688,7 @@ describe("openai-codex streaming", () => {
 					this.readyState = UnavailableBeforeStreamWebSocket.OPEN;
 					this.#emit("open", new Event("open"));
 					this.readyState = UnavailableBeforeStreamWebSocket.CLOSED;
-					this.#emit("close", { code: 1006 } as unknown as Event);
+					this.#emit("close", fromAny<Event>({ code: 1006 }));
 				}, 0);
 			}
 
@@ -1745,21 +1821,30 @@ describe("openai-codex streaming", () => {
 					return;
 				}
 				if (this.#connectionIndex === 0 && requestIndex === 2) {
-					this.#emit("message", {
-						data: JSON.stringify({
-							type: "response.output_item.added",
-							item: { type: "message", id: "msg_2", role: "assistant", status: "in_progress", content: [] },
+					this.#emit(
+						"message",
+						fromAny<Event>({
+							data: JSON.stringify({
+								type: "response.output_item.added",
+								item: { type: "message", id: "msg_2", role: "assistant", status: "in_progress", content: [] },
+							}),
 						}),
-					} as unknown as Event);
-					this.#emit("message", {
-						data: JSON.stringify({
-							type: "response.content_part.added",
-							part: { type: "output_text", text: "" },
+					);
+					this.#emit(
+						"message",
+						fromAny<Event>({
+							data: JSON.stringify({
+								type: "response.content_part.added",
+								part: { type: "output_text", text: "" },
+							}),
 						}),
-					} as unknown as Event);
-					this.#emit("message", {
-						data: JSON.stringify({ type: "response.output_text.delta", delta: "Still streaming" }),
-					} as unknown as Event);
+					);
+					this.#emit(
+						"message",
+						fromAny<Event>({
+							data: JSON.stringify({ type: "response.output_text.delta", delta: "Still streaming" }),
+						}),
+					);
 					setTimeout(() => {
 						abortSecondRequestRef.fn?.();
 					}, 0);
@@ -1778,45 +1863,63 @@ describe("openai-codex streaming", () => {
 			}
 
 			#emitCompleted(messageId: string, responseId: string, text: string): void {
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: { type: "message", id: messageId, role: "assistant", status: "in_progress", content: [] },
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: { type: "message", id: messageId, role: "assistant", status: "in_progress", content: [] },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: text }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.done",
-						item: {
-							type: "message",
-							id: messageId,
-							role: "assistant",
-							status: "completed",
-							content: [{ type: "output_text", text }],
-						},
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.content_part.added",
+							part: { type: "output_text", text: "" },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.done",
-						response: {
-							id: responseId,
-							status: "completed",
-							usage: {
-								input_tokens: 5,
-								output_tokens: 3,
-								total_tokens: 8,
-								input_tokens_details: { cached_tokens: 0 },
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.output_text.delta", delta: text }),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.done",
+							item: {
+								type: "message",
+								id: messageId,
+								role: "assistant",
+								status: "completed",
+								content: [{ type: "output_text", text }],
 							},
-						},
+						}),
 					}),
-				} as unknown as Event);
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.done",
+							response: {
+								id: responseId,
+								status: "completed",
+								usage: {
+									input_tokens: 5,
+									output_tokens: 3,
+									total_tokens: 8,
+									input_tokens_details: { cached_tokens: 0 },
+								},
+							},
+						}),
+					}),
+				);
 			}
 
 			#emit(type: string, event: Event): void {
@@ -1952,13 +2055,16 @@ describe("openai-codex streaming", () => {
 					return;
 				}
 				if (requestIndex === 2) {
-					this.#emit("message", {
-						data: JSON.stringify({
-							type: "error",
-							code: "invalid_request_error",
-							message: "simulated request error",
+					this.#emit(
+						"message",
+						fromAny<Event>({
+							data: JSON.stringify({
+								type: "error",
+								code: "invalid_request_error",
+								message: "simulated request error",
+							}),
 						}),
-					} as unknown as Event);
+					);
 					return;
 				}
 				if (requestIndex === 3) {
@@ -1974,45 +2080,63 @@ describe("openai-codex streaming", () => {
 			}
 
 			#emitCompleted(messageId: string, responseId: string, text: string): void {
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: { type: "message", id: messageId, role: "assistant", status: "in_progress", content: [] },
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: { type: "message", id: messageId, role: "assistant", status: "in_progress", content: [] },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: text }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.done",
-						item: {
-							type: "message",
-							id: messageId,
-							role: "assistant",
-							status: "completed",
-							content: [{ type: "output_text", text }],
-						},
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.content_part.added",
+							part: { type: "output_text", text: "" },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.done",
-						response: {
-							id: responseId,
-							status: "completed",
-							usage: {
-								input_tokens: 5,
-								output_tokens: 3,
-								total_tokens: 8,
-								input_tokens_details: { cached_tokens: 0 },
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.output_text.delta", delta: text }),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.done",
+							item: {
+								type: "message",
+								id: messageId,
+								role: "assistant",
+								status: "completed",
+								content: [{ type: "output_text", text }],
 							},
-						},
+						}),
 					}),
-				} as unknown as Event);
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.done",
+							response: {
+								id: responseId,
+								status: "completed",
+								usage: {
+									input_tokens: 5,
+									output_tokens: 3,
+									total_tokens: 8,
+									input_tokens_details: { cached_tokens: 0 },
+								},
+							},
+						}),
+					}),
+				);
 			}
 
 			#emit(type: string, event: Event): void {
@@ -2139,7 +2263,7 @@ describe("openai-codex streaming", () => {
 			}
 
 			send(): void {
-				this.#emit("message", { data: "{" } as unknown as Event);
+				this.#emit("message", fromAny<Event>({ data: "{" }));
 			}
 
 			close(): void {
@@ -2241,26 +2365,38 @@ describe("openai-codex streaming", () => {
 			}
 
 			send(): void {
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: {
-							type: "message",
-							id: "msg_ws_partial",
-							role: "assistant",
-							status: "in_progress",
-							content: [],
-						},
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: {
+								type: "message",
+								id: "msg_ws_partial",
+								role: "assistant",
+								status: "in_progress",
+								content: [],
+							},
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: "Partial output" }),
-				} as unknown as Event);
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.content_part.added",
+							part: { type: "output_text", text: "" },
+						}),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.output_text.delta", delta: "Partial output" }),
+					}),
+				);
 				this.readyState = BufferedCloseWebSocket.CLOSED;
-				this.#emit("close", { code: 1006 } as unknown as Event);
+				this.#emit("close", fromAny<Event>({ code: 1006 }));
 			}
 
 			close(): void {
@@ -2383,45 +2519,63 @@ describe("openai-codex streaming", () => {
 			}
 
 			#emitCompleted(messageId: string, responseId: string, text: string): void {
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: { type: "message", id: messageId, role: "assistant", status: "in_progress", content: [] },
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: { type: "message", id: messageId, role: "assistant", status: "in_progress", content: [] },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: text }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.done",
-						item: {
-							type: "message",
-							id: messageId,
-							role: "assistant",
-							status: "completed",
-							content: [{ type: "output_text", text }],
-						},
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.content_part.added",
+							part: { type: "output_text", text: "" },
+						}),
 					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.done",
-						response: {
-							id: responseId,
-							status: "completed",
-							usage: {
-								input_tokens: 5,
-								output_tokens: 3,
-								total_tokens: 8,
-								input_tokens_details: { cached_tokens: 0 },
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.output_text.delta", delta: text }),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.done",
+							item: {
+								type: "message",
+								id: messageId,
+								role: "assistant",
+								status: "completed",
+								content: [{ type: "output_text", text }],
 							},
-						},
+						}),
 					}),
-				} as unknown as Event);
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.done",
+							response: {
+								id: responseId,
+								status: "completed",
+								usage: {
+									input_tokens: 5,
+									output_tokens: 3,
+									total_tokens: 8,
+									input_tokens_details: { cached_tokens: 0 },
+								},
+							},
+						}),
+					}),
+				);
 			}
 
 			#emit(type: string, event: Event): void {
@@ -2539,51 +2693,69 @@ describe("openai-codex streaming", () => {
 				sendCount += 1;
 				const request = JSON.parse(data) as Record<string, unknown>;
 				expect(typeof request.type).toBe("string");
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.added",
-						item: {
-							type: "message",
-							id: `msg_${sendCount}`,
-							role: "assistant",
-							status: "in_progress",
-							content: [],
-						},
-					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({ type: "response.output_text.delta", delta: `Hello ${sendCount}` }),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.output_item.done",
-						item: {
-							type: "message",
-							id: `msg_${sendCount}`,
-							role: "assistant",
-							status: "completed",
-							content: [{ type: "output_text", text: `Hello ${sendCount}` }],
-						},
-					}),
-				} as unknown as Event);
-				this.#emit("message", {
-					data: JSON.stringify({
-						type: "response.done",
-						response: {
-							id: `resp_${sendCount}`,
-							status: "completed",
-							usage: {
-								input_tokens: 5,
-								output_tokens: 3,
-								total_tokens: 8,
-								input_tokens_details: { cached_tokens: 0 },
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: {
+								type: "message",
+								id: `msg_${sendCount}`,
+								role: "assistant",
+								status: "in_progress",
+								content: [],
 							},
-						},
+						}),
 					}),
-				} as unknown as Event);
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.content_part.added",
+							part: { type: "output_text", text: "" },
+						}),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({ type: "response.output_text.delta", delta: `Hello ${sendCount}` }),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.done",
+							item: {
+								type: "message",
+								id: `msg_${sendCount}`,
+								role: "assistant",
+								status: "completed",
+								content: [{ type: "output_text", text: `Hello ${sendCount}` }],
+							},
+						}),
+					}),
+				);
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.done",
+							response: {
+								id: `resp_${sendCount}`,
+								status: "completed",
+								usage: {
+									input_tokens: 5,
+									output_tokens: 3,
+									total_tokens: 8,
+									input_tokens_details: { cached_tokens: 0 },
+								},
+							},
+						}),
+					}),
+				);
 			}
 
 			close(): void {

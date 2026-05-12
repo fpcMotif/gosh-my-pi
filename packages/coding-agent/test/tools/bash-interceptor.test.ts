@@ -1,11 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import type { BashInterceptorRule } from "../../src/config/settings-schema";
 import type { ToolSession } from "../../src/tools";
 import { BashTool } from "../../src/tools/bash";
 
 function createBashTool(rules: BashInterceptorRule[]): BashTool {
-	const session = {
+	const session = fromAny<ToolSession>({
 		settings: {
 			get(key: string) {
 				if (key === "bashInterceptor.enabled") return true;
@@ -18,7 +19,7 @@ function createBashTool(rules: BashInterceptorRule[]): BashTool {
 				return rules;
 			},
 		},
-	} as unknown as ToolSession;
+	});
 
 	return new BashTool(session);
 }
@@ -34,9 +35,15 @@ describe("BashTool interception", () => {
 		]);
 
 		expect(
-			tool.execute("tool-call", { command: "cd packages/coding-agent && echo ok" }, undefined, undefined, {
-				toolNames: ["bash"],
-			} as AgentToolContext),
+			tool.execute(
+				"tool-call",
+				{ command: "cd packages/coding-agent && echo ok" },
+				undefined,
+				undefined,
+				fromPartial<AgentToolContext>({
+					toolNames: ["bash"],
+				}),
+			),
 		).rejects.toThrow("Do not hide directory changes");
 	});
 
@@ -50,9 +57,15 @@ describe("BashTool interception", () => {
 		]);
 
 		expect(
-			tool.execute("tool-call", { command: "cd packages/coding-agent && cat package.json" }, undefined, undefined, {
-				toolNames: ["read"],
-			} as AgentToolContext),
+			tool.execute(
+				"tool-call",
+				{ command: "cd packages/coding-agent && cat package.json" },
+				undefined,
+				undefined,
+				fromPartial<AgentToolContext>({
+					toolNames: ["read"],
+				}),
+			),
 		).rejects.toThrow("Use read instead");
 	});
 });

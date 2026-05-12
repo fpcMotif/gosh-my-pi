@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "bun:test";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { executeBuiltinSlashCommand } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-registry";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 
 function createRuntimeHarness(options?: {
 	handleSessionCommand?: InteractiveModeContext["handleSessionCommand"];
@@ -15,11 +16,11 @@ function createRuntimeHarness(options?: {
 		handleSessionCommand,
 		handleSessionDeleteCommand,
 		runtime: {
-			ctx: {
-				editor: { setText } as unknown as InteractiveModeContext["editor"],
+			ctx: fromPartial<InteractiveModeContext>({
+				editor: fromAny<InteractiveModeContext["editor"]>({ setText }),
 				handleSessionCommand,
 				handleSessionDeleteCommand,
-			} as InteractiveModeContext,
+			}),
 			handleBackgroundCommand: () => {},
 		},
 	};

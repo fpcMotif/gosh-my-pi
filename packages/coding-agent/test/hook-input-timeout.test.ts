@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 import { HookInputComponent } from "@oh-my-pi/pi-coding-agent/modes/components/hook-input";
 import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { TUI } from "@oh-my-pi/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 
 beforeAll(async () => {
 	const theme = await getThemeByName("dark");
@@ -22,7 +23,7 @@ describe("HookInputComponent timeout", () => {
 		const onSubmit = vi.fn();
 		const onCancel = vi.fn();
 		const onTimeout = vi.fn();
-		const tui = { requestRender: vi.fn() } as unknown as TUI;
+		const tui = fromAny<TUI>({ requestRender: vi.fn() });
 
 		const component = new HookInputComponent("Prompt", undefined, onSubmit, onCancel, {
 			timeout: 1_000,
@@ -53,7 +54,7 @@ describe("HookInputComponent timeout", () => {
 		const onSubmit = vi.fn();
 		const onCancel = vi.fn();
 		const onTimeout = vi.fn();
-		const tui = { requestRender: vi.fn() } as unknown as TUI;
+		const tui = fromAny<TUI>({ requestRender: vi.fn() });
 
 		const component = new HookInputComponent("Prompt", undefined, onSubmit, onCancel, {
 			timeout: 1_000,

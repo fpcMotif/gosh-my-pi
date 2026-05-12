@@ -1,5 +1,4 @@
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
+import { Effect, Stream } from "@oh-my-pi/pi-utils/effect";
 import type { AssistantMessageEvent } from "./types";
 import type { AssistantMessageEventStream } from "./utils/event-stream";
 

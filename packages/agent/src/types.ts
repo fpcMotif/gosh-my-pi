@@ -19,6 +19,7 @@ import type {
 } from "@oh-my-pi/pi-ai";
 import type { Static, TSchema } from "@sinclair/typebox";
 import type { AgentErrorKind } from "./error-kind";
+import { AgentBusy } from "./errors";
 
 /** Stream function - can return sync or Promise for async config lookup */
 export type StreamFn = (
@@ -192,11 +193,11 @@ export type AgentMessage<T extends keyof CustomAgentMessages = keyof CustomAgent
 /**
  * Agent state containing all configuration and conversation data.
  */
-export class AgentBusyError extends Error {
+export class AgentBusyError extends AgentBusy {
 	constructor(
 		message = "Agent is already processing. Use steer() or followUp() to queue messages, or wait for completion.",
 	) {
-		super(message);
+		super({ message });
 		this.name = "AgentBusyError";
 	}
 }

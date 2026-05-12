@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import type { ToolSession } from "../../src/tools";
 import { resolvePlanPath } from "../../src/tools/plan-mode-guard";
 
@@ -9,7 +10,7 @@ function makeSession(overrides: {
 	sessionId?: string | null;
 	cwd?: string;
 }): ToolSession {
-	return {
+	return fromAny<ToolSession>({
 		cwd: overrides.cwd ?? "/repo",
 		hasUI: false,
 		getSessionFile: () => null,
@@ -19,7 +20,7 @@ function makeSession(overrides: {
 		},
 		getArtifactsDir: () => overrides.artifactsDir ?? null,
 		getSessionId: () => overrides.sessionId ?? null,
-	} as unknown as ToolSession;
+	});
 }
 
 describe("resolvePlanPath local:// support", () => {

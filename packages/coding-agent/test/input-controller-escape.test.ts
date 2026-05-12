@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "bun:test";
 import { InputController } from "@oh-my-pi/pi-coding-agent/modes/controllers/input-controller";
 import type { InteractiveModeContext, SubmittedUserInput } from "@oh-my-pi/pi-coding-agent/modes/types";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 
 type FakeEditor = {
 	onEscape?: () => void;
@@ -96,18 +97,18 @@ function createContext(): {
 	// eslint-disable-next-line prefer-const
 	let ctx!: InteractiveModeContext;
 	const ensureLoadingAnimation = vi.fn(() => {
-		ctx.loadingAnimation = {} as InteractiveModeContext["loadingAnimation"];
+		ctx.loadingAnimation = fromPartial<InteractiveModeContext["loadingAnimation"]>({});
 	});
 
-	ctx = {
+	ctx = fromAny<InteractiveModeContext>({
 		editor: editor as unknown as InteractiveModeContext["editor"],
-		ui: { requestRender } as unknown as InteractiveModeContext["ui"],
+		ui: fromAny<InteractiveModeContext["ui"]>({ requestRender }),
 		loadingAnimation: undefined,
 		autoCompactionLoader: undefined,
 		retryLoader: undefined,
 		autoCompactionEscapeHandler: undefined,
 		retryEscapeHandler: undefined,
-		session: {
+		session: fromAny<InteractiveModeContext["session"]>({
 			isStreaming: false,
 			isCompacting: false,
 			isGeneratingHandoff: false,
@@ -121,13 +122,13 @@ function createContext(): {
 			abortPython,
 			clearQueue,
 			prompt,
-		} as unknown as InteractiveModeContext["session"],
-		sessionManager: {
+		}),
+		sessionManager: fromAny<InteractiveModeContext["sessionManager"]>({
 			getSessionName: () => "existing session",
-		} as unknown as InteractiveModeContext["sessionManager"],
-		keybindings: {
+		}),
+		keybindings: fromAny<InteractiveModeContext["keybindings"]>({
 			getKeys: () => [],
-		} as unknown as InteractiveModeContext["keybindings"],
+		}),
 		pendingImages: [],
 		isBashMode: false,
 		isPythonMode: false,
@@ -153,7 +154,7 @@ function createContext(): {
 		showTreeSelector: vi.fn(),
 		showUserMessageSelector: vi.fn(),
 		showSessionSelector: vi.fn(),
-	} as unknown as InteractiveModeContext;
+	});
 
 	return {
 		ctx,
@@ -183,7 +184,7 @@ describe("InputController escape behavior", () => {
 		const submission = createSubmission({ text: "hello" });
 		spies.startPendingSubmission.mockReturnValue(submission);
 		spies.cancelPendingSubmission.mockReturnValue(true);
-		ctx.loadingAnimation = {} as InteractiveModeContext["loadingAnimation"];
+		ctx.loadingAnimation = fromPartial<InteractiveModeContext["loadingAnimation"]>({});
 		const controller = new InputController(ctx);
 
 		controller.setupKeyHandlers();
@@ -217,7 +218,7 @@ describe("InputController escape behavior", () => {
 
 	it("falls back to aborting the active session when no pending optimistic submission exists", () => {
 		const { ctx, editor, spies } = createContext();
-		ctx.loadingAnimation = {} as InteractiveModeContext["loadingAnimation"];
+		ctx.loadingAnimation = fromPartial<InteractiveModeContext["loadingAnimation"]>({});
 		const controller = new InputController(ctx);
 
 		controller.setupKeyHandlers();
@@ -270,7 +271,7 @@ describe("InputController escape behavior", () => {
 
 	it("dismisses an active /btw panel before canceling a pending optimistic submission", () => {
 		const { ctx, editor, spies } = createContext();
-		ctx.loadingAnimation = {} as InteractiveModeContext["loadingAnimation"];
+		ctx.loadingAnimation = fromPartial<InteractiveModeContext["loadingAnimation"]>({});
 		spies.hasActiveBtw.mockReturnValue(true);
 		const controller = new InputController(ctx);
 

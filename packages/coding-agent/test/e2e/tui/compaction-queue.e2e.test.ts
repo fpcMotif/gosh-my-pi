@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { Container, type TUI } from "@oh-my-pi/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import { getThemeByName, setThemeInstance } from "../../../src/modes/theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext } from "../../../src/modes/types";
 import { UiHelpers } from "../../../src/modes/utils/ui-helpers";
@@ -79,7 +80,7 @@ function createStubContext(opts: {
 		pendingMessagesContainer,
 		ui,
 		session: session as unknown as InteractiveModeContext["session"],
-		settings: { get: () => undefined } as unknown as InteractiveModeContext["settings"],
+		settings: fromAny<InteractiveModeContext["settings"]>({ get: () => undefined }),
 		fileSlashCommands: known,
 		compactionQueuedMessages: opts.compactionQueued,
 		updatePendingMessagesDisplay: () => {},
@@ -95,7 +96,7 @@ function createStubContext(opts: {
 			const cmdName = spaceIdx === -1 ? text.slice(1) : text.slice(1, spaceIdx);
 			return known.has(cmdName);
 		},
-		keybindings: { getDisplayString: () => "Alt+Up" } as unknown as InteractiveModeContext["keybindings"],
+		keybindings: fromAny<InteractiveModeContext["keybindings"]>({ getDisplayString: () => "Alt+Up" }),
 	};
 	return { ctx: ctx as InteractiveModeContext, chatContainer, sessionLog };
 }

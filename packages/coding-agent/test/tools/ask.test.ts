@@ -5,6 +5,7 @@ import { getThemeByName, initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { AskTool, askToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/ask";
 import { ToolAbortError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
+import { fromAny } from "@total-typescript/shoehorn";
 
 function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 	return {
@@ -40,7 +41,7 @@ function createContext(args: {
 	abort?: () => void;
 }): AgentToolContext {
 	// AgentToolContext includes many runtime fields; tests only need UI + abort behavior.
-	return {
+	return fromAny<AgentToolContext>({
 		hasUI: true,
 		ui: {
 			select: args.select,
@@ -52,7 +53,7 @@ function createContext(args: {
 			) => args.editor?.(title, prefill, dialogOptions, editorOptions) ?? Promise.resolve(undefined),
 		},
 		abort: args.abort ?? (() => {}),
-	} as unknown as AgentToolContext;
+	});
 }
 
 function stripAnsi(text: string): string {

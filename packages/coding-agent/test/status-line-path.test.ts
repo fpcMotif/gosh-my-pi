@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { getProjectDir, setProjectDir } from "@oh-my-pi/pi-utils";
+import { fromAny } from "@total-typescript/shoehorn";
 import type { SegmentContext } from "../src/modes/components/status-line/segments";
 import { renderSegment } from "../src/modes/components/status-line/segments";
 
@@ -15,12 +16,12 @@ beforeAll(async () => {
 
 function createPathContext(): SegmentContext {
 	return {
-		session: {
+		session: fromAny<SegmentContext["session"]>({
 			state: {},
 			isFastModeEnabled: () => false,
 			modelRegistry: { isUsingOAuth: () => false },
 			sessionManager: undefined,
-		} as unknown as SegmentContext["session"],
+		}),
 		width: 120,
 		options: {
 			path: {

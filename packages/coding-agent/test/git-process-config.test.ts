@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
+import { fromPartial } from "@total-typescript/shoehorn";
 import type { Subprocess } from "bun";
 import * as git from "../src/utils/git";
 
@@ -22,12 +23,12 @@ function createTextStream(text: string): ReadableStream<Uint8Array> {
 }
 
 function createFakeProcess(stdout = "", stderr = "", exitCode = 0): Subprocess {
-	return {
+	return fromPartial<Subprocess>({
 		pid: 12345,
 		stdout: createTextStream(stdout),
 		stderr: createTextStream(stderr),
 		exited: Promise.resolve(exitCode),
-	} as Subprocess;
+	});
 }
 
 function createSpawnMock(calls: SpawnCall[]) {
@@ -35,7 +36,7 @@ function createSpawnMock(calls: SpawnCall[]) {
 	function mockSpawn(cmd: string[], options?: SpawnOptions): Subprocess;
 	function mockSpawn(first: string[] | (SpawnOptions & { cmd: string[] }), second?: SpawnOptions): Subprocess {
 		if (Array.isArray(first)) {
-			calls.push({ cmd: first, options: second ?? ({} as SpawnOptions) });
+			calls.push({ cmd: first, options: second ?? fromPartial<SpawnOptions>({}) });
 		} else {
 			const { cmd, ...options } = first;
 			calls.push({ cmd, options });

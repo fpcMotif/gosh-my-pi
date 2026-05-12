@@ -13,6 +13,7 @@ import type {
 import type { AssistantMessage, Context, Message, Model, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { Type } from "@sinclair/typebox";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { createAssistantMessage, pushAlphaThenDoneEvent } from "./helpers";
 
 // Mock stream for testing - uses actual AssistantMessageEventStream with throttling
@@ -233,7 +234,7 @@ describe("agentLoop with AgentMessage", () => {
 		const config: AgentLoopConfig = {
 			model: createModel(),
 			convertToLlm: identityConverter,
-			getToolContext: toolCall => ({ toolCall }) as AgentToolContext,
+			getToolContext: toolCall => fromPartial<AgentToolContext>({ toolCall }),
 		};
 
 		let callIndex = 0;

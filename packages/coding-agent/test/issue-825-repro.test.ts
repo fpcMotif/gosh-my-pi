@@ -23,6 +23,7 @@ import { AgentBusyError } from "@oh-my-pi/pi-agent-core";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { UiHelpers } from "@oh-my-pi/pi-coding-agent/modes/utils/ui-helpers";
+import { fromAny } from "@total-typescript/shoehorn";
 
 beforeAll(() => {
 	void initTheme();
@@ -84,7 +85,7 @@ function makeCtx(initialQueue: CompactionQueuedMessage[]) {
 	const showStatus = mock((_msg: string) => {});
 	const updatePendingMessagesDisplay = mock(() => {});
 
-	const ctx = {
+	const ctx = fromAny<InteractiveModeContext>({
 		session: fake.session,
 		compactionQueuedMessages: [...initialQueue],
 		pendingMessagesContainer: { clear: () => {}, addChild: () => {}, removeChild: () => {} },
@@ -95,7 +96,7 @@ function makeCtx(initialQueue: CompactionQueuedMessage[]) {
 		updatePendingMessagesDisplay,
 		showError,
 		showStatus,
-	} as unknown as InteractiveModeContext;
+	});
 
 	return { ctx, fake, showError, showStatus, updatePendingMessagesDisplay };
 }

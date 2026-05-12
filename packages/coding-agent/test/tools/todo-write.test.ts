@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import type { SessionEntry, SessionMessageEntry } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { fromAny } from "@total-typescript/shoehorn";
 import {
 	getLatestTodoPhasesFromEntries,
 	type TodoPhase,

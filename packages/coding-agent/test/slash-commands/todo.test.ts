@@ -8,6 +8,7 @@ import {
 	type BuiltinSlashCommandRuntime,
 } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-registry";
 import { USER_TODO_EDIT_CUSTOM_TYPE } from "@oh-my-pi/pi-coding-agent/tools/todo-write";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 
 type TodoEditEntry = CustomEntry<{ phases: TodoPhase[] }>;
 
@@ -48,11 +49,11 @@ function createHarness(initialPhases: TodoPhase[] = []) {
 		appendedMessages.push(message);
 	});
 
-	const ctx = {} as InteractiveModeContext;
+	const ctx = fromPartial<InteractiveModeContext>({});
 	Object.assign(ctx, {
-		agent: { appendMessage } as unknown as InteractiveModeContext["agent"],
-		editor: { setText } as unknown as InteractiveModeContext["editor"],
-		session: { getTodoPhases, setTodoPhases } as unknown as InteractiveModeContext["session"],
+		agent: fromAny<InteractiveModeContext["agent"]>({ appendMessage }),
+		editor: fromAny<InteractiveModeContext["editor"]>({ setText }),
+		session: fromAny<InteractiveModeContext["session"]>({ getTodoPhases, setTodoPhases }),
 		sessionManager,
 		setTodos,
 		showError,

@@ -19,6 +19,7 @@ import { SearchTool } from "@oh-my-pi/pi-coding-agent/tools/search";
 import { WriteTool } from "@oh-my-pi/pi-coding-agent/tools/write";
 import * as markitUtils from "@oh-my-pi/pi-coding-agent/utils/markit";
 import { $which, Snowflake } from "@oh-my-pi/pi-utils";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { unzipSync } from "fflate";
 
 // Helper to extract text from content blocks
@@ -197,19 +198,19 @@ function createTestToolSession(
 }
 
 function createTestToolContext(toolNames: string[]): AgentToolContext {
-	return {
+	return fromPartial<AgentToolContext>({
 		sessionManager: SessionManager.inMemory(),
-		modelRegistry: {
+		modelRegistry: fromAny<AgentToolContext["modelRegistry"]>({
 			find: () => undefined,
 			getAll: () => [],
 			getApiKey: async () => undefined,
-		} as unknown as AgentToolContext["modelRegistry"],
+		}),
 		model: undefined,
 		isIdle: () => true,
 		hasQueuedMessages: () => false,
 		abort: () => {},
 		toolNames,
-	} as AgentToolContext;
+	});
 }
 
 describe("Coding Agent Tools", () => {

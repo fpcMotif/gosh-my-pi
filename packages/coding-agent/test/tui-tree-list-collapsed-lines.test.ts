@@ -1,10 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { renderTreeList } from "../src/tui/tree-list";
 
-const stubTheme = {
+const stubTheme = fromPartial<Parameters<typeof renderTreeList>[1]>({
 	fg: (_color: string, text: string) => text,
 	tree: { branch: "├", last: "└", vertical: "│", horizontal: "─", hook: "╰" },
-} as Parameters<typeof renderTreeList>[1];
+});
 
 function expectWithinBudget(lines: string[], budget: number) {
 	expect(lines.length).toBeLessThanOrEqual(budget);

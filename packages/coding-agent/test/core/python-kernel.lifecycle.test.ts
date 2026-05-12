@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as gatewayCoordinator from "@oh-my-pi/pi-coding-agent/ipy/gateway-coordinator";
 import { PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { hookFetch, TempDir } from "@oh-my-pi/pi-utils";
+import { fromPartial } from "@total-typescript/shoehorn";
 import type { Subprocess } from "bun";
 
 type SpawnOptions = Bun.SpawnOptions.SpawnOptions<
@@ -74,7 +75,7 @@ const createResponse = (options: { ok: boolean; status?: number; json?: unknown;
 
 const createFakeProcess = (): Subprocess => {
 	const exited = new Promise<number>(() => undefined);
-	return { pid: 999999, exited } as Subprocess;
+	return fromPartial<Subprocess>({ pid: 999999, exited });
 };
 
 const expectResolvesWithin = async <T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {

@@ -11,6 +11,7 @@ import { inspectImageToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/inspec
 import { toolRenderers } from "@oh-my-pi/pi-coding-agent/tools/renderers";
 import { sanitizeText } from "@oh-my-pi/pi-natives";
 import { Value } from "@sinclair/typebox/value";
+import { fromAny } from "@total-typescript/shoehorn";
 
 const TINY_PNG_BASE64 =
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
@@ -66,10 +67,10 @@ function createSession(
 		getModelString: () => `${activeModel.provider}/${activeModel.id}`,
 		getActiveModelString: () => `${activeModel.provider}/${activeModel.id}`,
 		settings,
-		modelRegistry: {
+		modelRegistry: fromAny<NonNullable<ToolSession["modelRegistry"]>>({
 			getAvailable: () => availableModels,
 			getApiKey: async () => apiKey,
-		} as unknown as NonNullable<ToolSession["modelRegistry"]>,
+		}),
 	};
 }
 

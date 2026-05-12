@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { Container, type TUI } from "@oh-my-pi/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import { getThemeByName, setThemeInstance } from "../../../src/modes/theme/theme";
 import type { InteractiveModeContext } from "../../../src/modes/types";
 import { UiHelpers } from "../../../src/modes/utils/ui-helpers";
@@ -28,7 +29,7 @@ function stripAnsi(text: string): string {
 
 function createStubContext(): { ctx: InteractiveModeContext; chatContainer: Container; renderCalls: number } {
 	const chatContainer = new Container();
-	const ui = { requestRender: () => {} } as unknown as TUI;
+	const ui = fromAny<TUI>({ requestRender: () => {} });
 	let renderCalls = 0;
 	const renderCounting = new Proxy(ui, {
 		get(target, prop) {
@@ -36,7 +37,7 @@ function createStubContext(): { ctx: InteractiveModeContext; chatContainer: Cont
 			return target[prop as keyof TUI];
 		},
 	});
-	const ctx = {
+	const ctx = fromAny<InteractiveModeContext>({
 		isBackgrounded: false,
 		chatContainer,
 		ui: renderCounting,
@@ -44,7 +45,7 @@ function createStubContext(): { ctx: InteractiveModeContext; chatContainer: Cont
 		// don't, so we leave them as no-op stubs:
 		lastStatusText: undefined,
 		lastStatusSpacer: undefined,
-	} as unknown as InteractiveModeContext;
+	});
 	return {
 		ctx,
 		chatContainer,

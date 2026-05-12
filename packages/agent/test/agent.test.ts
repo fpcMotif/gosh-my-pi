@@ -3,6 +3,7 @@ import { Agent, type AgentTool, type AnyAgentTool, ThinkingLevel } from "@oh-my-
 import { getBundledModel, type SimpleStreamOptions, type ThinkingBudgets } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { Type } from "@sinclair/typebox";
+import { fromAny } from "@total-typescript/shoehorn";
 import { createAssistantMessage, pushAlphaThenDoneEvent } from "./helpers";
 
 class MockAssistantStream extends AssistantMessageEventStream {}
@@ -77,7 +78,7 @@ describe("Agent", () => {
 		expect(agent.state.thinkingLevel).toBe(ThinkingLevel.High);
 
 		// Test setTools
-		const tools = [{ name: "test", description: "test tool" } as unknown as AnyAgentTool];
+		const tools = [fromAny<AnyAgentTool>({ name: "test", description: "test tool" })];
 		agent.setTools(tools);
 		expect(agent.state.tools).toBe(tools);
 

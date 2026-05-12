@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "bun:test";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { executeBuiltinSlashCommand } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-registry";
+import { fromAny } from "@total-typescript/shoehorn";
 
 function createRuntimeHarness(overrides?: { setForcedToolChoice?: (toolName: string) => void }) {
 	const setForcedToolChoice = vi.fn(overrides?.setForcedToolChoice ?? ((_toolName: string) => {}));
@@ -8,12 +9,12 @@ function createRuntimeHarness(overrides?: { setForcedToolChoice?: (toolName: str
 	const showStatus = vi.fn();
 	const showError = vi.fn();
 
-	const ctx = {
-		editor: { setText } as unknown as InteractiveModeContext["editor"],
-		session: { setForcedToolChoice } as unknown as InteractiveModeContext["session"],
+	const ctx = fromAny<InteractiveModeContext>({
+		editor: fromAny<InteractiveModeContext["editor"]>({ setText }),
+		session: fromAny<InteractiveModeContext["session"]>({ setForcedToolChoice }),
 		showStatus,
 		showError,
-	} as unknown as InteractiveModeContext;
+	});
 
 	return {
 		runtime: {

@@ -1,4 +1,5 @@
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "bun:test";
 import { RetryController, type RetryControllerContext } from "../src/session/retry-controller";
 
@@ -23,30 +24,30 @@ function makeContext(opts: FakeContextOptions = {}): {
 	const fakeMessages: AssistantMessage[] = [];
 	const ctx: RetryControllerContext = {
 		sessionId: "test-session",
-		settings: {
+		settings: fromAny<RetryControllerContext["settings"]>({
 			getGroup: () => ({
 				enabled: opts.enabled ?? true,
 				maxRetries: opts.maxRetries ?? 3,
 				baseDelayMs: opts.baseDelayMs ?? 1,
 			}),
-		} as unknown as RetryControllerContext["settings"],
-		agent: {
+		}),
+		agent: fromAny<RetryControllerContext["agent"]>({
 			state: { messages: fakeMessages },
 			replaceMessages: (msgs: unknown[]) => calls.replaceMessages.push(msgs),
-		} as unknown as RetryControllerContext["agent"],
-		modelRegistry: {
+		}),
+		modelRegistry: fromAny<RetryControllerContext["modelRegistry"]>({
 			authStorage: {
 				markUsageLimitReached: opts.markUsageLimitReached ?? (async () => false),
 			},
-		} as unknown as RetryControllerContext["modelRegistry"],
-		retryFallbackPolicy: {
+		}),
+		retryFallbackPolicy: fromAny<RetryControllerContext["retryFallbackPolicy"]>({
 			noteCooldown: () => {
 				calls.noteCooldown++;
 			},
-		} as unknown as RetryControllerContext["retryFallbackPolicy"],
-		activeRetryFallback: {
+		}),
+		activeRetryFallback: fromAny<RetryControllerContext["activeRetryFallback"]>({
 			tryFallback: opts.tryFallback ?? (async () => false),
-		} as unknown as RetryControllerContext["activeRetryFallback"],
+		}),
 		getModel: () => ({ provider: "openai", baseUrl: "https://example.invalid" }),
 		getModelSelector: () => "openai/gpt-test",
 		getPromptGeneration: () => 1,

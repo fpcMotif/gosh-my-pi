@@ -10,9 +10,10 @@ import { createAgentSession } from "@oh-my-pi/pi-coding-agent/sdk";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { Snowflake } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
+import { fromPartial } from "@total-typescript/shoehorn";
 
 function createMcpCustomTool(name: string, serverName: string, mcpToolName: string): CustomTool {
-	return {
+	return fromPartial<CustomTool>({
 		name,
 		label: `${serverName}/${mcpToolName}`,
 		description: `Tool ${mcpToolName} from ${serverName}`,
@@ -22,7 +23,7 @@ function createMcpCustomTool(name: string, serverName: string, mcpToolName: stri
 		async execute() {
 			return { content: [{ type: "text", text: `${name} executed` }] };
 		},
-	} as CustomTool;
+	});
 }
 
 function createReasoningModel(): Model<"openai-responses"> {

@@ -46,6 +46,7 @@
 	},
 	"dependencies": {
 		"beautiful-mermaid": "catalog:",
+		"effect": "catalog:",
 		"handlebars": "catalog:",
 		"winston": "catalog:",
 		"winston-daily-rotate-file": "catalog:"

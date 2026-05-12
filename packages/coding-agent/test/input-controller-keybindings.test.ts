@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "bun:test";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { InputController } from "../src/modes/controllers/input-controller";
 import type { InteractiveModeContext } from "../src/modes/types";
 
@@ -50,27 +51,27 @@ async function createContext() {
 		setCustomKeyHandler: vi.fn(),
 		clearCustomKeyHandlers: vi.fn(),
 	};
-	const ctx = {
+	const ctx = fromAny<InteractiveModeContext>({
 		editor: editor as unknown as InteractiveModeContext["editor"],
-		ui: {} as InteractiveModeContext["ui"],
+		ui: fromPartial<InteractiveModeContext["ui"]>({}),
 		loadingAnimation: undefined,
 		autoCompactionLoader: undefined,
 		retryLoader: undefined,
 		autoCompactionEscapeHandler: undefined,
 		retryEscapeHandler: undefined,
-		session: {
+		session: fromPartial<InteractiveModeContext["session"]>({
 			isStreaming: false,
 			isCompacting: false,
 			isGeneratingHandoff: false,
 			isBashRunning: false,
 			isPythonRunning: false,
 			extensionRunner: undefined,
-		} as InteractiveModeContext["session"],
-		keybindings: {
+		}),
+		keybindings: fromPartial<InteractiveModeContext["keybindings"]>({
 			getKeys(action: string) {
 				return keyMap[action] ? [...keyMap[action]] : [];
 			},
-		} as InteractiveModeContext["keybindings"],
+		}),
 		pendingImages: [],
 		isBashMode: false,
 		isPythonMode: false,
@@ -87,7 +88,7 @@ async function createContext() {
 		showModelSelector,
 		updateEditorBorderColor: vi.fn(),
 		hasActiveBtw: vi.fn(() => false),
-	} as unknown as InteractiveModeContext;
+	});
 
 	return {
 		InputController,
@@ -124,7 +125,7 @@ describe("InputController keybinding setup", () => {
 		const invalidate = vi.fn();
 		const updateEditorBorderColor = vi.fn();
 		const refreshSessionChrome = vi.fn();
-		const ctx = {
+		const ctx = fromAny<InteractiveModeContext>({
 			session: {
 				cycleThinkingLevel: vi.fn(() => "low"),
 			},
@@ -132,7 +133,7 @@ describe("InputController keybinding setup", () => {
 			updateEditorBorderColor,
 			refreshSessionChrome,
 			showStatus: vi.fn(),
-		} as unknown as InteractiveModeContext;
+		});
 		const controller = new InputController(ctx);
 
 		controller.cycleThinkingLevel();

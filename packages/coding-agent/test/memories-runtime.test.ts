@@ -12,6 +12,7 @@ import {
 } from "@oh-my-pi/pi-coding-agent/memories";
 import * as memoryStorage from "@oh-my-pi/pi-coding-agent/memories/storage";
 import { getAgentDbPath, Snowflake } from "@oh-my-pi/pi-utils";
+import { fromPartial } from "@total-typescript/shoehorn";
 
 interface SessionFixture {
 	agentDir: string;
@@ -33,12 +34,12 @@ async function makeTempDir(prefix: string): Promise<string> {
 }
 
 function createModel(id = "test-model"): Model {
-	return {
+	return fromPartial<Model>({
 		provider: "openai",
 		id,
 		name: id,
 		contextWindow: 32_000,
-	} as Model;
+	});
 }
 
 function createModelRegistry(model: Model): any {

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { ConfigInvalid } from "@oh-my-pi/pi-agent-core";
 import {
 	CONFIG_DIR_NAME,
 	getAgentDir,
@@ -81,15 +82,14 @@ export interface IConfigFile<T> {
 	invalidate?(): void;
 }
 
-export class ConfigError extends Error {
+export class ConfigError extends ConfigInvalid {
+	readonly id: string;
+	readonly schemaErrors: ErrorObject[] | null | undefined;
+	readonly other?: { err: unknown; stage: string };
 	readonly #message: string;
-	constructor(
-		readonly id: string,
-		readonly schemaErrors: ErrorObject[] | null | undefined,
-		readonly other?: { err: unknown; stage: string },
-	) {
+	constructor(id: string, schemaErrors: ErrorObject[] | null | undefined, other?: { err: unknown; stage: string }) {
 		let messages: string[] | undefined;
-		let cause: any | undefined;
+		let cause: unknown | undefined;
 		let klass: string;
 
 		if (schemaErrors) {
@@ -121,8 +121,11 @@ export class ConfigError extends Error {
 				break;
 		}
 
-		super(message, { cause });
+		super({ configId: id, message, cause });
 		this.name = "LoadError";
+		this.id = id;
+		this.schemaErrors = schemaErrors;
+		this.other = other;
 		this.#message = message;
 	}
 

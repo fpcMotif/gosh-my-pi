@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { fromPartial } from "@total-typescript/shoehorn";
 import type { MCPReconnect } from "../src/mcp/tool-bridge";
 import { DeferredMCPTool, isRetriableConnectionError, MCPTool } from "../src/mcp/tool-bridge";
 import type { MCPServerConnection, MCPToolCallResult, MCPTransport } from "../src/mcp/types";
@@ -90,7 +91,7 @@ describe("isRetriableConnectionError", () => {
 
 describe("MCPTool.execute retry on connection error", () => {
 	const noop = () => {};
-	const noCtx = {} as Parameters<MCPTool["execute"]>[3];
+	const noCtx = fromPartial<Parameters<MCPTool["execute"]>[3]>({});
 
 	it("retries once on retriable error when reconnect succeeds", async () => {
 		let callCount = 0;
@@ -275,8 +276,8 @@ describe("MCPTool.execute retry on connection error", () => {
 
 describe("reconnect abort propagation", () => {
 	const noop = () => {};
-	const noCtx = {} as Parameters<MCPTool["execute"]>[3];
-	const noDeferredCtx = {} as Parameters<DeferredMCPTool["execute"]>[3];
+	const noCtx = fromPartial<Parameters<MCPTool["execute"]>[3]>({});
+	const noDeferredCtx = fromPartial<Parameters<DeferredMCPTool["execute"]>[3]>({});
 
 	it("throws ToolAbortError when MCPTool reconnect is aborted", async () => {
 		const failTransport = mockTransport(async () => {

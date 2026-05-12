@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { fromAny } from "@total-typescript/shoehorn";
 import {
 	type CustomStreamSimpleFn,
 	clearCustomApis,
@@ -13,7 +14,7 @@ afterEach(() => {
 });
 
 describe("custom API registry", () => {
-	const streamSimple: CustomStreamSimpleFn = () => ({}) as unknown as AssistantMessageEventStream;
+	const streamSimple: CustomStreamSimpleFn = () => fromAny<AssistantMessageEventStream>({});
 	test("registers and resolves a custom API provider", () => {
 		registerCustomApi("custom-provider", streamSimple, "ext-a");
 

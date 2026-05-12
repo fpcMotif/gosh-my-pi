@@ -17,6 +17,7 @@ import {
 } from "@oh-my-pi/pi-coding-agent/edit";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { Value } from "@sinclair/typebox/value";
+import { fromPartial } from "@total-typescript/shoehorn";
 
 beforeAll(async () => {
 	_resetSettingsForTest();
@@ -52,7 +53,7 @@ async function withTempDir(fn: (tempDir: string) => Promise<void>): Promise<void
 
 function atomExecuteOptions(tempDir: string, input: string): ExecuteAtomSingleOptions {
 	return {
-		session: { cwd: tempDir } as ToolSession,
+		session: fromPartial<ToolSession>({ cwd: tempDir }),
 		input,
 		writethrough: async () => {
 			throw new Error("unexpected write");
@@ -524,16 +525,18 @@ describe("atom parser — edge cases", () => {
 
 	it("locator-only patches report the cursor diagnostic", async () => {
 		expect(
-			executeAtomSingle({
-				session: { cwd: process.cwd() } as ToolSession,
-				input: "---a.ts\n@123ab",
-				writethrough: async () => {
-					throw new Error("unexpected write");
-				},
-				beginDeferredDiagnosticsForPath: () => {
-					throw new Error("unexpected diagnostics");
-				},
-			} as ExecuteAtomSingleOptions),
+			executeAtomSingle(
+				fromPartial<ExecuteAtomSingleOptions>({
+					session: fromPartial<ToolSession>({ cwd: process.cwd() }),
+					input: "---a.ts\n@123ab",
+					writethrough: async () => {
+						throw new Error("unexpected write");
+					},
+					beginDeferredDiagnosticsForPath: () => {
+						throw new Error("unexpected diagnostics");
+					},
+				}),
+			),
 		).rejects.toThrow(
 			"Cursor moved but no mutation found. Add +TEXT to insert, -Lid to delete, or Lid=TEXT to replace.",
 		);

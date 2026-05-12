@@ -31,6 +31,7 @@ import { clampTimeout } from "@oh-my-pi/pi-coding-agent/tools/tool-timeouts";
 import { sanitizeText } from "@oh-my-pi/pi-natives";
 import * as piUtils from "@oh-my-pi/pi-utils";
 import { TempDir } from "@oh-my-pi/pi-utils";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 
 describe("lsp regressions", () => {
 	it("detects bracket-style glob patterns", () => {
@@ -316,12 +317,12 @@ describe("lsp regressions", () => {
 				name: "test-lsp",
 				cwd: tempDir.path(),
 				config: server,
-				proc: {
+				proc: fromAny<LspClient["proc"]>({
 					stdin: {
 						write() {},
 						flush: async () => {},
 					},
-				} as unknown as LspClient["proc"],
+				}),
 				requestId: 0,
 				diagnostics: new Map([[targetUri, { diagnostics: [staleDiagnostic], version: null }]]),
 				diagnosticsVersion: 1,
@@ -352,7 +353,7 @@ describe("lsp regressions", () => {
 				client.diagnosticsVersion += 1;
 			}, 80);
 
-			const tool = new LspTool({ cwd: tempDir.path() } as ToolSession);
+			const tool = new LspTool(fromPartial<ToolSession>({ cwd: tempDir.path() }));
 			const result = await tool.execute("diag-stale", {
 				action: "diagnostics",
 				file: targetFile,

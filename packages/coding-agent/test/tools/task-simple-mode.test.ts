@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Settings } from "../../src/config/settings";
 import { TaskTool } from "../../src/task";
 import * as discoveryModule from "../../src/task/discovery";
@@ -15,13 +16,13 @@ const TEST_AGENTS = [
 ];
 
 function createSession(overrides: Partial<Record<string, unknown>> = {}): ToolSession {
-	return {
+	return fromAny<ToolSession>({
 		cwd: "/tmp",
 		hasUI: false,
 		settings: Settings.isolated(overrides),
 		getSessionFile: () => null,
 		getSessionSpawns: () => "*",
-	} as unknown as ToolSession;
+	});
 }
 
 function getSchemaProperties(tool: TaskTool): Record<string, unknown> {
@@ -85,19 +86,25 @@ describe("task.simple", () => {
 		});
 
 		const schemaFreeTool = await TaskTool.create(createSession({ "task.simple": "schema-free" }));
-		const schemaFreeResult = await schemaFreeTool.execute("tool-1", {
-			agent: "task",
-			schema: '{"properties":{"ok":{"type":"boolean"}}}',
-			tasks: [{ id: "One", description: "label", assignment: "Do the thing." }],
-		} as TaskParams);
+		const schemaFreeResult = await schemaFreeTool.execute(
+			"tool-1",
+			fromPartial<TaskParams>({
+				agent: "task",
+				schema: '{"properties":{"ok":{"type":"boolean"}}}',
+				tasks: [{ id: "One", description: "label", assignment: "Do the thing." }],
+			}),
+		);
 		expect(getFirstText(schemaFreeResult)).toContain("does not accept `schema`");
 
 		const independentTool = await TaskTool.create(createSession({ "task.simple": "independent" }));
-		const independentResult = await independentTool.execute("tool-2", {
-			agent: "task",
-			context: "Shared background",
-			tasks: [{ id: "Two", description: "label", assignment: "Do the independent thing." }],
-		} as TaskParams);
+		const independentResult = await independentTool.execute(
+			"tool-2",
+			fromPartial<TaskParams>({
+				agent: "task",
+				context: "Shared background",
+				tasks: [{ id: "Two", description: "label", assignment: "Do the independent thing." }],
+			}),
+		);
 		expect(getFirstText(independentResult)).toContain("does not accept `context`");
 	});
 });

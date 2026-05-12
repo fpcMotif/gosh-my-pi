@@ -3,8 +3,9 @@ import { ToolExecutionComponent } from "@oh-my-pi/pi-coding-agent/modes/componen
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { TUI } from "@oh-my-pi/pi-tui";
 import { visibleWidth } from "@oh-my-pi/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 
-const uiStub = { requestRender() {} } as unknown as TUI;
+const uiStub = fromPartial<TUI>({ requestRender() {} });
 
 function renderPlain(component: ToolExecutionComponent, width: number): string {
 	return Bun.stripANSI(component.render(width).join("\n"));

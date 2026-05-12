@@ -6,6 +6,7 @@ import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/confi
 import { getDefault } from "@oh-my-pi/pi-coding-agent/config/settings-schema";
 import { SelectorController } from "@oh-my-pi/pi-coding-agent/modes/controllers/selector-controller";
 import { getProjectAgentDir, Snowflake } from "@oh-my-pi/pi-utils";
+import { fromAny } from "@total-typescript/shoehorn";
 import { YAML } from "bun";
 
 describe("autocompleteMaxVisible setting", () => {
@@ -57,9 +58,11 @@ describe("autocompleteMaxVisible setting", () => {
 
 	it("should coerce submenu string values for live editor updates", () => {
 		const setAutocompleteMaxVisible = vi.fn();
-		const controller = new SelectorController({
-			editor: { setAutocompleteMaxVisible },
-		} as unknown as ConstructorParameters<typeof SelectorController>[0]);
+		const controller = new SelectorController(
+			fromAny<ConstructorParameters<typeof SelectorController>[0]>({
+				editor: { setAutocompleteMaxVisible },
+			}),
+		);
 
 		controller.handleSettingChange("autocompleteMaxVisible", "10");
 

@@ -493,6 +493,7 @@
 		"ajv": "catalog:",
 		"chalk": "catalog:",
 		"diff": "catalog:",
+		"effect": "catalog:",
 		"fflate": "catalog:",
 		"handlebars": "catalog:",
 		"linkedom": "catalog:",
