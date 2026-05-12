@@ -17,7 +17,12 @@ interface FakeAgentSpec {
 
 function fakeAgent(spec: FakeAgentSpec = {}): { agent: Agent; calls: { name: string; args: unknown[] }[] } {
 	const calls: { name: string; args: unknown[] }[] = [];
+	// AgentRunController bridges caller aborts via `agent.turnSignal` and reads
+	// `agent.lastAbortReason` when constructing TurnAborted; the partial fake
+	// must expose both so the Effect-side path doesn't trip on undefined.
 	const target = {
+		turnSignal: new AbortController().signal,
+		lastAbortReason: "user" as const,
 		async prompt(...args: unknown[]): Promise<void> {
 			calls.push({ name: "prompt", args });
 			if (spec.prompt) await spec.prompt(...args);

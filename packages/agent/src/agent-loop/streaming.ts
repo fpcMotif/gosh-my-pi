@@ -197,7 +197,10 @@ function handleAbortedStream(
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 ): AssistantMessage {
 	return finishPartialMessage(
-		buildTerminalStreamMessage(config, partialMessage, "Request was aborted", "aborted"),
+		// Empty errorMessage — `stopReason: "aborted"` is the load-bearing
+		// signal for the UI; the typed `TurnAborted` failure surfaces through
+		// the AgentRunController bridge, not this synthesized message.
+		buildTerminalStreamMessage(config, partialMessage, "", "aborted"),
 		addedPartial,
 		context,
 		stream,

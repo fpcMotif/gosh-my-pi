@@ -141,10 +141,7 @@ export class AssistantMessageComponent extends Container {
 		if (!hasToolCalls) {
 			if (message.stopReason === "aborted") {
 				const abortMessage =
-					message.errorMessage !== null &&
-					message.errorMessage !== undefined &&
-					message.errorMessage !== "" &&
-					message.errorMessage !== "Request was aborted"
+					message.errorMessage !== null && message.errorMessage !== undefined && message.errorMessage !== ""
 						? message.errorMessage
 						: "Operation aborted";
 				if (hasVisibleContent) {

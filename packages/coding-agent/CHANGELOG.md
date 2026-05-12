@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Routed `StreamingEditGuard` and TTSR triggers through `agent.abort("streaming-edit-guard" | "ttsr")` so the new `TurnAborted` bridge in `pi-agent-core` surfaces a typed reason instead of `"unknown"`. Updated the assistant-message UI filter to default to `"Operation aborted"` for empty errorMessages (the legacy `"Request was aborted"` sentinel is retired upstream).
 - Refreshed the default coding-agent TUI with the pi-vivid theme, compact status/tool chrome, conversation rails, and a lower-noise welcome surface.
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt and updated TypeScript project diagnostics to use tsgo.
 - Renamed the installed CLI command and prebuilt binary artifacts from `omp` to `gmp` to avoid collisions with an existing `omp` command.
