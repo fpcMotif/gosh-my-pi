@@ -76,6 +76,7 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 	readonly label = "Search";
 	readonly description: string;
 	readonly parameters = searchSchema;
+	readonly idempotent = true;
 	readonly strict = true;
 
 	constructor(private readonly session: ToolSession) {

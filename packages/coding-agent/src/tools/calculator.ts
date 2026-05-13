@@ -398,6 +398,7 @@ export class CalculatorTool implements AgentTool<typeof calculatorSchema, Calcul
 	readonly label = "Calc";
 	readonly description: string;
 	readonly parameters = calculatorSchema;
+	readonly idempotent = true;
 	readonly strict = true;
 
 	constructor(_session: ToolSession) {

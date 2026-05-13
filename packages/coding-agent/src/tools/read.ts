@@ -455,6 +455,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	readonly description: string;
 	readonly parameters = readSchema;
 	readonly nonAbortable = true;
+	readonly idempotent = true;
 	readonly strict = true;
 	readonly intent = (args: Partial<ReadParams>): string => {
 		const p = typeof args.path === "string" ? args.path.trim() : "";

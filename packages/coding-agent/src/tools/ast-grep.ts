@@ -64,6 +64,7 @@ export class AstGrepTool implements AgentTool<typeof astGrepSchema, AstGrepToolD
 	readonly label = "AST Grep";
 	readonly description: string;
 	readonly parameters = astGrepSchema;
+	readonly idempotent = true;
 	readonly strict = true;
 
 	constructor(private readonly session: ToolSession) {
