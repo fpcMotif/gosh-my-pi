@@ -104,13 +104,32 @@ export const streamEffectAiOpenAi = <TApi extends Api>(
 		);
 	});
 
-	// runPromiseExit (not runPromise) so Effect's defect reporter doesn't
-	// log fiber defects to stderr in parallel with our caller seeing the
-	// rejection — a single failure path keeps the consumer's catch clean.
+	// catchDefect converts fiber defects (Effect.die, thrown JS errors) into
+	// typed failures so runPromiseExit returns a clean Exit rather than logging
+	// the defect to stderr in parallel with the consumer seeing the rejection.
+	const safe = Effect.provide(program, layer).pipe(Effect.catchDefect(defect => Effect.fail(defect)));
+	// Pre-attach a no-op result-promise catch: AssistantMessageEventStream's
+	// `error()` rejects an internal #resultPromise that nobody awaits in the
+	// caller's for-await loop. Without this attachment the rejection surfaces
+	// as an unhandled-promise crash in Bun.
+	stream.result().catch(() => undefined);
 	void (async () => {
-		const exit = await Effect.runPromiseExit(Effect.provide(program, layer));
+		const exit = await Effect.runPromiseExit(safe);
 		if (Exit.isFailure(exit)) {
-			stream.error(Cause.squash(exit.cause));
+			const cause = Cause.squash(exit.cause);
+			// Push an explicit `error` event so the for-await consumer sees a
+			// terminal event in-band (matches pi-ai's existing providers). The
+			// AssistantMessageEventStream marks done on this event.
+			stream.push({
+				type: "error",
+				reason: "error",
+				error: {
+					...accumulator.partial,
+					stopReason: "error",
+					errorMessage: cause instanceof Error ? cause.message : String(cause),
+				},
+			});
+			stream.error(cause);
 			return;
 		}
 		if (!stream.done) {

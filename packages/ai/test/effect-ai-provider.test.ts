@@ -91,7 +91,10 @@ describe("streamEffectAiOpenAi — pi-ai-compatible streaming via Effect 4 Langu
 
 		const events = await collect(stream);
 		const types = events.map(e => e.type);
-		expect(types).toEqual(["start", "error", "error"]);
+		// AssistantMessageEventStream marks the stream done on the first
+		// `error` event, so the second error from finish:error is dropped — pi-ai
+		// consumers see exactly one terminal event per turn.
+		expect(types).toEqual(["start", "error"]);
 	});
 
 	it("ends cleanly when the stream completes without a finish part", async () => {
@@ -142,13 +145,19 @@ describe("streamEffectAiOpenAi — pi-ai-compatible streaming via Effect 4 Langu
 		if (done?.type === "done") expect(done.reason).toBe("toolUse");
 	});
 
-	it("surfaces a layer-construction failure via the stream's error channel", async () => {
+	it("surfaces a layer-construction failure as an in-band 'error' event", async () => {
 		const failingLayer: Layer.Layer<LanguageModel.LanguageModel> = Layer.effect(
 			LanguageModel.LanguageModel,
-			Effect.die("upstream provider unreachable"),
+			Effect.fail(new Error("upstream provider unreachable")),
 		);
 
 		const stream = streamEffectAiOpenAi(model, context, { languageModelLayer: failingLayer });
-		await expect(collect(stream)).rejects.toBeDefined();
+		const events = await collect(stream);
+		const errorEvent = events.find(e => e.type === "error");
+		expect(errorEvent?.type).toBe("error");
+		if (errorEvent?.type === "error") {
+			expect(errorEvent.error.errorMessage).toMatch(/upstream provider unreachable/);
+			expect(errorEvent.error.stopReason).toBe("error");
+		}
 	});
 });

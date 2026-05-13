@@ -6,6 +6,7 @@ export * from "./auth-storage";
 export * from "./auth-types";
 export * from "./effect-ai";
 export * from "./effect-ai-prompt-builder";
+export * from "./effect-ai-provider";
 export * from "./effect-ai-stream-accumulator";
 export * from "./effect-ai-stream-adapter";
 export * from "./errors";
