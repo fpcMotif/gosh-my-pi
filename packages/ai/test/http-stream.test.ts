@@ -25,7 +25,7 @@ function openStream<T>(opts: HttpStreamOpts<T>): Promise<Exit.Exit<AsyncIterable
 
 function requestWith(
 	fetchFn: typeof fetch,
-	input: RequestInfo,
+	input: string | URL | Request,
 	init?: RequestInit,
 ): Promise<Exit.Exit<Response, HttpError>> {
 	return Effect.runPromiseExit(
@@ -108,10 +108,13 @@ describe("Http.requestStream", () => {
 	it("request delegates to the supplied fetch and preserves explicit caller signals", async () => {
 		const externalController = new AbortController();
 		let observedSignal: AbortSignal | null | undefined;
-		const fetchFn: typeof fetch = (_input, init) => {
-			observedSignal = init?.signal;
-			return Promise.resolve(new Response("ok", { status: 201 }));
-		};
+		const fetchFn = Object.assign(
+			(_input: string | URL | Request, init?: RequestInit) => {
+				observedSignal = init?.signal;
+				return Promise.resolve(new Response("ok", { status: 201 }));
+			},
+			{ preconnect: fetch.preconnect },
+		);
 
 		const exit = await requestWith(fetchFn, "https://example.test/models", { signal: externalController.signal });
 
@@ -123,7 +126,7 @@ describe("Http.requestStream", () => {
 
 	it("request maps fetch rejection into HttpError with the requested URL", async () => {
 		const cause = new Error("network down");
-		const fetchFn: typeof fetch = () => Promise.reject(cause);
+		const fetchFn = Object.assign(() => Promise.reject(cause), { preconnect: fetch.preconnect });
 
 		const exit = await requestWith(fetchFn, "https://example.test/fail");
 		const err = expectHttpFailure(exit);
@@ -236,7 +239,7 @@ describe("Http.requestStream", () => {
 		await iterator.return?.(undefined);
 	});
 
-	it("idle watchdog fires during iteration when inter-event gap exceeds idleTimeoutMs", async () => {
+	it("idle watchdog fires during iteration with LocalAbort({kind:'idle'}) when inter-event gap exceeds idleTimeoutMs", async () => {
 		let capturedSignal: AbortSignal | undefined;
 		async function* slowEvents(): AsyncGenerator<number> {
 			yield 1;
@@ -254,7 +257,13 @@ describe("Http.requestStream", () => {
 		});
 		expect(Exit.isSuccess(exit)).toBe(true);
 		if (!Exit.isSuccess(exit)) return;
-		await expect(collect(exit.value)).rejects.toThrow(/OpenAI Codex SSE stream stalled/);
+		const thrown = await collect(exit.value).then(
+			() => undefined,
+			(err: unknown) => err,
+		);
+		expect(thrown).toBeInstanceOf(LocalAbort);
+		expect((thrown as LocalAbort).kind).toBe("idle");
+		expect((thrown as LocalAbort).durationMs).toBe(10);
 		expect(capturedSignal?.aborted).toBe(true);
 	});
 
