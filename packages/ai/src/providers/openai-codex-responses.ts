@@ -37,9 +37,12 @@ import {
 	getOpenAIResponsesHistoryPayload,
 	normalizeResponsesToolCallId,
 } from "../utils";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
+import { formatLocalAbortMessage, unwrapLocalAbort } from "../errors";
+import { type HttpShape, makeLiveHttp, unwrapHttpStreamBodyError } from "../layers/http";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
-import { getOpenAIStreamIdleTimeoutMs, iterateWithIdleTimeout } from "../utils/idle-iterator";
+import { getOpenAIStreamIdleTimeoutMs, getStreamFirstEventTimeoutMs } from "../utils/idle-iterator";
 import { parseStreamingJson } from "../utils/json-parse";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { compactGrammarDefinition } from "./grammar";
@@ -74,6 +77,13 @@ export interface OpenAICodexResponsesOptions extends StreamOptions {
 	toolChoice?: ToolChoice;
 	preferWebsockets?: boolean;
 	serviceTier?: ServiceTier;
+	/**
+	 * Test seam: inject a stub HttpShape so unit tests can exercise the
+	 * Http.requestStream contract (watchdog, idle timeout, caller abort)
+	 * without monkey-patching `global.fetch`. Defaults to `makeLiveHttp()`
+	 * in production.
+	 */
+	httpService?: HttpShape;
 }
 
 const CODEX_DEBUG = $flag("PI_CODEX_DEBUG");
@@ -131,12 +141,24 @@ interface CodexRequestContext {
 	websocketState?: CodexWebSocketSessionState;
 	transformedBody: RequestBody;
 	rawRequestDump: RawHttpRequestDump;
+	/**
+	 * Resolved HttpShape used to open SSE streams. Either the caller-supplied
+	 * test stub (OpenAICodexResponsesOptions.httpService) or LiveHttp.
+	 */
+	http: HttpShape;
 }
 
 interface CodexRequestSetup {
-	requestSignal: AbortSignal;
-	wrapCodexSseStream: (source: AsyncGenerator<Record<string, unknown>>) => AsyncGenerator<Record<string, unknown>>;
-	requestAbortController: AbortController;
+	/**
+	 * Owns *non-fetch* aborts only: retry sleeps, websocket reconnects,
+	 * follow-up turns. The SSE fetch lifetime is owned by Http.requestStream
+	 * (see openCodexSseTransport) — those two AbortControllers are sibling
+	 * concerns and no longer share a merged signal (Bug #2 fix in ADR-0005).
+	 */
+	nonFetchAbortController: AbortController;
+	nonFetchSignal: AbortSignal;
+	/** Caller's external signal, threaded into Http.requestStream as callerSignal. */
+	callerSignal: AbortSignal | undefined;
 }
 
 interface CodexStreamRuntime {
@@ -396,19 +418,23 @@ function removeTransientBlockIndices(output: AssistantMessage): void {
 }
 
 function createRequestSetup(options: OpenAICodexResponsesOptions | undefined): CodexRequestSetup {
-	const requestAbortController = new AbortController();
-	const requestSignal = options?.signal
-		? AbortSignal.any([options.signal, requestAbortController.signal])
-		: requestAbortController.signal;
-	const wrapCodexSseStream = (
-		source: AsyncGenerator<Record<string, unknown>>,
-	): AsyncGenerator<Record<string, unknown>> =>
-		iterateWithIdleTimeout(source, {
-			idleTimeoutMs: getOpenAIStreamIdleTimeoutMs(),
-			errorMessage: "OpenAI Codex SSE stream stalled while waiting for the next event",
-			onIdle: () => requestAbortController.abort(),
-		});
-	return { requestAbortController, requestSignal, wrapCodexSseStream };
+	const nonFetchAbortController = new AbortController();
+	// Bridge caller -> non-fetch controller so a caller abort also cancels
+	// in-flight retry sleeps and websocket reconnects. The SSE fetch is no
+	// longer covered here — Http.requestStream owns that controller.
+	if (options?.signal !== undefined) {
+		const callerSignal = options.signal;
+		if (callerSignal.aborted) {
+			nonFetchAbortController.abort();
+		} else {
+			callerSignal.addEventListener("abort", () => nonFetchAbortController.abort(), { once: true });
+		}
+	}
+	return {
+		nonFetchAbortController,
+		nonFetchSignal: nonFetchAbortController.signal,
+		callerSignal: options?.signal,
+	};
 }
 
 async function buildCodexRequestContext(
@@ -458,6 +484,7 @@ async function buildCodexRequestContext(
 		websocketState,
 		transformedBody,
 		rawRequestDump,
+		http: options?.httpService ?? makeLiveHttp(),
 	};
 }
 
@@ -566,7 +593,7 @@ async function openInitialCodexEventStream(
 				});
 				if (!activateFallback) {
 					websocketRetries += 1;
-					await abortableSleep(getCodexWebSocketRetryDelayMs(websocketRetries), requestSetup.requestSignal);
+					await abortableSleep(getCodexWebSocketRetryDelayMs(websocketRetries), requestSetup.nonFetchSignal);
 					continue;
 				}
 				break;
@@ -612,7 +639,7 @@ async function openCodexWebSocketTransport(
 		websocketHeaders,
 		websocketRequest,
 		websocketState,
-		requestSetup.requestSignal,
+		requestSetup.nonFetchSignal,
 	);
 	return { eventStream, requestBodyForState, transport: "websocket" };
 }
@@ -628,19 +655,38 @@ async function openCodexSseTransport(
 	requestBodyForState: RequestBody;
 	transport: CodexTransport;
 }> {
-	const eventStream = requestSetup.wrapCodexSseStream(
-		await openCodexSseEventStream(
-			requestContext.url,
-			requestContext.requestHeaders,
-			requestContext.accountId,
-			requestContext.apiKey,
-			options?.sessionId,
-			body,
-			state,
-			requestSetup.requestSignal,
-		),
+	const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
+	const firstEventTimeoutMs = options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs);
+	const wrapped = await Effect.runPromise(
+		requestContext.http.requestStream<Record<string, unknown>>({
+			callerSignal: requestSetup.callerSignal,
+			label: "OpenAI Codex SSE stream",
+			idleTimeoutMs,
+			firstEventWatchdog:
+				firstEventTimeoutMs !== undefined && firstEventTimeoutMs > 0
+					? { kind: "timeout", timeoutMs: firstEventTimeoutMs }
+					: undefined,
+			body: signal =>
+				openCodexSseEventStream(
+					requestContext.url,
+					requestContext.requestHeaders,
+					requestContext.accountId,
+					requestContext.apiKey,
+					options?.sessionId,
+					body,
+					state,
+					signal,
+				),
+		}),
 	);
+	const eventStream = adaptIterableToGenerator(wrapped);
 	return { eventStream, requestBodyForState: structuredCloneJSON(body), transport: "sse" };
+}
+
+async function* adaptIterableToGenerator<T>(source: AsyncIterable<T>): AsyncGenerator<T> {
+	for await (const item of source) {
+		yield item;
+	}
 }
 
 async function reopenCodexWebSocketRuntimeStream(
@@ -1260,7 +1306,7 @@ async function tryReplayWebsocketFailureOverSse(
 		runtime.websocketStreamRetries += 1;
 		await abortableSleep(
 			getCodexWebSocketRetryDelayMs(runtime.websocketStreamRetries),
-			context.requestSetup.requestSignal,
+			context.requestSetup.nonFetchSignal,
 		);
 		await reopenCodexWebSocketRuntimeStream(context, runtime, state);
 		return true;
@@ -1312,7 +1358,7 @@ async function tryRetryCodexProviderError(
 	runtime.sawTerminalEvent = false;
 	resetOutputState(context.output);
 	context.firstTokenTime = undefined;
-	await abortableSleep(CODEX_RETRY_DELAY_MS * runtime.providerRetryAttempt, context.requestSetup.requestSignal);
+	await abortableSleep(CODEX_RETRY_DELAY_MS * runtime.providerRetryAttempt, context.requestSetup.nonFetchSignal);
 
 	if (runtime.transport === "websocket" && websocketState) {
 		await reopenCodexWebSocketRuntimeStream(context, runtime, websocketState);
@@ -1368,8 +1414,17 @@ async function handleCodexStreamFailure(
 		resetCodexWebSocketAppendState(context.requestContext.websocketState);
 		resetCodexSessionMetadata(context.requestContext.websocketState);
 	}
-	output.stopReason = context.options?.signal?.aborted ? "aborted" : "error";
-	output.errorMessage = await finalizeErrorMessage(error, context.requestContext.rawRequestDump);
+	const localAbort = unwrapLocalAbort(error);
+	if (localAbort !== undefined) {
+		output.stopReason = "error";
+		output.errorMessage = formatLocalAbortMessage("Codex stream", localAbort);
+	} else {
+		output.stopReason = context.options?.signal?.aborted ? "aborted" : "error";
+		output.errorMessage = await finalizeErrorMessage(
+			unwrapHttpStreamBodyError(error),
+			context.requestContext.rawRequestDump,
+		);
+	}
 	output.duration = Date.now() - context.startTime;
 	if (context.firstTokenTime) {
 		output.ttft = context.firstTokenTime - context.startTime;
@@ -1440,6 +1495,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 							url: "",
 							body: { model: model.id },
 						},
+						http: options?.httpService ?? makeLiveHttp(),
 					},
 					startTime,
 				} satisfies CodexStreamProcessingContext);
