@@ -259,7 +259,7 @@ describe("Http.requestStream", () => {
 		if (!Exit.isSuccess(exit)) return;
 		const thrown = await collect(exit.value).then(
 			() => undefined,
-			(err: unknown) => err,
+			(error: unknown) => error,
 		);
 		expect(thrown).toBeInstanceOf(LocalAbort);
 		expect((thrown as LocalAbort).kind).toBe("idle");
