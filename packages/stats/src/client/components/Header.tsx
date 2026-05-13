@@ -32,6 +32,7 @@ export function Header({ activeTab, onTabChange, onSync, syncing }: HeaderProps)
 							type="button"
 							onClick={() => onTabChange(tab)}
 							className={`tab-btn capitalize ${activeTab === tab ? "active" : ""}`}
+							aria-current={activeTab === tab ? "page" : undefined}
 						>
 							{tab}
 						</button>
