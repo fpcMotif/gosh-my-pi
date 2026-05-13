@@ -5,6 +5,7 @@ export * from "./auth-credential-store";
 export * from "./auth-storage";
 export * from "./auth-types";
 export * from "./effect-ai";
+export * from "./effect-ai-stream-adapter";
 export * from "./errors";
 export * from "./model-cache";
 export * from "./model-manager";
