@@ -395,6 +395,33 @@ describe("lsp regressions", () => {
 		}
 	});
 
+	it("detects Effect Language Service through the custom linter client", async () => {
+		const tempDir = TempDir.createSync("@omp-lsp-effect-language-service-");
+		const sourcePath = path.join(tempDir.path(), "src", "program.ts");
+
+		await Bun.write(path.join(tempDir.path(), "package.json"), "{}");
+		await Bun.write(path.join(tempDir.path(), "tsconfig.json"), "{}");
+		await Bun.write(sourcePath, "import { Effect } from 'effect';\n");
+
+		const whichSpy = vi
+			.spyOn(piUtils, "$which")
+			.mockImplementation(command =>
+				command === "effect-language-service" ? "/usr/local/bin/effect-language-service" : null,
+			);
+
+		try {
+			const config = loadConfig(tempDir.path());
+			const effectServer = config.servers["effect-language-service"];
+			expect(effectServer?.resolvedCommand).toBe("/usr/local/bin/effect-language-service");
+			expect(effectServer?.createClient).toBeDefined();
+			expect(getServersForFile(config, sourcePath).map(([name]) => name)).toEqual(["effect-language-service"]);
+			expect(whichSpy).toHaveBeenCalledWith("effect-language-service");
+		} finally {
+			vi.restoreAllMocks();
+			tempDir.removeSync();
+		}
+	});
+
 	it("detects tlaplus files for LSP startup and language ids", async () => {
 		const tempDir = TempDir.createSync("@omp-lsp-tlaplus-");
 		const specPath = path.join(tempDir.path(), "Spec.tla");

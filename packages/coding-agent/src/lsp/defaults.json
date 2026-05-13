@@ -76,8 +76,7 @@
 		"args": ["diagnostics", "--format", "json"],
 		"fileTypes": [".ts", ".tsx", ".mts", ".cts"],
 		"rootMarkers": ["tsconfig.json", "package.json"],
-		"isLinter": true,
-		"disabled": true
+		"isLinter": true
 	},
 	"biome": {
 		"command": "biome",

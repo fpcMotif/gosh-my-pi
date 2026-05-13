@@ -5,6 +5,7 @@ import { $which, isRecord, logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { getConfigDirPaths } from "../config";
 import { BiomeClient } from "./clients/biome-client";
+import { EffectLanguageServiceClient } from "./clients/effect-language-service-client";
 import { SwiftLintClient } from "./clients/swiftlint-client";
 import DEFAULTS from "./defaults.json" with { type: "json" };
 import type { ServerConfig } from "./types";
@@ -131,6 +132,13 @@ function applyRuntimeDefaults(servers: Record<string, ServerConfig>): Record<str
 
 	if (updated.biome) {
 		updated.biome = { ...updated.biome, createClient: BiomeClient.create };
+	}
+
+	if (updated["effect-language-service"]) {
+		updated["effect-language-service"] = {
+			...updated["effect-language-service"],
+			createClient: EffectLanguageServiceClient.create,
+		};
 	}
 
 	if (updated.swiftlint) {
@@ -329,6 +337,7 @@ export function loadConfig(cwd: string): LspConfig {
 		const defaultsWithRuntime = applyRuntimeDefaults(mergedServers);
 
 		for (const [name, config] of Object.entries(defaultsWithRuntime)) {
+			if (config.disabled === true) continue;
 			// Check if project has root markers for this language
 			if (!hasRootMarkers(cwd, config.rootMarkers)) continue;
 
