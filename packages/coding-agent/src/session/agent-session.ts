@@ -22,6 +22,7 @@ import {
 	type AgentErrorKind,
 	type AgentEvent,
 	type AgentMessage,
+	type AgentRunRequest,
 	type AgentState,
 	type AgentTool,
 	ThinkingLevel,
@@ -53,6 +54,7 @@ import {
 	Snowflake,
 	setNativeKillTree,
 } from "@oh-my-pi/pi-utils";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry } from "../config/model-registry";
@@ -118,6 +120,8 @@ import { outputMeta } from "../tools/output-meta";
 import { normalizeLocalScheme, resolveToCwd } from "../tools/path-utils";
 import { isAutoQaEnabled } from "../tools/report-tool-issue";
 import type { TodoItem, TodoPhase } from "../tools/todo-write";
+import { appendRecoveryMarkerEffect } from "./recovery-marker-live";
+import { isRecoveryPolicyEnabled, runAgentRequest } from "./run-bridge";
 import { parseCommandArgs } from "../utils/command-args";
 import { type EditMode, resolveEditMode } from "../utils/edit-mode";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
@@ -460,6 +464,10 @@ export class AgentSession {
 	#recoveryMarkerEventSeq = 0;
 	#recoveryMarkerPendingToolCallIds = new Set<string>();
 
+	async #runAgentRequest(request: AgentRunRequest): Promise<void> {
+		await runAgentRequest(this.agent, this.sessionManager, request, { enabled: isRecoveryPolicyEnabled() });
+	}
+
 	#startPowerAssertion(): void {
 		if (process.platform !== "darwin") {
 			return;
@@ -742,15 +750,18 @@ export class AgentSession {
 	 * the legacy path until dogfooding confirms the new flow. See ADR-0003
 	 * + CONTEXT.md:486.
 	 */
-	#emitRecoveryMarker(isStreaming: boolean): void {
-		if (process.env.OMP_RECOVERY_POLICY !== "1") return;
+	async #emitRecoveryMarker(isStreaming: boolean): Promise<void> {
+		if (!isRecoveryPolicyEnabled()) return;
 		this.#recoveryMarkerGeneration += 1;
-		this.sessionManager.appendRecoveryMarker({
-			generation: this.#recoveryMarkerGeneration,
-			lastEventSeq: this.#recoveryMarkerEventSeq,
-			isStreaming,
-			pendingToolCallIds: [...this.#recoveryMarkerPendingToolCallIds],
-		});
+		await Effect.runPromise(
+			appendRecoveryMarkerEffect(this.sessionManager, {
+				generation: this.#recoveryMarkerGeneration,
+				lastEventSeq: this.#recoveryMarkerEventSeq,
+				isStreaming,
+				pendingToolCallIds: [...this.#recoveryMarkerPendingToolCallIds],
+				timestamp: Date.now(),
+			}),
+		);
 	}
 
 	/** Internal handler for agent events - shared by subscribe and reconnect */
@@ -768,10 +779,10 @@ export class AgentSession {
 		// before the marker is written.
 		if (event.type === "tool_execution_end") {
 			this.#recoveryMarkerPendingToolCallIds.delete(event.toolCallId);
-			this.#emitRecoveryMarker(false);
+			await this.#emitRecoveryMarker(false);
 		} else if (event.type === "turn_end") {
 			this.#recoveryMarkerPendingToolCallIds.clear();
-			this.#emitRecoveryMarker(false);
+			await this.#emitRecoveryMarker(false);
 		}
 
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
@@ -912,7 +923,7 @@ export class AgentSession {
 									this.#ttsr.markInjected(details.rules);
 								}
 								try {
-									await this.agent.continue();
+									await this.#runAgentRequest({ kind: "continue" });
 								} catch {
 									this.#ttsr.resolveResume();
 								}
@@ -980,7 +991,7 @@ export class AgentSession {
 						this.#recoveryMarkerPendingToolCallIds.add(content.id);
 					}
 				}
-				this.#emitRecoveryMarker(true);
+				await this.#emitRecoveryMarker(true);
 			}
 
 			// Track assistant message for auto-compaction (checked on agent_end)
@@ -1207,7 +1218,7 @@ export class AgentSession {
 				}
 				try {
 					await this.#activeRetryFallback.maybeRestorePrimary();
-					await this.agent.continue();
+					await this.#runAgentRequest({ kind: "continue" });
 				} catch {
 					options?.onError?.();
 				}
@@ -2629,7 +2640,7 @@ export class AgentSession {
 
 		if (options?.deliverAs === "nextTurn") {
 			if (options?.triggerTurn === true) {
-				await this.agent.prompt(appMessage);
+				await this.#runAgentRequest({ kind: "prompt", input: appMessage });
 				return;
 			}
 			this.agent.appendMessage(appMessage);
@@ -2644,7 +2655,7 @@ export class AgentSession {
 		}
 
 		if (options?.triggerTurn === true) {
-			await this.agent.prompt(appMessage);
+			await this.#runAgentRequest({ kind: "prompt", input: appMessage });
 			return;
 		}
 
@@ -4593,7 +4604,7 @@ export class AgentSession {
 		const deadline = Date.now() + 30_000;
 		for (;;) {
 			try {
-				await this.agent.prompt(messages, options);
+				await this.#runAgentRequest({ kind: "prompt", input: messages, options });
 				return;
 			} catch (error) {
 				if (!(error instanceof AgentBusyError)) {

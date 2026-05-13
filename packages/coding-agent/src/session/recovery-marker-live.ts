@@ -44,3 +44,13 @@ export function makeRecoveryMarkerLayer(sessionManager: SessionManager): Layer.L
 			}),
 	});
 }
+
+export function appendRecoveryMarkerEffect(
+	sessionManager: SessionManager,
+	payload: RecoveryMarkerPayload,
+): Effect.Effect<void, SessionStorageError> {
+	return Effect.gen(function* () {
+		const marker = yield* RecoveryMarker;
+		yield* marker.append(payload);
+	}).pipe(Effect.provide(makeRecoveryMarkerLayer(sessionManager)));
+}
