@@ -1,0 +1,3 @@
+## 2024-05-13 - Promise Coalescing for API Deduplication
+**Learning:** The frontend dashboard (`App.tsx`) makes multiple concurrent API requests (e.g., `getStats`, `getRecentRequests`, `getRecentErrors`) using `Promise.all`. The backend (`server.ts`) naively triggers a full file system synchronization (`syncAllSessions`) for *every* incoming API request before returning data. This creates redundant file I/O operations and database queries, becoming a significant bottleneck as the session files grow.
+**Action:** Implemented Promise coalescing (request deduplication) for `syncAllSessions` so that concurrent frontend requests share the same underlying sync operation, saving I/O and CPU resources.
