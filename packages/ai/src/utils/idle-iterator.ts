@@ -1,4 +1,4 @@
-import { $env } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils/env";
 
 const DEFAULT_OPENAI_STREAM_IDLE_TIMEOUT_MS = 120_000;
 const DEFAULT_STREAM_FIRST_EVENT_TIMEOUT_MS = 100_000;
@@ -59,6 +59,7 @@ export interface IdleTimeoutIteratorOptions {
 	firstItemErrorMessage?: string;
 	onIdle?: () => void;
 	onFirstItemTimeout?: () => void;
+	createTimeoutError?: (phase: "firstItem" | "idle", timeoutMs: number, message: string) => Error;
 }
 
 /**
@@ -108,7 +109,7 @@ export async function* iterateWithIdleTimeout<T>(
 				throw outcome.error;
 			}
 			if (outcome.result.done === true) {
-				return;
+				break;
 			}
 			onFirst?.();
 			yield outcome.result.value;
@@ -123,6 +124,7 @@ export async function* iterateWithIdleTimeout<T>(
 		try {
 			const outcome = await Promise.race([nextResultPromise, timeoutPromise]);
 			if (outcome.kind === "timeout") {
+				const phase = onFirst === null ? "idle" : "firstItem";
 				if (onFirst === null) {
 					options.onIdle?.();
 				} else {
@@ -132,9 +134,9 @@ export async function* iterateWithIdleTimeout<T>(
 				if (returnPromise !== undefined && returnPromise !== null) {
 					void returnPromise.catch(() => {});
 				}
-				throw new Error(
-					onFirst === null ? options.errorMessage : (options.firstItemErrorMessage ?? options.errorMessage),
-				);
+				const message =
+					onFirst === null ? options.errorMessage : (options.firstItemErrorMessage ?? options.errorMessage);
+				throw options.createTimeoutError?.(phase, activeTimeoutMs, message) ?? new Error(message);
 			}
 			if (watchdog !== undefined && watchdog !== null) clearTimeout(watchdog);
 			watchdog = undefined;
