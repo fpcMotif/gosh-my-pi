@@ -57,7 +57,7 @@ export interface HttpStreamOpts<T> {
 
 /** Public shape of the Http service. */
 export interface HttpShape {
-	readonly request: (input: RequestInfo, init?: RequestInit) => Effect.Effect<Response, HttpError>;
+	readonly request: (input: string | URL | Request, init?: RequestInit) => Effect.Effect<Response, HttpError>;
 	/**
 	 * Open a streamed response under a per-call AbortController and
 	 * watchdog. The Effect resolves when the body promise produces an
