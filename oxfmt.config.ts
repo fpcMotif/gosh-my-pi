@@ -31,5 +31,11 @@ export default defineConfig({
 		".wt/**/*",
 		// Generated — NEVER hand-edit (per AGENTS.md). Regenerate via `bun --cwd=packages/ai run generate-models`.
 		"packages/ai/src/models.json",
+		// Vendored upstream Effect checkouts — see .gitignore.
+		"effect-main/**/*",
+		"effect-smol-main/**/*",
+		"language-service-main/**/*",
+		"tsgo-main/**/*",
+		"pi/**/*",
 	],
 });
