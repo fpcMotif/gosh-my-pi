@@ -145,6 +145,65 @@ describe("streamEffectAiOpenAi — pi-ai-compatible streaming via Effect 4 Langu
 		if (done?.type === "done") expect(done.reason).toBe("toolUse");
 	});
 
+	it("threads context.tools through Toolkit so the LanguageModel sees the tool surface as opts.tools", async () => {
+		// LanguageModel.make's streamText callback receives `ProviderOptions`
+		// where `tools` is the flattened array of Tool definitions the
+		// service derived from the user-supplied Toolkit.
+		let observedToolNames: ReadonlyArray<string> | undefined;
+		const observingLayer: Layer.Layer<LanguageModel.LanguageModel> = Layer.effect(
+			LanguageModel.LanguageModel,
+			LanguageModel.make({
+				streamText: (opts: { readonly tools?: ReadonlyArray<{ readonly name: string }> }) => {
+					observedToolNames = opts.tools !== undefined ? opts.tools.map(t => t.name).sort() : [];
+					return Stream.fromIterable<Response.StreamPartEncoded>([
+						{
+							type: "finish",
+							reason: "stop",
+							usage: {
+								inputTokens: { uncached: 0, total: 0, cacheRead: 0, cacheWrite: 0 },
+								outputTokens: { total: 0, text: undefined, reasoning: undefined },
+							},
+							response: undefined,
+						},
+					]);
+				},
+				generateText: () => Effect.succeed([]),
+			}),
+		);
+
+		const contextWithTools: Context = {
+			...context,
+			tools: [
+				{ name: "get_weather", description: "Get weather", parameters: { type: "object" } },
+				{ name: "list_files", description: "List files", parameters: { type: "object" } },
+			],
+		};
+
+		const stream = streamEffectAiOpenAi(model, contextWithTools, { languageModelLayer: observingLayer });
+		await collect(stream);
+
+		expect(observedToolNames).toEqual(["get_weather", "list_files"]);
+	});
+
+	it("omits the toolkit option when context.tools is empty (matches Effect 4's no-tool shape)", async () => {
+		let observedToolCount: number | undefined;
+		const observingLayer: Layer.Layer<LanguageModel.LanguageModel> = Layer.effect(
+			LanguageModel.LanguageModel,
+			LanguageModel.make({
+				streamText: (opts: { readonly tools?: ReadonlyArray<unknown> }) => {
+					observedToolCount = opts.tools?.length ?? 0;
+					return Stream.fromIterable<Response.StreamPartEncoded>([]);
+				},
+				generateText: () => Effect.succeed([]),
+			}),
+		);
+
+		const stream = streamEffectAiOpenAi(model, context, { languageModelLayer: observingLayer });
+		await collect(stream);
+
+		expect(observedToolCount).toBe(0);
+	});
+
 	it("surfaces a layer-construction failure as an in-band 'error' event", async () => {
 		const failingLayer: Layer.Layer<LanguageModel.LanguageModel> = Layer.effect(
 			LanguageModel.LanguageModel,

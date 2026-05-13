@@ -17,12 +17,12 @@
 // incrementally without changing their for-await loop or AbortSignal
 // plumbing.
 //
-// Status: text-only happy path. Tools, structured output, thinking budgets,
-// service tiers, and the full retry / fallback ladder remain as feature
-// parity work for slice 4. The accumulator already understands every
-// Effect 4 part variant the call site might see, so adding feature support
-// only requires extending the prompt builder + Toolkit construction; the
-// stream pipeline below is final.
+// Status: text-only happy path + tool definitions + auth resolution.
+// Structured output, thinking budgets, service tiers, and the full retry /
+// fallback ladder remain as feature-parity follow-ups. The accumulator
+// already understands every Effect 4 part variant the call site might see,
+// so adding feature support only requires extending the prompt builder +
+// `OpenAiLanguageModel.layer` config — the stream pipeline below is final.
 
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -31,12 +31,19 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as LanguageModelInternal from "effect/unstable/ai/LanguageModel";
 import { makeOmpOpenAiLayer, type OmpOpenAiLayerOptions } from "./effect-ai";
+import { resolveOpenAiAuth } from "./effect-ai-auth";
 import { buildPrompt } from "./effect-ai-prompt-builder";
 import { ResponseStreamAccumulator } from "./effect-ai-stream-accumulator";
+import { toolkitFromPiAiTools } from "./effect-ai-toolkit-bridge";
 import type { Api, Context, Model, OptionsForApi } from "./types";
 import { AssistantMessageEventStream } from "./utils/event-stream";
 
 export interface EffectAiStreamOptions {
+	/**
+	 * Caller-supplied API key. When absent, falls back to the canonical
+	 * `<PROVIDER>_API_KEY` env var via `getEnvApiKey(model.provider)`.
+	 */
+	readonly apiKey?: string;
 	/**
 	 * Override the LanguageModel layer entirely. Test seam: pass a
 	 * `Layer.succeed(LanguageModel.LanguageModel, fakeService)` to bypass
@@ -45,9 +52,8 @@ export interface EffectAiStreamOptions {
 	readonly languageModelLayer?: Layer.Layer<LanguageModelInternal.LanguageModel>;
 	/**
 	 * Override the `makeOmpOpenAiLayer` options. Ignored when
-	 * `languageModelLayer` is set. Defaults: model from
-	 * `model.id`; apiKey + baseUrl are caller-supplied (no env fallback
-	 * here — slice 4 will wire pi-ai's auth resolvers).
+	 * `languageModelLayer` is set. Caller overrides win over the
+	 * model-registry defaults (`baseUrl` from `model.baseUrl`).
 	 */
 	readonly layerOptions?: Partial<OmpOpenAiLayerOptions>;
 }
@@ -73,14 +79,21 @@ export const streamEffectAiOpenAi = <TApi extends Api>(
 ): AssistantMessageEventStream => {
 	const stream = new AssistantMessageEventStream();
 
+	const auth = resolveOpenAiAuth(model, {
+		apiKey: options?.layerOptions?.apiKey ?? options?.apiKey,
+		baseUrl: options?.layerOptions?.baseUrl,
+		organizationId: options?.layerOptions?.organizationId,
+		projectId: options?.layerOptions?.projectId,
+	});
+
 	const layer =
 		options?.languageModelLayer ??
 		makeOmpOpenAiLayer({
 			model: model.id,
-			apiKey: options?.layerOptions?.apiKey,
-			baseUrl: options?.layerOptions?.baseUrl,
-			organizationId: options?.layerOptions?.organizationId,
-			projectId: options?.layerOptions?.projectId,
+			apiKey: auth.apiKey,
+			baseUrl: auth.baseUrl,
+			organizationId: auth.organizationId,
+			projectId: auth.projectId,
 			httpClient: options?.layerOptions?.httpClient,
 		});
 
@@ -91,10 +104,11 @@ export const streamEffectAiOpenAi = <TApi extends Api>(
 	});
 
 	const prompt = buildPrompt(context);
+	const toolkit = toolkitFromPiAiTools(context.tools);
 
 	const program = Effect.gen(function* () {
 		const lm = yield* LanguageModelInternal.LanguageModel;
-		const partStream = lm.streamText({ prompt });
+		const partStream = toolkit === undefined ? lm.streamText({ prompt }) : lm.streamText({ prompt, toolkit });
 		yield* Stream.runForEach(partStream, part =>
 			Effect.sync(() => {
 				for (const event of accumulator.feed(part)) {
