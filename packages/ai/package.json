@@ -117,6 +117,8 @@
 		"@aws-sdk/client-bedrock-runtime": "catalog:",
 		"@aws-sdk/credential-provider-node": "catalog:",
 		"@bufbuild/protobuf": "catalog:",
+		"@effect/ai-openai": "catalog:",
+		"@effect/platform-bun": "catalog:",
 		"@google/genai": "catalog:",
 		"@oh-my-pi/pi-natives": "catalog:",
 		"@oh-my-pi/pi-utils": "catalog:",

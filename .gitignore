@@ -34,6 +34,7 @@ target/
 # (oxlintrc, biome.json, package.json) that conflicts with workspace tools.
 effect-main/
 effect-smol-main/
+.repos/effect
 language-service-main/
 tsgo-main/
 skills-main/
