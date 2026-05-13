@@ -20,15 +20,12 @@ import {
 	type ToolChoice,
 } from "../types";
 import { createOpenAIResponsesHistoryPayload, sanitizeOpenAIResponsesHistoryItemsForReplay } from "../utils";
-import { createAbortSourceTracker } from "../utils/abort";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
+import { formatLocalAbortMessage, unwrapLocalAbort } from "../errors";
 import { AssistantMessageEventStream } from "../utils/event-stream";
+import { type HttpShape, makeLiveHttp, unwrapHttpStreamBodyError } from "../layers/http";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
-import {
-	createWatchdog,
-	getOpenAIStreamIdleTimeoutMs,
-	getStreamFirstEventTimeoutMs,
-	iterateWithIdleTimeout,
-} from "../utils/idle-iterator";
+import { getOpenAIStreamIdleTimeoutMs, getStreamFirstEventTimeoutMs } from "../utils/idle-iterator";
 import { notifyProviderResponse } from "../utils/provider-response";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAIResponsesToolChoice, type OpenAIResponsesToolChoice } from "../utils/tool-choice";
@@ -42,11 +39,10 @@ export interface OpenAIResponsesOptions extends StreamOptions {
 	serviceTier?: ServiceTier;
 	toolChoice?: ToolChoice;
 	strictResponsesPairing?: boolean;
+	httpService?: HttpShape;
 }
 
 const OPENAI_RESPONSES_PROVIDER_SESSION_STATE_PREFIX = "openai-responses:";
-const OPENAI_RESPONSES_FIRST_EVENT_TIMEOUT_MESSAGE =
-	"OpenAI responses stream timed out while waiting for the first event";
 
 interface OpenAIResponsesProviderSessionState extends ProviderSessionState {
 	nativeHistoryReplayWarmed: boolean;
@@ -126,9 +122,6 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			timestamp: Date.now(),
 		};
 		let rawRequestDump: RawHttpRequestDump | undefined;
-		const abortTracker = createAbortSourceTracker(options?.signal);
-		const firstEventTimeoutAbortError = new Error(OPENAI_RESPONSES_FIRST_EVENT_TIMEOUT_MESSAGE);
-		const { requestAbortController, requestSignal } = abortTracker;
 
 		try {
 			const apiKey = options?.apiKey ?? getEnvApiKey(model.provider) ?? "";
@@ -147,45 +140,40 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				body: params,
 			};
 
-			const { data, response, request_id } = await client.chat.completions
-				.create(params as any, { signal: requestSignal })
-				.withResponse();
-			await notifyProviderResponse(options, response, model, request_id);
-			const openaiStream = data;
-
-			const firstEventWatchdog = createWatchdog(
-				options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs),
-				() => abortTracker.abortLocally(firstEventTimeoutAbortError),
+			const http = options?.httpService ?? makeLiveHttp();
+			const firstEventTimeoutMs = options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs);
+			const openaiStream = await Effect.runPromise(
+				http.requestStream<OpenAI.Responses.ResponseStreamEvent>({
+					callerSignal: options?.signal,
+					label: "OpenAI responses stream",
+					idleTimeoutMs,
+					firstEventWatchdog:
+						firstEventTimeoutMs !== undefined && firstEventTimeoutMs > 0
+							? { kind: "timeout", timeoutMs: firstEventTimeoutMs }
+							: undefined,
+					body: async signal => {
+						const { data, response, request_id } = await client.chat.completions
+							.create(params as any, { signal })
+							.withResponse();
+						await notifyProviderResponse(options, response, model, request_id);
+						return data as unknown as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>;
+					},
+				}),
 			);
 			stream.push({ type: "start", partial: output });
 
 			const nativeOutputItems: Array<Record<string, unknown>> = [];
-			await processResponsesStream(
-				iterateWithIdleTimeout(openaiStream as any, {
-					idleTimeoutMs,
-					watchdog: firstEventWatchdog,
-					errorMessage: "OpenAI responses stream stalled while waiting for the next event",
-					onIdle: () => requestAbortController.abort(),
-				}),
-				output,
-				stream,
-				model,
-				{
-					onFirstToken: () => {
-						if (firstTokenTime === null || firstTokenTime === undefined || firstTokenTime === 0)
-							firstTokenTime = Date.now();
-					},
-					onOutputItemDone: item => {
-						nativeOutputItems.push(structuredCloneJSON<unknown>(item) as unknown as Record<string, unknown>);
-					},
+			await processResponsesStream(openaiStream, output, stream, model, {
+				onFirstToken: () => {
+					if (firstTokenTime === null || firstTokenTime === undefined || firstTokenTime === 0)
+						firstTokenTime = Date.now();
 				},
-			);
+				onOutputItemDone: item => {
+					nativeOutputItems.push(structuredCloneJSON<unknown>(item) as unknown as Record<string, unknown>);
+				},
+			});
 
-			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
-			if (firstEventTimeoutError) {
-				throw firstEventTimeoutError;
-			}
-			if (abortTracker.wasCallerAbort()) {
+			if (options?.signal?.aborted === true) {
 				throw new Error("Request was aborted");
 			}
 
@@ -206,9 +194,14 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			for (const block of output.content) {
 				delete (block as { index?: number }).index;
 			}
-			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
-			output.stopReason = abortTracker.wasCallerAbort() ? "aborted" : "error";
-			output.errorMessage = firstEventTimeoutError?.message ?? (await finalizeErrorMessage(error, rawRequestDump));
+			const localAbort = unwrapLocalAbort(error);
+			output.stopReason = localAbort !== undefined || options?.signal?.aborted !== true ? "error" : "aborted";
+			output.errorMessage =
+				localAbort !== undefined
+					? formatLocalAbortMessage("OpenAI responses stream", localAbort)
+					: output.stopReason === "aborted"
+						? "Request was aborted"
+						: await finalizeErrorMessage(unwrapHttpStreamBodyError(error), rawRequestDump);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime !== null && firstTokenTime !== undefined && firstTokenTime > 0)
 				output.ttft = firstTokenTime - startTime;

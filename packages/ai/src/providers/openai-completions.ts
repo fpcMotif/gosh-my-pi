@@ -1,4 +1,5 @@
 import { $env } from "@oh-my-pi/pi-utils";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
 import OpenAI from "openai";
 import type {
 	ChatCompletionAssistantMessageParam,
@@ -29,15 +30,11 @@ import {
 	type ToolChoice,
 	type ToolResultMessage,
 } from "../types";
-import { createAbortSourceTracker } from "../utils/abort";
+import { formatLocalAbortMessage, unwrapLocalAbort } from "../errors";
 import { AssistantMessageEventStream } from "../utils/event-stream";
+import { type HttpShape, makeLiveHttp, unwrapHttpStreamBodyError } from "../layers/http";
 import { type CapturedHttpErrorResponse, finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
-import {
-	createWatchdog,
-	getOpenAIStreamIdleTimeoutMs,
-	getStreamFirstEventTimeoutMs,
-	iterateWithIdleTimeout,
-} from "../utils/idle-iterator";
+import { getOpenAIStreamIdleTimeoutMs, getStreamFirstEventTimeoutMs } from "../utils/idle-iterator";
 import { parseStreamingJson } from "../utils/json-parse";
 import { getKimiCommonHeaders } from "../utils/oauth/kimi";
 import { notifyProviderResponse } from "../utils/provider-response";
@@ -111,6 +108,7 @@ export interface OpenAICompletionsOptions extends StreamOptions {
 	toolChoice?: ToolChoice;
 	reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
 	serviceTier?: ServiceTier;
+	httpService?: HttpShape;
 }
 
 type OpenAICompletionsSamplingParams = OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & {
@@ -190,9 +188,6 @@ function getTrailingPartialTag(text: string, tags: readonly string[]): string {
 	return text.slice(-maxLength);
 }
 
-const OPENAI_COMPLETIONS_FIRST_EVENT_TIMEOUT_MESSAGE =
-	"OpenAI completions stream timed out while waiting for the first event";
-
 export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 	model: Model<"openai-completions">,
 	context: Context,
@@ -223,9 +218,6 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			timestamp: Date.now(),
 		};
 		let rawRequestDump: RawHttpRequestDump | undefined;
-		const abortTracker = createAbortSourceTracker(options?.signal);
-		const firstEventTimeoutAbortError = new Error(OPENAI_COMPLETIONS_FIRST_EVENT_TIMEOUT_MESSAGE);
-		const { requestAbortController, requestSignal } = abortTracker;
 
 		try {
 			const apiKey = options?.apiKey ?? getEnvApiKey(model.provider) ?? "";
@@ -246,7 +238,10 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			);
 			const disableStrictTools = providerSessionState?.strictToolsDisabled ?? false;
 
-			const createCompletionsStream = async (toolStrictModeOverride?: ToolStrictModeOverride) => {
+			const createCompletionsStream = async (
+				signal: AbortSignal,
+				toolStrictModeOverride?: ToolStrictModeOverride,
+			) => {
 				clearCapturedErrorResponse();
 				const effectiveToolStrictModeOverride = disableStrictTools ? "none" : toolStrictModeOverride;
 				const { params, toolStrictMode } = buildParams(
@@ -268,24 +263,41 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 					body: params,
 				};
 				const { data, response, request_id } = await client.chat.completions
-					.create(params, { signal: requestSignal })
+					.create(params, { signal })
 					.withResponse();
 				await notifyProviderResponse(options, response, model, request_id);
 				return data;
 			};
-			let openaiStream: AsyncIterable<ChatCompletionChunk>;
-			try {
-				openaiStream = await createCompletionsStream();
-			} catch (error) {
-				const capturedErrorResponse = getCapturedErrorResponse();
-				if (!shouldRetryWithoutStrictTools(error, capturedErrorResponse, appliedToolStrictMode, context.tools)) {
-					throw error;
-				}
-				openaiStream = await createCompletionsStream("none");
-			}
-			const firstEventWatchdog = createWatchdog(
-				options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs),
-				() => abortTracker.abortLocally(firstEventTimeoutAbortError),
+			const http = options?.httpService ?? makeLiveHttp();
+			const firstEventTimeoutMs = options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs);
+			const openaiStream = await Effect.runPromise(
+				http.requestStream<ChatCompletionChunk>({
+					callerSignal: options?.signal,
+					label: "OpenAI completions stream",
+					idleTimeoutMs,
+					firstEventWatchdog:
+						firstEventTimeoutMs !== undefined && firstEventTimeoutMs > 0
+							? { kind: "timeout", timeoutMs: firstEventTimeoutMs }
+							: undefined,
+					body: async signal => {
+						try {
+							return await createCompletionsStream(signal);
+						} catch (error) {
+							const capturedErrorResponse = captureErrorResponse();
+							if (
+								!shouldRetryWithoutStrictTools(
+									error,
+									capturedErrorResponse,
+									appliedToolStrictMode,
+									context.tools,
+								)
+							) {
+								throw error;
+							}
+							return await createCompletionsStream(signal, "none");
+						}
+					},
+				}),
 			);
 			stream.push({ type: "start", partial: output });
 
@@ -504,12 +516,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 				}
 			};
 
-			for await (const chunk of iterateWithIdleTimeout(openaiStream, {
-				watchdog: firstEventWatchdog,
-				idleTimeoutMs,
-				errorMessage: "OpenAI completions stream stalled while waiting for the next event",
-				onIdle: () => requestAbortController.abort(),
-			})) {
+			for await (const chunk of openaiStream) {
 				if (chunk === undefined || chunk === null || typeof chunk !== "object") continue;
 
 				output.responseId ||= chunk.id;
@@ -554,11 +561,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 
 			finishCurrentBlock(currentBlock);
 
-			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
-			if (firstEventTimeoutError) {
-				throw firstEventTimeoutError;
-			}
-			if (abortTracker.wasCallerAbort()) {
+			if (options?.signal?.aborted === true) {
 				throw new Error("Request was aborted");
 			}
 
@@ -576,11 +579,18 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			stream.end();
 		} catch (error) {
 			for (const block of output.content) delete (block as { index?: number }).index;
-			const firstEventTimeoutError = abortTracker.getLocalAbortReason();
-			output.stopReason = abortTracker.wasCallerAbort() ? "aborted" : "error";
+			const localAbort = unwrapLocalAbort(error);
+			output.stopReason = localAbort !== undefined || options?.signal?.aborted !== true ? "error" : "aborted";
 			output.errorMessage =
-				firstEventTimeoutError?.message ??
-				(await finalizeErrorMessage(error, rawRequestDump, getCapturedErrorResponse?.()));
+				localAbort !== undefined
+					? formatLocalAbortMessage("OpenAI completions stream", localAbort)
+					: output.stopReason === "aborted"
+						? "Request was aborted"
+						: await finalizeErrorMessage(
+								unwrapHttpStreamBodyError(error),
+								rawRequestDump,
+								getCapturedErrorResponse?.(),
+							);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime !== null && firstTokenTime !== undefined && firstTokenTime !== 0)
 				output.ttft = firstTokenTime - startTime;
