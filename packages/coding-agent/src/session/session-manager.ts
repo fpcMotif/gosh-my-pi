@@ -209,7 +209,7 @@ export interface CustomMessageEntry<T = unknown> extends SessionEntryBase {
 /**
  * RecoveryMarker JSONL entry — appended by AgentRunController at three
  * safe points (post-`message_end`, post-`tool_execution_end`, post-
- * `turn_end`) when `OMP_RECOVERY_POLICY=1`. Read once on session reopen by
+ * `turn_end`) when crash recovery is enabled. Read once on session reopen by
  * `RecoveryPolicy` to classify the prior process exit into
  * `safe`/`mid-stream`/`mid-tool`. Skipped by LLM-context construction
  * (same family as `CustomEntry`). See ADR-0003 + CONTEXT.md:486.

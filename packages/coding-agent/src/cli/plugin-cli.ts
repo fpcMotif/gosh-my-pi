@@ -592,19 +592,11 @@ async function handleConfigValidate(manager: PluginManager, flags: { json?: bool
 	}
 }
 
-async function handleEnable(
-	manager: PluginManager,
-	plugins: string[],
-	flags: { json?: boolean; scope?: "user" | "project" },
-): Promise<void> {
+async function handleEnable(manager: PluginManager, plugins: string[], flags: { json?: boolean }): Promise<void> {
 	return handleSetEnabled(manager, plugins, flags, true);
 }
 
-async function handleDisable(
-	manager: PluginManager,
-	plugins: string[],
-	flags: { json?: boolean; scope?: "user" | "project" },
-): Promise<void> {
+async function handleDisable(manager: PluginManager, plugins: string[], flags: { json?: boolean }): Promise<void> {
 	return handleSetEnabled(manager, plugins, flags, false);
 }
 

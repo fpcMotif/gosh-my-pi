@@ -3,7 +3,7 @@
 	"meta": {
 		"project": "gmp-tui-go",
 		"version": "0.1.0-dev",
-		"generated": "2026-05-06T00:00:00Z",
+		"generated": "2026-05-11T16:36:20Z",
 		"owner": "fpcmotif@gmail.com",
 		"fork_of": "can1357/oh-my-pi",
 		"tui_fork_of": "charmbracelet/crush",
@@ -25,6 +25,147 @@
 		},
 		"plan_doc": "/Users/martinfan/.claude/plans/dd-an-apps-tui-go-2-wondrous-cookie.md"
 	},
+	"progress_summary": {
+		"timestamp": "2026-05-11T16:36:20Z",
+		"confidence": "static-artifact high; runtime not claimed",
+		"confidence_note": "Audited docs/adr/*.md, apps/tui-go/prd.json, apps/tui-go/prd.schema.json, and implementation evidence with rg/sed. This board is now schema-valid and aligned to the files checked. Runtime 100% confidence still needs focused test runs and smoke tests, which were not run because repo instructions require explicit test instruction.",
+		"checked_evidence": [
+			"docs/adr/0001-gmp-mode-credential-store.md",
+			"docs/adr/0002-apps-tui-go-gmp-only.md",
+			"docs/adr/0003-agent-recovery-policy-not-workflow.md",
+			"docs/adr/0004-provider-abort-taxonomy-effect-race-not-tracker.md",
+			"apps/tui-go/internal/cmd/root.go",
+			"apps/tui-go/internal/cmd/login.go",
+			"apps/tui-go/internal/cmd/run.go",
+			"apps/tui-go/internal/workspace/gmp_workspace.go",
+			"apps/tui-go/internal/workspace/workspace.go",
+			"packages/coding-agent/src/modes/rpc/rpc-mode.ts",
+			"packages/coding-agent/src/modes/rpc/rpc-mode-auth-picker.test.ts",
+			"packages/coding-agent/src/session/recovery-policy.ts",
+			"packages/coding-agent/src/session/run-bridge.ts",
+			"packages/agent/src/run/agent-run.ts",
+			"packages/agent/src/run/recovery-marker.ts",
+			"packages/agent/src/errors.ts",
+			"packages/ai/src/providers/openai-responses.ts",
+			"packages/ai/src/providers/openai-completions.ts"
+		],
+		"missing_runtime_evidence": [
+			"Go login contract test file named in ADR 0002 is not present in the current checkout",
+			"No focused Go or Bun tests were run during this PRD audit",
+			"P8 end-to-end smoke and release dry-run remain unrun"
+		]
+	},
+	"top_priorities": [
+		{
+			"rank": 1,
+			"title": "Close ADR 0002 auth/login consumer-side contract gap",
+			"state": "pending",
+			"why": "ADR 0002 explicitly calls for apps/tui-go/internal/cmd/login_test.go, but that file is absent. Backend picker tests exist, so the remaining confidence gap is the Go CLI consumer contract.",
+			"adr_refs": ["ADR-0002"],
+			"next_tasks": ["T-P6-007", "T-P6-008"]
+		},
+		{
+			"rank": 2,
+			"title": "Resolve the TS-TUI removal mismatch",
+			"state": "pending",
+			"why": "The prior P6a done note conflicts with the current tree: InteractiveMode, modes/components, packages/tui, and @oh-my-pi/pi-tui references are still present. The board must not claim this is done until the code matches.",
+			"adr_refs": ["ADR-0002"],
+			"next_tasks": ["T-P6-001", "T-P6-002", "T-P6-003", "T-P6-004", "T-P6-005", "T-P6-006"]
+		},
+		{
+			"rank": 3,
+			"title": "Implement ADR 0004 provider abort migration",
+			"state": "pending",
+			"why": "LocalAbort and Effect signal helpers exist, but openai-responses.ts and openai-completions.ts still import createAbortSourceTracker. ADR 0004 remains Proposed until the provider boundary moves to Effect.race.",
+			"adr_refs": ["ADR-0004"],
+			"next_tasks": ["T-P10-001", "T-P10-002"]
+		}
+	],
+	"adr_alignment": [
+		{
+			"id": "ADR-0001",
+			"status": "Accepted — 2026-05-07",
+			"state": "done",
+			"decision": "In gmp mode, backend model catalog/AuthStorage is the source of truth; Crush local provider stores are inert at runtime.",
+			"evidence": [
+				"apps/tui-go/internal/workspace/gmp_workspace.go implements IsGmpMode() = true and auth/model bridge code",
+				"apps/tui-go/internal/ui/model/ui.go routes auth through runGmpAuthCommand",
+				"apps/tui-go/internal/cmd/login.go drives auth.login over the gmp RPC subprocess and documents AuthStorage ownership",
+				"packages/coding-agent/src/modes/rpc/rpc-mode.ts exposes models.catalog, set_model, and auth.login handling"
+			],
+			"gaps": ["Runtime auth smoke was not re-run in this audit"],
+			"next_actions": [
+				"Keep ADR 0001 as the accepted source of truth for auth/model ownership",
+				"Use P8 smoke test to prove the path end-to-end before release"
+			]
+		},
+		{
+			"id": "ADR-0002",
+			"status": "Accepted — 2026-05-07",
+			"state": "in_progress",
+			"decision": "apps/tui-go is gmp-only; empty auth.login provider triggers a backend-driven auth.pick_provider flow; Phase 1 lite removes unreachable vanilla Crush workspace paths.",
+			"evidence": [
+				"apps/tui-go/internal/cmd/root.go setupWorkspace returns setupGmpWorkspace only",
+				"app_workspace.go and client_workspace.go are absent from apps/tui-go/internal/workspace",
+				"apps/tui-go/internal/cmd/run.go now dispatches non-interactive prompts to the gmp RPC backend",
+				"packages/coding-agent/src/modes/rpc/rpc-mode-auth-picker.test.ts covers empty provider picker, cancellation, malformed reply, and defaultId wire shape",
+				"apps/tui-go/internal/ui/model/ui_test.go covers openAuthenticationDialog dispatching through SendAuthCommand"
+			],
+			"gaps": [
+				"ADR-named apps/tui-go/internal/cmd/login_test.go is absent",
+				"apps/tui-go/internal/workspace/workspace.go still has comments naming AppWorkspace and ClientWorkspace false branches",
+				"apps/tui-go/.goreleaser.yml is still tracked and P7 marks deletion pending"
+			],
+			"next_actions": [
+				"Add Go CLI auth.login picker contract tests for runGmpLogin/authCLIDriver",
+				"Refresh stale workspace comments now that apps/tui-go is gmp-only",
+				"Delete or neutralize apps/tui-go/.goreleaser.yml before release work"
+			]
+		},
+		{
+			"id": "ADR-0003",
+			"status": "Accepted — 2026-05-07",
+			"state": "in_progress",
+			"decision": "Agent recovery is a RecoveryPolicy over the existing session JSONL, using recovery-marker lines and never replaying side-effecting tools.",
+			"evidence": [
+				"packages/agent/src/run/recovery-marker.ts defines RecoveryMarker and recovery-marker payloads",
+				"packages/agent/src/run/agent-run.ts defines AgentRunController without replacing RetryController",
+				"packages/coding-agent/src/session/recovery-policy.ts classifies safe, mid-stream, and mid-tool states and documents the never-re-run rule",
+				"packages/coding-agent/src/session/recovery-driver.ts applies classified recovery",
+				"packages/coding-agent/src/session/run-bridge.ts gates the runtime path behind OMP_RECOVERY_POLICY=1"
+			],
+			"gaps": [
+				"The runtime path is still env-gated, so default production adoption is not proven by this audit",
+				"No focused recovery-policy or agent-run tests were run during this PRD audit"
+			],
+			"next_actions": [
+				"Decide whether OMP_RECOVERY_POLICY remains gated or becomes default-on",
+				"Run focused recovery-policy, recovery-driver, run-bridge, and agent-run tests when test execution is explicitly requested"
+			]
+		},
+		{
+			"id": "ADR-0004",
+			"status": "Proposed — 2026-05-08",
+			"state": "pending",
+			"decision": "Provider abort taxonomy should move from AbortSourceTracker to Effect.race with LocalAbort for provider-local timeout/idle/stall failures.",
+			"evidence": [
+				"packages/agent/src/errors.ts defines LocalAbort",
+				"packages/agent/src/error-kind.ts maps LocalAbort into transient transport",
+				"packages/utils/src/effect-signal.ts defines effectFromSignal and signalFromFiber"
+			],
+			"gaps": [
+				"packages/ai/src/utils/abort.ts still defines createAbortSourceTracker",
+				"packages/ai/src/providers/openai-responses.ts still imports and uses createAbortSourceTracker",
+				"packages/ai/src/providers/openai-completions.ts still imports and uses createAbortSourceTracker",
+				"ADR 0004 is not yet included in packages/coding-agent/src/internal-urls/docs-index.generated.ts"
+			],
+			"next_actions": [
+				"Migrate OpenAI provider streaming boundaries to Effect.race + LocalAbort",
+				"Delete createAbortSourceTracker and update remaining consumers in the same PR",
+				"Promote ADR 0004 status after migration lands"
+			]
+		}
+	],
 	"phases": [
 		{
 			"id": "P0",
@@ -76,16 +217,16 @@
 		{
 			"id": "P6a",
 			"name": "TS interactive TUI dispatch removal (safe surface)",
-			"state": "done",
+			"state": "pending",
 			"branch": "feat/p6a-ts-tui-interactive-removal",
 			"commit": "3c77360d8",
-			"evidence": "main.ts dispatch errors with --mode guidance; runInteractiveMode/submitInteractiveInput/InteractiveModeNotify deleted; modes/index.ts cleaned; 4 files deleted (interactive-mode.ts + 3 TUI tests). Net -2385 LOC.",
+			"evidence": "Current checkout audit on 2026-05-11 found packages/coding-agent/src/main.ts still imports InteractiveMode and still defines runInteractiveMode, submitInteractiveInput, and InteractiveModeNotify; packages/coding-agent/src/modes/interactive-mode.ts is still tracked. Prior done claim may exist on another branch, but it is not fulfilled in this checkout.",
 			"acceptance_criteria": [
-				"bare `omp` errors with --mode {print|rpc|acp} guidance + gmp-tui-go pointer (DONE; main.ts dispatch)",
-				"InteractiveMode no longer imported anywhere (DONE; verified via rg)",
-				"oxfmt --check clean on touched files (DONE)",
-				"oxlint --quiet on workspace: 0 errors (DONE; 29 pre-existing warnings unchanged)",
-				"bun --cwd=packages/coding-agent test: P6a doesn't add failures (DONE; 2 pre-existing failures stem from removed marketplace module, in-flight cleanup in plugin-cli.ts WIP)"
+				"bare `omp` errors with --mode {print|rpc|acp} guidance + gmp-tui-go pointer",
+				"InteractiveMode no longer imported anywhere",
+				"packages/coding-agent/src/modes/interactive-mode.ts deleted",
+				"main.ts no longer exports submitInteractiveInput / InteractiveModeNotify",
+				"focused verification requested and run before marking done"
 			]
 		},
 		{
@@ -141,6 +282,32 @@
 				"Tagged pre-release on a feature branch produces a usable archive on at least darwin-arm64",
 				"Documented installation steps in apps/tui-go/README.md or root README"
 			]
+		},
+		{
+			"id": "P9",
+			"name": "Agent recovery policy (ADR 0003)",
+			"state": "in_progress",
+			"evidence": "RecoveryMarker, AgentRunController, RecoveryPolicy, RecoveryDriver, and run-bridge exist; the runtime bridge is still OMP_RECOVERY_POLICY-gated.",
+			"acceptance_criteria": [
+				"recovery-marker JSONL entries are appended only at safe points",
+				"RecoveryPolicy classifies safe, mid-stream, and mid-tool states without replaying tools",
+				"mid-tool recovery appends synthetic error results and then continues",
+				"AgentRunController stays inside the existing RetryController boundary",
+				"focused recovery tests pass after the gate/default decision"
+			]
+		},
+		{
+			"id": "P10",
+			"name": "Provider abort taxonomy (ADR 0004)",
+			"state": "pending",
+			"evidence": "LocalAbort and effect signal helpers exist, but OpenAI providers still use createAbortSourceTracker; ADR 0004 remains Proposed.",
+			"acceptance_criteria": [
+				"packages/ai/src/utils/abort.ts removed or reduced to no createAbortSourceTracker export",
+				"openai-responses.ts and openai-completions.ts use Effect.race + LocalAbort for local timeout/idle/stall",
+				"caller aborts map to user-aborted stopReason while LocalAbort maps to transient transport error",
+				"ADR 0004 status updated when the provider migration lands",
+				"generated docs index includes ADR 0004 if internal docs embedding remains required"
+			]
 		}
 	],
 	"tasks": [
@@ -148,24 +315,25 @@
 			"id": "T-P5-prd",
 			"phase_id": "P5",
 			"title": "Place apps/tui-go/prd.json + prd.schema.json",
-			"state": "in_progress",
+			"state": "done",
 			"files_touched": ["apps/tui-go/prd.json", "apps/tui-go/prd.schema.json"],
+			"verification": ["Schema-valid after 2026-05-11 PRD audit"],
 			"depends_on": []
 		},
 		{
 			"id": "T-P5-000a",
 			"phase_id": "P5",
 			"title": "Rewrite Go module path to github.com/fpcMotif/gosh-my-pi/apps/tui-go",
-			"state": "pending",
+			"state": "done",
 			"files_touched": ["apps/tui-go/go.mod", "apps/tui-go/**/*.go"],
 			"depends_on": [],
-			"notes": "gomvpkg or scripted sed across imports + go.mod module line; regenerate go.sum; verify build/vet/test scoped clean immediately."
+			"notes": "Static audit confirmed apps/tui-go/go.mod module path and Go imports use github.com/fpcMotif/gosh-my-pi/apps/tui-go."
 		},
 		{
 			"id": "T-P5-000b",
 			"phase_id": "P5",
 			"title": "Rename binary omp-tui-go → gmp-tui-go",
-			"state": "pending",
+			"state": "done",
 			"files_touched": [
 				"apps/tui-go/main.go",
 				"apps/tui-go/internal/cmd/root.go",
@@ -180,7 +348,7 @@
 			"id": "T-P5-001",
 			"phase_id": "P5",
 			"title": "Add apps/tui-go/NOTICE with fork SHA + attribution",
-			"state": "pending",
+			"state": "done",
 			"files_touched": ["apps/tui-go/NOTICE"],
 			"depends_on": []
 		},
@@ -188,7 +356,7 @@
 			"id": "T-P5-002",
 			"phase_id": "P5",
 			"title": "Add apps/tui-go/CONTRIBUTING.md (FSL boundary clarification)",
-			"state": "pending",
+			"state": "done",
 			"files_touched": ["apps/tui-go/CONTRIBUTING.md"],
 			"depends_on": []
 		},
@@ -196,7 +364,7 @@
 			"id": "T-P5-003",
 			"phase_id": "P5",
 			"title": "Update root README.md with license-boundary section",
-			"state": "pending",
+			"state": "done",
 			"files_touched": ["README.md"],
 			"depends_on": ["T-P5-001"]
 		},
@@ -204,7 +372,7 @@
 			"id": "T-P5-004",
 			"phase_id": "P5",
 			"title": "Audit Crush's slash flow; trap /quit /help /clear /debug locally",
-			"state": "pending",
+			"state": "done",
 			"files_touched": ["apps/tui-go/internal/ui/**"],
 			"depends_on": ["T-P5-000a"]
 		},
@@ -212,7 +380,7 @@
 			"id": "T-P5-005",
 			"phase_id": "P5",
 			"title": "Add 60x10 min-size banner gate (verify if Crush has one first)",
-			"state": "pending",
+			"state": "done",
 			"files_touched": ["apps/tui-go/internal/ui/model/**"],
 			"depends_on": ["T-P5-000a"]
 		},
@@ -220,7 +388,7 @@
 			"id": "T-P5-006",
 			"phase_id": "P5",
 			"title": "Verify/adapt logging: ~/.gmp/tui.log, Ctrl+L overlay, --debug stderr",
-			"state": "pending",
+			"state": "done",
 			"files_touched": ["apps/tui-go/internal/log/**", "apps/tui-go/internal/cmd/root.go"],
 			"depends_on": ["T-P5-000a"]
 		},
@@ -228,7 +396,7 @@
 			"id": "T-P5-007",
 			"phase_id": "P5",
 			"title": "Add sibling-binary lookup before PATH; --agent-cmd flag override",
-			"state": "pending",
+			"state": "done",
 			"files_touched": ["apps/tui-go/internal/cmd/root.go", "apps/tui-go/internal/ompclient/client.go"],
 			"depends_on": ["T-P5-000a"]
 		},
@@ -236,27 +404,27 @@
 			"id": "T-P5-008",
 			"phase_id": "P5",
 			"title": "Resolve upstream Crush test fixture failure (provider config)",
-			"state": "pending",
+			"state": "done",
 			"depends_on": [],
-			"notes": "expected `openai`, actual `chatgpt-sub`; either fix fixture or document as accepted divergence"
+			"notes": "Accepted divergence is skip-tagged in apps/tui-go/internal/config/store_test.go and tracked as R3."
 		},
 
 		{
 			"id": "T-P6-001",
-			"phase_id": "P6",
+			"phase_id": "P6b",
 			"title": "Delete packages/tui/ entirely",
 			"state": "pending",
 			"files_touched": ["packages/tui/**"]
 		},
 		{
 			"id": "T-P6-002",
-			"phase_id": "P6",
+			"phase_id": "P6b",
 			"title": "Delete packages/coding-agent/src/modes/{interactive-mode.ts,components/,controllers/,theme/}",
 			"state": "pending"
 		},
 		{
 			"id": "T-P6-003",
-			"phase_id": "P6",
+			"phase_id": "P6b",
 			"title": "Drop @oh-my-pi/pi-tui from root package.json catalog + bun.lock",
 			"state": "pending",
 			"files_touched": ["package.json", "bun.lock"],
@@ -264,7 +432,7 @@
 		},
 		{
 			"id": "T-P6-004",
-			"phase_id": "P6",
+			"phase_id": "P6b",
 			"title": "Bare `omp` invocation prints --mode guidance error",
 			"state": "pending",
 			"files_touched": ["packages/coding-agent/src/cli.ts", "packages/coding-agent/src/cli/args.ts"],
@@ -272,17 +440,39 @@
 		},
 		{
 			"id": "T-P6-005",
-			"phase_id": "P6",
+			"phase_id": "P6b",
 			"title": "Purge TS-TUI references from AGENTS.md / CLAUDE.md / READMEs",
 			"state": "pending",
 			"depends_on": ["T-P6-002"]
 		},
 		{
 			"id": "T-P6-006",
-			"phase_id": "P6",
+			"phase_id": "P6b",
 			"title": "bun check:ts + scoped test runs clean",
 			"state": "pending",
 			"depends_on": ["T-P6-003", "T-P6-004", "T-P6-005"]
+		},
+		{
+			"id": "T-P6-007",
+			"phase_id": "P6b",
+			"title": "Add Go CLI auth.login picker contract test required by ADR 0002",
+			"state": "pending",
+			"priority": "high",
+			"adr_refs": ["ADR-0002"],
+			"files_touched": ["apps/tui-go/internal/cmd/login_test.go"],
+			"depends_on": [],
+			"notes": "ADR 0002 names this file explicitly; backend picker tests exist, but the Go CLI consumer contract is still missing in the current checkout."
+		},
+		{
+			"id": "T-P6-008",
+			"phase_id": "P6b",
+			"title": "Refresh gmp-only workspace comments and stale App/Client references",
+			"state": "pending",
+			"priority": "med",
+			"adr_refs": ["ADR-0002"],
+			"files_touched": ["apps/tui-go/internal/workspace/workspace.go"],
+			"depends_on": [],
+			"notes": "workspace.go still describes AppWorkspace/ClientWorkspace false branches even though apps/tui-go is now gmp-only."
 		},
 
 		{
@@ -344,6 +534,63 @@
 			"title": "Document install steps in root README + apps/tui-go/README.md",
 			"state": "pending",
 			"depends_on": ["T-P8-002"]
+		},
+		{
+			"id": "T-P9-001",
+			"phase_id": "P9",
+			"title": "Decide RecoveryPolicy runtime gate default",
+			"state": "pending",
+			"priority": "high",
+			"adr_refs": ["ADR-0003"],
+			"files_touched": ["packages/coding-agent/src/session/run-bridge.ts", "packages/coding-agent/src/sdk.ts"],
+			"depends_on": [],
+			"notes": "Current code gates the AgentRunController path behind OMP_RECOVERY_POLICY=1; decide whether ADR 0003 is dogfood-only or default-on before marking P9 done."
+		},
+		{
+			"id": "T-P9-002",
+			"phase_id": "P9",
+			"title": "Run focused RecoveryPolicy verification after gate decision",
+			"state": "pending",
+			"priority": "med",
+			"adr_refs": ["ADR-0003"],
+			"verification": [
+				"bun --cwd=packages/agent test test/run/agent-run.test.ts",
+				"bun --cwd=packages/coding-agent test test/recovery-policy.test.ts test/run-bridge.test.ts"
+			],
+			"depends_on": ["T-P9-001"],
+			"notes": "Tests listed as required evidence; not run during this PRD audit."
+		},
+		{
+			"id": "T-P10-001",
+			"phase_id": "P10",
+			"title": "Replace AbortSourceTracker in OpenAI streaming providers",
+			"state": "pending",
+			"priority": "high",
+			"adr_refs": ["ADR-0004"],
+			"files_touched": [
+				"packages/ai/src/providers/openai-responses.ts",
+				"packages/ai/src/providers/openai-completions.ts",
+				"packages/ai/src/utils/abort.ts",
+				"packages/agent/src/errors.ts",
+				"packages/agent/src/error-kind.ts",
+				"packages/utils/src/effect-signal.ts"
+			],
+			"depends_on": [],
+			"notes": "Static audit still finds createAbortSourceTracker imports in openai-responses.ts and openai-completions.ts."
+		},
+		{
+			"id": "T-P10-002",
+			"phase_id": "P10",
+			"title": "Promote ADR 0004 after provider migration and docs index refresh",
+			"state": "pending",
+			"priority": "med",
+			"adr_refs": ["ADR-0004"],
+			"files_touched": [
+				"docs/adr/0004-provider-abort-taxonomy-effect-race-not-tracker.md",
+				"packages/coding-agent/src/internal-urls/docs-index.generated.ts"
+			],
+			"depends_on": ["T-P10-001"],
+			"notes": "ADR 0004 is Proposed and not embedded in the generated internal docs index in the current checkout."
 		}
 	],
 	"risks": [

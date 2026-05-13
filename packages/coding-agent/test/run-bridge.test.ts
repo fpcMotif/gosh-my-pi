@@ -1,4 +1,4 @@
-// Contracts for the OMP_RECOVERY_POLICY run bridge. Two branches:
+// Contracts for the default-on recovery-policy run bridge. Two branches:
 //   - enabled: false → forwards directly to `agent.prompt` / `agent.continue`
 //     (same byte-for-byte path the codebase used pre-P3).
 //   - enabled: true  → routes through AgentRunController + Effect.runPromiseExit
@@ -7,7 +7,7 @@
 import { describe, expect, it } from "bun:test";
 import { type Agent, AgentBusy, AgentBusyError, ConfigInvalid } from "@oh-my-pi/pi-agent-core";
 import { fromAny } from "@total-typescript/shoehorn";
-import { runAgentRequest } from "../src/session/run-bridge";
+import { isRecoveryPolicyEnabled, RECOVERY_POLICY_ENV_VAR, runAgentRequest } from "../src/session/run-bridge";
 import type { SessionManager } from "../src/session/session-manager";
 
 interface FakeAgentSpec {
@@ -35,6 +35,44 @@ function fakeSessionManager(): SessionManager {
 		appendRecoveryMarker: () => "marker-id",
 	});
 }
+
+function withRecoveryPolicyEnv(value: string | undefined, run: () => void): void {
+	const previous = process.env[RECOVERY_POLICY_ENV_VAR];
+	try {
+		if (value === undefined) {
+			delete process.env[RECOVERY_POLICY_ENV_VAR];
+		} else {
+			process.env[RECOVERY_POLICY_ENV_VAR] = value;
+		}
+		run();
+	} finally {
+		if (previous === undefined) {
+			delete process.env[RECOVERY_POLICY_ENV_VAR];
+		} else {
+			process.env[RECOVERY_POLICY_ENV_VAR] = previous;
+		}
+	}
+}
+
+describe("isRecoveryPolicyEnabled", () => {
+	it("defaults crash recovery on when OMP_RECOVERY_POLICY is unset", () => {
+		withRecoveryPolicyEnv(undefined, () => {
+			expect(isRecoveryPolicyEnabled()).toBe(true);
+		});
+	});
+
+	it("accepts OMP_RECOVERY_POLICY=1 as an explicit enabled value", () => {
+		withRecoveryPolicyEnv("1", () => {
+			expect(isRecoveryPolicyEnabled()).toBe(true);
+		});
+	});
+
+	it("treats OMP_RECOVERY_POLICY=0 as the legacy direct-path escape hatch", () => {
+		withRecoveryPolicyEnv("0", () => {
+			expect(isRecoveryPolicyEnabled()).toBe(false);
+		});
+	});
+});
 
 describe("runAgentRequest (enabled: false — direct path)", () => {
 	it("calls agent.prompt with string + options for prompt request", async () => {

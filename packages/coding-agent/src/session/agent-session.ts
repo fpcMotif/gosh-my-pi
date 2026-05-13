@@ -121,6 +121,7 @@ import { normalizeLocalScheme, resolveToCwd } from "../tools/path-utils";
 import { isAutoQaEnabled } from "../tools/report-tool-issue";
 import type { TodoItem, TodoPhase } from "../tools/todo-write";
 import { appendRecoveryMarkerEffect } from "./recovery-marker-live";
+import type { RecoveryAction } from "./recovery-driver";
 import { isRecoveryPolicyEnabled, runAgentRequest } from "./run-bridge";
 import { parseCommandArgs } from "../utils/command-args";
 import { type EditMode, resolveEditMode } from "../utils/edit-mode";
@@ -252,6 +253,8 @@ export interface AgentSessionConfig {
 	defaultSelectedMCPToolNames?: string[];
 	/** TTSR manager for time-traveling stream rules */
 	ttsrManager?: TtsrManager;
+	/** Crash-recovery action already applied to agent history during SDK reopen. */
+	recoveryAction?: RecoveryAction;
 	/** Secret obfuscator for deobfuscating streaming edit content */
 	obfuscator?: SecretObfuscator;
 	/** Logical owner for retained Python kernels created by this session. */
@@ -629,6 +632,7 @@ export class AgentSession {
 		// Always subscribe to agent events for internal handling
 		// (session persistence, hooks, auto-compaction, retry logic)
 		this.#unsubscribeAgent = this.agent.subscribe(this.#handleAgentEvent);
+		this.#scheduleRecoveredContinuation(config.recoveryAction);
 	}
 
 	/** Model registry for API key resolution and model discovery */
@@ -746,9 +750,8 @@ export class AgentSession {
 	/**
 	 * P3b: write a `recovery-marker` JSONL line at one of the three safe
 	 * points (post-`message_end`, post-`tool_execution_end`, post-`turn_end`).
-	 * Gated on `OMP_RECOVERY_POLICY === "1"` so production traffic stays on
-	 * the legacy path until dogfooding confirms the new flow. See ADR-0003
-	 * + CONTEXT.md:486.
+	 * Enabled by default; `OMP_RECOVERY_POLICY=0|false|off|no` is the escape
+	 * hatch for local comparison with the legacy direct path.
 	 */
 	async #emitRecoveryMarker(isStreaming: boolean): Promise<void> {
 		if (!isRecoveryPolicyEnabled()) return;
@@ -1208,7 +1211,7 @@ export class AgentSession {
 		generation?: number;
 		shouldContinue?: () => boolean;
 		onSkip?: () => void;
-		onError?: () => void;
+		onError?: (error: unknown) => void;
 	}): void {
 		this.#schedulePostPromptTask(
 			async () => {
@@ -1219,8 +1222,8 @@ export class AgentSession {
 				try {
 					await this.#activeRetryFallback.maybeRestorePrimary();
 					await this.#runAgentRequest({ kind: "continue" });
-				} catch {
-					options?.onError?.();
+				} catch (error) {
+					options?.onError?.(error);
 				}
 			},
 			{
@@ -1229,6 +1232,20 @@ export class AgentSession {
 				onSkip: options?.onSkip,
 			},
 		);
+	}
+
+	#scheduleRecoveredContinuation(action: RecoveryAction | undefined): void {
+		if (action === undefined || action.kind === "none") return;
+		this.#scheduleAgentContinue({
+			delayMs: 0,
+			shouldContinue: () => !this.isStreaming,
+			onError: error => {
+				logger.warn("Crash recovery continuation failed", {
+					kind: action.kind,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			},
+		});
 	}
 
 	#scheduleAutoContinuePrompt(generation: number): void {

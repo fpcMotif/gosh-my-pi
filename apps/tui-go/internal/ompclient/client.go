@@ -32,7 +32,8 @@ type Options struct {
 	// Bin is the binary to spawn. Defaults to "gmp" (the local fork's
 	// renamed coding-agent binary; intentionally not "omp" to avoid
 	// collision with an upstream `omp` install on PATH).
-	// Override with the GMP_TUI_BACKEND env var (handled by caller).
+	// Override with the GMP_TUI_BACKEND env var or legacy OMP_TUI_BACKEND
+	// alias (handled by caller).
 	Bin string
 
 	// PrefixArgs are placed before "--mode rpc". This supports commands

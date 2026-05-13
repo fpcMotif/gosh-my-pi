@@ -24,9 +24,10 @@
 // CONTEXT.md:474-484 documents the term + the avoid list.
 
 import { Effect } from "@oh-my-pi/pi-utils/effect";
+import type { ImageContent } from "@oh-my-pi/pi-ai";
 import type { Agent } from "../agent";
 import { AgentBusy, type AgentRunError, ConfigInvalid } from "../errors";
-import type { AgentMessage, AgentPromptOptions, ImageContent } from "../types";
+import type { AgentMessage, AgentPromptOptions } from "../types";
 import type { Clock } from "./clock";
 import type { RecoveryMarker } from "./recovery-marker";
 

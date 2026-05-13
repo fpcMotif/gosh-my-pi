@@ -19,8 +19,8 @@ import type { SessionEntry } from "./session-manager";
 
 /**
  * Structured description of what `decideRecoveryAction` decided. The driver
- * applies these to an Agent; the orchestrator returns this so callers can
- * decide whether to call `agent.continue()` after recovery.
+ * applies these to an Agent; `AgentSession` consumes non-`none` actions by
+ * scheduling `agent.continue()` after it subscribes to agent events.
  */
 export type RecoveryAction =
 	| { readonly kind: "none" }
@@ -90,9 +90,8 @@ export function decideRecoveryAction(
  * `replaceMessages` for `mid-stream`, one `appendMessage` per synthetic for
  * `mid-tool`, no-op for `none`.
  *
- * The caller (orchestrator or `createAgentSession`) is responsible for then
- * calling `agent.continue()` if the action was non-`none` and the agent should
- * resume.
+ * `AgentSession` is responsible for then scheduling `agent.continue()` if the
+ * action was non-`none` and the agent should resume.
  */
 export function applyRecoveryAction(action: RecoveryAction, agent: AgentRecoveryFacade): void {
 	switch (action.kind) {
@@ -112,7 +111,8 @@ export function applyRecoveryAction(action: RecoveryAction, agent: AgentRecovery
 /**
  * Top-level orchestrator: classifies the crash state from the session log,
  * decides the recovery action, applies it to the agent, and returns the
- * applied action so the caller can decide whether to call `agent.continue()`.
+ * applied action so the session can schedule `agent.continue()` after its
+ * event subscription is in place.
  *
  * The classification helpers (`findLatestRecoveryMarker`, `classifyCrashState`,
  * `findLatestAssistantMessage`) live in `./recovery-policy.ts`; this driver

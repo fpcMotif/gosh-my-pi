@@ -43,7 +43,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
 	rootCmd.PersistentFlags().StringP("data-dir", "D", "", "Custom crush data directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
-	rootCmd.PersistentFlags().StringP("agent-cmd", "a", "", "Path to gmp binary or full command line (overrides sibling-binary lookup, PATH, and GMP_TUI_BACKEND)")
+	rootCmd.PersistentFlags().StringP("agent-cmd", "a", "", "Path to gmp binary or full command line (overrides sibling-binary lookup, PATH, GMP_TUI_BACKEND, and OMP_TUI_BACKEND)")
 	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific crush server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")

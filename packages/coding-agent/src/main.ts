@@ -132,8 +132,25 @@ export async function submitInteractiveInput(
 	}
 }
 
-// Returns the child process exit code when tui-go was spawned, or null
-// when the caller should fall through to the legacy interactive mode.
+/**
+ * When `omp` is launched in an interactive TTY, optionally spawn the
+ * Go-side TUI frontend (`gmp-tui-go`) instead of the in-process legacy
+ * TUI. Controlled by the `OMP_TUI` env var:
+ *
+ * - unset / `legacy` / `auto`: legacy in-process TUI (current default)
+ * - `go`: try to spawn `gmp-tui-go`; fall back to legacy if not found
+ * - `go-strict`: try to spawn `gmp-tui-go`; exit with code 2 if not found
+ *
+ * The user can override binary discovery via `OMP_TUI_BIN` (full path).
+ *
+ * Returns the child process exit code when tui-go was spawned, or `null`
+ * when the caller should fall through to the legacy interactive mode.
+ *
+ * Architectural note: this is candidate #3, phase T1. tui-go is the
+ * intended frontend; the legacy in-process TUI (`InteractiveMode`) is on
+ * the deletion path. Auto-spawn lets users opt in incrementally without
+ * forcing a flag-day migration. See `.claude/plans/delete-pi-tui-design.md`.
+ */
 async function tryAutoSpawnTuiGo(): Promise<number | null> {
 	const launch = resolveTuiGoLaunch();
 	if (launch.action === "legacy") {
