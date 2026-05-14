@@ -20,6 +20,21 @@ import { getSessionEntry, listAllSessionFiles, parseSessionFile } from "./parser
 import type { DashboardStats, MessageStats, RequestDetails } from "./types";
 
 /**
+ * Utility to coalesce concurrent promises for the same operation.
+ * Prevents redundant database queries and file I/O.
+ */
+function coalescePromise<T>(fn: () => Promise<T>): () => Promise<T> {
+	let activePromise: Promise<T> | null = null;
+	return () => {
+		if (activePromise) return activePromise;
+		activePromise = fn().finally(() => {
+			activePromise = null;
+		});
+		return activePromise;
+	};
+}
+
+/**
  * Sync a single session file to the database.
  * Only processes new entries since the last sync.
  */
@@ -55,10 +70,9 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 }
 
 /**
- * Sync all session files to the database.
- * Returns the number of new entries processed.
+ * Internal implementation for syncing all session files.
  */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+async function _syncAllSessions(): Promise<{ processed: number; files: number }> {
 	await initDb();
 
 	const files = await listAllSessionFiles();
@@ -76,9 +90,15 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 }
 
 /**
- * Get all dashboard stats.
+ * Sync all session files to the database.
+ * Returns the number of new entries processed.
  */
-export async function getDashboardStats(): Promise<DashboardStats> {
+export const syncAllSessions = coalescePromise(_syncAllSessions);
+
+/**
+ * Internal implementation for getting dashboard stats.
+ */
+async function _getDashboardStats(): Promise<DashboardStats> {
 	await initDb();
 
 	return {
@@ -91,6 +111,11 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 		costSeries: getCostTimeSeries(90),
 	};
 }
+
+/**
+ * Get all dashboard stats.
+ */
+export const getDashboardStats = coalescePromise(_getDashboardStats);
 export async function getRecentRequests(limit?: number): Promise<MessageStats[]> {
 	await initDb();
 	return dbGetRecentRequests(limit);
