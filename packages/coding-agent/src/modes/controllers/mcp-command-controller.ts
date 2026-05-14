@@ -244,6 +244,9 @@ export class MCPCommandController {
 			return { scope, error: `Unknown option: ${argToken}` };
 		}
 
+		if (authToken !== undefined && authToken !== "" && (url === null || url === undefined || url === "")) {
+			return { scope, error: "--token requires --url (HTTP/SSE transport)." };
+		}
 		const hasQuick = Boolean(url) || Boolean(commandTokens && commandTokens.length > 0);
 		if (!hasQuick) {
 			return { scope, initialName: name };
@@ -253,9 +256,6 @@ export class MCPCommandController {
 		}
 		if (url !== undefined && url !== "" && commandTokens !== undefined && commandTokens.length > 0) {
 			return { scope, error: "Use either --url or -- <command...>, not both." };
-		}
-		if (authToken !== undefined && authToken !== "" && (url === null || url === undefined || url === "")) {
-			return { scope, error: "--token requires --url (HTTP/SSE transport)." };
 		}
 
 		if (commandTokens !== undefined && commandTokens.length > 0) {

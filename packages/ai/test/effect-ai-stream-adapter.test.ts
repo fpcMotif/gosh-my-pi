@@ -1,11 +1,25 @@
 import { describe, expect, it } from "bun:test";
 import { toResponseStreamParts } from "@oh-my-pi/pi-ai/effect-ai-stream-adapter";
-import type { AssistantMessage } from "@oh-my-pi/pi-ai/types";
+import type { AssistantMessage, Usage } from "@oh-my-pi/pi-ai/types";
+
+const zeroUsage = (): Usage => ({
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	totalTokens: 0,
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+});
 
 const emptyMessage = (): AssistantMessage => ({
 	role: "assistant",
 	content: [],
+	api: "openai-responses",
+	provider: "openai",
+	model: "gpt-5",
+	usage: zeroUsage(),
 	stopReason: "stop",
+	timestamp: 0,
 	duration: 0,
 });
 
@@ -153,7 +167,14 @@ describe("toResponseStreamParts — pi-ai AssistantMessageEvent -> Effect 4 Resp
 				reason: "stop",
 				message: {
 					...emptyMessage(),
-					usage: { input: 10, output: 5, cacheRead: 2, cacheWrite: 0, totalTokens: 17 },
+					usage: {
+						input: 10,
+						output: 5,
+						cacheRead: 2,
+						cacheWrite: 0,
+						totalTokens: 17,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
 				},
 			});
 			expect(out).toHaveLength(1);
@@ -191,7 +212,15 @@ describe("toResponseStreamParts — pi-ai AssistantMessageEvent -> Effect 4 Resp
 				reason: "stop",
 				message: {
 					...emptyMessage(),
-					usage: { input: 1, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 101, reasoningTokens: 40 },
+					usage: {
+						input: 1,
+						output: 100,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 101,
+						reasoningTokens: 40,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
 				},
 			});
 			const usage = "usage" in out[0]! ? out[0].usage : undefined;

@@ -111,6 +111,10 @@ export const STATUS_LINE_PRESETS: Record<StatusLinePreset, PresetDef> = {
 	},
 };
 
-export function getPreset(name: StatusLinePreset): PresetDef {
-	return STATUS_LINE_PRESETS[name] ?? STATUS_LINE_PRESETS.default;
+function isStatusLinePreset(name: string): name is StatusLinePreset {
+	return name in STATUS_LINE_PRESETS;
+}
+
+export function getPreset(name: string): PresetDef {
+	return isStatusLinePreset(name) ? STATUS_LINE_PRESETS[name] : STATUS_LINE_PRESETS.default;
 }

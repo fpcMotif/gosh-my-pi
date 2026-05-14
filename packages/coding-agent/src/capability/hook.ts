@@ -15,7 +15,7 @@ export interface Hook {
 	/** Absolute path to hook file */
 	path: string;
 	/** Hook type (pre/post) and associated tool */
-	type: "pre" | "post";
+	type: string;
 	/** Tool this hook applies to, or "*" for all */
 	tool: string;
 	/** Source level */

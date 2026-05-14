@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { LanguageModel } from "@oh-my-pi/pi-ai/effect-ai";
 import { streamEffectAiOpenAi } from "@oh-my-pi/pi-ai/effect-ai-provider";
 import type { AssistantMessageEvent, Context, Model } from "@oh-my-pi/pi-ai/types";
+import { Type } from "@sinclair/typebox";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -9,11 +10,15 @@ import type * as Response from "effect/unstable/ai/Response";
 
 const model: Model<"openai-responses"> = {
 	id: "gpt-5",
+	name: "GPT-5",
 	provider: "openai",
 	api: "openai-responses",
 	baseUrl: "https://example.test/v1",
-	contextLength: 200_000,
-	maxOutputTokens: 16_384,
+	reasoning: true,
+	input: ["text"],
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	contextWindow: 200_000,
+	maxTokens: 16_384,
 };
 
 const context: Context = {
@@ -174,8 +179,8 @@ describe("streamEffectAiOpenAi — pi-ai-compatible streaming via Effect 4 Langu
 		const contextWithTools: Context = {
 			...context,
 			tools: [
-				{ name: "get_weather", description: "Get weather", parameters: { type: "object" } },
-				{ name: "list_files", description: "List files", parameters: { type: "object" } },
+				{ name: "get_weather", description: "Get weather", parameters: Type.Object({}) },
+				{ name: "list_files", description: "List files", parameters: Type.Object({}) },
 			],
 		};
 
@@ -205,7 +210,7 @@ describe("streamEffectAiOpenAi — pi-ai-compatible streaming via Effect 4 Langu
 	});
 
 	it("surfaces a layer-construction failure as an in-band 'error' event", async () => {
-		const failingLayer: Layer.Layer<LanguageModel.LanguageModel> = Layer.effect(
+		const failingLayer: Layer.Layer<LanguageModel.LanguageModel, Error, never> = Layer.effect(
 			LanguageModel.LanguageModel,
 			Effect.fail(new Error("upstream provider unreachable")),
 		);
@@ -217,6 +222,35 @@ describe("streamEffectAiOpenAi — pi-ai-compatible streaming via Effect 4 Langu
 		if (errorEvent?.type === "error") {
 			expect(errorEvent.error.errorMessage).toMatch(/upstream provider unreachable/);
 			expect(errorEvent.error.stopReason).toBe("error");
+		}
+	});
+
+	it("maps a caller AbortSignal to a terminal 'aborted' error event", async () => {
+		// streamText never completes — only the caller's AbortSignal can end
+		// the turn. The abort must surface as pi-ai's `aborted` reason (parity
+		// with streamOpenAIResponses), not a generic `error`.
+		const hangingLayer: Layer.Layer<LanguageModel.LanguageModel> = Layer.effect(
+			LanguageModel.LanguageModel,
+			LanguageModel.make({
+				streamText: () => Stream.never,
+				generateText: () => Effect.succeed([]),
+			}),
+		);
+
+		const controller = new AbortController();
+		const stream = streamEffectAiOpenAi(model, context, {
+			languageModelLayer: hangingLayer,
+			signal: controller.signal,
+		});
+		setTimeout(() => controller.abort(), 10);
+
+		const events = await collect(stream);
+		const terminal = events.at(-1);
+		expect(terminal?.type).toBe("error");
+		if (terminal?.type === "error") {
+			expect(terminal.reason).toBe("aborted");
+			expect(terminal.error.stopReason).toBe("aborted");
+			expect(terminal.error.errorMessage).toBe("Request was aborted");
 		}
 	});
 });

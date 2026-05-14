@@ -27,12 +27,37 @@ describe("renameApprovedPlanFile", () => {
 		};
 	}
 
+	it("rejects non-local source or destination paths", () => {
+		expect(renameApprovedPlanFile(options("PLAN.md", "local://WP_MIGRATION_PLAN.md"))).rejects.toThrow(
+			"source path must use local",
+		);
+		expect(renameApprovedPlanFile(options("local://PLAN.md", "WP_MIGRATION_PLAN.md"))).rejects.toThrow(
+			"destination path must use local",
+		);
+	});
+
+	it("returns without filesystem work when source and destination are identical", async () => {
+		await renameApprovedPlanFile(options("local://PLAN.md", "local://PLAN.md"));
+	});
+
 	it("fails with actionable error when destination already exists", async () => {
 		await Bun.write(path.join(artifactsDir, "local", "PLAN.md"), "draft");
 		await Bun.write(path.join(artifactsDir, "local", "WP_MIGRATION_PLAN.md"), "existing");
 
 		expect(renameApprovedPlanFile(options("local://PLAN.md", "local://WP_MIGRATION_PLAN.md"))).rejects.toThrow(
 			"Plan destination already exists at local://WP_MIGRATION_PLAN.md",
+		);
+	});
+
+	it("rejects non-file destinations and wraps source rename failures", async () => {
+		await fs.mkdir(path.join(artifactsDir, "local", "WP_MIGRATION_PLAN.md"));
+
+		await expect(renameApprovedPlanFile(options("local://PLAN.md", "local://WP_MIGRATION_PLAN.md"))).rejects.toThrow(
+			"Plan destination exists but is not a file",
+		);
+
+		await expect(renameApprovedPlanFile(options("local://MISSING.md", "local://READY.md"))).rejects.toThrow(
+			"Failed to rename approved plan from local://MISSING.md to local://READY.md",
 		);
 	});
 

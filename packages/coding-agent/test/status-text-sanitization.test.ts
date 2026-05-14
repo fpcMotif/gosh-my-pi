@@ -1,5 +1,10 @@
-import { describe, expect, it } from "bun:test";
-import { sanitizeStatusText } from "../src/modes/shared";
+import { beforeAll, describe, expect, it } from "bun:test";
+import { initTheme } from "../src/modes/theme/theme";
+import { getTabBarTheme, sanitizeStatusText } from "../src/modes/shared";
+
+beforeAll(async () => {
+	await initTheme(false);
+});
 
 describe("sanitizeStatusText", () => {
 	it("strips OSC, DCS, PM, APC, and 8-bit CSI escape sequences", () => {
@@ -14,5 +19,16 @@ describe("sanitizeStatusText", () => {
 			" suffix";
 
 		expect(sanitizeStatusText(input)).toBe("prefix link red suffix");
+	});
+});
+
+describe("getTabBarTheme", () => {
+	it("provides render functions for active, inactive, and hint tab states", () => {
+		const tabTheme = getTabBarTheme();
+
+		expect(Bun.stripANSI(tabTheme.label("Models"))).toBe("Models");
+		expect(Bun.stripANSI(tabTheme.activeTab("Active"))).toBe("Active");
+		expect(Bun.stripANSI(tabTheme.inactiveTab("Other"))).toBe("Other");
+		expect(Bun.stripANSI(tabTheme.hint("Ctrl+N"))).toBe("Ctrl+N");
 	});
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getSessionAccentHex, getSessionAccentHexForTitle } from "../src/utils/session-color";
+import { getSessionAccentAnsi, getSessionAccentHex, getSessionAccentHexForTitle } from "../src/utils/session-color";
 import { formatSessionTerminalTitle } from "../src/utils/title-generator";
 
 describe("getSessionAccentHexForTitle", () => {
@@ -12,6 +12,14 @@ describe("getSessionAccentHexForTitle", () => {
 
 		expect(getSessionAccentHexForTitle("Named session", "user")).toBe(expected);
 		expect(getSessionAccentHexForTitle("Named session", undefined)).toBe(expected);
+	});
+});
+
+describe("getSessionAccentAnsi", () => {
+	it("maps absent colors to undefined and valid colors to ANSI 24-bit foreground escapes", () => {
+		expect(getSessionAccentAnsi(undefined)).toBeUndefined();
+		expect(getSessionAccentAnsi("")).toBeUndefined();
+		expect(getSessionAccentAnsi("#ff0000")).toBe("\x1b[38;2;255;0;0m");
 	});
 });
 

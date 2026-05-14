@@ -1,16 +1,24 @@
 import { describe, expect, it } from "bun:test";
 import { buildPrompt, messagesFromContext } from "@oh-my-pi/pi-ai/effect-ai-prompt-builder";
-import type { Api, Context, Provider } from "@oh-my-pi/pi-ai/types";
+import type { AssistantMessage, Context, Usage } from "@oh-my-pi/pi-ai/types";
+import { Type } from "@sinclair/typebox";
 
-const baseAssistant = (
-	content: Context["messages"][number] extends { role: "assistant"; content: infer C } ? C : never,
-): Context["messages"][number] => ({
+const zeroUsage = (): Usage => ({
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	totalTokens: 0,
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+});
+
+const baseAssistant = (content: AssistantMessage["content"]): AssistantMessage => ({
 	role: "assistant",
 	content,
-	api: "openai-responses" satisfies Api,
-	provider: "openai" satisfies Provider,
+	api: "openai-responses",
+	provider: "openai",
 	model: "gpt-5",
-	usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 },
+	usage: zeroUsage(),
 	stopReason: "stop",
 	timestamp: 0,
 });
@@ -196,7 +204,8 @@ describe("messagesFromContext — pi-ai Context -> Effect 4 MessageEncoded[]", (
 					},
 				],
 			});
-			if (out[0]?.role === "tool") expect(out[0].content[0]?.isFailure).toBe(true);
+			const part = out[0]?.role === "tool" ? out[0].content[0] : undefined;
+			if (part?.type === "tool-result") expect(part.isFailure).toBe(true);
 		});
 	});
 
@@ -216,7 +225,7 @@ describe("messagesFromContext — pi-ai Context -> Effect 4 MessageEncoded[]", (
 			const prompt = buildPrompt({
 				systemPrompt: "x",
 				messages: [{ role: "user", content: "hi", timestamp: 0 }],
-				tools: [{ name: "noop", description: "no", parameters: { type: "object" } }],
+				tools: [{ name: "noop", description: "no", parameters: Type.Object({}) }],
 			});
 			expect(prompt.content).toHaveLength(2);
 		});

@@ -17,9 +17,9 @@
 // incrementally without changing their for-await loop or AbortSignal
 // plumbing.
 //
-// Status: text-only happy path + tool definitions + auth resolution.
-// Structured output, thinking budgets, service tiers, and the full retry /
-// fallback ladder remain as feature-parity follow-ups. The accumulator
+// Status: text-only happy path + tool definitions + auth resolution +
+// caller-signal abort. Structured output, thinking budgets, service tiers,
+// and the full retry / fallback ladder remain as feature-parity follow-ups. The accumulator
 // already understands every Effect 4 part variant the call site might see,
 // so adding feature support only requires extending the prompt builder +
 // `OpenAiLanguageModel.layer` config — the stream pipeline below is final.
@@ -49,7 +49,7 @@ export interface EffectAiStreamOptions {
 	 * `Layer.succeed(LanguageModel.LanguageModel, fakeService)` to bypass
 	 * `makeOmpOpenAiLayer` (and the OpenAi HTTP wiring it builds).
 	 */
-	readonly languageModelLayer?: Layer.Layer<LanguageModelInternal.LanguageModel>;
+	readonly languageModelLayer?: Layer.Layer<LanguageModelInternal.LanguageModel, unknown, never>;
 	/**
 	 * Override the `makeOmpOpenAiLayer` options. Ignored when
 	 * `languageModelLayer` is set. Caller overrides win over the
@@ -67,10 +67,11 @@ export interface EffectAiStreamOptions {
  * loops; the resulting stream emits the same `AssistantMessageEvent`
  * variants in the same order.
  *
- * The Effect program is spawned in a fire-and-forget IIFE that pushes
- * events to the returned stream as parts arrive. Errors from
- * `Effect.runPromise` are reported via `stream.error(...)`, which surfaces
- * to the consumer's iterator as a rejection.
+ * The Effect program is forked at the `runPromiseExit` boundary; its parts
+ * are pushed to the returned stream as they arrive. The terminal Exit
+ * decides the final event: a clean finish ends the stream, a failure or
+ * defect emits an in-band `error` event, and a caller-signal abort (via
+ * `options.signal`) emits one with `reason: "aborted"`.
  */
 export const streamEffectAiOpenAi = <TApi extends Api>(
 	model: Model<TApi>,
@@ -116,40 +117,49 @@ export const streamEffectAiOpenAi = <TApi extends Api>(
 				}
 			}),
 		);
-	});
+	}).pipe(Effect.provide(layer));
 
-	// catchDefect converts fiber defects (Effect.die, thrown JS errors) into
-	// typed failures so runPromiseExit returns a clean Exit rather than logging
-	// the defect to stderr in parallel with the consumer seeing the rejection.
-	const safe = Effect.provide(program, layer).pipe(Effect.catchDefect(defect => Effect.fail(defect)));
 	// Pre-attach a no-op result-promise catch: AssistantMessageEventStream's
 	// `error()` rejects an internal #resultPromise that nobody awaits in the
 	// caller's for-await loop. Without this attachment the rejection surfaces
 	// as an unhandled-promise crash in Bun.
 	stream.result().catch(() => undefined);
-	void (async () => {
-		const exit = await Effect.runPromiseExit(safe);
+
+	// runPromiseExit is the runtime boundary: it forks the fiber, wires the
+	// caller's AbortSignal to fiber interruption, and observes the terminal
+	// Exit — so a defect lands in the Exit's Cause rather than leaking to
+	// stderr (no explicit catchDefect needed). The Exit branch decides the
+	// in-band terminal event the for-await consumer sees, matching pi-ai's
+	// existing providers.
+	void Effect.runPromiseExit(program, { signal: options?.signal }).then(exit => {
 		if (Exit.isFailure(exit)) {
-			const cause = Cause.squash(exit.cause);
-			// Push an explicit `error` event so the for-await consumer sees a
-			// terminal event in-band (matches pi-ai's existing providers). The
-			// AssistantMessageEventStream marks done on this event.
+			// A caller-signal abort surfaces as an interrupt-only Cause; map it
+			// to pi-ai's `aborted` reason for parity with streamOpenAIResponses.
+			const aborted = Cause.hasInterruptsOnly(exit.cause) || options?.signal?.aborted === true;
+			const reason = aborted ? "aborted" : "error";
+			const squashed = Cause.squash(exit.cause);
+			// Push an explicit terminal event so the for-await consumer sees it
+			// in-band; AssistantMessageEventStream marks done on this event.
 			stream.push({
 				type: "error",
-				reason: "error",
+				reason,
 				error: {
 					...accumulator.partial,
-					stopReason: "error",
-					errorMessage: cause instanceof Error ? cause.message : String(cause),
+					stopReason: reason,
+					errorMessage: aborted
+						? "Request was aborted"
+						: squashed instanceof Error
+							? squashed.message
+							: String(squashed),
 				},
 			});
-			stream.error(cause);
+			stream.error(squashed);
 			return;
 		}
 		if (!stream.done) {
 			stream.end(accumulator.partial);
 		}
-	})();
+	});
 
 	return stream;
 };

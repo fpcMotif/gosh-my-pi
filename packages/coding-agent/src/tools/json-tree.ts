@@ -133,15 +133,11 @@ export function renderJsonTreeLines(
 					const firstLine = truncateToWidth(strLines[0], maxScalarLen);
 					pushLine(`${prefix}${iconScalar} ${label}: ${theme.fg("dim", `"${firstLine}`)}`);
 
-					// Subsequent lines indented
-					for (let i = 1; i < maxStrLines; i++) {
-						if (lines.length >= maxLines) {
-							truncated = true;
-							break;
-						}
-						const line = truncateToWidth(strLines[i], maxScalarLen);
-						pushLine(`${continuePrefix}   ${theme.fg("dim", ` ${line}`)}`);
-					}
+				// Subsequent lines indented
+				for (let i = 1; i < maxStrLines; i++) {
+					const line = truncateToWidth(strLines[i], maxScalarLen);
+					pushLine(`${continuePrefix}   ${theme.fg("dim", ` ${line}`)}`);
+				}
 
 					// Show truncation and closing quote
 					if (strLines.length > maxStrLines) {
@@ -190,8 +186,6 @@ export function renderJsonTreeLines(
 			}
 
 			// Handle objects
-			if (!isRecord(val)) return;
-
 			const header =
 				key !== null && key !== undefined && key !== "" ? theme.fg("muted", key) : theme.fg("muted", "object");
 			pushLine(`${prefix}${iconObject} ${header}`);

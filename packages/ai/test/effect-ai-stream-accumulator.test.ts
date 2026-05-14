@@ -288,7 +288,12 @@ describe("ResponseStreamAccumulator — Effect 4 Response.AnyPart -> pi-ai Assis
 		it("response-metadata is silently dropped (no pi-ai event)", () => {
 			const acc = new ResponseStreamAccumulator(seed);
 			const events = acc.feed(
-				Response.makePart("response-metadata", { id: "rmd", modelId: "gpt-5", timestamp: new Date() }),
+				Response.makePart("response-metadata", {
+					id: "rmd",
+					modelId: "gpt-5",
+					timestamp: undefined,
+					request: undefined,
+				}),
 			);
 			expect(events.map(e => e.type)).toEqual(["start"]);
 		});

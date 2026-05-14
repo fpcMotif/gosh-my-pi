@@ -4,7 +4,7 @@ import { SkillMessageComponent } from "@oh-my-pi/pi-coding-agent/modes/component
 import { UserMessageComponent } from "@oh-my-pi/pi-coding-agent/modes/components/user-message";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { CustomMessage, SkillPromptDetails } from "@oh-my-pi/pi-coding-agent/session/messages";
-import { visibleWidth } from "@oh-my-pi/pi-tui";
+import { Text, visibleWidth } from "@oh-my-pi/pi-tui";
 
 function renderPlain(component: { render(width: number): string[] }, width: number): string {
 	return Bun.stripANSI(component.render(width).join("\n"));
@@ -49,6 +49,29 @@ describe("conversation message framing", () => {
 		expectWidthBounded(component, 60);
 	});
 
+	it("rebuilds custom-rendered messages on expansion and invalidation", () => {
+		const message: CustomMessage = {
+			role: "custom",
+			customType: "note",
+			content: "body",
+			display: true,
+			timestamp: Date.now(),
+		};
+		const expandedStates: boolean[] = [];
+		const component = new CustomMessageComponent(message, (_message, options) => {
+			expandedStates.push(options.expanded);
+			return new Text(options.expanded ? "expanded custom" : "collapsed custom", 0, 0);
+		});
+
+		expect(renderPlain(component, 60)).toContain("collapsed custom");
+		component.setExpanded(true);
+		expect(renderPlain(component, 60)).toContain("expanded custom");
+		component.invalidate();
+
+		expect(renderPlain(component, 60)).toContain("expanded custom");
+		expect(expandedStates).toEqual([false, true, true]);
+	});
+
 	it("renders skill summaries collapsed and prompt content when expanded", () => {
 		const message: CustomMessage<SkillPromptDetails> = {
 			role: "custom",
@@ -71,5 +94,8 @@ describe("conversation message framing", () => {
 		expect(expanded).toContain("Prompt");
 		expect(expanded).toContain("skill prompt body");
 		expectWidthBounded(component, 72);
+
+		component.invalidate();
+		expect(renderPlain(component, 72)).toContain("skill prompt body");
 	});
 });

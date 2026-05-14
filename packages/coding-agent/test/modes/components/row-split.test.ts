@@ -5,9 +5,13 @@ import { RowSplit } from "@oh-my-pi/pi-coding-agent/modes/components/row-split";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 
 class StaticLines implements Component {
+	invalidations = 0;
+
 	constructor(private readonly lines: string[]) {}
 
-	invalidate(): void {}
+	invalidate(): void {
+		this.invalidations += 1;
+	}
 
 	render(_width: number): string[] {
 		return this.lines;
@@ -74,5 +78,20 @@ describe("RowSplit", () => {
 		expect(lines).toHaveLength(1);
 		expect(lines[0]).toContain("\x1b[31m");
 		expect(visibleWidth(lines[0])).toBe(14);
+	});
+
+	it("applies resized left-column widths and invalidates both children", () => {
+		const left = new StaticLines(["left"]);
+		const right = new StaticLines(["right"]);
+		const split = new RowSplit(left, right, { leftWidth: 2, separator: "|" });
+
+		expect(stripAnsi(split.render(12)[0])).toBe("l…|right    ");
+
+		split.setLeftWidth(5);
+		expect(stripAnsi(split.render(12)[0])).toBe("left |right ");
+
+		split.invalidate();
+		expect(left.invalidations).toBe(1);
+		expect(right.invalidations).toBe(1);
 	});
 });

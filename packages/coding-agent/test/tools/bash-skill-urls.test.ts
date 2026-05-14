@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import * as path from "node:path";
 import type { Skill } from "../../src/extensibility/skills";
 import { resolveLocalUrlToPath } from "../../src/internal-urls";
-import { expandInternalUrls, expandSkillUrls } from "../../src/tools/bash-skill-urls";
+import { expandInternalUrls, expandSkillUrls, resolveSkillUrlToPath } from "../../src/tools/bash-skill-urls";
 import { ToolError } from "../../src/tools/tool-errors";
 
 function shellEscape(p: string): string {
@@ -147,6 +147,29 @@ describe("expandSkillUrls", () => {
 	it("throws ToolError when traversal is attempted with encoded segments", () => {
 		const skills = [createSkill("valid-skill", "/tmp/skills/valid-skill")];
 		expect(() => expandSkillUrls("cat skill://valid-skill/%2E%2E/%2E%2E/etc/passwd", skills)).toThrow(ToolError);
+	});
+
+	it("rejects malformed skill URLs and URLs without a skill name", () => {
+		const skills = [createSkill("valid-skill", "/tmp/skills/valid-skill")];
+
+		expect(() => resolveSkillUrlToPath("not-a-skill-url", skills)).toThrow("Invalid skill:// URL");
+		expect(() => resolveSkillUrlToPath("skill://", skills)).toThrow("Invalid skill:// URL");
+	});
+
+	it("rejects invalid percent encoding in skill URL paths", () => {
+		const skills = [createSkill("valid-skill", "/tmp/skills/valid-skill")];
+
+		expect(() => resolveSkillUrlToPath("skill://valid-skill/%E0%A4%A", skills)).toThrow(
+			"Invalid skill:// URL path encoding",
+		);
+	});
+
+	it("resolves namespaced skill names with colon line-range suffixes", () => {
+		const skills = [createSkill("plugin:review", "/tmp/skills/plugin-review")];
+
+		expect(resolveSkillUrlToPath("skill://plugin%3Areview:10-20", skills)).toBe(
+			path.join(skills[0].baseDir, "10-20"),
+		);
 	});
 });
 

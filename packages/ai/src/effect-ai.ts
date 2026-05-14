@@ -1,6 +1,6 @@
 // Effect-native AI surface for the workspace.
 //
-// Re-exports the Effect 4 AI primitives (LanguageModel, Prompt, Response, Tool,
+// Re-exports the Effect 4 AI primitives (LanguageModel, Prompt, Response, AiTool,
 // Toolkit, AiError) from `effect/unstable/ai/*` and the OpenAI provider from
 // `@effect/ai-openai`, so consumers can import the typed surface from a single
 // workspace-pinned entry point rather than reaching into the upstream module
@@ -28,7 +28,7 @@ export * as AiError from "effect/unstable/ai/AiError";
 export * as LanguageModel from "effect/unstable/ai/LanguageModel";
 export * as Prompt from "effect/unstable/ai/Prompt";
 export * as Response from "effect/unstable/ai/Response";
-export * as Tool from "effect/unstable/ai/Tool";
+export * as AiTool from "effect/unstable/ai/Tool";
 export * as Toolkit from "effect/unstable/ai/Toolkit";
 
 /**
@@ -57,7 +57,7 @@ export interface OmpOpenAiLayerOptions {
 	 * Tests pass a stub layer here to intercept the wire without monkey-patching
 	 * `globalThis.fetch`.
 	 */
-	readonly httpClient?: Layer.Layer<HttpClient.HttpClient>;
+	readonly httpClient?: Layer.Layer<HttpClient.HttpClient, never, never>;
 }
 
 /**
@@ -81,7 +81,9 @@ export interface OmpOpenAiLayerOptions {
  *       program.pipe(Effect.provide(makeOmpOpenAiLayer({ model: "gpt-5", apiKey }))),
  *   );
  */
-export function makeOmpOpenAiLayer(options: OmpOpenAiLayerOptions): Layer.Layer<LanguageModelInternal.LanguageModel> {
+export function makeOmpOpenAiLayer(
+	options: OmpOpenAiLayerOptions,
+): Layer.Layer<LanguageModelInternal.LanguageModel, never, never> {
 	const clientLayer = OpenAiClient.layer({
 		apiKey: options.apiKey === undefined ? undefined : Redacted.make(options.apiKey),
 		apiUrl: options.baseUrl,

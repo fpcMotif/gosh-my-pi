@@ -90,6 +90,21 @@ describe("parseRuleConditionAndScope", () => {
 });
 
 describe("TtsrManager scope matching", () => {
+	it("reports rule presence, settings, and message count", () => {
+		const manager = new TtsrManager({ repeatMode: "after-gap", repeatGap: 3 });
+		expect(manager.hasRules()).toBe(false);
+		expect(manager.getMessageCount()).toBe(0);
+		expect(manager.getSettings().repeatGap).toBe(3);
+
+		const rule = makeRule({ condition: ["forbidden"], scope: ["text"] });
+		expect(manager.addRule(rule)).toBe(true);
+		manager.incrementMessageCount();
+
+		expect(manager.hasRules()).toBe(true);
+		expect(manager.getMessageCount()).toBe(1);
+		expect(manager.getSettings().repeatMode).toBe("after-gap");
+	});
+
 	it("applies file-scoped tool rules without cross-language contamination", () => {
 		const manager = new TtsrManager();
 		const rule = makeRule({

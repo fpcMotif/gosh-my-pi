@@ -7,6 +7,7 @@ import {
 	buildPromptModel,
 	commandFromOp,
 	createTools,
+	cwdFromOp,
 	type DetectedRunner,
 	RecipeTool,
 	resolveCommand,
@@ -86,6 +87,12 @@ describe("recipe", () => {
 		expect(titleFromOp("pkg:test", detectedRunners)).toBe("Pkg");
 	});
 
+	it("reports useful errors for empty ops and missing explicit runner tasks", () => {
+		expect(() => resolveCommand("", detectedRunners)).toThrow("recipe op is empty");
+		expect(() => resolveCommand("pkg:", detectedRunners)).toThrow("Task `(empty)` not found in runner `pkg`");
+		expect(() => resolveCommand("pkg:missing", detectedRunners)).toThrow("Task `missing` not found in runner `pkg`");
+	});
+
 	it("routes namespaced tasks through task-specific command prefixes", () => {
 		expect(resolveCommand("pkg:test --watch", detectedRunners)).toEqual({ command: "bun run test --watch" });
 		expect(resolveCommand("cargo:server/bin/serve -- --port 0", detectedRunners)).toEqual({
@@ -106,6 +113,7 @@ describe("recipe", () => {
 			command: "bun run 'test' --watch",
 			cwd: "packages/pkg-a",
 		});
+		expect(cwdFromOp("pkg-a/test --watch", runners)).toBe("packages/pkg-a");
 	});
 
 	it("returns renderer fallbacks for unresolved or streaming ops", () => {

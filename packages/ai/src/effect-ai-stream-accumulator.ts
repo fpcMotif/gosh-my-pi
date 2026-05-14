@@ -43,7 +43,16 @@ export interface ResponseStreamAccumulatorSeed {
 	readonly timestamp?: number;
 }
 
-const emptyUsage = (): Usage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 });
+const emptyCost = (): Usage["cost"] => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 });
+
+const emptyUsage = (): Usage => ({
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	totalTokens: 0,
+	cost: emptyCost(),
+});
 
 const finishReasonToStopReason = (reason: string): StopReason => {
 	switch (reason) {
@@ -78,6 +87,7 @@ const usageFromEffect = (eff: Response.Usage): Usage => {
 		cacheRead,
 		cacheWrite,
 		totalTokens: input + output + cacheRead + cacheWrite,
+		cost: emptyCost(),
 	};
 	if (eff.outputTokens.reasoning !== undefined) {
 		usage.reasoningTokens = eff.outputTokens.reasoning;

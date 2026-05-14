@@ -198,6 +198,43 @@ describe("InspectImageTool", () => {
 		expect(resultOutput).toContain("more lines");
 	});
 
+	it("renders empty inspect-image results with fallback metadata", async () => {
+		const theme = await getThemeByName("dark");
+		expect(theme).toBeDefined();
+		const component = inspectImageToolRenderer.renderResult(
+			{
+				content: [],
+				details: {
+					model: "openai/gpt-4o",
+					imagePath: "/tmp/empty.png",
+					mimeType: "image/png",
+				},
+			},
+			{ expanded: false, isPartial: false },
+			theme!,
+			{ path: "/tmp/empty.png" },
+		);
+
+		const output = sanitizeText(component.render(100).join("\n"));
+		expect(output).toContain("(no output)");
+		expect(output).toContain("openai/gpt-4o");
+		expect(output).toContain("image/png");
+	});
+
+	it("renders an inspect-image call without an optional question", async () => {
+		const theme = await getThemeByName("dark");
+		expect(theme).toBeDefined();
+		const component = inspectImageToolRenderer.renderCall(
+			{ path: "/tmp/screenshot.png" },
+			{ expanded: false, isPartial: false },
+			theme!,
+		);
+
+		const output = sanitizeText(component.render(100).join("\n"));
+		expect(output).toContain("Inspect Image");
+		expect(output).not.toContain("Question:");
+	});
+
 	it("schema rejects unknown parameters", () => {
 		const tool = new InspectImageTool(createSession(testDir, visionModel));
 		expect(tool.strict).toBe(false);

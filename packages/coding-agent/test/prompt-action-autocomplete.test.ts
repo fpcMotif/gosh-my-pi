@@ -110,4 +110,28 @@ describe("prompt action autocomplete", () => {
 		const suggestions = await provider.getSuggestions(["release #v1"], 0, 11);
 		expect(suggestions).toBeNull();
 	});
+
+	it("delegates inline hints to slash-command autocomplete", () => {
+		const provider = createPromptActionAutocompleteProvider({
+			commands: [
+				{
+					name: "task",
+					description: "Run task",
+					getInlineHint: argumentText => (argumentText === "run" ? " <name>" : null),
+				},
+			],
+			basePath: "/tmp",
+			keybindings: AppKeybindingsManager.inMemory(),
+			copyCurrentLine: () => {},
+			copyPrompt: () => {},
+			undo: () => {},
+			moveCursorToMessageEnd: () => {},
+			moveCursorToMessageStart: () => {},
+			moveCursorToLineStart: () => {},
+			moveCursorToLineEnd: () => {},
+		});
+
+		expect(provider.getInlineHint(["/task run"], 0, 9)).toBe(" <name>");
+		expect(provider.getInlineHint(["plain"], 0, 5)).toBeNull();
+	});
 });

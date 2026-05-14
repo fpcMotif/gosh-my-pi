@@ -152,8 +152,8 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 							? { kind: "timeout", timeoutMs: firstEventTimeoutMs }
 							: undefined,
 					body: async signal => {
-						const { data, response, request_id } = await client.chat.completions
-							.create(params as any, { signal })
+						const { data, response, request_id } = await client.responses
+							.create(params, { signal })
 							.withResponse();
 						await notifyProviderResponse(options, response, model, request_id);
 						return data as unknown as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>;
@@ -270,7 +270,7 @@ function buildParams(
 
 	const params: OpenAIResponsesSamplingParams = {
 		model: model.id,
-		input: messages as any,
+		input: messages,
 		stream: true,
 		store: false,
 	};
@@ -293,23 +293,23 @@ function buildParams(
 	}
 
 	if (context.tools) {
-		params.tools = convertTools(context.tools, true, model) as any;
+		params.tools = convertTools(context.tools, true, model);
 		if (options !== undefined && options.toolChoice !== undefined && options.toolChoice !== null) {
-			params.tool_choice = mapOpenAIResponsesToolChoiceForTools(options.toolChoice, context.tools, model) as any;
+			params.tool_choice = mapOpenAIResponsesToolChoiceForTools(options.toolChoice, context.tools, model);
 		}
-		if (params.tools?.some(t => (t as { type?: string }).type === "custom")) {
+		if (params.tools?.some(t => t.type === "custom")) {
 			params.parallel_tool_calls = false;
 		}
 	}
 
 	if (model.reasoning) {
-		params.include = ["reasoning.encrypted_content"] as any;
+		params.include = ["reasoning.encrypted_content"];
 
 		if (options?.reasoning || options?.reasoningSummary) {
 			params.reasoning = {
 				effort: options?.reasoning || "medium",
 				summary: options?.reasoningSummary || "auto",
-			} as any;
+			};
 		}
 	}
 
@@ -360,7 +360,7 @@ export function convertTools(tools: Tool[], strictMode: boolean, model: Model<"o
 					syntax: tool.customFormat.syntax,
 					definition: compactGrammarDefinition(tool.customFormat.syntax, tool.customFormat.definition),
 				},
-			} as unknown as OpenAITool;
+			};
 		}
 		const strict = NO_STRICT === false && strictMode && tool.strict !== false;
 		const baseParameters = tool.parameters as unknown as Record<string, unknown>;
@@ -370,7 +370,7 @@ export function convertTools(tools: Tool[], strictMode: boolean, model: Model<"o
 			name: tool.name,
 			description: tool.description || "",
 			parameters,
-			...(effectiveStrict && { strict: true }),
-		} as OpenAITool;
+			strict: effectiveStrict,
+		};
 	});
 }

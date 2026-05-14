@@ -32,10 +32,6 @@ export class UserMessageComponent extends Container {
 
 	override render(width: number): string[] {
 		const lines = super.render(width);
-		if (lines.length === 0) {
-			return lines;
-		}
-
 		lines[0] = OSC133_ZONE_START + lines[0];
 		lines[lines.length - 1] = lines[lines.length - 1] + OSC133_ZONE_END + OSC133_ZONE_FINAL;
 		return lines;

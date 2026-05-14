@@ -23,7 +23,9 @@ import type { SessionManager } from "./session-manager";
  * from pi-agent-core directly, or by passing a stub SessionManager with a
  * spy on `appendRecoveryMarker`.
  */
-export function makeRecoveryMarkerLayer(sessionManager: SessionManager): Layer.Layer<RecoveryMarker> {
+type RecoveryMarkerSessionWriter = Pick<SessionManager, "appendRecoveryMarker">;
+
+export function makeRecoveryMarkerLayer(sessionManager: RecoveryMarkerSessionWriter): Layer.Layer<RecoveryMarker> {
 	return Layer.succeed(RecoveryMarker)({
 		append: (payload: RecoveryMarkerPayload) =>
 			Effect.try({
@@ -46,7 +48,7 @@ export function makeRecoveryMarkerLayer(sessionManager: SessionManager): Layer.L
 }
 
 export function appendRecoveryMarkerEffect(
-	sessionManager: SessionManager,
+	sessionManager: RecoveryMarkerSessionWriter,
 	payload: RecoveryMarkerPayload,
 ): Effect.Effect<void, SessionStorageError> {
 	return Effect.gen(function* () {

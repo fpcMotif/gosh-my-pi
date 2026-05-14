@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { loadPythonModules, type PythonModuleExecutor } from "@oh-my-pi/pi-coding-agent/ipy/modules";
+import { discoverPythonModules, loadPythonModules, type PythonModuleExecutor } from "@oh-my-pi/pi-coding-agent/ipy/modules";
 import { getAgentModulesDir, getProjectModulesDir, TempDir } from "@oh-my-pi/pi-utils";
 
 const fixturesDir = path.resolve(import.meta.dir, "../../test/fixtures/python-modules");
@@ -150,5 +150,23 @@ describe("python modules", () => {
 		};
 
 		expect(loadPythonModules(executor, { cwd, agentDir })).rejects.toThrow("Failed to load Python module");
+	});
+
+	it("surfaces unreadable module files with the module path", async () => {
+		tempRoot = TempDir.createSync("@omp-python-modules-");
+		const agentDir = path.join(tempRoot.path(), "agent");
+		const cwd = path.join(tempRoot.path(), "project");
+		const modulePath = path.join(getProjectModulesDir(cwd), "alpha.py");
+		await fs.mkdir(path.dirname(modulePath), { recursive: true });
+		await Bun.write(modulePath, "def alpha():\n    return 'alpha'\n");
+		await fs.chmod(modulePath, 0o000);
+
+		try {
+			await expect(discoverPythonModules({ cwd, agentDir })).rejects.toThrow(
+				`Failed to read Python module ${modulePath}:`,
+			);
+		} finally {
+			await fs.chmod(modulePath, 0o600);
+		}
 	});
 });

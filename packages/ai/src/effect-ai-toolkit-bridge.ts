@@ -23,6 +23,32 @@ import * as Tool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import type { Tool as PiAiTool } from "./types";
 
+type RuntimePiAiTool = Tool.ProviderDefined<
+	"pi-ai.tool",
+	string,
+	{
+		readonly args: typeof Schema.Void;
+		readonly parameters: typeof Schema.Unknown;
+		readonly success: typeof Schema.Void;
+		readonly failure: typeof Schema.Never;
+		readonly failureMode: "error";
+	},
+	false
+>;
+
+type RuntimePiAiTools = { readonly [name: string]: RuntimePiAiTool };
+
+const makeRuntimeTool = (tool: PiAiTool): RuntimePiAiTool =>
+	Object.assign(
+		Tool.providerDefined({
+			id: "pi-ai.tool",
+			customName: tool.name,
+			providerName: tool.name,
+			parameters: Schema.Unknown,
+		})(undefined),
+		{ description: tool.description },
+	);
+
 /**
  * Convert a pi-ai `Tool[]` into an Effect 4 `Toolkit` ready to pass to
  * `LanguageModel.streamText({ prompt, toolkit })`. Returns `undefined`
@@ -36,13 +62,8 @@ import type { Tool as PiAiTool } from "./types";
  */
 export const toolkitFromPiAiTools = (
 	tools: ReadonlyArray<PiAiTool> | undefined,
-): Toolkit.Toolkit<Record<string, Tool.Any>> | undefined => {
+): Toolkit.Toolkit<RuntimePiAiTools> | undefined => {
 	if (tools === undefined || tools.length === 0) return undefined;
-	const effectTools = tools.map(t =>
-		Tool.make(t.name, {
-			description: t.description,
-			parameters: Schema.Unknown,
-		}),
-	);
+	const effectTools = tools.map(makeRuntimeTool);
 	return Toolkit.make(...effectTools);
 };

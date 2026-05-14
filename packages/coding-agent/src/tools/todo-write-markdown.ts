@@ -67,10 +67,6 @@ function flushNote(state: MarkdownParseState): void {
 		state.noteBuf = [];
 		return;
 	}
-	while (state.noteBuf.length > 0 && state.noteBuf[state.noteBuf.length - 1] === "") {
-		state.noteBuf.pop();
-	}
-	if (state.noteBuf.length === 0) return;
 	const joined = state.noteBuf.join("\n");
 	state.currentTask.notes = state.currentTask.notes ? [...state.currentTask.notes, joined] : [joined];
 	state.noteBuf = [];

@@ -40,11 +40,7 @@ export function parseInternalUrl(input: string): InternalUrl {
 		const search = queryIdx !== -1 ? withoutHash.slice(queryIdx) : "";
 		const queryString = search.slice(1); // strip leading ?
 
-		// Strip search/hash from pathname captured by regex.
-		let rawPathname = pathMatch?.[1] ?? "";
-		if (queryIdx !== -1 && rawPathname.includes("?")) {
-			rawPathname = rawPathname.slice(0, rawPathname.indexOf("?"));
-		}
+		const rawPathname = pathMatch?.[1] ?? "";
 
 		parsed = {
 			protocol: `${hostMatch[1]}:`,

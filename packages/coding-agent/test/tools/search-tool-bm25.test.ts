@@ -3,6 +3,7 @@ import { getThemeByName } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { Settings } from "../../src/config/settings";
 import {
 	buildDiscoverableMCPSearchIndex,
+	searchDiscoverableMCPTools,
 	type DiscoverableMCPSearchIndex,
 } from "../../src/mcp/discoverable-tool-metadata";
 import type { ToolSession } from "../../src/tools/index";
@@ -135,6 +136,13 @@ describe("SearchToolBm25Tool", () => {
 				}),
 			},
 		]);
+	});
+
+	it("rejects empty discovery queries and returns no matches for an empty index", () => {
+		const emptyIndex = buildDiscoverableMCPSearchIndex([]);
+
+		expect(() => searchDiscoverableMCPTools(emptyIndex, "   ", 5)).toThrow("Query must contain");
+		expect(searchDiscoverableMCPTools(emptyIndex, "github", 5)).toEqual([]);
 	});
 
 	it("renders a titled discovery summary instead of the raw tool name", async () => {

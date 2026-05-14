@@ -35,4 +35,20 @@ describe("CountdownTimer", () => {
 		vi.advanceTimersByTime(1);
 		expect(onExpire).toHaveBeenCalledTimes(1);
 	});
+
+	it("ticks when remaining whole seconds change and requests renders", () => {
+		const onTick = vi.fn();
+		const onExpire = vi.fn();
+		const tui = { requestRender: vi.fn() };
+		const timer = new CountdownTimer(2_500, tui, onTick, onExpire);
+
+		expect(onTick).toHaveBeenCalledWith(3);
+		expect(tui.requestRender).toHaveBeenCalledTimes(1);
+
+		vi.advanceTimersByTime(1_000);
+		expect(onTick).toHaveBeenLastCalledWith(2);
+		expect(tui.requestRender).toHaveBeenCalledTimes(2);
+
+		timer.dispose();
+	});
 });

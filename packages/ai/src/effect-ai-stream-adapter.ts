@@ -87,7 +87,7 @@ const buildUsage = (usage: PiAiUsage | undefined): Response.Usage => {
  * `contentIndex` so a delta carries the same id as its corresponding
  * start/end, without needing an accumulator across calls.
  */
-export const toResponseStreamParts = (event: AssistantMessageEvent): ReadonlyArray<Response.StreamPart<{}>> => {
+export const toResponseStreamParts = (event: AssistantMessageEvent): ReadonlyArray<Response.AnyPart> => {
 	switch (event.type) {
 		case "start":
 			// No Effect 4 stream-open marker — the Stream starting IS the marker.

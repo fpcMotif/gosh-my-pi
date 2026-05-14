@@ -5,7 +5,8 @@
 //     and re-throws the typed `AgentRunError` instance (preserving instanceof).
 
 import { describe, expect, it } from "bun:test";
-import { type Agent, AgentBusy, AgentBusyError, ConfigInvalid } from "@oh-my-pi/pi-agent-core";
+import { type Agent, AgentBusy, AgentBusyError, type AgentMessage, ConfigInvalid } from "@oh-my-pi/pi-agent-core";
+import type { ImageContent } from "@oh-my-pi/pi-ai";
 import { fromAny } from "@total-typescript/shoehorn";
 import { isRecoveryPolicyEnabled, RECOVERY_POLICY_ENV_VAR, runAgentRequest } from "../src/session/run-bridge";
 import type { SessionManager } from "../src/session/session-manager";
@@ -81,6 +82,26 @@ describe("runAgentRequest (enabled: false — direct path)", () => {
 		expect(calls.length).toBe(1);
 		expect(calls[0]?.name).toBe("prompt");
 		expect(calls[0]?.args[0]).toBe("hello");
+	});
+
+	it("calls the image overload when a string prompt includes image content", async () => {
+		const { agent, calls } = fakeAgent();
+		const images: ImageContent[] = [{ type: "image", source: { type: "base64", mediaType: "image/png", data: "abc" } }];
+		const options = { messageSource: "user" as const };
+
+		await runAgentRequest(agent, fakeSessionManager(), { kind: "prompt", input: "see this", images, options }, { enabled: false });
+
+		expect(calls).toEqual([{ name: "prompt", args: ["see this", images, options] }]);
+	});
+
+	it("passes non-string prompt input through the message overload", async () => {
+		const { agent, calls } = fakeAgent();
+		const message: AgentMessage = { role: "user", content: "hello", timestamp: 123 };
+		const options = { messageSource: "synthetic" as const };
+
+		await runAgentRequest(agent, fakeSessionManager(), { kind: "prompt", input: message, options }, { enabled: false });
+
+		expect(calls).toEqual([{ name: "prompt", args: [message, options] }]);
 	});
 
 	it("calls agent.continue for continue request", async () => {

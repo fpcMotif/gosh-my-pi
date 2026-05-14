@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	formatDebugLogExpandedLines,
 	formatDebugLogLine,
+	parseDebugLogPid,
 	parseDebugLogTimestampMs,
 } from "../../src/debug/log-formatting";
 
@@ -40,14 +41,26 @@ describe("formatDebugLogLine", () => {
 		}
 	});
 
+	it("preserves empty expanded log lines as a single blank row", () => {
+		expect(formatDebugLogExpandedLines("", 80)).toEqual([""]);
+	});
+
 	it("parses timestamp from JSON log lines", () => {
 		const input = '{"timestamp":"2026-02-14T12:34:56.000Z","level":"info","message":"ok"}';
 		expect(parseDebugLogTimestampMs(input)).toBe(Date.parse("2026-02-14T12:34:56.000Z"));
 	});
 
 	it("returns undefined when timestamp is missing or invalid", () => {
+		expect(parseDebugLogTimestampMs("null")).toBeUndefined();
 		expect(parseDebugLogTimestampMs('{"message":"ok"}')).toBeUndefined();
 		expect(parseDebugLogTimestampMs('{"timestamp":"not-a-date"}')).toBeUndefined();
 		expect(parseDebugLogTimestampMs("not-json")).toBeUndefined();
+	});
+
+	it("parses finite numeric process ids from JSON log lines", () => {
+		expect(parseDebugLogPid('{"pid":1234,"message":"ok"}')).toBe(1234);
+		expect(parseDebugLogPid('{"pid":"1234"}')).toBeUndefined();
+		expect(parseDebugLogPid("null")).toBeUndefined();
+		expect(parseDebugLogPid("not-json")).toBeUndefined();
 	});
 });

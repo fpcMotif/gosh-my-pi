@@ -73,10 +73,6 @@ export function fuzzyFilter<T>(items: T[], query: string, getText: (item: T) => 
 		.split(/\s+/)
 		.filter(t => t.length > 0);
 
-	if (tokens.length === 0) {
-		return items;
-	}
-
 	const results: { item: T; totalScore: number }[] = [];
 
 	for (const item of items) {

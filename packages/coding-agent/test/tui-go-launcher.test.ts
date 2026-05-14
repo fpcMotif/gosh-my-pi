@@ -45,6 +45,22 @@ describe("tui-go launcher", () => {
 		expect(got).toEqual({ action: "spawn", binPath: "/bin/gmp-tui-go", mode: "go" });
 	});
 
+	test("normalizes explicit go/auto aliases and unknown values to Go mode", () => {
+		expect(
+			resolveTuiGoLaunch({
+				env: { GMP_TUI: "go" },
+				which: () => "/bin/gmp-tui-go",
+			}),
+		).toEqual({ action: "spawn", binPath: "/bin/gmp-tui-go", mode: "go" });
+
+		expect(
+			resolveTuiGoLaunch({
+				env: { GMP_TUI: "unsupported" },
+				which: () => "/bin/gmp-tui-go",
+			}),
+		).toEqual({ action: "spawn", binPath: "/bin/gmp-tui-go", mode: "go" });
+	});
+
 	test("does not attempt the Go TUI for rpc mode", () => {
 		expect(shouldAttemptTuiGoLaunch("rpc", true)).toBe(false);
 		expect(shouldAttemptTuiGoLaunch("text", true)).toBe(true);
