@@ -31,14 +31,19 @@ export function Header({ activeTab, onTabChange, onSync, syncing }: HeaderProps)
 							key={tab}
 							type="button"
 							onClick={() => onTabChange(tab)}
-							className={`tab-btn capitalize ${activeTab === tab ? "active" : ""}`}
+							className={`tab-btn capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-cyan)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-surface)] ${activeTab === tab ? "active" : ""}`}
 						>
 							{tab}
 						</button>
 					))}
 				</div>
 
-				<button type="button" onClick={onSync} disabled={syncing} className="btn btn-primary">
+				<button
+					type="button"
+					onClick={onSync}
+					disabled={syncing}
+					className="btn btn-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-pink)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-page)]"
+				>
 					<RefreshCw size={16} className={syncing ? "spin" : ""} />
 					{syncing ? "Syncing..." : "Sync"}
 				</button>
