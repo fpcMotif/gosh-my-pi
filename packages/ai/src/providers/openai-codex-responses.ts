@@ -37,7 +37,7 @@ import {
 	getOpenAIResponsesHistoryPayload,
 	normalizeResponsesToolCallId,
 } from "../utils";
-import { Effect } from "@oh-my-pi/pi-utils/effect";
+import { Duration, Effect } from "@oh-my-pi/pi-utils/effect";
 import { formatLocalAbortMessage, unwrapLocalAbort } from "../errors";
 import { type HttpShape, makeLiveHttp, unwrapHttpStreamBodyError } from "../layers/http";
 import { AssistantMessageEventStream } from "../utils/event-stream";

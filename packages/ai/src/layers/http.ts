@@ -76,7 +76,7 @@ export interface HttpShape {
 }
 
 /** Service tag for the Http Layer. */
-export class Http extends Context.Service<Http, HttpShape>()("@oh-my-pi/pi-ai/Http") {}
+export class Http extends Context.Tag("@oh-my-pi/pi-ai/Http")<Http, HttpShape>() {}
 
 function buildRequester(fetchFn: typeof fetch): HttpShape["request"] {
 	return (input, init) =>
