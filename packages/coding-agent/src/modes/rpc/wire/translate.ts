@@ -26,6 +26,8 @@ import type {
 	Usage,
 	UserMessage,
 } from "@oh-my-pi/pi-ai";
+import { logger } from "@oh-my-pi/pi-utils";
+import type { RenderResultOptions } from "../../../extensibility/custom-tools/types";
 import type { AgentSessionEvent } from "../../../session/agent-session";
 import type {
 	BashExecutionMessage,
@@ -33,9 +35,13 @@ import type {
 	HookMessage,
 	PythonExecutionMessage,
 } from "../../../session/messages";
-import type { ToolPresentation, ToolPresentationCode, ToolPresentationStatus } from "../../../tools/presentation";
+import type {
+	ToolPresentation,
+	ToolPresentationCode,
+	ToolPresentationResult,
+	ToolPresentationStatus,
+} from "../../../tools/presentation";
 import { toolRenderers } from "../../../tools/renderers";
-import type { RenderResultOptions } from "../../../extensibility/custom-tools/types";
 import type {
 	WireAssistantContentBlockV1,
 	WireAssistantMessageEventV1,
@@ -52,6 +58,8 @@ import type {
 	WireTextContentV1,
 	WireThinkingContentV1,
 	WireToolCallV1,
+	WireToolPresentationCodeV1,
+	WireToolPresentationStatusV1,
 	WireToolPresentationV1,
 	WireToolResultMessageV1,
 	WireToolResultV1,
@@ -109,15 +117,17 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 				...(event.errorKind !== undefined && { errorKind: toWireErrorKind(event.errorKind) }),
 			};
 
-		case "tool_execution_start":
+		case "tool_execution_start": {
+			const presentation = toWireCallPresentation(event.toolName, event.args);
 			return {
 				type: "tool_execution_start",
 				toolCallId: event.toolCallId,
 				toolName: event.toolName,
 				args: event.args,
 				...(event.intent !== undefined && { intent: event.intent }),
-				...withWirePresentation(toWireCallPresentation(event.toolName, event.args)),
+				...(presentation !== undefined && { presentation }),
 			};
+		}
 
 		case "tool_execution_update":
 			return {
@@ -125,23 +135,23 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 				toolCallId: event.toolCallId,
 				toolName: event.toolName,
 				args: event.args,
-				partialResult: toWireToolExecutionResult(event.toolName, event.partialResult, event.args, {
-					expanded: false,
-					isPartial: true,
-				}),
+				partialResult: toWireToolResult(event.partialResult),
 			};
 
-		case "tool_execution_end":
+		case "tool_execution_end": {
+			const presentation = toWireResultPresentation(event.toolName, event.result, {
+				expanded: false,
+				isPartial: false,
+			});
+			const wireResult = toWireToolResult(event.result);
 			return {
 				type: "tool_execution_end",
 				toolCallId: event.toolCallId,
 				toolName: event.toolName,
-				result: toWireToolExecutionResult(event.toolName, event.result, undefined, {
-					expanded: false,
-					isPartial: false,
-				}),
+				result: presentation === undefined ? wireResult : { ...wireResult, presentation },
 				...(event.isError !== undefined && { isError: event.isError }),
 			};
+		}
 
 		// ============================================================================
 		// Internal-only events — not on the v1 wire (decision 1B curated subset).
@@ -411,56 +421,35 @@ function toWireToolResult(result: { content: (TextContent | ImageContent)[]; det
 	};
 }
 
-function toWireToolExecutionResult(
+function safePresent(
 	toolName: string,
-	result: { content: (TextContent | ImageContent)[]; details?: unknown },
-	args: Record<string, unknown> | undefined,
-	options: RenderResultOptions,
-): WireToolResultV1 {
-	const wireResult = toWireToolResult(result);
-	return {
-		...wireResult,
-		...withWirePresentation(toWireResultPresentation(toolName, result, options, args)),
-	};
-}
-
-function withWirePresentation(
-	presentation: WireToolPresentationV1 | undefined,
-): { presentation: WireToolPresentationV1 } | Record<string, never> {
-	return presentation === undefined ? {} : { presentation };
-}
-
-function toWireCallPresentation(
-	toolName: string,
-	args: Record<string, unknown>,
+	produce: (renderer: (typeof toolRenderers)[string]) => ToolPresentationResult,
 ): WireToolPresentationV1 | undefined {
 	const renderer = toolRenderers[toolName];
-	if (!renderer?.presentCall) return undefined;
+	if (!renderer) return undefined;
+	let presentation: ToolPresentationResult;
 	try {
-		const presentation = renderer.presentCall(args, { expanded: false, isPartial: true });
-		return presentation === undefined ? undefined : toWireToolPresentation(presentation);
-	} catch {
+		presentation = produce(renderer);
+	} catch (error) {
+		logger.warn("Tool renderer failed", { tool: toolName, error: String(error) });
 		return undefined;
 	}
+	return presentation === undefined ? undefined : toWireToolPresentation(presentation);
+}
+
+function toWireCallPresentation(toolName: string, args: Record<string, unknown>): WireToolPresentationV1 | undefined {
+	return safePresent(toolName, renderer => renderer.presentCall?.(args, { expanded: false, isPartial: true }));
 }
 
 function toWireResultPresentation(
 	toolName: string,
 	result: { content: (TextContent | ImageContent)[]; details?: unknown },
 	options: RenderResultOptions,
-	args?: Record<string, unknown>,
 ): WireToolPresentationV1 | undefined {
-	const renderer = toolRenderers[toolName];
-	if (!renderer?.presentResult) return undefined;
-	try {
-		const presentation = renderer.presentResult(result, options, args);
-		return presentation === undefined ? undefined : toWireToolPresentation(presentation);
-	} catch {
-		return undefined;
-	}
+	return safePresent(toolName, renderer => renderer.presentResult?.(result, options));
 }
 
-function toWireToolPresentationStatus(status: ToolPresentationStatus): WireToolPresentationV1["status"] {
+function toWireToolPresentationStatus(status: ToolPresentationStatus): WireToolPresentationStatusV1 {
 	return {
 		...(status.icon !== undefined && { icon: status.icon }),
 		...(status.spinnerFrame !== undefined && { spinnerFrame: status.spinnerFrame }),
@@ -471,7 +460,7 @@ function toWireToolPresentationStatus(status: ToolPresentationStatus): WireToolP
 	};
 }
 
-function toWireToolPresentationCode(code: ToolPresentationCode): Extract<WireToolPresentationV1, { type: "code" }>["code"] {
+function toWireToolPresentationCode(code: ToolPresentationCode): WireToolPresentationCodeV1 {
 	return {
 		code: code.code,
 		...(code.language !== undefined && { language: code.language }),
@@ -486,22 +475,23 @@ function toWireToolPresentationCode(code: ToolPresentationCode): Extract<WireToo
 }
 
 function toWireToolPresentation(presentation: ToolPresentation): WireToolPresentationV1 {
-	if (presentation.type === "status") {
-		return { type: "status", status: toWireToolPresentationStatus(presentation.status) };
+	switch (presentation.type) {
+		case "status":
+			return { type: "status", status: toWireToolPresentationStatus(presentation.status) };
+		case "code":
+			return { type: "code", code: toWireToolPresentationCode(presentation.code) };
+		case "block":
+			return {
+				type: "block",
+				...(presentation.status !== undefined && { status: toWireToolPresentationStatus(presentation.status) }),
+				...(presentation.state !== undefined && { state: presentation.state }),
+				sections: presentation.sections.map(section => ({
+					...(section.label !== undefined && { label: section.label }),
+					lines: section.lines,
+				})),
+				...(presentation.applyBg !== undefined && { applyBg: presentation.applyBg }),
+			};
 	}
-	if (presentation.type === "code") {
-		return { type: "code", code: toWireToolPresentationCode(presentation.code) };
-	}
-	return {
-		type: "block",
-		...(presentation.status !== undefined && { status: toWireToolPresentationStatus(presentation.status) }),
-		...(presentation.state !== undefined && { state: presentation.state }),
-		sections: presentation.sections.map(section => ({
-			...(section.label !== undefined && { label: section.label }),
-			lines: section.lines,
-		})),
-		...(presentation.applyBg !== undefined && { applyBg: presentation.applyBg }),
-	};
 }
 
 function toWireAssistantMessageEvent(ev: AssistantMessageEvent): WireAssistantMessageEventV1 {
