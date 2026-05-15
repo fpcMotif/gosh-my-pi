@@ -176,10 +176,10 @@ Neutral tool presentation data in `packages/coding-agent/src/tools/presentation.
 The first slice supports status and output-block presentations plus a legacy
 `pi-tui` Adapter. `ToolExecutionComponent` now prefers `presentCall` /
 `presentResult` data from built-in renderers when available and falls back to
-the older component renderers. Initial migration covers simple `bash` and
-non-URL `read` call summaries; richer result output and edit diff presentation
-remain on the legacy renderers until their width-sensitive behavior has a
-dedicated migration pass.
+the older component renderers. Initial migration covers simple `bash`, non-URL
+`read`, and non-vim `edit`/`apply_patch` call summaries. Richer result output
+and edit diff result presentation remain on the legacy renderers until their
+width-sensitive behavior has a dedicated migration pass.
 
 **pi-tui (legacy frontend, scheduled for deletion — candidate #3)**:
 The in-process TUI library at `packages/tui/`. Originally hosted both the

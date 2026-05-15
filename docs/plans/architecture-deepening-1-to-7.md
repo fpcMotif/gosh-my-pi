@@ -17,34 +17,33 @@ This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architect
 
 ## Execution order overview
 
-| Step | Candidate | Primary package | Expected shape |
-| --- | --- | --- | --- |
-| 1 | AgentSession Reactor event routing | `packages/coding-agent` | Ordered event-router Module |
-| 2 | PostPromptRecovery scheduler | `packages/coding-agent` | Deep continuation scheduler Module |
-| 3 | RecoveryLedger write-side | `packages/coding-agent` / `packages/agent` | Recovery marker state Module |
-| 4 | ContextPressure decision Module | `packages/coding-agent` | Pure compaction/promotion decision Module |
-| 5 | ToolPresentation Module | `packages/coding-agent` | Neutral tool presentation data + rendering Adapters |
-| 6 | Direct RpcModelCatalog picker | `apps/tui-go` + RPC types | Picker consumes backend catalog directly |
-| 7 | Collapse gmp-only Workspace seam | `apps/tui-go` | Remove hypothetical `IsGmpMode` Seam and narrow caller Interfaces |
+| Step | Candidate                          | Primary package                            | Expected shape                                                    |
+| ---- | ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------- |
+| 1    | AgentSession Reactor event routing | `packages/coding-agent`                    | Ordered event-router Module                                       |
+| 2    | PostPromptRecovery scheduler       | `packages/coding-agent`                    | Deep continuation scheduler Module                                |
+| 3    | RecoveryLedger write-side          | `packages/coding-agent` / `packages/agent` | Recovery marker state Module                                      |
+| 4    | ContextPressure decision Module    | `packages/coding-agent`                    | Pure compaction/promotion decision Module                         |
+| 5    | ToolPresentation Module            | `packages/coding-agent`                    | Neutral tool presentation data + rendering Adapters               |
+| 6    | Direct RpcModelCatalog picker      | `apps/tui-go` + RPC types                  | Picker consumes backend catalog directly                          |
+| 7    | Collapse gmp-only Workspace seam   | `apps/tui-go`                              | Remove hypothetical `IsGmpMode` Seam and narrow caller Interfaces |
 
 ---
 
 ## Execution state
 
 - [x] **Step 1 complete** — `AgentEventRouter` extracted and wired as ordered display-event router for `#handleAgentEvent` with event-start queue cleanup and assistant display deobfuscation.
-  - _Downside/rollback:_ Router is a narrow shim (display-layer only) so remaining ordering logic stays in `AgentSession`; if this split causes regressions, rollback by restoring those three responsibilities directly in `#handleAgentEvent`.
+   - _Downside/rollback:_ Router is a narrow shim (display-layer only) so remaining ordering logic stays in `AgentSession`; if this split causes regressions, rollback by restoring those three responsibilities directly in `#handleAgentEvent`.
 - [x] **Step 2 complete** — PostPromptRecovery scheduler refactor.
-  - _Downside/rollback:_ `PostPromptScheduler` centralizes all delayed continuation logic; if regressions appear around scheduling edges (cancel vs skip semantics, prompt-generation mismatch, or continuation nesting with retry/TTSR), rollback by restoring local `#schedulePostPromptTask` plus direct `#postPromptTasks*`/`#waitForPostPromptRecovery` handling in `AgentSession` for one change set before reworking with narrower helpers.
+   - _Downside/rollback:_ `PostPromptScheduler` centralizes all delayed continuation logic; if regressions appear around scheduling edges (cancel vs skip semantics, prompt-generation mismatch, or continuation nesting with retry/TTSR), rollback by restoring local `#schedulePostPromptTask` plus direct `#postPromptTasks*`/`#waitForPostPromptRecovery` handling in `AgentSession` for one change set before reworking with narrower helpers.
 - [x] **Step 3 complete** — RecoveryLedger write-side extraction.
-  - _Downside/rollback:_ RecoveryLedger centralizes recovery-marker write timing and state; if it causes sequencing confusion, rollback by moving write timing back into AgentSession while keeping RecoveryMarker writes in one place and reintroducing a thinner helper on a smaller scope.
+   - _Downside/rollback:_ RecoveryLedger centralizes recovery-marker write timing and state; if it causes sequencing confusion, rollback by moving write timing back into AgentSession while keeping RecoveryMarker writes in one place and reintroducing a thinner helper on a smaller scope.
 - [x] **Step 4 complete** - ContextPressure decision module.
-  - _Downside/rollback:_ `ContextPressurePolicy` improves decision-table testability but adds one more hop between the automatic compaction trigger and the session mutations. If debugging pressure decisions gets harder, rollback by moving `decideContextPressure` back into `#checkCompaction` while keeping the pure candidate-ordering tests as a guard.
+   - _Downside/rollback:_ `ContextPressurePolicy` improves decision-table testability but adds one more hop between the automatic compaction trigger and the session mutations. If debugging pressure decisions gets harder, rollback by moving `decideContextPressure` back into `#checkCompaction` while keeping the pure candidate-ordering tests as a guard.
 - [ ] **Step 5 pending** - ToolPresentation module.
-  - _Progress:_ First slice added neutral `ToolPresentation` status/block data, a legacy `pi-tui` Adapter, `ToolExecutionComponent` preference for presentation data, and `bash`/non-URL `read` call-summary migration.
-  - _Downside/rollback:_ Result rendering and edit diff presentation are still legacy-renderer owned because their width-sensitive output needs a separate migration. Rollback by removing `presentCall`/`presentResult` preference in `ToolExecutionComponent` and leaving the adapter module unused.
+   - _Progress:_ First slice added neutral `ToolPresentation` status/block data, a legacy `pi-tui` Adapter, `ToolExecutionComponent` preference for presentation data, and `bash`/non-URL `read` call-summary migration. Second slice added non-vim `edit`/`apply_patch` call-summary presentation data while leaving legacy result rendering intact.
+   - _Downside/rollback:_ Result rendering and edit diff result presentation are still legacy-renderer owned because their width-sensitive output needs a separate migration. Rollback by removing `presentCall`/`presentResult` preference in `ToolExecutionComponent` and leaving the adapter module unused.
 - [ ] **Step 6 pending** — Direct `RpcModelCatalog` picker.
 - [ ] **Step 7 pending** — Collapse gmp-only `Workspace` seam.
-
 
 ## 1. AgentSession Reactor event routing
 
@@ -101,7 +100,7 @@ The Implementation may still use internal handler Modules, but callers should no
 7. Successful retry fallback emits success before retry state is cleared.
 8. On `agent_end`, retry handling runs before compaction.
 9. Compaction runs before todo completion checks.
-10. Tool-choice queue resolution stays at `turn_end`, not `message_end`.
+10.   Tool-choice queue resolution stays at `turn_end`, not `message_end`.
 
 ### Implementation slices
 
@@ -636,15 +635,15 @@ Do not run full `bun test` unless explicitly requested.
 
 ## Documentation updates by step
 
-| Step | Docs to update |
-| --- | --- |
-| 1 | `CONTEXT.md` if `AgentEventRouter` becomes canonical |
-| 2 | `CONTEXT.md` if `PostPromptScheduler` becomes canonical |
-| 3 | `CONTEXT.md`; possibly an ADR if deleting or changing `RecoveryMarker` Layer semantics |
-| 4 | `CONTEXT.md`, `docs/compaction.md` |
-| 5 | `CONTEXT.md`, `docs/tui.md`, custom tool rendering docs |
-| 6 | `CONTEXT.md`, ADR-0002 follow-up note if compatibility shim is removed |
-| 7 | `CONTEXT.md`, ADR-0002 implementation notes if the gmp-only carve-out is completed |
+| Step | Docs to update                                                                         |
+| ---- | -------------------------------------------------------------------------------------- |
+| 1    | `CONTEXT.md` if `AgentEventRouter` becomes canonical                                   |
+| 2    | `CONTEXT.md` if `PostPromptScheduler` becomes canonical                                |
+| 3    | `CONTEXT.md`; possibly an ADR if deleting or changing `RecoveryMarker` Layer semantics |
+| 4    | `CONTEXT.md`, `docs/compaction.md`                                                     |
+| 5    | `CONTEXT.md`, `docs/tui.md`, custom tool rendering docs                                |
+| 6    | `CONTEXT.md`, ADR-0002 follow-up note if compatibility shim is removed                 |
+| 7    | `CONTEXT.md`, ADR-0002 implementation notes if the gmp-only carve-out is completed     |
 
 ## First implementation recommendation
 
