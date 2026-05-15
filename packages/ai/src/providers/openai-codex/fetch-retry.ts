@@ -4,16 +4,14 @@
 //   - Iterating against a transient HTTP status (CODEX_RETRYABLE_STATUS) up
 //     to CODEX_MAX_RETRIES with linear back-off (CODEX_RETRY_DELAY_MS * n).
 //   - Honouring server-provided 429 `Retry-After` / "try again in Xs"
-//     deadlines while budgeting total 429 wait time to CODEX_RATE_LIMIT_BUDGET_MS.
+//     deadlines while budgeting total 429 wait time to
+//     CODEX_RATE_LIMIT_BUDGET_MS.
 //   - Bailing on persistent 429s (usage-limit exhaustion) so credential
 //     rotation can happen one layer up in the agent session.
-//
-// The implementation is a recursive Effect with a typed state record — no
-// `while(true)`, no `setTimeout`, no untyped Promise plumbing. Errors flow
-// through Effect.matchEffect so each retry decision is one explicit branch.
 
-import { Duration, Effect } from "@oh-my-pi/pi-utils/effect";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
 import { isUsageLimitError } from "../../rate-limit-utils";
+import { retryWithState, type RetryDecision } from "../../utils/retry";
 
 export const CODEX_RETRY_DELAY_MS = 500;
 export const CODEX_MAX_RETRIES = 5;
@@ -26,15 +24,13 @@ interface CodexFetchRetryState {
 	readonly rateLimitTimeSpentMs: number;
 }
 
-type CodexFetchRetryDecision =
-	| { readonly _tag: "return"; readonly response: Response }
-	| { readonly _tag: "retry"; readonly delayMs: number; readonly nextState: CodexFetchRetryState };
+type CodexFetchRetryDecision = RetryDecision<Response, CodexFetchRetryState, unknown>;
 
 const INITIAL_STATE: CodexFetchRetryState = { attempt: 0, rateLimitTimeSpentMs: 0 };
 
 /**
  * Resolve `fetch(url, init)` while transparently retrying transient HTTP
- * failures per Codex's retry policy. The supplied `signal` is honoured both
+ * failures per Codex's retry policy. The supplied `signal` is honored both
  * for the outer Effect run and the inner `fetch` (whichever rejects first
  * wins the race).
  */
@@ -53,38 +49,37 @@ export function codexFetchRetryEffect(
 	signal: AbortSignal | undefined,
 	state: CodexFetchRetryState,
 ): Effect.Effect<Response, unknown> {
-	return Effect.tryPromise({
-		try: () => fetch(url, { ...init, signal: signal ?? init.signal }),
-		catch: cause => cause,
-	}).pipe(
-		Effect.matchEffect({
-			onFailure: error => onCodexFetchFailure(url, init, signal, state, error),
-			onSuccess: response => onCodexFetchSuccess(url, init, signal, state, response),
-		}),
-	);
+	return retryWithState<Response, CodexFetchRetryState, unknown>({
+		initialState: state,
+		attempt: () =>
+			Effect.tryPromise({
+				try: () => fetch(url, { ...init, signal: signal ?? init.signal }),
+				catch: cause => cause,
+			}),
+		onSuccess: (response, currentState) => onCodexFetchSuccess(signal, currentState, response),
+		onFailure: (error, currentState) => onCodexFetchFailure(signal, currentState, error),
+	});
 }
 
 function onCodexFetchSuccess(
-	url: string,
-	init: RequestInit,
 	signal: AbortSignal | undefined,
 	state: CodexFetchRetryState,
 	response: Response,
-): Effect.Effect<Response, unknown> {
-	if (!CODEX_RETRYABLE_STATUS.has(response.status)) return Effect.succeed(response);
-	if (signal?.aborted) return Effect.succeed(response);
+): Effect.Effect<CodexFetchRetryDecision, unknown> {
+	if (!CODEX_RETRYABLE_STATUS.has(response.status)) {
+		return Effect.succeed({ _tag: "return", value: response });
+	}
+	if (signal?.aborted) {
+		return Effect.succeed({ _tag: "return", value: response });
+	}
 
 	return Effect.tryPromise({
 		try: () => response.clone().text(),
 		catch: cause => cause,
 	}).pipe(
 		Effect.matchEffect({
-			onFailure: error => onCodexFetchFailure(url, init, signal, state, error),
-			onSuccess: errorBody => {
-				const decision = decideCodexFetchRetry(response, state, errorBody);
-				if (decision._tag === "return") return Effect.succeed(decision.response);
-				return delayThenRetryCodexFetch(url, init, signal, decision.delayMs, decision.nextState);
-			},
+			onFailure: error => onCodexFetchFailure(signal, state, error),
+			onSuccess: errorBody => Effect.succeed(decideCodexFetchRetry(response, state, errorBody)),
 		}),
 	);
 }
@@ -94,17 +89,17 @@ function decideCodexFetchRetry(
 	state: CodexFetchRetryState,
 	errorBody: string,
 ): CodexFetchRetryDecision {
-	// Usage-limit errors are persistent (account allocation exhausted) — retrying
+	// Usage-limit errors are persistent (account allocation exhausted) so retrying
 	// with the same credential is futile. Bail out so the agent session layer
 	// can rotate credentials instead.
 	if (response.status === 429 && isUsageLimitError(errorBody)) {
-		return { _tag: "return", response };
+		return { _tag: "return", value: response };
 	}
 
 	const { delay, serverProvided } = parseCodexRetryDelayMs(response, state.attempt, errorBody);
 	if (response.status === 429 && serverProvided) {
 		if (state.rateLimitTimeSpentMs + delay > CODEX_RATE_LIMIT_BUDGET_MS) {
-			return { _tag: "return", response };
+			return { _tag: "return", value: response };
 		}
 		return {
 			_tag: "retry",
@@ -116,7 +111,7 @@ function decideCodexFetchRetry(
 		};
 	}
 
-	if (state.attempt >= CODEX_MAX_RETRIES) return { _tag: "return", response };
+	if (state.attempt >= CODEX_MAX_RETRIES) return { _tag: "return", value: response };
 
 	return {
 		_tag: "retry",
@@ -126,30 +121,19 @@ function decideCodexFetchRetry(
 }
 
 function onCodexFetchFailure(
-	url: string,
-	init: RequestInit,
 	signal: AbortSignal | undefined,
 	state: CodexFetchRetryState,
 	error: unknown,
-): Effect.Effect<Response, unknown> {
+): Effect.Effect<CodexFetchRetryDecision, unknown> {
 	if (state.attempt >= CODEX_MAX_RETRIES || signal?.aborted) return Effect.fail(error);
-	return delayThenRetryCodexFetch(url, init, signal, CODEX_RETRY_DELAY_MS * (state.attempt + 1), {
-		attempt: state.attempt + 1,
-		rateLimitTimeSpentMs: state.rateLimitTimeSpentMs,
+	return Effect.succeed({
+		_tag: "retry",
+		delayMs: CODEX_RETRY_DELAY_MS * (state.attempt + 1),
+		nextState: {
+			attempt: state.attempt + 1,
+			rateLimitTimeSpentMs: state.rateLimitTimeSpentMs,
+		},
 	});
-}
-
-function delayThenRetryCodexFetch(
-	url: string,
-	init: RequestInit,
-	signal: AbortSignal | undefined,
-	delayMs: number,
-	nextState: CodexFetchRetryState,
-): Effect.Effect<Response, unknown> {
-	return Effect.succeed(undefined).pipe(
-		Effect.delay(Duration.millis(delayMs)),
-		Effect.flatMap(() => codexFetchRetryEffect(url, init, signal, nextState)),
-	);
 }
 
 /**

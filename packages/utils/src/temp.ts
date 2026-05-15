@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -36,8 +37,48 @@ export class TempDir {
 	}
 
 	removeSync(): void {
-		fs.rmSync(this.#path, { recursive: true, force: true });
-		this.#removePromise = Promise.resolve();
+		// On Windows, `fs.rmSync({ force: true })` can still surface EBUSY
+		// when a sibling like bun:sqlite holds the file handle past `close()`
+		// return; the kernel releases on its own clock, not ours. We retry
+		// briefly, then fall through to `cmd.exe /c rd /s /q` which uses
+		// the WIN32 RemoveDirectory APIs (different lock semantics than the
+		// libuv path) as the last-resort. Non-Windows uses one rmSync call.
+		if (process.platform !== "win32") {
+			fs.rmSync(this.#path, { recursive: true, force: true });
+			this.#removePromise = Promise.resolve();
+			return;
+		}
+		const maxAttempts = 6;
+		let lastError: unknown;
+		for (let i = 0; i < maxAttempts; i += 1) {
+			try {
+				fs.rmSync(this.#path, { recursive: true, force: true });
+				this.#removePromise = Promise.resolve();
+				return;
+			} catch (err) {
+				lastError = err;
+				const code = (err as NodeJS.ErrnoException).code;
+				if (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") {
+					throw err;
+				}
+				const deadline = Date.now() + 250;
+				while (Date.now() < deadline) {
+					// busy-wait: removeSync is called from `using` / `Disposable`
+					// contracts where async would change the contract.
+				}
+			}
+		}
+		try {
+			// `cmd.exe /c rd /s /q` uses WIN32 RemoveDirectoryW / DeleteFileW
+			// directly; it has different (more forgiving) lock semantics than
+			// the libuv path that fs.rmSync rides on under Bun on Windows.
+			execSync(`cmd.exe /c rd /s /q "${this.#path}"`, { stdio: "ignore" });
+			this.#removePromise = Promise.resolve();
+			return;
+		} catch {
+			// Fall through to throw the last fs error.
+		}
+		throw lastError;
 	}
 
 	toString(): string {

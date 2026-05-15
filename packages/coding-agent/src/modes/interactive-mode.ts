@@ -75,12 +75,7 @@ import { SelectorController } from "./controllers/selector-controller";
 import { SSHCommandController } from "./controllers/ssh-command-controller";
 import { ChatKeyNav } from "./components/chat-keynav";
 import { RowSplit } from "./components/row-split";
-<<<<<<< Updated upstream
 import { Sidebar, type SidebarMcpServer, type SidebarModelCard } from "./components/sidebar";
-=======
-import { ShimmerLoader } from "./components/shimmer-loader";
-import { Sidebar, type SidebarMcpServer } from "./components/sidebar";
->>>>>>> Stashed changes
 import { TodoCommandController } from "./controllers/todo-command-controller";
 import { OAuthManualInputManager } from "./oauth-manual-input";
 import { SessionObserverRegistry } from "./session-observer-registry";

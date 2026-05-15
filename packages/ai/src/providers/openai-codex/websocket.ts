@@ -200,6 +200,8 @@ export class CodexWebSocketConnection {
 				settled = true;
 			};
 
+			// WebSocket lifecycle is exposed only as DOM events; Effect owns the
+			// handshake, timeout, and abort race around this listener boundary.
 			socket.addEventListener("open", event => {
 				this.#captureHandshakeHeaders(socket, event);
 				settleSuccess();

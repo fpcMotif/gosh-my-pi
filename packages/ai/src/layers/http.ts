@@ -1,4 +1,4 @@
-// Http Layer — wraps `fetch` as an Effect service so call sites can be
+// Http Layer - wraps `fetch` as an Effect service so call sites can be
 // provided with a real fetch (LiveHttp) or a test stub (makeHttpLayer).
 //
 // Two methods:
@@ -15,7 +15,7 @@ import { iterateWithIdleTimeout } from "../utils/idle-iterator";
 
 /**
  * Tagged error raised by the Http service when the underlying `fetch` rejects
- * (network error, abort, DNS, etc.). Non-2xx responses are NOT raised here —
+ * (network error, abort, DNS, etc.). Non-2xx responses are NOT raised here -
  * callers inspect `Response.ok` themselves so retry / fallback logic stays
  * explicit.
  */
@@ -135,7 +135,7 @@ function buildStreamer(): HttpShape["requestStream"] {
 		Effect.suspend(() => {
 			const startedAt = Date.now();
 			// Controller lifetime spans the open Effect AND the iterable's
-			// iteration — handed off to the iterable wrapper on success.
+			// iteration - handed off to the iterable wrapper on success.
 			const controller = new AbortController();
 			let abortListener: (() => void) | undefined;
 			const cleanup = (): void => {
@@ -148,7 +148,7 @@ function buildStreamer(): HttpShape["requestStream"] {
 
 			// Open: body() runs synchronously inside Effect.suspend so the
 			// watchdog race is fair. The body's own rejection is preserved
-			// as a tagged error in the failure channel — non-2xx HTTP errors
+			// as a tagged error in the failure channel - non-2xx HTTP errors
 			// must reach the caller's catch handler as unwrap-able causes
 			// (e.g. "rate limit"), not collapsed to LocalAbort.
 			const open = Effect.suspend(() => {
@@ -221,7 +221,7 @@ export function makeLiveHttp(fetchFn: typeof fetch = fetch): HttpShape {
 	return { request: buildRequester(fetchFn), requestStream: buildStreamer() };
 }
 
-/** Live Layer — uses the global `fetch`. */
+/** Live Layer - uses the global `fetch`. */
 export const LiveHttp: Layer.Layer<Http> = Layer.succeed(Http)(makeLiveHttp());
 
 /**

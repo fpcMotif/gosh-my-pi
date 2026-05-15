@@ -37,7 +37,7 @@ import {
 	getOpenAIResponsesHistoryPayload,
 	normalizeResponsesToolCallId,
 } from "../utils";
-import { Duration, Effect } from "@oh-my-pi/pi-utils/effect";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
 import { formatLocalAbortMessage, unwrapLocalAbort } from "../errors";
 import { type HttpShape, makeLiveHttp, unwrapHttpStreamBodyError } from "../layers/http";
 import { AssistantMessageEventStream } from "../utils/event-stream";
@@ -45,6 +45,7 @@ import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-ins
 import { getOpenAIStreamIdleTimeoutMs, getStreamFirstEventTimeoutMs } from "../utils/idle-iterator";
 import { parseStreamingJson } from "../utils/json-parse";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
+import { type RetryDecision, retryWithState } from "../utils/retry";
 import { compactGrammarDefinition } from "./grammar";
 import {
 	CODEX_BASE_URL,
@@ -99,7 +100,6 @@ export interface OpenAICodexResponsesOptions extends StreamOptions {
 
 const CODEX_DEBUG = $flag("PI_CODEX_DEBUG");
 const CODEX_MAX_RETRIES = 5;
-const CODEX_RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const CODEX_RETRY_DELAY_MS = 500;
 const CODEX_WEBSOCKET_IDLE_TIMEOUT_MS = 300000;
 const CODEX_WEBSOCKET_FIRST_EVENT_TIMEOUT_MS = 15000;
@@ -113,8 +113,28 @@ const X_MODELS_ETAG_HEADER = "x-models-etag";
 const X_REASONING_INCLUDED_HEADER = "x-reasoning-included";
 /** Connection-level websocket failures that should immediately fall back to SSE without retrying. */
 const CODEX_WEBSOCKET_FATAL_PATTERNS = ["websocket error:", "websocket closed before open", "connection timeout"];
-/** Max total time to spend retrying 429s with server-provided delays (5 minutes). */
-const CODEX_RATE_LIMIT_BUDGET_MS = 5 * 60 * 1000;
+
+type CodexStreamCompletion = {
+	readonly firstTokenTime?: number;
+};
+
+type CodexStreamRetryState = {
+	readonly providerRetryAttempt: number;
+	readonly websocketStreamRetries: number;
+};
+
+type CodexStreamRetryDecision = RetryDecision<CodexStreamCompletion, CodexStreamRetryState, unknown>;
+
+type CodexTransportOpenResult = {
+	eventStream: AsyncGenerator<Record<string, unknown>>;
+	requestBodyForState: RequestBody;
+	transport: CodexTransport;
+};
+
+type CodexWebSocketOpenState = {
+	websocketRetries: number;
+	websocketRetryBudget: number;
+};
 
 type CodexEventItem = ResponseReasoningItem | ResponseOutputMessage | ResponseFunctionToolCall | ResponseCustomToolCall;
 type CodexOutputBlock = ThinkingContent | TextContent | (ToolCall & { partialJson: string });
@@ -145,7 +165,7 @@ interface CodexRequestSetup {
 	/**
 	 * Owns *non-fetch* aborts only: retry sleeps, websocket reconnects,
 	 * follow-up turns. The SSE fetch lifetime is owned by Http.requestStream
-	 * (see openCodexSseTransport) — those two AbortControllers are sibling
+	 * (see openCodexSseTransport); those two AbortControllers are sibling
 	 * concerns and no longer share a merged signal (Bug #2 fix in ADR-0005).
 	 */
 	nonFetchAbortController: AbortController;
@@ -179,10 +199,6 @@ interface CodexStreamProcessingContext {
 	firstTokenTime?: number;
 }
 
-interface CodexStreamCompletion {
-	firstTokenTime?: number;
-}
-
 function parseCodexNonNegativeInteger(value: string | undefined, fallback: number): number {
 	if (!value) return fallback;
 	const parsed = Number(value);
@@ -208,9 +224,6 @@ function getCodexWebSocketRetryBudget(): number {
 function getCodexWebSocketRetryDelayMs(retry: number): number {
 	const baseDelay = parseCodexPositiveInteger($env.PI_CODEX_WEBSOCKET_RETRY_DELAY_MS, CODEX_RETRY_DELAY_MS);
 	return baseDelay * Math.max(1, retry);
-}
-function sleepWithAbort(delayMs: number, signal?: AbortSignal): Promise<void> {
-	return Effect.runPromise(Effect.sleep(Duration.millis(Math.max(0, delayMs))), { signal });
 }
 
 function getCodexWebSocketIdleTimeoutMs(): number {
@@ -366,7 +379,7 @@ function createRequestSetup(options: OpenAICodexResponsesOptions | undefined): C
 	const nonFetchAbortController = new AbortController();
 	// Bridge caller -> non-fetch controller so a caller abort also cancels
 	// in-flight retry sleeps and websocket reconnects. The SSE fetch is no
-	// longer covered here — Http.requestStream owns that controller.
+	// longer covered here; Http.requestStream owns that controller.
 	if (options?.signal !== undefined) {
 		const callerSignal = options.signal;
 		if (callerSignal.aborted) {
@@ -478,9 +491,9 @@ async function buildTransformedCodexRequestBody(
 			}
 		}
 		// When a custom-tool is active, force serial tool-calling. OpenAI's
-		// `parallel_tool_calls` is request-scoped — disabling it here affects
+		// `parallel_tool_calls` is request-scoped; disabling it here affects
 		// every tool in the turn, not just the custom one. That's coarser
-		// than spec §1's "supports_parallel_tool_calls = false" (which
+		// than spec section 1's "supports_parallel_tool_calls = false" (which
 		// strictly targets `apply_patch`), but the platform API offers no
 		// per-tool flag.
 		const emittedTools = params.tools as CodexToolPayload[];
@@ -518,7 +531,6 @@ async function openInitialCodexEventStream(
 			requestSetup,
 			options,
 			websocketState,
-			0,
 			getCodexWebSocketRetryBudget(),
 		);
 		if (websocketTransport !== null) return websocketTransport;
@@ -531,39 +543,62 @@ async function openInitialCodexWebSocketWithRetry(
 	requestSetup: CodexRequestSetup,
 	options: OpenAICodexResponsesOptions | undefined,
 	websocketState: CodexWebSocketSessionState,
-	websocketRetries: number,
 	websocketRetryBudget: number,
 ): Promise<{
 	eventStream: AsyncGenerator<Record<string, unknown>>;
 	requestBodyForState: RequestBody;
 	transport: CodexTransport;
 } | null> {
-	try {
-		return await openCodexWebSocketTransport(requestContext, requestSetup, options, websocketState, websocketRetries);
-	} catch (error) {
-		const websocketError = error instanceof Error ? error : new Error(String(error));
-		const isFatal = isCodexWebSocketFatalError(websocketError);
-		const activateFallback = isFatal || websocketRetries >= websocketRetryBudget;
-		recordCodexWebSocketFailure(websocketState, activateFallback);
-		logCodexDebug("codex websocket fallback", {
-			error: websocketError.message,
-			retry: websocketRetries,
-			retryBudget: websocketRetryBudget,
-			activated: activateFallback,
-			fatal: isFatal,
-		});
-		if (activateFallback) return null;
-		const nextRetry = websocketRetries + 1;
-		await sleepWithAbort(getCodexWebSocketRetryDelayMs(nextRetry), requestSetup.nonFetchSignal);
-		return openInitialCodexWebSocketWithRetry(
-			requestContext,
-			requestSetup,
-			options,
-			websocketState,
-			nextRetry,
-			websocketRetryBudget,
-		);
-	}
+	const initialState: CodexWebSocketOpenState = {
+		websocketRetries: 0,
+		websocketRetryBudget,
+	};
+	return Effect.runPromise(
+		retryWithState<CodexTransportOpenResult | null, CodexWebSocketOpenState, unknown>({
+			initialState,
+			attempt: state =>
+				Effect.tryPromise({
+					try: () =>
+						openCodexWebSocketTransport(
+							requestContext,
+							requestSetup,
+							options,
+							websocketState,
+							state.websocketRetries,
+						),
+					catch: error => error,
+				}),
+			onSuccess: result => Effect.succeed({ _tag: "return", value: result }),
+			onFailure: (error, state) => {
+				if (requestSetup.nonFetchSignal.aborted) {
+					return Effect.fail(error);
+				}
+				const websocketError = error instanceof Error ? error : new Error(String(error));
+				const isFatal = isCodexWebSocketFatalError(websocketError);
+				const activateFallback = isFatal || state.websocketRetries >= state.websocketRetryBudget;
+				recordCodexWebSocketFailure(websocketState, activateFallback);
+				logCodexDebug("codex websocket fallback", {
+					error: websocketError.message,
+					retry: state.websocketRetries,
+					retryBudget: state.websocketRetryBudget,
+					activated: activateFallback,
+					fatal: isFatal,
+				});
+
+				if (activateFallback) {
+					return Effect.succeed({ _tag: "return", value: null });
+				}
+
+				const nextRetry = state.websocketRetries + 1;
+				return Effect.succeed({
+					_tag: "retry",
+					delayMs: getCodexWebSocketRetryDelayMs(nextRetry),
+					nextState: { websocketRetries: nextRetry, websocketRetryBudget: state.websocketRetryBudget },
+				});
+			},
+		}),
+		{ signal: requestSetup.nonFetchSignal },
+	);
 }
 async function openCodexWebSocketTransport(
 	requestContext: CodexRequestContext,
@@ -725,29 +760,46 @@ async function processCodexResponseStream(
 ): Promise<CodexStreamCompletion> {
 	const { output, stream } = context;
 	stream.push({ type: "start", partial: output });
-	return processCodexResponseStreamAttempt(context, runtime);
+	return Effect.runPromise(
+		retryWithState<CodexStreamCompletion, CodexStreamRetryState, unknown>({
+			initialState: {
+				providerRetryAttempt: runtime.providerRetryAttempt,
+				websocketStreamRetries: runtime.websocketStreamRetries,
+			},
+			attempt: () =>
+				Effect.tryPromise({
+					try: () => processCodexResponseStreamAttempt(context, runtime),
+					catch: cause => cause,
+				}),
+			onSuccess: (completion, state) => {
+				runtime.providerRetryAttempt = state.providerRetryAttempt;
+				runtime.websocketStreamRetries = state.websocketStreamRetries;
+				return Effect.succeed({ _tag: "return", value: completion });
+			},
+			onFailure: (error, state) =>
+				Effect.tryPromise({
+					try: () => recoverCodexStreamError(context, runtime, state, error),
+					catch: cause => cause,
+				}),
+		}),
+		{ signal: context.requestSetup.nonFetchSignal },
+	);
 }
 
 async function processCodexResponseStreamAttempt(
 	context: CodexStreamProcessingContext,
 	runtime: CodexStreamRuntime,
 ): Promise<CodexStreamCompletion> {
-	try {
-		let firstTokenTime = context.firstTokenTime;
-		for await (const rawEvent of runtime.eventStream) {
-			firstTokenTime = handleCodexStreamEvent({
-				...context,
-				runtime,
-				rawEvent,
-				firstTokenTime,
-			});
-		}
-		return { firstTokenTime };
-	} catch (error) {
-		const recovered = await recoverCodexStreamError(context, runtime, error);
-		if (!recovered) throw error;
-		return processCodexResponseStreamAttempt(context, runtime);
+	let firstTokenTime = context.firstTokenTime;
+	for await (const rawEvent of runtime.eventStream) {
+		firstTokenTime = handleCodexStreamEvent({
+			...context,
+			runtime,
+			rawEvent,
+			firstTokenTime,
+		});
 	}
+	return { firstTokenTime };
 }
 
 function handleCodexStreamEvent(args: {
@@ -1174,18 +1226,25 @@ function handleResponseCompleted(
 async function recoverCodexStreamError(
 	context: CodexStreamProcessingContext,
 	runtime: CodexStreamRuntime,
+	retryState: CodexStreamRetryState,
 	error: unknown,
-): Promise<boolean> {
-	if (await tryReconnectCodexWebSocketOnConnectionLimit(context, runtime, error)) {
-		return true;
+): Promise<CodexStreamRetryDecision> {
+	if (context.options?.signal?.aborted || context.requestSetup.nonFetchSignal.aborted) {
+		return { _tag: "fail", error };
 	}
-	if (await tryReplayWebsocketFailureOverSse(context, runtime, error)) {
-		return true;
+	const reconnect = await tryReconnectCodexWebSocketOnConnectionLimit(context, runtime, retryState, error);
+	if (reconnect !== null) {
+		return reconnect;
 	}
-	if (await tryRetryCodexProviderError(context, runtime, error)) {
-		return true;
+	const replay = await tryReplayWebsocketFailureOverSse(context, runtime, retryState, error);
+	if (replay !== null) {
+		return replay;
 	}
-	return false;
+	const provider = await tryRetryCodexProviderError(context, runtime, retryState, error);
+	if (provider !== null) {
+		return provider;
+	}
+	return { _tag: "fail", error };
 }
 
 /**
@@ -1197,14 +1256,15 @@ async function recoverCodexStreamError(
 async function tryReconnectCodexWebSocketOnConnectionLimit(
 	context: CodexStreamProcessingContext,
 	runtime: CodexStreamRuntime,
+	retryState: CodexStreamRetryState,
 	error: unknown,
-): Promise<boolean> {
+): Promise<CodexStreamRetryDecision | null> {
 	if (!(error instanceof CodexProviderStreamError) || error.code !== "websocket_connection_limit_reached") {
-		return false;
+		return null;
 	}
 	const websocketState = context.requestContext.websocketState;
-	if (!websocketState || runtime.transport !== "websocket" || context.options?.signal?.aborted) {
-		return false;
+	if (!websocketState || runtime.transport !== "websocket") {
+		return null;
 	}
 
 	// Close the stale connection so getOrCreateCodexWebSocketConnection creates a fresh one.
@@ -1218,7 +1278,7 @@ async function tryReconnectCodexWebSocketOnConnectionLimit(
 	});
 
 	if (context.output.content.length > 0) {
-		// Content already emitted to the caller — cannot safely continue on a new WS.
+		// Content already emitted to the caller cannot safely continue on a new WS.
 		// Reset and replay the full request over SSE.
 		runtime.canSafelyReplayWebsocketOverSse = true;
 		runtime.currentItem = null;
@@ -1227,21 +1287,40 @@ async function tryReconnectCodexWebSocketOnConnectionLimit(
 		resetOutputState(context.output);
 		context.firstTokenTime = undefined;
 		recordCodexWebSocketFailure(websocketState, true);
-		await reopenCodexSseRuntimeStream(context, runtime, websocketState);
-		return true;
+		return {
+			_tag: "retry",
+			delayMs: 0,
+			nextState: retryState,
+			beforeRetry: Effect.tryPromise({
+				try: () => reopenCodexSseRuntimeStream(context, runtime, websocketState),
+				catch: cause => cause,
+			}),
+		};
 	}
 
-	// No content emitted yet — reconnect over websocket.
-	runtime.websocketStreamRetries += 1;
-	await reopenCodexWebSocketRuntimeStream(context, runtime, websocketState);
-	return true;
+	// No content emitted yet; reconnect over websocket.
+	const nextState = {
+		providerRetryAttempt: retryState.providerRetryAttempt,
+		websocketStreamRetries: retryState.websocketStreamRetries + 1,
+	};
+	runtime.providerRetryAttempt = nextState.providerRetryAttempt;
+	runtime.websocketStreamRetries = nextState.websocketStreamRetries;
+	return {
+		_tag: "retry",
+		delayMs: 0,
+		nextState,
+		beforeRetry: Effect.tryPromise({
+			try: () => reopenCodexWebSocketRuntimeStream(context, runtime, websocketState),
+			catch: cause => cause,
+		}),
+	};
 }
-
 async function tryReplayWebsocketFailureOverSse(
 	context: CodexStreamProcessingContext,
 	runtime: CodexStreamRuntime,
+	retryState: CodexStreamRetryState,
 	error: unknown,
-): Promise<boolean> {
+): Promise<CodexStreamRetryDecision | null> {
 	const websocketState = context.requestContext.websocketState;
 	const canReplay =
 		runtime.transport === "websocket" &&
@@ -1250,18 +1329,18 @@ async function tryReplayWebsocketFailureOverSse(
 		runtime.canSafelyReplayWebsocketOverSse &&
 		!runtime.sawTerminalEvent &&
 		!context.options?.signal?.aborted;
-	if (!canReplay) return false;
+	if (!canReplay) return null;
 
 	const state = websocketState;
 	const streamError = error instanceof Error ? error : new Error(String(error));
 	const replayingBufferedOutputOverSse = context.output.content.length > 0;
 	const isFatal = isCodexWebSocketFatalError(streamError);
 	const activateFallback =
-		replayingBufferedOutputOverSse || isFatal || runtime.websocketStreamRetries >= getCodexWebSocketRetryBudget();
+		replayingBufferedOutputOverSse || isFatal || retryState.websocketStreamRetries >= getCodexWebSocketRetryBudget();
 	recordCodexWebSocketFailure(state, activateFallback);
 	logCodexDebug("codex websocket stream fallback", {
 		error: streamError.message,
-		retry: runtime.websocketStreamRetries,
+		retry: retryState.websocketStreamRetries,
 		retryBudget: getCodexWebSocketRetryBudget(),
 		activated: activateFallback,
 		fatal: isFatal,
@@ -1269,13 +1348,21 @@ async function tryReplayWebsocketFailureOverSse(
 	});
 
 	if (!activateFallback) {
-		runtime.websocketStreamRetries += 1;
-		await sleepWithAbort(
-			getCodexWebSocketRetryDelayMs(runtime.websocketStreamRetries),
-			context.requestSetup.nonFetchSignal,
-		);
-		await reopenCodexWebSocketRuntimeStream(context, runtime, state);
-		return true;
+		const nextState = {
+			providerRetryAttempt: retryState.providerRetryAttempt,
+			websocketStreamRetries: retryState.websocketStreamRetries + 1,
+		};
+		runtime.providerRetryAttempt = nextState.providerRetryAttempt;
+		runtime.websocketStreamRetries = nextState.websocketStreamRetries;
+		return {
+			_tag: "retry",
+			delayMs: getCodexWebSocketRetryDelayMs(nextState.websocketStreamRetries),
+			nextState,
+			beforeRetry: Effect.tryPromise({
+				try: () => reopenCodexWebSocketRuntimeStream(context, runtime, state),
+				catch: cause => cause,
+			}),
+		};
 	}
 
 	if (replayingBufferedOutputOverSse) {
@@ -1287,25 +1374,35 @@ async function tryReplayWebsocketFailureOverSse(
 		context.firstTokenTime = undefined;
 	}
 
-	await reopenCodexSseRuntimeStream(context, runtime, state);
-	return true;
+	return {
+		_tag: "retry",
+		delayMs: 0,
+		nextState: retryState,
+		beforeRetry: Effect.tryPromise({
+			try: () => reopenCodexSseRuntimeStream(context, runtime, state),
+			catch: cause => cause,
+		}),
+	};
 }
-
 async function tryRetryCodexProviderError(
 	context: CodexStreamProcessingContext,
 	runtime: CodexStreamRuntime,
+	retryState: CodexStreamRetryState,
 	error: unknown,
-): Promise<boolean> {
-	if (
-		!isRetryableCodexProviderError(error) ||
-		context.output.content.length > 0 ||
-		runtime.providerRetryAttempt >= CODEX_MAX_RETRIES ||
-		context.options?.signal?.aborted
-	) {
-		return false;
+): Promise<CodexStreamRetryDecision | null> {
+	if (!isRetryableCodexProviderError(error) || context.output.content.length > 0 || context.options?.signal?.aborted) {
+		return null;
+	}
+	if (retryState.providerRetryAttempt >= CODEX_MAX_RETRIES) {
+		return null;
 	}
 
-	runtime.providerRetryAttempt += 1;
+	const nextState = {
+		providerRetryAttempt: retryState.providerRetryAttempt + 1,
+		websocketStreamRetries: retryState.websocketStreamRetries,
+	};
+	runtime.providerRetryAttempt = nextState.providerRetryAttempt;
+	runtime.websocketStreamRetries = nextState.websocketStreamRetries;
 	const websocketState = context.requestContext.websocketState;
 	if (runtime.transport === "websocket" && websocketState) {
 		resetCodexWebSocketAppendState(websocketState);
@@ -1314,7 +1411,7 @@ async function tryRetryCodexProviderError(
 
 	logCodexDebug("retrying codex provider stream error", {
 		error: error instanceof Error ? error.message : String(error),
-		retry: runtime.providerRetryAttempt,
+		retry: nextState.providerRetryAttempt,
 		retryBudget: CODEX_MAX_RETRIES,
 		transport: runtime.transport,
 	});
@@ -1324,17 +1421,20 @@ async function tryRetryCodexProviderError(
 	runtime.sawTerminalEvent = false;
 	resetOutputState(context.output);
 	context.firstTokenTime = undefined;
-	await sleepWithAbort(CODEX_RETRY_DELAY_MS * runtime.providerRetryAttempt, context.requestSetup.nonFetchSignal);
 
-	if (runtime.transport === "websocket" && websocketState) {
-		await reopenCodexWebSocketRuntimeStream(context, runtime, websocketState);
-		return true;
-	}
-
-	await reopenCodexSseRuntimeStream(context, runtime, websocketState);
-	return true;
+	return {
+		_tag: "retry",
+		delayMs: CODEX_RETRY_DELAY_MS * nextState.providerRetryAttempt,
+		nextState,
+		beforeRetry: Effect.tryPromise({
+			try: () =>
+				runtime.transport === "websocket" && websocketState
+					? reopenCodexWebSocketRuntimeStream(context, runtime, websocketState)
+					: reopenCodexSseRuntimeStream(context, runtime, websocketState),
+			catch: cause => cause,
+		}),
+	};
 }
-
 function finalizeCodexResponse(
 	context: CodexStreamProcessingContext,
 	runtime: CodexStreamRuntime,
@@ -2158,7 +2258,7 @@ function isRetryableCodexProviderError(error: unknown): boolean {
 
 function truncate(text: string, limit: number): string {
 	if (text.length <= limit) return text;
-	return `${text.slice(0, limit)}…[truncated ${text.length - limit}]`;
+	return `${text.slice(0, limit)}...[truncated ${text.length - limit}]`;
 }
 
 function formatCodexFailure(rawEvent: Record<string, unknown>): string | null {
