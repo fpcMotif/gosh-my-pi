@@ -29,6 +29,7 @@ import {
 	renderJsonTreeLines,
 } from "../../tools/json-tree";
 import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../tools/python";
+import { renderToolPresentation } from "../../tools/presentation";
 import { formatExpandHint, replaceTabs, resolveImageOptions, truncateToWidth } from "../../tools/render-utils";
 import { toolRenderers } from "../../tools/renderers";
 import { renderStatusLine } from "../../tui";
@@ -555,7 +556,11 @@ export class ToolExecutionComponent extends Container {
 				if (shouldRenderCall) {
 					// Render call component
 					try {
-						const callComponent = renderer.renderCall(this.#getCallArgsForRender(), this.#renderState, theme);
+						const callArgs = this.#getCallArgsForRender();
+						const callPresentation = renderer.presentCall?.(callArgs, this.#renderState);
+						const callComponent = callPresentation
+							? renderToolPresentation(callPresentation, theme)
+							: renderer.renderCall(callArgs, this.#renderState, theme);
 						if (callComponent) {
 							this.#contentBox.addChild(ensureInvalidate(callComponent));
 						}
@@ -569,16 +574,16 @@ export class ToolExecutionComponent extends Container {
 				// Render result component if we have a result
 				if (this.#result) {
 					try {
-						const resultComponent = renderer.renderResult(
-							{
-								content: this.#result.content as any,
-								details: this.#result.details,
-								isError: this.#result.isError,
-							},
-							this.#renderState,
-							theme,
-							this.#getCallArgsForRender(),
-						);
+						const result = {
+							content: this.#result.content as any,
+							details: this.#result.details,
+							isError: this.#result.isError,
+						};
+						const resultArgs = this.#getCallArgsForRender();
+						const resultPresentation = renderer.presentResult?.(result, this.#renderState, resultArgs);
+						const resultComponent = resultPresentation
+							? renderToolPresentation(resultPresentation, theme)
+							: renderer.renderResult(result, this.#renderState, theme, resultArgs);
 						if (resultComponent) {
 							this.#contentBox.addChild(ensureInvalidate(resultComponent));
 						}

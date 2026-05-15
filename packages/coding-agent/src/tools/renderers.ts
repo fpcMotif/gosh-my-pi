@@ -10,6 +10,7 @@ import { lspToolRenderer } from "../lsp/render";
 import type { Theme } from "../modes/theme/theme";
 import { taskToolRenderer } from "../task/render";
 import { webSearchToolRenderer } from "../web/search/render";
+import type { ToolPresentationOptions, ToolPresentationResult } from "./presentation";
 import { askToolRenderer } from "./ask";
 import { astEditToolRenderer } from "./ast-edit";
 import { astGrepToolRenderer } from "./ast-grep";
@@ -31,7 +32,13 @@ import { sshToolRenderer } from "./ssh";
 import { todoWriteToolRenderer } from "./todo-write";
 import { writeToolRenderer } from "./write";
 
-type ToolRenderer = {
+export type ToolRenderer = {
+	presentCall?: (args: unknown, options: ToolPresentationOptions) => ToolPresentationResult;
+	presentResult?: (
+		result: { content: Array<{ type: string; text?: string }>; details?: unknown; isError?: boolean },
+		options: ToolPresentationOptions,
+		args?: unknown,
+	) => ToolPresentationResult;
 	renderCall: (args: unknown, options: RenderResultOptions, theme: Theme) => Component;
 	renderResult: (
 		result: { content: Array<{ type: string; text?: string }>; details?: unknown; isError?: boolean },

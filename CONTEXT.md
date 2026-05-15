@@ -171,6 +171,16 @@ buildDisplaySessionContext, modelRegistry, sessionManager, agent state
 mutation, extension hooks) and a feedback loop into agent.continue. Risk vs
 reward made full extraction unwise this turn.
 
+**ToolPresentation**:
+Neutral tool presentation data in `packages/coding-agent/src/tools/presentation.ts`.
+The first slice supports status and output-block presentations plus a legacy
+`pi-tui` Adapter. `ToolExecutionComponent` now prefers `presentCall` /
+`presentResult` data from built-in renderers when available and falls back to
+the older component renderers. Initial migration covers simple `bash` and
+non-URL `read` call summaries; richer result output and edit diff presentation
+remain on the legacy renderers until their width-sensitive behavior has a
+dedicated migration pass.
+
 **pi-tui (legacy frontend, scheduled for deletion — candidate #3)**:
 The in-process TUI library at `packages/tui/`. Originally hosted both the
 TUI rendering primitives (Text, Container, Box, Loader, Markdown,
