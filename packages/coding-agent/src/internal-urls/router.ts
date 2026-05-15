@@ -11,11 +11,7 @@ import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
  * registered protocol handlers.
  */
 export class InternalUrlRouter {
-	readonly #handlers: Map<string, ProtocolHandler>;
-
-	constructor() {
-		this.#handlers = new Map();
-	}
+	#handlers = new Map<string, ProtocolHandler>();
 
 	/**
 	 * Register a protocol handler.

@@ -135,7 +135,9 @@ export const streamEffectAiOpenAi = <TApi extends Api>(
 		if (Exit.isFailure(exit)) {
 			// A caller-signal abort surfaces as an interrupt-only Cause; map it
 			// to pi-ai's `aborted` reason for parity with streamOpenAIResponses.
-			const aborted = Cause.hasInterruptsOnly(exit.cause) || options?.signal?.aborted === true;
+			// Trust `hasInterruptsOnly` — a real failure racing with the signal
+			// produces a mixed Cause and stays labeled as `error`.
+			const aborted = Cause.hasInterruptsOnly(exit.cause);
 			const reason = aborted ? "aborted" : "error";
 			const squashed = Cause.squash(exit.cause);
 			// Push an explicit terminal event so the for-await consumer sees it
