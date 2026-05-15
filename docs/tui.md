@@ -164,7 +164,8 @@ data and adapts it back to the current `pi-tui` components with
 `renderToolPresentation(...)`; renderers that do not expose presentation data
 continue through the legacy component path. The first migration slices cover
 status and output-block vocabulary for simple call summaries, including
-`bash`, non-URL `read`, and non-vim `edit`/`apply_patch` calls.
+`bash`, non-URL `read`, and non-vim `edit`/`apply_patch` calls. The same
+presentation module also has a code-cell shape used by non-URL `read` results.
 
 ## Lifecycle and cancellation
 
