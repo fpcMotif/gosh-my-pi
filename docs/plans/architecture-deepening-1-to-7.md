@@ -31,15 +31,16 @@ This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architect
 
 ## Execution state
 
-- [x] **Step 1 complete** ‚Äî `AgentEventRouter` extracted and wired as ordered display-event router for `#handleAgentEvent` with event-start queue cleanup and assistant display deobfuscation.
+- [x] **Step 1 complete** ‚Ä?`AgentEventRouter` extracted and wired as ordered display-event router for `#handleAgentEvent` with event-start queue cleanup and assistant display deobfuscation.
   - _Downside/rollback:_ Router is a narrow shim (display-layer only) so remaining ordering logic stays in `AgentSession`; if this split causes regressions, rollback by restoring those three responsibilities directly in `#handleAgentEvent`.
-- [x] **Step 2 complete** ‚Äî PostPromptRecovery scheduler refactor.
+- [x] **Step 2 complete** ‚Ä?PostPromptRecovery scheduler refactor.
   - _Downside/rollback:_ `PostPromptScheduler` centralizes all delayed continuation logic; if regressions appear around scheduling edges (cancel vs skip semantics, prompt-generation mismatch, or continuation nesting with retry/TTSR), rollback by restoring local `#schedulePostPromptTask` plus direct `#postPromptTasks*`/`#waitForPostPromptRecovery` handling in `AgentSession` for one change set before reworking with narrower helpers.
-- [ ] **Step 3 pending** ‚Äî RecoveryLedger write-side extraction.
-- [ ] **Step 4 pending** ‚Äî ContextPressure decision module.
-- [ ] **Step 5 pending** ‚Äî ToolPresentation module.
-- [ ] **Step 6 pending** ‚Äî Direct `RpcModelCatalog` picker.
-- [ ] **Step 7 pending** ‚Äî Collapse gmp-only `Workspace` seam.
+- [x] **Step 3 complete** °™ RecoveryLedger write-side extraction.
+  - _Downside/rollback:_ RecoveryLedger centralizes recovery-marker write timing and state; if it causes sequencing confusion, rollback by moving write timing back into AgentSession while keeping RecoveryMarker writes in one place and reintroducing a thinner helper on a smaller scope.
+- [ ] **Step 4 pending** ‚Ä?ContextPressure decision module.
+- [ ] **Step 5 pending** ‚Ä?ToolPresentation module.
+- [ ] **Step 6 pending** ‚Ä?Direct `RpcModelCatalog` picker.
+- [ ] **Step 7 pending** ‚Ä?Collapse gmp-only `Workspace` seam.
 
 
 ## 1. AgentSession Reactor event routing
@@ -67,7 +68,7 @@ This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architect
 - tool-result side effects.
 - post-turn retry, compaction, rewind, todo completion.
 
-The **Reactor** term already exists in `CONTEXT.md`, but the current Implementation is still a large method rather than a deep Module. The current Interface is effectively ‚Äúedit this method carefully and know all ordering constraints.‚Äù That is shallow.
+The **Reactor** term already exists in `CONTEXT.md`, but the current Implementation is still a large method rather than a deep Module. The current Interface is effectively ‚Äúedit this method carefully and know all ordering constraints.‚Ä?That is shallow.
 
 ### Deletion test
 
@@ -167,7 +168,7 @@ Continuation scheduling is spread across callbacks and fields:
 - retry wait promises
 - recovered continuation scheduling
 
-The Interface is not ‚Äúschedule safe post-prompt work‚Äù; it is ‚Äúknow which private field to wait on.‚Äù That is shallow and race-prone.
+The Interface is not ‚Äúschedule safe post-prompt work‚Ä? it is ‚Äúknow which private field to wait on.‚Ä?That is shallow and race-prone.
 
 ### Deletion test
 

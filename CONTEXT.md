@@ -488,17 +488,16 @@ touching the type surface the UI shares with Crush internals.
 **AgentRunController**:
 The Effect-side wrapper around `Agent.prompt` / `Agent.continue`
 introduced by the v4 migration P3. Owns no new state; it reframes the
-existing pi-agent-core run as an `Effect<void, AgentRunError, ...>`
-program so retries, recovery, and durability hooks become a Layer
-seam instead of inline `try/catch`. Public surface stays
-`Promise<void>` — `Effect.runPromise` lives at the seam. Lives in
+existing pi-agent-core run as an `Effect<void, AgentRunError, Clock>`
+program so retries and recovery keep a typed Promise→Effect error seam
+instead of inline `try/catch`. Public surface stays `Promise<void>` —
+`Effect.runPromiseExit` lives at the seam. Lives in
 `packages/agent/src/run/agent-run.ts`. Sits inside the existing
 `RetryController`/`ActiveRetryFallback` boundary; does **not**
-replace them. Production callers reach the controller through
-**runAgentRequest** (in coding-agent), which gates on
-`OMP_RECOVERY_POLICY` and provides the Live `RecoveryMarker` + `Clock`
-Layers. _Avoid_: turn pump, turn driver, AgentTurnRunner,
-durable workflow, Workflow.
+replace them. It intentionally does not write recovery markers;
+**RecoveryLedger** owns marker emission from the AgentEvent stream.
+_Avoid_: turn pump, turn driver, AgentTurnRunner, durable workflow,
+Workflow.
 
 **RecoveryMarker**:
 A typed JSONL line (`event: "recovery-marker"`) appended to the session
@@ -508,6 +507,17 @@ log at three well-defined safe points: after `message_end`, after each
 point the **RecoveryPolicy** reads on session reopen to classify the
 crash state. Cheap, append-only, ignored by readers that don't know
 about it. _Avoid_: turn-checkpoint, durable-checkpoint, snapshot.
+
+**RecoveryLedger**:
+Write-side owner for ADR-0003 recovery marker state in
+`packages/coding-agent/src/session/recovery-ledger.ts`. Owns the
+monotonic marker generation, observed event sequence, pending tool-call
+IDs, and the writer Adapter around `SessionManager.appendRecoveryMarker`.
+`AgentSession` routes ordered event facts to it at the safe points:
+event start, assistant persisted, tool completed, and turn completed.
+The ledger keeps marker timing in one Module while **RecoveryPolicy**
+remains the read/classify Module on session reopen. _Avoid_:
+checkpoint writer, marker manager, recovery tracker.
 
 **RecoveryPolicy**:
 Module that runs once on session reopen. Reads the session JSONL tail
@@ -586,21 +596,16 @@ The `OMP_RECOVERY_POLICY`-gated wrapper around `Agent.prompt` /
 `runAgentRequest(agent, sessionManager, request, { enabled })`. When
 `enabled: false`, dispatches directly to the agent's methods
 (byte-for-byte the path the codebase used pre-P3). When `enabled:
-true`, builds an **AgentRunController**, provides the Live
-**RecoveryMarker** Layer (via `makeRecoveryMarkerLayer(sessionManager)`)
-plus `LiveClock`, runs via `Effect.runPromiseExit`, and unwraps the
-Exit so callers see the same `Promise<void>` contract — typed
-`AgentRunError` instances re-throw verbatim through
-`Cause.findErrorOption`, so `instanceof AgentBusy` /
+true`, builds an **AgentRunController**, provides `LiveClock`, runs via
+`Effect.runPromiseExit`, and unwraps the Exit so callers see the same
+`Promise<void>` contract — typed `AgentRunError` instances re-throw
+verbatim through `Cause.findErrorOption`, so `instanceof AgentBusy` /
 `instanceof ContextOverflow` checks at every existing throw site keep
-working. Test seam: `enabled` is an explicit parameter (not
-`process.env`) so contract tests can pin both branches without
-mutating globals (per AGENTS.md "Testing Guidance"). **Wiring status
-(2026-05-08)**: the bridge function is shipped but **not yet wired**
-into the 5 `this.agent.prompt(...)` / `this.agent.continue()` call
-sites inside `packages/coding-agent/src/session/agent-session.ts`;
-production callers therefore continue to take the direct path until
-that wiring is added. _Avoid_: turn-runner, agent-driver, run-wrapper.
+working. Recovery markers are not written by this bridge; they are
+written by **RecoveryLedger** from the AgentEvent stream. Test seam:
+`enabled` is an explicit parameter (not `process.env`) so contract
+tests can pin both branches without mutating globals (per AGENTS.md
+"Testing Guidance"). _Avoid_: turn-runner, agent-driver, run-wrapper.
 
 ## Relationships
 
