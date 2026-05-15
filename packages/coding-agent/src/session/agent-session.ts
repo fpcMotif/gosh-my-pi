@@ -124,6 +124,7 @@ import { appendRecoveryMarkerEffect } from "./recovery-marker-live";
 import type { RecoveryAction } from "./recovery-driver";
 import { isRecoveryPolicyEnabled, runAgentRequest } from "./run-bridge";
 import { parseCommandArgs } from "../utils/command-args";
+import { AgentEventRouter } from "./agent-event-router";
 import { type EditMode, resolveEditMode } from "../utils/edit-mode";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import { extractFileMentions, generateFileMentionMessages } from "../utils/file-mentions";
@@ -389,6 +390,7 @@ export class AgentSession {
 
 	// Event subscription state
 	#unsubscribeAgent?: () => void;
+	#eventRouter: AgentEventRouter;
 	#eventListeners: AgentSessionEventListener[] = [];
 
 	#pendingMessages = new PendingSessionMessages();
@@ -617,6 +619,12 @@ export class AgentSession {
 		this.#agentId = config.agentId;
 		this.#agentRegistry = config.agentRegistry;
 		this.#branchSummaryCompleter = config.branchSummaryCompleter;
+		this.#eventRouter = new AgentEventRouter({
+			emitSessionEvent: event => this.#emitSessionEvent(event),
+			getUserMessageText: message => this.#getUserMessageText(message),
+			removeVisibleQueuedMessage: messageText => this.#pendingMessages.removeVisibleMessage(messageText),
+			getObfuscator: () => this.#obfuscator,
+		});
 		this.agent.setAssistantMessageEventInterceptor(assistantMessageEvent => {
 			const event: AgentEvent = {
 				type: "message_update",
@@ -788,31 +796,7 @@ export class AgentSession {
 			await this.#emitRecoveryMarker(false);
 		}
 
-		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
-		// This ensures the UI sees the updated queue state
-		if (event.type === "message_start" && event.message.role === "user") {
-			const messageText = this.#getUserMessageText(event.message);
-			if (messageText) {
-				this.#pendingMessages.removeVisibleMessage(messageText);
-			}
-		}
-
-		// Deobfuscate assistant message content for display emission — the LLM echoes back
-		// obfuscated placeholders, but listeners (TUI, extensions, exporters) must see real
-		// values. The original event.message stays obfuscated so the persistence path below
-		// writes `#HASH#` tokens to the session file; convertToLlm re-obfuscates outbound
-		// traffic on the next turn. Walks text, thinking, and toolCall arguments/intent.
-		let displayEvent: AgentEvent = event;
-		const obfuscator = this.#obfuscator;
-		if (obfuscator && event.type === "message_end" && event.message.role === "assistant") {
-			const message = event.message;
-			const deobfuscatedContent = obfuscator.deobfuscateObject(message.content);
-			if (deobfuscatedContent !== message.content) {
-				displayEvent = { ...event, message: { ...message, content: deobfuscatedContent } };
-			}
-		}
-
-		await this.#emitSessionEvent(displayEvent);
+		await this.#eventRouter.handle(event);
 
 		if (event.type === "turn_start") {
 			this.#streamingEditGuard.reset();

@@ -29,6 +29,18 @@ This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architect
 
 ---
 
+## Execution state
+
+- [x] **Step 1 complete** — `AgentEventRouter` extracted and wired as ordered display-event router for `#handleAgentEvent` with event-start queue cleanup and assistant display deobfuscation.
+  - _Downside/rollback:_ Router is a narrow shim (display-layer only) so remaining ordering logic stays in `AgentSession`; if this split causes regressions, rollback by restoring those three responsibilities directly in `#handleAgentEvent`.
+- [ ] **Step 2 pending** — PostPromptRecovery scheduler refactor.
+- [ ] **Step 3 pending** — RecoveryLedger write-side extraction.
+- [ ] **Step 4 pending** — ContextPressure decision module.
+- [ ] **Step 5 pending** — ToolPresentation module.
+- [ ] **Step 6 pending** — Direct `RpcModelCatalog` picker.
+- [ ] **Step 7 pending** — Collapse gmp-only `Workspace` seam.
+
+
 ## 1. AgentSession Reactor event routing
 
 ### Files

@@ -27,6 +27,14 @@ of the lower-level `Agent` from pi-agent-core. Originally a 6,898-line
 god-object; candidate #1b is incrementally decomposing it into focused
 controller classes that AgentSession owns and delegates to.
 
+**AgentEventRouter**:
+Pilot extraction for candidate #1. Owns ordered, display-layer event routing
+responsibilities at the `AgentEvent` boundary: visible-queue removal on user
+`message_start`, assistant content deobfuscation for emitted display events,
+and forwarding through `emitSessionEvent`. `AgentSession` now constructs this
+router and delegates the pure routing concern so side-effect ordering around
+extension visibility can be tested in isolation.
+
 **ActiveRetryFallback**:
 First extracted subsystem (#1b pilot). Owns the per-session
 "currently-active retry fallback" state plus the methods that mutate it
