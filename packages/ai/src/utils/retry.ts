@@ -160,10 +160,7 @@ function extractErrorCode(error: unknown): string | undefined {
  * callers that already live inside an Effect pipeline and want to compose
  * the retry policy with their own Schedule (e.g. via Schedule.intersect).
  */
-export function copilotRetryEffect<T>(
-	fn: () => Promise<T>,
-	options: { provider: string },
-): Effect.Effect<T, unknown> {
+export function copilotRetryEffect<T>(fn: () => Promise<T>, options: { provider: string }): Effect.Effect<T, unknown> {
 	return withCopilotRetry(Effect.tryPromise({ try: fn, catch: error => error }), options);
 }
 

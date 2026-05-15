@@ -42,19 +42,16 @@ export interface LocalAbortWatchdogOpts {
  * same failure shape into their own Effect.raceFirst / Effect.timeout
  * combinators without re-deriving the kind/duration plumbing.
  */
-export const watchdogFailureEffect = (
-	kind: LocalAbort["kind"],
-	timeoutMs: number,
-): Effect.Effect<never, LocalAbort> =>
+export const watchdogFailureEffect = (kind: LocalAbort["kind"], timeoutMs: number): Effect.Effect<never, LocalAbort> =>
 	Effect.fail(new LocalAbort({ kind, durationMs: timeoutMs })).pipe(Effect.delay(Duration.millis(timeoutMs)));
 
 /**
- * Schedule.spaced + Schedule.recurs(0) wrapper exported only so call sites
- * keep their Effect plumbing explicit when they need a one-shot delay that
- * is type-aligned with watchdog policies. Mostly useful inside tests.
+ * One-shot delay Schedule pinned to a single Effect.sleep so call sites that
+ * need a watchdog-shaped Schedule (e.g. composing Effect.repeat or
+ * Effect.scheduleFrom) get one without re-deriving the spaced+recurs pair.
  */
-export const oneShotWatchdogSchedule = (timeoutMs: number): Schedule.Schedule<unknown> =>
-	Schedule.spaced(Duration.millis(timeoutMs)).pipe(Schedule.intersect(Schedule.recurs(0)));
+export const oneShotWatchdogSchedule = (timeoutMs: number): Schedule.Schedule<number> =>
+	Schedule.recurs(0).pipe(Schedule.addDelay(() => Effect.succeed(Duration.millis(timeoutMs))));
 
 export const runWithLocalAbortWatchdog = (opts: LocalAbortWatchdogOpts): Effect.Effect<void, LocalAbort> =>
 	Effect.scoped(
