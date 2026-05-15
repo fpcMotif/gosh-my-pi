@@ -211,8 +211,14 @@ export interface WireToolResultV1 {
 	presentation?: WireToolPresentationV1;
 }
 
+export type WireToolUIStatusV1 = "success" | "error" | "warning" | "info" | "pending" | "running" | "aborted";
+
+export type WireToolPresentationStateV1 = "pending" | "running" | "success" | "error" | "warning";
+
+export type WireToolPresentationCodeStatusV1 = "pending" | "running" | "warning" | "complete" | "error";
+
 export interface WireToolPresentationStatusV1 {
-	icon?: string;
+	icon?: WireToolUIStatusV1;
 	spinnerFrame?: number;
 	title: string;
 	titleColor?: string;
@@ -225,32 +231,28 @@ export interface WireToolPresentationSectionV1 {
 	lines: string[];
 }
 
+export interface WireToolPresentationCodeV1 {
+	code: string;
+	language?: string;
+	title?: string;
+	status?: WireToolPresentationCodeStatusV1;
+	spinnerFrame?: number;
+	output?: string;
+	outputMaxLines?: number;
+	codeMaxLines?: number;
+	expanded?: boolean;
+}
+
 export type WireToolPresentationV1 =
-	| {
-			type: "status";
-			status: WireToolPresentationStatusV1;
-	  }
+	| { type: "status"; status: WireToolPresentationStatusV1 }
 	| {
 			type: "block";
 			status?: WireToolPresentationStatusV1;
-			state?: string;
+			state?: WireToolPresentationStateV1;
 			sections: WireToolPresentationSectionV1[];
 			applyBg?: boolean;
 	  }
-	| {
-			type: "code";
-			code: {
-				code: string;
-				language?: string;
-				title?: string;
-				status?: string;
-				spinnerFrame?: number;
-				output?: string;
-				outputMaxLines?: number;
-				codeMaxLines?: number;
-				expanded?: boolean;
-			};
-	  };
+	| { type: "code"; code: WireToolPresentationCodeV1 };
 
 // ============================================================================
 // Streaming sub-events (inside message_update)
