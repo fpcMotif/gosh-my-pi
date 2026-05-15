@@ -41,6 +41,7 @@ import {
 import { applyListLimit } from "./list-limit";
 import { formatFullOutputReference, formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
 import { expandPath, formatPathRelativeToCwd, resolveReadPath } from "./path-utils";
+import { renderToolPresentation, type ToolPresentation, type ToolPresentationResult } from "./presentation";
 import { formatAge, formatBytes, shortenPath, wrapBrackets } from "./render-utils";
 import {
 	executeReadQuery,
@@ -1384,26 +1385,40 @@ interface ReadRenderArgs {
 	raw?: boolean;
 }
 
+function presentReadCall(args: ReadRenderArgs | undefined): ToolPresentation {
+	const rawPath = args?.file_path ?? args?.path ?? "";
+	const filePath = shortenPath(rawPath);
+	const offset = args?.offset;
+	const limit = args?.limit;
+
+	let pathDisplay = filePath || "...";
+	if (offset !== undefined || limit !== undefined) {
+		const startLine = offset ?? 1;
+		const endLine = limit !== undefined ? startLine + limit - 1 : "";
+		pathDisplay += `:${startLine}${endLine ? `-${endLine}` : ""}`;
+	}
+
+	return {
+		type: "status",
+		status: { icon: "pending", title: "Read", description: pathDisplay },
+	};
+}
+
 export const readToolRenderer = {
+	presentCall(args: ReadRenderArgs | undefined): ToolPresentationResult {
+		if (isReadableUrlPath(args?.file_path ?? args?.path ?? "")) {
+			return undefined;
+		}
+
+		return presentReadCall(args);
+	},
+
 	renderCall(args: ReadRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		if (isReadableUrlPath(args.file_path ?? args.path ?? "")) {
 			return renderReadUrlCall(args, _options, uiTheme);
 		}
 
-		const rawPath = args.file_path ?? args.path ?? "";
-		const filePath = shortenPath(rawPath);
-		const offset = args.offset;
-		const limit = args.limit;
-
-		let pathDisplay = filePath || "…";
-		if (offset !== undefined || limit !== undefined) {
-			const startLine = offset ?? 1;
-			const endLine = limit !== undefined ? startLine + limit - 1 : "";
-			pathDisplay += `:${startLine}${endLine ? `-${endLine}` : ""}`;
-		}
-
-		const text = renderStatusLine({ icon: "pending", title: "Read", description: pathDisplay }, uiTheme);
-		return new Text(text, 0, 0);
+		return renderToolPresentation(presentReadCall(args), uiTheme);
 	},
 
 	renderResult(

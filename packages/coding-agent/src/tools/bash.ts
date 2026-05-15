@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { ImageProtocol, TERMINAL, Text } from "@oh-my-pi/pi-tui";
+import { ImageProtocol, TERMINAL } from "@oh-my-pi/pi-tui";
 import { $env, getProjectDir, isEnoent, prompt } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { type BashResult, executeBash } from "../exec/bash-executor";
@@ -20,6 +20,7 @@ import { applyHeadTail } from "./bash-normalize";
 import { expandInternalUrls, type InternalUrlExpansionOptions } from "./bash-skill-urls";
 import { formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
+import { renderToolPresentation, type ToolPresentation } from "./presentation";
 import { formatToolWorkingDirectory, replaceTabs } from "./render-utils";
 import { ToolAbortError, ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
@@ -772,14 +773,30 @@ function toBashRenderArgs<TArgs>(args: TArgs | undefined, config: ShellRendererC
 	};
 }
 
+function presentShellCall<TArgs>(
+	args: TArgs | undefined,
+	options: RenderResultOptions,
+	config: ShellRendererConfig<TArgs>,
+): ToolPresentation {
+	const renderArgs = toBashRenderArgs(args, config);
+	return {
+		type: "status",
+		status: {
+			icon: "pending",
+			title: config.resolveTitle(args, options),
+			description: formatBashCommand(renderArgs),
+		},
+	};
+}
+
 export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
 	return {
+		presentCall(args: TArgs, options: RenderResultOptions): ToolPresentation {
+			return presentShellCall(args, options, config);
+		},
+
 		renderCall(args: TArgs, options: RenderResultOptions, uiTheme: Theme): Component {
-			const renderArgs = toBashRenderArgs(args, config);
-			const cmdText = formatBashCommand(renderArgs);
-			const title = config.resolveTitle(args, options);
-			const text = renderStatusLine({ icon: "pending", title, description: cmdText }, uiTheme);
-			return new Text(text, 0, 0);
+			return renderToolPresentation(presentShellCall(args, options, config), uiTheme);
 		},
 
 		renderResult(

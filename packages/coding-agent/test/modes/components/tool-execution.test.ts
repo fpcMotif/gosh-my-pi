@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { ToolExecutionComponent } from "@oh-my-pi/pi-coding-agent/modes/components/tool-execution";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
-import type { TUI } from "@oh-my-pi/pi-tui";
-import { visibleWidth } from "@oh-my-pi/pi-tui";
+import { toolRenderers, type ToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/renderers";
+import { Text, type TUI, visibleWidth } from "@oh-my-pi/pi-tui";
 
 const uiStub = { requestRender() {} } as unknown as TUI;
 
@@ -69,5 +69,34 @@ describe("ToolExecutionComponent", () => {
 		expect(rendered).toContain("failed   badly");
 		expect(rendered).not.toContain("\t");
 		expectWidthBounded(component, 72);
+	});
+
+	it("prefers structured presentation data for built-in renderer calls", () => {
+		const previous = toolRenderers.presentation_demo;
+		const presentationRenderer: ToolRenderer = {
+			presentCall: () => ({
+				type: "status",
+				status: { icon: "pending", title: "Presented", description: "neutral summary" },
+			}),
+			renderCall: () => {
+				throw new Error("legacy renderCall should not run");
+			},
+			renderResult: () => new Text("unused", 0, 0),
+		};
+		toolRenderers.presentation_demo = presentationRenderer;
+		try {
+			const component = new ToolExecutionComponent("presentation_demo", {}, {}, undefined, uiStub);
+			const rendered = renderPlain(component, 88);
+
+			expect(rendered).toContain("Presented");
+			expect(rendered).toContain("neutral summary");
+			expectWidthBounded(component, 88);
+		} finally {
+			if (previous) {
+				toolRenderers.presentation_demo = previous;
+			} else {
+				delete toolRenderers.presentation_demo;
+			}
+		}
 	});
 });
