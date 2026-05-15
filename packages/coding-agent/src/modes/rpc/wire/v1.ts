@@ -208,7 +208,49 @@ export type WireMessageV1 =
 export interface WireToolResultV1 {
 	content: WireUserContentBlockV1[];
 	details?: unknown;
+	presentation?: WireToolPresentationV1;
 }
+
+export interface WireToolPresentationStatusV1 {
+	icon?: string;
+	spinnerFrame?: number;
+	title: string;
+	titleColor?: string;
+	description?: string;
+	meta?: string[];
+}
+
+export interface WireToolPresentationSectionV1 {
+	label?: string;
+	lines: string[];
+}
+
+export type WireToolPresentationV1 =
+	| {
+			type: "status";
+			status: WireToolPresentationStatusV1;
+	  }
+	| {
+			type: "block";
+			status?: WireToolPresentationStatusV1;
+			state?: string;
+			sections: WireToolPresentationSectionV1[];
+			applyBg?: boolean;
+	  }
+	| {
+			type: "code";
+			code: {
+				code: string;
+				language?: string;
+				title?: string;
+				status?: string;
+				spinnerFrame?: number;
+				output?: string;
+				outputMaxLines?: number;
+				codeMaxLines?: number;
+				expanded?: boolean;
+			};
+	  };
 
 // ============================================================================
 // Streaming sub-events (inside message_update)
@@ -263,6 +305,7 @@ export type WireEventV1 =
 			toolName: string;
 			args: Record<string, unknown>;
 			intent?: string;
+			presentation?: WireToolPresentationV1;
 	  }
 	| {
 			type: "tool_execution_update";
