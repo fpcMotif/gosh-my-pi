@@ -11,6 +11,22 @@ async function getUiTheme() {
 }
 
 describe("editToolRenderer", () => {
+	it("exposes neutral presentation data for edit call summaries", () => {
+		const presentation = editToolRenderer.presentCall(
+			{
+				path: "packages/coding-agent/src/edit/renderer.ts",
+				newText: "after",
+			},
+			{ expanded: false, isPartial: true, renderContext: { editMode: "replace" } },
+		);
+
+		expect(presentation?.type).toBe("block");
+		if (presentation?.type !== "block") return;
+		expect(presentation.status?.title).toBe("Edit");
+		expect(presentation.status?.description).toContain("packages/coding-agent/src/edit/renderer.ts");
+		expect(presentation.sections[0].lines.join("\n")).toContain("after");
+	});
+
 	it("shows the target path from partial JSON while edit args stream", async () => {
 		const uiTheme = await getUiTheme();
 		const component = editToolRenderer.renderCall(
