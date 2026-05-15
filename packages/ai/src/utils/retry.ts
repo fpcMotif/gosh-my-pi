@@ -1,4 +1,4 @@
-import { Effect } from "@oh-my-pi/pi-utils/effect";
+import { Cause, Effect, Exit } from "@oh-my-pi/pi-utils/effect";
 import { withCopilotRetry } from "../effect-utils";
 
 type ErrorLike = {
@@ -162,6 +162,8 @@ export async function callWithCopilotModelRetry<T>(
 	fn: () => Promise<T>,
 	options: { provider: string; signal?: AbortSignal },
 ): Promise<T> {
-	const program = withCopilotRetry(Effect.promise(fn), options);
-	return Effect.runPromise(program, { signal: options.signal });
+	const program = withCopilotRetry(Effect.tryPromise({ try: fn, catch: error => error }), options);
+	const exit = await Effect.runPromiseExit(program, { signal: options.signal });
+	if (Exit.isSuccess(exit)) return exit.value;
+	throw Cause.squash(exit.cause);
 }

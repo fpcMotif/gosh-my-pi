@@ -1,5 +1,5 @@
 import * as os from "node:os";
-import { $env, $flag, abortableSleep, asRecord, logger, readSseJson, structuredCloneJSON } from "@oh-my-pi/pi-utils";
+import { $env, $flag, asRecord, logger, readSseJson, structuredCloneJSON } from "@oh-my-pi/pi-utils";
 import type OpenAI from "openai";
 import type {
 	ResponseCustomToolCall,
@@ -215,6 +215,9 @@ function getCodexWebSocketRetryBudget(): number {
 function getCodexWebSocketRetryDelayMs(retry: number): number {
 	const baseDelay = parseCodexPositiveInteger($env.PI_CODEX_WEBSOCKET_RETRY_DELAY_MS, CODEX_RETRY_DELAY_MS);
 	return baseDelay * Math.max(1, retry);
+}
+function sleepWithAbort(delayMs: number, signal?: AbortSignal): Promise<void> {
+	return Effect.runPromise(Effect.sleep(Duration.millis(Math.max(0, delayMs))), { signal });
 }
 
 function getCodexWebSocketIdleTimeoutMs(): number {
@@ -593,7 +596,7 @@ async function openInitialCodexEventStream(
 				});
 				if (!activateFallback) {
 					websocketRetries += 1;
-					await abortableSleep(getCodexWebSocketRetryDelayMs(websocketRetries), requestSetup.nonFetchSignal);
+					await sleepWithAbort(getCodexWebSocketRetryDelayMs(websocketRetries), requestSetup.nonFetchSignal);
 					continue;
 				}
 				break;
@@ -1304,7 +1307,7 @@ async function tryReplayWebsocketFailureOverSse(
 
 	if (!activateFallback) {
 		runtime.websocketStreamRetries += 1;
-		await abortableSleep(
+		await sleepWithAbort(
 			getCodexWebSocketRetryDelayMs(runtime.websocketStreamRetries),
 			context.requestSetup.nonFetchSignal,
 		);
@@ -1358,7 +1361,7 @@ async function tryRetryCodexProviderError(
 	runtime.sawTerminalEvent = false;
 	resetOutputState(context.output);
 	context.firstTokenTime = undefined;
-	await abortableSleep(CODEX_RETRY_DELAY_MS * runtime.providerRetryAttempt, context.requestSetup.nonFetchSignal);
+	await sleepWithAbort(CODEX_RETRY_DELAY_MS * runtime.providerRetryAttempt, context.requestSetup.nonFetchSignal);
 
 	if (runtime.transport === "websocket" && websocketState) {
 		await reopenCodexWebSocketRuntimeStream(context, runtime, websocketState);
@@ -2140,41 +2143,136 @@ function getRetryDelayMs(
 }
 
 async function fetchWithRetry(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
-	let attempt = 0;
-	let rateLimitTimeSpent = 0;
-	while (true) {
-		try {
-			const response = await fetch(url, { ...init, signal: signal ?? init.signal });
-			if (!CODEX_RETRYABLE_STATUS.has(response.status)) {
-				return response;
-			}
-			if (signal?.aborted) return response;
-			const errorBody = await response.clone().text();
-			// Usage-limit errors are persistent (account allocation exhausted) — retrying with the
-			// same credential is futile. Bail out immediately so the error propagates to the agent
-			// session layer where credential switching happens.
-			if (response.status === 429 && isUsageLimitError(errorBody)) {
-				return response;
-			}
-			const { delay, serverProvided } = getRetryDelayMs(response, attempt, errorBody);
-			if (response.status === 429 && serverProvided) {
-				if (rateLimitTimeSpent + delay > CODEX_RATE_LIMIT_BUDGET_MS) {
-					return response;
-				}
-				rateLimitTimeSpent += delay;
-			} else if (attempt >= CODEX_MAX_RETRIES) {
-				return response;
-			}
-			await abortableSleep(delay, signal);
-		} catch (error) {
-			if (attempt >= CODEX_MAX_RETRIES || signal?.aborted) {
-				throw error;
-			}
-			const delay = CODEX_RETRY_DELAY_MS * (attempt + 1);
-			await abortableSleep(delay, signal);
-		}
-		attempt += 1;
+	return Effect.runPromise(fetchWithRetryEffect(url, init, signal, { attempt: 0, rateLimitTimeSpentMs: 0 }), {
+		signal,
+	});
+}
+
+interface CodexFetchRetryState {
+	readonly attempt: number;
+	readonly rateLimitTimeSpentMs: number;
+}
+
+type CodexFetchRetryDecision =
+	| { readonly _tag: "return"; readonly response: Response }
+	| {
+			readonly _tag: "retry";
+			readonly delayMs: number;
+			readonly nextState: CodexFetchRetryState;
+	  };
+
+function fetchWithRetryEffect(
+	url: string,
+	init: RequestInit,
+	signal: AbortSignal | undefined,
+	state: CodexFetchRetryState,
+): Effect.Effect<Response, unknown> {
+	return Effect.tryPromise({
+		try: () => fetch(url, { ...init, signal: signal ?? init.signal }),
+		catch: cause => cause,
+	}).pipe(
+		Effect.matchEffect({
+			onFailure: error => retryCodexFetchFailure(url, init, signal, state, error),
+			onSuccess: response => handleCodexFetchResponse(url, init, signal, state, response),
+		}),
+	);
+}
+
+function handleCodexFetchResponse(
+	url: string,
+	init: RequestInit,
+	signal: AbortSignal | undefined,
+	state: CodexFetchRetryState,
+	response: Response,
+): Effect.Effect<Response, unknown> {
+	if (!CODEX_RETRYABLE_STATUS.has(response.status)) {
+		return Effect.succeed(response);
 	}
+	if (signal?.aborted) return Effect.succeed(response);
+
+	return Effect.tryPromise({
+		try: () => response.clone().text(),
+		catch: cause => cause,
+	}).pipe(
+		Effect.matchEffect({
+			onFailure: error => retryCodexFetchFailure(url, init, signal, state, error),
+			onSuccess: errorBody => {
+				const decision = getCodexResponseRetryDecision(response, state, errorBody);
+				if (decision._tag === "return") return Effect.succeed(decision.response);
+				return retryCodexFetchAfterDelay(url, init, signal, decision.delayMs, decision.nextState);
+			},
+		}),
+	);
+}
+
+function getCodexResponseRetryDecision(
+	response: Response,
+	state: CodexFetchRetryState,
+	errorBody: string,
+): CodexFetchRetryDecision {
+	// Usage-limit errors are persistent (account allocation exhausted) - retrying with the
+	// same credential is futile. Bail out immediately so the error propagates to the agent
+	// session layer where credential switching happens.
+	if (response.status === 429 && isUsageLimitError(errorBody)) {
+		return { _tag: "return", response };
+	}
+
+	const { delay, serverProvided } = getRetryDelayMs(response, state.attempt, errorBody);
+	if (response.status === 429 && serverProvided) {
+		if (state.rateLimitTimeSpentMs + delay > CODEX_RATE_LIMIT_BUDGET_MS) {
+			return { _tag: "return", response };
+		}
+		return {
+			_tag: "retry",
+			delayMs: delay,
+			nextState: {
+				attempt: state.attempt + 1,
+				rateLimitTimeSpentMs: state.rateLimitTimeSpentMs + delay,
+			},
+		};
+	}
+
+	if (state.attempt >= CODEX_MAX_RETRIES) {
+		return { _tag: "return", response };
+	}
+
+	return {
+		_tag: "retry",
+		delayMs: delay,
+		nextState: {
+			attempt: state.attempt + 1,
+			rateLimitTimeSpentMs: state.rateLimitTimeSpentMs,
+		},
+	};
+}
+
+function retryCodexFetchFailure(
+	url: string,
+	init: RequestInit,
+	signal: AbortSignal | undefined,
+	state: CodexFetchRetryState,
+	error: unknown,
+): Effect.Effect<Response, unknown> {
+	if (state.attempt >= CODEX_MAX_RETRIES || signal?.aborted) {
+		return Effect.fail(error);
+	}
+	return retryCodexFetchAfterDelay(url, init, signal, CODEX_RETRY_DELAY_MS * (state.attempt + 1), {
+		attempt: state.attempt + 1,
+		rateLimitTimeSpentMs: state.rateLimitTimeSpentMs,
+	});
+}
+
+function retryCodexFetchAfterDelay(
+	url: string,
+	init: RequestInit,
+	signal: AbortSignal | undefined,
+	delayMs: number,
+	nextState: CodexFetchRetryState,
+): Effect.Effect<Response, unknown> {
+	return Effect.succeed(undefined).pipe(
+		Effect.delay(Duration.millis(delayMs)),
+		Effect.flatMap(() => fetchWithRetryEffect(url, init, signal, nextState)),
+	);
 }
 
 function redactHeaders(headers: Headers): Record<string, string> {

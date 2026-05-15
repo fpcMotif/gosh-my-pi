@@ -3,7 +3,7 @@ import { Http, HttpError, LiveHttp, makeHttpLayer, type HttpStreamOpts } from "@
 import { streamOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import type { AssistantMessage, Context, Model } from "@oh-my-pi/pi-ai/types";
 import { callWithCopilotModelRetry } from "@oh-my-pi/pi-ai/utils/retry";
-import { Cause, Effect, Exit, Option } from "@oh-my-pi/pi-utils/effect";
+import { Cause, Effect, Exit } from "@oh-my-pi/pi-utils/effect";
 
 interface Metrics {
 	contractsPassed: number;
@@ -40,9 +40,7 @@ async function contract(name: string, run: () => Promise<void> | void): Promise<
 
 function expectErrorFailure(exit: Exit.Exit<unknown, unknown>): unknown {
 	assert(Exit.isFailure(exit), "expected failure exit");
-	const failure = Cause.failureOption(exit.cause);
-	assert(Option.isSome(failure), "expected error failure cause");
-	return Option.getOrThrow(failure);
+	return Cause.squash(exit.cause);
 }
 
 function expectLocalAbortFailure(exit: Exit.Exit<unknown, unknown>): LocalAbort {
