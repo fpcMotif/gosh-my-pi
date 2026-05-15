@@ -44,4 +44,24 @@ describe("ToolPresentation", () => {
 		expect(rendered).toContain("alpha");
 		expect(rendered).toContain("beta");
 	});
+
+	it("adapts neutral code presentations to the legacy code cell", () => {
+		const rendered = renderPlain(
+			renderToolPresentation(
+				{
+					type: "code",
+					code: {
+						code: "const value = 1;",
+						language: "typescript",
+						title: "Read src/value.ts",
+						status: "complete",
+					},
+				},
+				theme,
+			),
+		);
+
+		expect(rendered).toContain("Read src/value.ts");
+		expect(rendered).toContain("const value = 1;");
+	});
 });

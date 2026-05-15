@@ -39,7 +39,12 @@ import {
 	renderReadUrlResult,
 } from "./fetch";
 import { applyListLimit } from "./list-limit";
-import { formatFullOutputReference, formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
+import {
+	formatFullOutputReference,
+	formatStyledTruncationWarning,
+	formatTruncationMetaNotice,
+	type OutputMeta,
+} from "./output-meta";
 import { expandPath, formatPathRelativeToCwd, resolveReadPath } from "./path-utils";
 import { renderToolPresentation, type ToolPresentation, type ToolPresentationResult } from "./presentation";
 import { formatAge, formatBytes, shortenPath, wrapBrackets } from "./render-utils";
@@ -1405,6 +1410,80 @@ function presentReadCall(args: ReadRenderArgs | undefined): ToolPresentation {
 	};
 }
 
+function getReadWarningLines(details: ReadToolDetails | undefined): string[] {
+	const warningLines: string[] = [];
+	const truncation = details?.meta?.truncation;
+	const fallback = details?.truncation;
+	if (details?.resolvedPath !== null && details?.resolvedPath !== undefined && details?.resolvedPath !== "") {
+		warningLines.push(`Resolved path: ${details.resolvedPath}`);
+	}
+	if (truncation) {
+		if (fallback?.firstLineExceedsLimit === true) {
+			let warning = `First line exceeds ${formatBytes(fallback.outputBytes ?? fallback.totalBytes)} limit`;
+			if (truncation.artifactId !== null && truncation.artifactId !== undefined && truncation.artifactId !== "") {
+				warning += `. ${formatFullOutputReference(truncation.artifactId)}`;
+			}
+			warningLines.push(warning);
+		} else {
+			warningLines.push(formatTruncationMetaNotice(truncation));
+		}
+	}
+	return warningLines;
+}
+
+function getReadResultTitle(args: ReadRenderArgs | undefined, details: ReadToolDetails | undefined): string {
+	const rawPath = args?.file_path ?? args?.path ?? "";
+	const suffix = details?.suffixResolution;
+	const displayPath = suffix ? shortenPath(suffix.to) : shortenPath(rawPath);
+	const correction = suffix ? ` (corrected from ${shortenPath(suffix.from)})` : "";
+	let title = displayPath ? `Read ${displayPath}${correction}` : "Read";
+	if (args?.offset !== undefined || args?.limit !== undefined) {
+		const startLine = args.offset ?? 1;
+		const endLine = args.limit !== undefined ? startLine + args.limit - 1 : "";
+		title += `:${startLine}${endLine ? `-${endLine}` : ""}`;
+	}
+	return title;
+}
+
+function presentReadResult(
+	result: { content: Array<{ type: string; text?: string }>; details?: ReadToolDetails },
+	options: RenderResultOptions,
+	args?: ReadRenderArgs,
+): ToolPresentation {
+	const details = result.details;
+	const rawText = result.content?.find(c => c.type === "text")?.text ?? "";
+	const contentText = details?.displayContent?.text ?? rawText;
+	const imageContent = result.content?.find(c => c.type === "image");
+	const rawPath = args?.file_path ?? args?.path ?? "";
+	const warningLines = getReadWarningLines(details);
+
+	if (imageContent) {
+		const suffix = details?.suffixResolution;
+		const displayPath = suffix ? shortenPath(suffix.to) : shortenPath(rawPath) || rawPath || "image";
+		const correction = suffix ? ` (corrected from ${shortenPath(suffix.from)})` : "";
+		const detailLines = contentText ? contentText.split("\n") : [];
+		const lines = [...detailLines, ...warningLines].filter(line => line !== "");
+		return {
+			type: "block",
+			status: { icon: suffix ? "warning" : "success", title: "Read", description: `${displayPath}${correction}` },
+			state: "success",
+			sections: [{ label: "Details", lines: lines.length > 0 ? lines : ["(image)"] }],
+		};
+	}
+
+	return {
+		type: "code",
+		code: {
+			code: contentText,
+			language: getLanguageFromPath(rawPath),
+			title: getReadResultTitle(args, details),
+			status: "complete",
+			output: warningLines.length > 0 ? warningLines.join("\n") : undefined,
+			expanded: options.expanded,
+		},
+	};
+}
+
 export const readToolRenderer = {
 	presentCall(args: ReadRenderArgs | undefined): ToolPresentationResult {
 		if (isReadableUrlPath(args?.file_path ?? args?.path ?? "")) {
@@ -1412,6 +1491,19 @@ export const readToolRenderer = {
 		}
 
 		return presentReadCall(args);
+	},
+
+	presentResult(
+		result: { content: Array<{ type: string; text?: string }>; details?: ReadToolDetails },
+		options: RenderResultOptions,
+		args?: ReadRenderArgs,
+	): ToolPresentationResult {
+		const urlDetails = result.details as ReadUrlToolDetails | undefined;
+		if (urlDetails?.kind === "url" || isReadableUrlPath(args?.file_path ?? args?.path ?? "")) {
+			return undefined;
+		}
+
+		return presentReadResult(result, options, args);
 	},
 
 	renderCall(args: ReadRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {

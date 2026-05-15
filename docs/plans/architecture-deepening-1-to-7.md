@@ -40,8 +40,8 @@ This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architect
 - [x] **Step 4 complete** - ContextPressure decision module.
    - _Downside/rollback:_ `ContextPressurePolicy` improves decision-table testability but adds one more hop between the automatic compaction trigger and the session mutations. If debugging pressure decisions gets harder, rollback by moving `decideContextPressure` back into `#checkCompaction` while keeping the pure candidate-ordering tests as a guard.
 - [ ] **Step 5 pending** - ToolPresentation module.
-   - _Progress:_ First slice added neutral `ToolPresentation` status/block data, a legacy `pi-tui` Adapter, `ToolExecutionComponent` preference for presentation data, and `bash`/non-URL `read` call-summary migration. Second slice added non-vim `edit`/`apply_patch` call-summary presentation data while leaving legacy result rendering intact.
-   - _Downside/rollback:_ Result rendering and edit diff result presentation are still legacy-renderer owned because their width-sensitive output needs a separate migration. Rollback by removing `presentCall`/`presentResult` preference in `ToolExecutionComponent` and leaving the adapter module unused.
+   - _Progress:_ First slice added neutral `ToolPresentation` status/block data, a legacy `pi-tui` Adapter, `ToolExecutionComponent` preference for presentation data, and `bash`/non-URL `read` call-summary migration. Second slice added non-vim `edit`/`apply_patch` call-summary presentation data while leaving legacy result rendering intact. Third slice added neutral code-cell presentation and moved non-URL `read` results onto it.
+   - _Downside/rollback:_ Shell output and edit diff result presentation are still legacy-renderer owned because their width-sensitive output needs separate migration. Rollback by removing `presentCall`/`presentResult` preference in `ToolExecutionComponent` and leaving the adapter module unused.
 - [ ] **Step 6 pending** — Direct `RpcModelCatalog` picker.
 - [ ] **Step 7 pending** — Collapse gmp-only `Workspace` seam.
 
