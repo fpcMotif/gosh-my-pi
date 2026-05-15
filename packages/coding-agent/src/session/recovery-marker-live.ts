@@ -47,6 +47,13 @@ export function makeRecoveryMarkerLayer(sessionManager: RecoveryMarkerSessionWri
 	});
 }
 
+export async function appendRecoveryMarker(
+	sessionManager: RecoveryMarkerSessionWriter,
+	payload: RecoveryMarkerPayload,
+): Promise<void> {
+	await Effect.runPromise(appendRecoveryMarkerEffect(sessionManager, payload));
+}
+
 export function appendRecoveryMarkerEffect(
 	sessionManager: RecoveryMarkerSessionWriter,
 	payload: RecoveryMarkerPayload,
