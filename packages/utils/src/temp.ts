@@ -55,9 +55,9 @@ export class TempDir {
 				fs.rmSync(this.#path, { recursive: true, force: true });
 				this.#removePromise = Promise.resolve();
 				return;
-			} catch (err) {
-				lastError = err;
-				const code = (err as NodeJS.ErrnoException).code;
+			} catch (error) {
+				lastError = error;
+				const code = (error as NodeJS.ErrnoException).code;
 				if (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") {
 					throw err;
 				}

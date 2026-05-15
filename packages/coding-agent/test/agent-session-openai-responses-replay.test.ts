@@ -237,9 +237,9 @@ describe("AgentSession OpenAI Responses replay boundaries", () => {
 			try {
 				fs.rmSync(target, { recursive: true, force: true });
 				return;
-			} catch (err) {
-				const code = (err as NodeJS.ErrnoException).code;
-				if (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") throw err;
+			} catch (error) {
+				const code = (error as NodeJS.ErrnoException).code;
+				if (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") throw error;
 				await Bun.sleep(250);
 			}
 		}
