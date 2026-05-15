@@ -53,7 +53,6 @@ import {
 	Snowflake,
 	setNativeKillTree,
 } from "@oh-my-pi/pi-utils";
-import { Effect } from "@oh-my-pi/pi-utils/effect";
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry } from "../config/model-registry";
@@ -119,7 +118,7 @@ import { outputMeta } from "../tools/output-meta";
 import { normalizeLocalScheme, resolveToCwd } from "../tools/path-utils";
 import { isAutoQaEnabled } from "../tools/report-tool-issue";
 import type { TodoItem, TodoPhase } from "../tools/todo-write";
-import { appendRecoveryMarkerEffect } from "./recovery-marker-live";
+import { RecoveryLedger } from "./recovery-ledger";
 import type { RecoveryAction } from "./recovery-driver";
 import { isRecoveryPolicyEnabled, runAgentRequest } from "./run-bridge";
 import { parseCommandArgs } from "../utils/command-args";
@@ -457,14 +456,7 @@ export class AgentSession {
 	#lastSuccessfulYieldToolCallId: string | undefined = undefined;
 	#promptGeneration = 0;
 	#providerSessions = new ProviderSessionPool();
-	// P3b RecoveryPolicy state. Tracks per-session counters that get
-	// stamped onto every recovery-marker JSONL line so the
-	// classifyCrashState helper (./recovery-policy.ts) can pick the latest
-	// marker on session reopen and distinguish safe / mid-stream / mid-tool.
-	// Only the marker emission code below mutates these.
-	#recoveryMarkerGeneration = 0;
-	#recoveryMarkerEventSeq = 0;
-	#recoveryMarkerPendingToolCallIds = new Set<string>();
+	#recoveryLedger: RecoveryLedger;
 
 	async #runAgentRequest(request: AgentRunRequest): Promise<void> {
 		await runAgentRequest(this.agent, this.sessionManager, request, { enabled: isRecoveryPolicyEnabled() });
@@ -616,6 +608,10 @@ export class AgentSession {
 		this.#agentId = config.agentId;
 		this.#agentRegistry = config.agentRegistry;
 		this.#branchSummaryCompleter = config.branchSummaryCompleter;
+		this.#recoveryLedger = RecoveryLedger.fromSessionManager({
+			sessionManager: this.sessionManager,
+			isRecoveryPolicyEnabled: () => isRecoveryPolicyEnabled(),
+		});
 		this.#eventRouter = new AgentEventRouter({
 			emitSessionEvent: event => this.#emitSessionEvent(event),
 			getUserMessageText: message => this.#getUserMessageText(message),
@@ -762,32 +758,12 @@ export class AgentSession {
 	// Track last assistant message for auto-compaction check
 	#lastAssistantMessage: AssistantMessage | undefined = undefined;
 
-	/**
-	 * P3b: write a `recovery-marker` JSONL line at one of the three safe
-	 * points (post-`message_end`, post-`tool_execution_end`, post-`turn_end`).
-	 * Enabled by default; `OMP_RECOVERY_POLICY=0|false|off|no` is the escape
-	 * hatch for local comparison with the legacy direct path.
-	 */
-	async #emitRecoveryMarker(isStreaming: boolean): Promise<void> {
-		if (!isRecoveryPolicyEnabled()) return;
-		this.#recoveryMarkerGeneration += 1;
-		await Effect.runPromise(
-			appendRecoveryMarkerEffect(this.sessionManager, {
-				generation: this.#recoveryMarkerGeneration,
-				lastEventSeq: this.#recoveryMarkerEventSeq,
-				isStreaming,
-				pendingToolCallIds: [...this.#recoveryMarkerPendingToolCallIds],
-				timestamp: Date.now(),
-			}),
-		);
-	}
-
 	/** Internal handler for agent events - shared by subscribe and reconnect */
 	#handleAgentEvent = async (event: AgentEvent): Promise<void> => {
 		// P3b: per-event sequence counter for recovery markers. Incremented on
 		// every event so each marker payload's `lastEventSeq` is monotonic
 		// across the session lifetime.
-		this.#recoveryMarkerEventSeq += 1;
+		this.#recoveryLedger.trackEvent();
 
 		// P3b: marker emission for tool_execution_end + turn_end. Handled at
 		// the top of the dispatcher so they fire regardless of any later
@@ -796,11 +772,9 @@ export class AgentSession {
 		// pending-tool-call set has been initialised from the message content
 		// before the marker is written.
 		if (event.type === "tool_execution_end") {
-			this.#recoveryMarkerPendingToolCallIds.delete(event.toolCallId);
-			await this.#emitRecoveryMarker(false);
+			await this.#recoveryLedger.observeToolExecutionEnd(event.toolCallId);
 		} else if (event.type === "turn_end") {
-			this.#recoveryMarkerPendingToolCallIds.clear();
-			await this.#emitRecoveryMarker(false);
+			await this.#recoveryLedger.observeTurnEnd();
 		}
 
 		await this.#eventRouter.handle(event);
@@ -979,13 +953,7 @@ export class AgentSession {
 			// `tool_execution_end` will leave these ids unfinished and
 			// RecoveryPolicy.classifyCrashState will flag them.
 			if (event.message.role === "assistant") {
-				this.#recoveryMarkerPendingToolCallIds.clear();
-				for (const content of event.message.content) {
-					if (content.type === "toolCall") {
-						this.#recoveryMarkerPendingToolCallIds.add(content.id);
-					}
-				}
-				await this.#emitRecoveryMarker(true);
+				await this.#recoveryLedger.observeAssistantMessageEnd(event.message as AssistantMessage, true);
 			}
 
 			// Track assistant message for auto-compaction (checked on agent_end)
