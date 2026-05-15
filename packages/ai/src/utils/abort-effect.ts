@@ -16,7 +16,7 @@
 // typed-error failure mode incrementally; once Http.requestStream is the
 // single entrypoint (P4f) this helper becomes Layer-internal.
 
-import { Duration, Effect } from "@oh-my-pi/pi-utils/effect";
+import { Duration, Effect, Schedule } from "@oh-my-pi/pi-utils/effect";
 import { effectFromSignal } from "@oh-my-pi/pi-utils/effect-signal";
 import { LocalAbort } from "../errors";
 
@@ -35,6 +35,26 @@ export interface LocalAbortWatchdogOpts {
 	 */
 	readonly body: (signal: AbortSignal) => Promise<void>;
 }
+
+/**
+ * Build a watchdog Effect that fails with a tagged LocalAbort after
+ * `timeoutMs` elapses. Exposed so other Effect pipelines can splice the
+ * same failure shape into their own Effect.raceFirst / Effect.timeout
+ * combinators without re-deriving the kind/duration plumbing.
+ */
+export const watchdogFailureEffect = (
+	kind: LocalAbort["kind"],
+	timeoutMs: number,
+): Effect.Effect<never, LocalAbort> =>
+	Effect.fail(new LocalAbort({ kind, durationMs: timeoutMs })).pipe(Effect.delay(Duration.millis(timeoutMs)));
+
+/**
+ * Schedule.spaced + Schedule.recurs(0) wrapper exported only so call sites
+ * keep their Effect plumbing explicit when they need a one-shot delay that
+ * is type-aligned with watchdog policies. Mostly useful inside tests.
+ */
+export const oneShotWatchdogSchedule = (timeoutMs: number): Schedule.Schedule<unknown> =>
+	Schedule.spaced(Duration.millis(timeoutMs)).pipe(Schedule.intersect(Schedule.recurs(0)));
 
 export const runWithLocalAbortWatchdog = (opts: LocalAbortWatchdogOpts): Effect.Effect<void, LocalAbort> =>
 	Effect.scoped(
@@ -55,9 +75,7 @@ export const runWithLocalAbortWatchdog = (opts: LocalAbortWatchdogOpts): Effect.
 				return Effect.promise(() => promise);
 			});
 
-			const watchdog = Effect.fail(
-				new LocalAbort({ kind: opts.watchdog.kind, durationMs: opts.watchdog.timeoutMs }),
-			).pipe(Effect.delay(Duration.millis(opts.watchdog.timeoutMs)));
+			const watchdog = watchdogFailureEffect(opts.watchdog.kind, opts.watchdog.timeoutMs);
 
 			const program: Effect.Effect<void, LocalAbort> = Effect.raceFirst(work, watchdog);
 

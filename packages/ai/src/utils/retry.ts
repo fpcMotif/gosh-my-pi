@@ -1,5 +1,5 @@
-import { Cause, Effect, Exit } from "@oh-my-pi/pi-utils/effect";
-import { withCopilotRetry } from "../effect-utils";
+import { Cause, Effect, Exit, Schedule } from "@oh-my-pi/pi-utils/effect";
+import { copilotRetryPolicy, withCopilotRetry } from "../effect-utils";
 
 type ErrorLike = {
 	message?: string;
@@ -155,6 +155,27 @@ function extractErrorCode(error: unknown): string | undefined {
 }
 
 /**
+ * Wrap a thunk-shaped Copilot call as an Effect, applying the Copilot retry
+ * Schedule when (and only when) the provider is "github-copilot". Surface for
+ * callers that already live inside an Effect pipeline and want to compose
+ * the retry policy with their own Schedule (e.g. via Schedule.intersect).
+ */
+export function copilotRetryEffect<T>(
+	fn: () => Promise<T>,
+	options: { provider: string },
+): Effect.Effect<T, unknown> {
+	return withCopilotRetry(Effect.tryPromise({ try: fn, catch: error => error }), options);
+}
+
+/**
+ * Effect-side Copilot retry Schedule + termination predicate, exposed so
+ * downstream pipelines can splice the policy into their own Effect.retry
+ * call site. Backed by `copilotRetryPolicy` (2 recurs, linear back-off).
+ */
+export const copilotRetrySchedule: Schedule.Schedule<unknown> = copilotRetryPolicy;
+export const shouldRetryCopilotError = (error: unknown): boolean => isCopilotRetryableError(error);
+
+/**
  * Wrap an initial Copilot request so transient `model_not_supported` 400s are
  * retried a small number of times. No-op for non-Copilot providers.
  */
@@ -162,8 +183,7 @@ export async function callWithCopilotModelRetry<T>(
 	fn: () => Promise<T>,
 	options: { provider: string; signal?: AbortSignal },
 ): Promise<T> {
-	const program = withCopilotRetry(Effect.tryPromise({ try: fn, catch: error => error }), options);
-	const exit = await Effect.runPromiseExit(program, { signal: options.signal });
+	const exit = await Effect.runPromiseExit(copilotRetryEffect(fn, options), { signal: options.signal });
 	if (Exit.isSuccess(exit)) return exit.value;
 	throw Cause.squash(exit.cause);
 }

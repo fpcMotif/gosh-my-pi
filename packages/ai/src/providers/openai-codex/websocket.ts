@@ -55,11 +55,7 @@ export interface CodexWebSocketConnectionOptions {
 type CodexWebSocketMessage = Record<string, unknown>;
 type CodexWebSocketQueueItem = CodexWebSocketMessage | Error | null;
 
-type WebSocketCtorWithHeaders = new (
-	url: string,
-	options?: { headers?: Record<string, string> },
-) => WebSocket;
-const WebSocketWithHeaders = WebSocket as unknown as WebSocketCtorWithHeaders;
+type WebSocketCtorWithHeaders = new (url: string, options?: { headers?: Record<string, string> }) => WebSocket;
 
 const TERMINAL_EVENT_TYPES: ReadonlySet<string> = new Set([
 	"response.completed",
@@ -113,18 +109,16 @@ export class CodexWebSocketConnection {
 			return;
 		}
 		logger.time("codexWs:awaitTcpHandshake");
-		const handshake = this.#openSocketEffect().pipe(
-			Effect.timeoutFail({
-				duration: Duration.millis(CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS),
-				onTimeout: () => {
-					this.close("connect-timeout");
-					return createCodexWebSocketTransportError("connection timeout");
-				},
+		const connectTimeout = Effect.sleep(Duration.millis(CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS)).pipe(
+			Effect.flatMap(() => {
+				this.close("connect-timeout");
+				return Effect.fail(createCodexWebSocketTransportError("connection timeout"));
 			}),
 		);
+		const handshake = Effect.raceFirst(this.#openSocketEffect(), connectTimeout);
 		const program = signal === undefined ? handshake : effectFromSignal(signal, handshake);
-		const settled = Effect.runPromise(program).catch((err: unknown) => {
-			throw this.#asTransportError(err);
+		const settled = Effect.runPromise(program).catch((error: unknown) => {
+			throw this.#asTransportError(error);
 		});
 		this.#connectPromise = settled.finally(() => {
 			this.#connectPromise = undefined;
@@ -184,19 +178,26 @@ export class CodexWebSocketConnection {
 	}
 
 	#openSocketEffect(): Effect.Effect<void, Error> {
-		return Effect.async<void, Error>(resume => {
+		return Effect.suspend(() => {
+			const { promise, resolve, reject } = Promise.withResolvers<void>();
+			const WebSocketWithHeaders = WebSocket as unknown as WebSocketCtorWithHeaders;
 			const socket = new WebSocketWithHeaders(this.#url, { headers: this.#headers });
 			this.#socket = socket;
 			let settled = false;
 			const settleSuccess = (): void => {
 				if (settled) return;
 				settled = true;
-				resume(Effect.void);
+				resolve();
 			};
 			const settleFailure = (err: Error): void => {
 				if (settled) return;
 				settled = true;
-				resume(Effect.fail(err));
+				reject(err);
+			};
+			const cleanup = (): void => {
+				if (settled) return;
+				socket.close(1000, "aborted");
+				settled = true;
 			};
 
 			socket.addEventListener("open", event => {
@@ -231,12 +232,10 @@ export class CodexWebSocketConnection {
 			});
 			socket.addEventListener("message", event => this.#dispatchMessage(event));
 
-			return Effect.sync(() => {
-				if (!settled) {
-					socket.close(1000, "aborted");
-					settled = true;
-				}
-			});
+			return Effect.tryPromise({
+				try: () => promise,
+				catch: err => this.#asTransportError(err),
+			}).pipe(Effect.onInterrupt(() => Effect.sync(cleanup)));
 		});
 	}
 
@@ -289,22 +288,19 @@ export class CodexWebSocketConnection {
 	}
 
 	#waitOneCycleEffect(timeoutMs: number): Effect.Effect<"message" | "timeout"> {
-		const waiter: Effect.Effect<"message"> = Effect.async<"message">(resume => {
-			const cb = (): void => resume(Effect.succeed("message" as const));
-			this.#waiters.push(cb);
-			return Effect.sync(() => {
+		return Effect.suspend(() => {
+			const { promise, resolve } = Promise.withResolvers<"message">();
+			const cb = (): void => resolve("message");
+			const removeWaiter = (): void => {
 				const idx = this.#waiters.indexOf(cb);
 				if (idx >= 0) this.#waiters.splice(idx, 1);
-			});
+			};
+			this.#waiters.push(cb);
+			const waiter = Effect.promise(() => promise);
+			if (timeoutMs <= 0) return waiter.pipe(Effect.ensuring(Effect.sync(removeWaiter)));
+			const timeout = Effect.sleep(Duration.millis(timeoutMs)).pipe(Effect.map(() => "timeout" as const));
+			return Effect.raceFirst(waiter, timeout).pipe(Effect.ensuring(Effect.sync(removeWaiter)));
 		});
-		if (timeoutMs <= 0) return waiter;
-		return waiter.pipe(
-			Effect.timeoutTo({
-				duration: Duration.millis(timeoutMs),
-				onTimeout: (): "timeout" => "timeout",
-				onSuccess: (value: "message"): "message" | "timeout" => value,
-			}),
-		);
 	}
 
 	#asTransportError(err: unknown): Error {

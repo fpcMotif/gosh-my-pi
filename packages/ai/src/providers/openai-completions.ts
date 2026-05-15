@@ -38,6 +38,7 @@ import { getOpenAIStreamIdleTimeoutMs, getStreamFirstEventTimeoutMs } from "../u
 import { parseStreamingJson } from "../utils/json-parse";
 import { getKimiCommonHeaders } from "../utils/oauth/kimi";
 import { notifyProviderResponse } from "../utils/provider-response";
+import { buildOpenAiSdkOptions } from "./shared/openai-sdk-options";
 import { extractHttpStatusFromError } from "../utils/retry";
 import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { isForcedToolChoice, mapToOpenAICompletionsToolChoice } from "../utils/tool-choice";
@@ -658,14 +659,7 @@ async function createClient(
 		{ preconnect: fetch.preconnect },
 	);
 	return {
-		client: new OpenAI({
-			apiKey,
-			baseURL: baseUrl,
-			dangerouslyAllowBrowser: true,
-			maxRetries: 5,
-			defaultHeaders: headers,
-			fetch: wrappedFetch,
-		}),
+		client: new OpenAI(buildOpenAiSdkOptions({ apiKey, baseUrl, defaultHeaders: headers, fetch: wrappedFetch })),
 		baseUrl,
 		requestHeaders: headers,
 		getCapturedErrorResponse: () => capturedErrorResponse,

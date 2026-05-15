@@ -228,8 +228,8 @@ export const LiveHttp: Layer.Layer<Http> = Layer.succeed(Http)(makeLiveHttp());
  * Construct an Http Layer that delegates to a custom `fetch` implementation.
  * Used by `fetchCodexModels`'s `fetchFn` option (test seam). The streaming
  * method's test seam is the caller-supplied `body` callback, not `fetchFn`,
- * because the body owns its own fetch (codex calls `fetchWithRetry`, openai
- * SDK uses its own client).
+ * because the body owns its own fetch (codex routes through
+ * `requestCodexResponseWithRetry`, openai SDK uses its own client).
  */
 export function makeHttpLayer(fetchFn: typeof fetch): Layer.Layer<Http> {
 	return Layer.succeed(Http)({

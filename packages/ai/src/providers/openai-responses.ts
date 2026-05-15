@@ -31,6 +31,7 @@ import { adaptSchemaForStrict, NO_STRICT } from "../utils/schema";
 import { mapToOpenAIResponsesToolChoice, type OpenAIResponsesToolChoice } from "../utils/tool-choice";
 import { compactGrammarDefinition } from "./grammar";
 import { convertMessages, processResponsesStream } from "./openai-responses-shared";
+import { buildOpenAiSdkOptions } from "./shared/openai-sdk-options";
 
 // OpenAI Responses-specific options
 export interface OpenAIResponsesOptions extends StreamOptions {
@@ -240,13 +241,7 @@ async function createClient(
 		headers["x-client-request-id"] = headers["x-client-request-id"] ?? sessionId;
 	}
 	return {
-		client: new OpenAI({
-			apiKey: effectiveApiKey,
-			baseURL: baseUrl,
-			dangerouslyAllowBrowser: true,
-			maxRetries: 5,
-			defaultHeaders: headers,
-		}),
+		client: new OpenAI(buildOpenAiSdkOptions({ apiKey: effectiveApiKey, baseUrl, defaultHeaders: headers })),
 		baseUrl,
 	};
 }
