@@ -46,7 +46,6 @@ import type {
 import { Effort, getSupportedEfforts, isContextOverflow, modelsAreEqual, streamSimple } from "@oh-my-pi/pi-ai";
 import { killTree, MacOSPowerAssertion } from "@oh-my-pi/pi-natives";
 import {
-	abortableSleep,
 	getAgentDbPath,
 	isEnoent,
 	logger,
@@ -125,6 +124,7 @@ import type { RecoveryAction } from "./recovery-driver";
 import { isRecoveryPolicyEnabled, runAgentRequest } from "./run-bridge";
 import { parseCommandArgs } from "../utils/command-args";
 import { AgentEventRouter } from "./agent-event-router";
+import { PostPromptScheduler } from "./post-prompt-scheduler";
 import { type EditMode, resolveEditMode } from "../utils/edit-mode";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import { extractFileMentions, generateFileMentionMessages } from "../utils/file-mentions";
@@ -391,6 +391,7 @@ export class AgentSession {
 	// Event subscription state
 	#unsubscribeAgent?: () => void;
 	#eventRouter: AgentEventRouter;
+	#postPromptScheduler: PostPromptScheduler;
 	#eventListeners: AgentSessionEventListener[] = [];
 
 	#pendingMessages = new PendingSessionMessages();
@@ -447,10 +448,6 @@ export class AgentSession {
 	#rpcHostToolNames = new Set<string>();
 
 	#ttsr: TtsrEngine;
-	#postPromptTasks = new Set<Promise<void>>();
-	#postPromptTasksPromise: Promise<void> | undefined = undefined;
-	#postPromptTasksResolve: (() => void) | undefined = undefined;
-	#postPromptTasksAbortController = new AbortController();
 
 	#streamingEditGuard: StreamingEditGuard;
 	#promptInFlightCount = 0;
@@ -624,6 +621,16 @@ export class AgentSession {
 			getUserMessageText: message => this.#getUserMessageText(message),
 			removeVisibleQueuedMessage: messageText => this.#pendingMessages.removeVisibleMessage(messageText),
 			getObfuscator: () => this.#obfuscator,
+		});
+		this.#postPromptScheduler = new PostPromptScheduler({
+			getPromptGeneration: () => this.#promptGeneration,
+			maybeRestorePrimary: () => this.#activeRetryFallback.maybeRestorePrimary(),
+			runAgentRequest: () => this.#runAgentRequest({ kind: "continue" }),
+			getRetryPromise: () => this.#retry.waitFor(),
+			getTtsrResumePromise: () => this.#ttsr.getResumePromise(),
+			isStreaming: () => this.isStreaming,
+			waitForAgentIdle: () => this.agent.waitForIdle(),
+			resolveResume: () => this.#ttsr.resolveResume(),
 		});
 		this.agent.setAssistantMessageEventInterceptor(assistantMessageEvent => {
 			const event: AgentEvent = {
@@ -1120,7 +1127,7 @@ export class AgentSession {
 				this.#pendingRewindReport = undefined;
 			}
 			const compactionTask = this.#checkCompaction(msg);
-			this.#trackPostPromptTask(compactionTask);
+			this.#postPromptScheduler.track(compactionTask);
 			await compactionTask;
 			// Check for incomplete todos only after a final assistant stop, not intermediate tool-use turns.
 			const hasToolCalls = msg.content.some(content => content.type === "toolCall");
@@ -1136,58 +1143,11 @@ export class AgentSession {
 		}
 	};
 
-	#ensurePostPromptTasksPromise(): void {
-		if (this.#postPromptTasksPromise) return;
-		const { promise, resolve } = Promise.withResolvers<void>();
-		this.#postPromptTasksPromise = promise;
-		this.#postPromptTasksResolve = resolve;
-	}
-
-	#resolvePostPromptTasks(): void {
-		if (!this.#postPromptTasksResolve) return;
-		this.#postPromptTasksResolve();
-		this.#postPromptTasksResolve = undefined;
-		this.#postPromptTasksPromise = undefined;
-	}
-
-	#trackPostPromptTask(task: Promise<void>): void {
-		this.#postPromptTasks.add(task);
-		this.#ensurePostPromptTasksPromise();
-		void task
-			.catch(() => {})
-			.finally(() => {
-				this.#postPromptTasks.delete(task);
-				if (this.#postPromptTasks.size === 0) {
-					this.#resolvePostPromptTasks();
-				}
-			});
-	}
-
 	#schedulePostPromptTask(
 		task: (signal: AbortSignal) => Promise<void>,
 		options?: { delayMs?: number; generation?: number; onSkip?: () => void },
 	): void {
-		const delayMs = options?.delayMs ?? 0;
-		const signal = this.#postPromptTasksAbortController.signal;
-		const scheduled = (async () => {
-			if (delayMs > 0) {
-				try {
-					await abortableSleep(delayMs, signal);
-				} catch {
-					return;
-				}
-			}
-			if (signal.aborted) {
-				options?.onSkip?.();
-				return;
-			}
-			if (options?.generation !== undefined && this.#promptGeneration !== options.generation) {
-				options.onSkip?.();
-				return;
-			}
-			await task(signal);
-		})();
-		this.#trackPostPromptTask(scheduled);
+		this.#postPromptScheduler.schedulePostPromptTask(task, options);
 	}
 
 	#scheduleAgentContinue(options?: {
@@ -1197,25 +1157,7 @@ export class AgentSession {
 		onSkip?: () => void;
 		onError?: (error: unknown) => void;
 	}): void {
-		this.#schedulePostPromptTask(
-			async () => {
-				if (options?.shouldContinue && !options.shouldContinue()) {
-					options.onSkip?.();
-					return;
-				}
-				try {
-					await this.#activeRetryFallback.maybeRestorePrimary();
-					await this.#runAgentRequest({ kind: "continue" });
-				} catch (error) {
-					options?.onError?.(error);
-				}
-			},
-			{
-				delayMs: options?.delayMs,
-				generation: options?.generation,
-				onSkip: options?.onSkip,
-			},
-		);
+		this.#postPromptScheduler.scheduleAgentContinue(options);
 	}
 
 	#scheduleRecoveredContinuation(action: RecoveryAction | undefined): void {
@@ -1256,20 +1198,7 @@ export class AgentSession {
 	}
 
 	async #cancelPostPromptTasks(): Promise<void> {
-		this.#postPromptTasksAbortController.abort();
-		this.#postPromptTasksAbortController = new AbortController();
-		this.#ttsr.resolveResume();
-
-		const pendingTasks = Array.from(this.#postPromptTasks);
-		if (pendingTasks.length === 0) {
-			this.#resolvePostPromptTasks();
-			return;
-		}
-
-		await Promise.allSettled(pendingTasks);
-		if (this.#postPromptTasks.size === 0) {
-			this.#resolvePostPromptTasks();
-		}
+		await this.#postPromptScheduler.cancel();
 	}
 	/**
 	 * Wait for retry, TTSR resume, and any background continuation to settle.
@@ -1278,30 +1207,7 @@ export class AgentSession {
 	 * the TTSR resume gate resolves.
 	 */
 	async #waitForPostPromptRecovery(): Promise<void> {
-		while (true) {
-			const retryPromise = this.#retry.waitFor();
-			if (retryPromise) {
-				await retryPromise;
-				continue;
-			}
-			const ttsrResume = this.#ttsr.getResumePromise();
-			if (ttsrResume) {
-				await ttsrResume;
-				continue;
-			}
-			if (this.#postPromptTasksPromise) {
-				await this.#postPromptTasksPromise;
-				continue;
-			}
-			// Tracked post-prompt tasks cover deferred continuations scheduled from
-			// event handlers. Keep the streaming fallback for direct agent activity
-			// outside the scheduler.
-			if (this.agent.state.isStreaming) {
-				await this.agent.waitForIdle();
-				continue;
-			}
-			break;
-		}
+		await this.#postPromptScheduler.waitForRecovery();
 	}
 
 	#queueDeferredTtsrInjectionIfNeeded(assistantMsg: AssistantMessage): void {

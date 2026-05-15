@@ -33,7 +33,8 @@ This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architect
 
 - [x] **Step 1 complete** — `AgentEventRouter` extracted and wired as ordered display-event router for `#handleAgentEvent` with event-start queue cleanup and assistant display deobfuscation.
   - _Downside/rollback:_ Router is a narrow shim (display-layer only) so remaining ordering logic stays in `AgentSession`; if this split causes regressions, rollback by restoring those three responsibilities directly in `#handleAgentEvent`.
-- [ ] **Step 2 pending** — PostPromptRecovery scheduler refactor.
+- [x] **Step 2 complete** — PostPromptRecovery scheduler refactor.
+  - _Downside/rollback:_ `PostPromptScheduler` centralizes all delayed continuation logic; if regressions appear around scheduling edges (cancel vs skip semantics, prompt-generation mismatch, or continuation nesting with retry/TTSR), rollback by restoring local `#schedulePostPromptTask` plus direct `#postPromptTasks*`/`#waitForPostPromptRecovery` handling in `AgentSession` for one change set before reworking with narrower helpers.
 - [ ] **Step 3 pending** — RecoveryLedger write-side extraction.
 - [ ] **Step 4 pending** — ContextPressure decision module.
 - [ ] **Step 5 pending** — ToolPresentation module.

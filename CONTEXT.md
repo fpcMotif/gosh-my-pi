@@ -35,6 +35,12 @@ and forwarding through `emitSessionEvent`. `AgentSession` now constructs this
 router and delegates the pure routing concern so side-effect ordering around
 extension visibility can be tested in isolation.
 
+**PostPromptScheduler**:
+Owns continuation scheduling for post-turn recovery. It centralizes delayed
+continuation tasks, generation guards, cancellation, and wait-gating across retry
+TTSR resume and streaming states. It also owns safe `continue` scheduling so
+`maybeRestorePrimary()` runs before every automatic `agent.continue()`.
+
 **ActiveRetryFallback**:
 First extracted subsystem (#1b pilot). Owns the per-session
 "currently-active retry fallback" state plus the methods that mutate it
