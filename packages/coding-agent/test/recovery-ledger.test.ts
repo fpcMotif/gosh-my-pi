@@ -45,8 +45,8 @@ describe("RecoveryLedger", () => {
 			},
 		});
 
-		ledger.trackEvent();
-		await ledger.observeAssistantMessageEnd(assistantMessage(["call-1", "call-2"]), true);
+		ledger.observeEventStart();
+		await ledger.observeAssistantPersisted(assistantMessage(["call-1", "call-2"]), true);
 
 		expect(markers).toEqual([
 			{
@@ -68,12 +68,12 @@ describe("RecoveryLedger", () => {
 			},
 		});
 
-		ledger.trackEvent();
-		await ledger.observeAssistantMessageEnd(assistantMessage(["call-1", "call-2"]), false);
-		ledger.trackEvent();
-		await ledger.observeToolExecutionEnd("call-1");
-		ledger.trackEvent();
-		await ledger.observeTurnEnd();
+		ledger.observeEventStart();
+		await ledger.observeAssistantPersisted(assistantMessage(["call-1", "call-2"]), false);
+		ledger.observeEventStart();
+		await ledger.observeToolCompleted("call-1");
+		ledger.observeEventStart();
+		await ledger.observeTurnCompleted();
 
 		expect(markers).toHaveLength(3);
 		expect(markers).toEqual([
@@ -110,8 +110,8 @@ describe("RecoveryLedger", () => {
 			},
 		});
 
-		ledger.trackEvent();
-		await ledger.observeAssistantMessageEnd(
+		ledger.observeEventStart();
+		await ledger.observeAssistantPersisted(
 			fromPartial<AssistantMessage>({
 				role: "user",
 				content: [{ type: "text", text: "hello" }],
@@ -131,12 +131,12 @@ describe("RecoveryLedger", () => {
 			},
 		});
 
-		ledger.trackEvent();
-		await ledger.observeAssistantMessageEnd(assistantMessage(["call-1"]), true);
-		ledger.trackEvent();
-		await ledger.observeToolExecutionEnd("call-1");
-		ledger.trackEvent();
-		await ledger.observeTurnEnd();
+		ledger.observeEventStart();
+		await ledger.observeAssistantPersisted(assistantMessage(["call-1"]), true);
+		ledger.observeEventStart();
+		await ledger.observeToolCompleted("call-1");
+		ledger.observeEventStart();
+		await ledger.observeTurnCompleted();
 
 		expect(markers).toEqual([]);
 	});

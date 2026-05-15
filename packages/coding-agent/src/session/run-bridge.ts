@@ -17,8 +17,7 @@
 // "Testing Guidance" — full-suite-safe rule).
 
 import { type Agent, AgentRunController, type AgentRunRequest, LiveClock } from "@oh-my-pi/pi-agent-core";
-import { Cause, Effect, Layer, Option } from "@oh-my-pi/pi-utils/effect";
-import { makeRecoveryMarkerLayer } from "./recovery-marker-live";
+import { Cause, Effect, Option } from "@oh-my-pi/pi-utils/effect";
 import type { SessionManager } from "./session-manager";
 
 /** Env var name + on-value for the gated runtime path. Single source of truth. */
@@ -45,9 +44,9 @@ export interface RunAgentRequestOptions {
 
 /**
  * Dispatch an `AgentRunRequest` against `agent`. When `options.enabled` is
- * `true`, runs through `AgentRunController` with the Live `RecoveryMarker`
- * Layer (writes markers via `sessionManager`'s `appendRecoveryMarker`) and
- * `LiveClock`. When `false`, calls `agent.prompt` / `agent.continue`
+ * `true`, runs through `AgentRunController` with `LiveClock`. Recovery
+ * markers are written by `RecoveryLedger` from the AgentEvent stream, not by
+ * this run bridge. When `false`, calls `agent.prompt` / `agent.continue`
  * directly — same byte-for-byte path the codebase used pre-P3.
  *
  * Failure semantics (enabled branch):
@@ -59,7 +58,7 @@ export interface RunAgentRequestOptions {
  */
 export async function runAgentRequest(
 	agent: Agent,
-	sessionManager: SessionManager,
+	_sessionManager: SessionManager,
 	request: AgentRunRequest,
 	options: RunAgentRequestOptions,
 ): Promise<void> {
@@ -69,8 +68,7 @@ export async function runAgentRequest(
 	}
 
 	const controller = new AgentRunController(agent);
-	const liveLayer = Layer.mergeAll(makeRecoveryMarkerLayer(sessionManager), LiveClock);
-	const program = controller.run(request).pipe(Effect.provide(liveLayer));
+	const program = controller.run(request).pipe(Effect.provide(LiveClock));
 	const exit = await Effect.runPromiseExit(program);
 
 	if (exit._tag === "Success") return;

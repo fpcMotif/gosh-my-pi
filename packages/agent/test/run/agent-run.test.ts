@@ -3,16 +3,13 @@
 // the Promise→Effect→Promise round-trip preserves tagged-error fidelity.
 
 import { describe, expect, it } from "bun:test";
-import { Effect, Exit, Layer, Option } from "@oh-my-pi/pi-utils/effect";
+import { Effect, Exit, Option } from "@oh-my-pi/pi-utils/effect";
 import { Cause } from "@oh-my-pi/pi-utils/effect";
 import { fromPartial } from "@total-typescript/shoehorn";
 import type { Agent } from "../../src/agent";
 import { AgentBusy, ContextOverflow, ProviderHttpError } from "../../src/errors";
 import { AgentRunController } from "../../src/run/agent-run";
 import { LiveClock } from "../../src/run/clock";
-import { NoopRecoveryMarker } from "../../src/run/recovery-marker";
-
-const TestLayer = Layer.mergeAll(NoopRecoveryMarker, LiveClock);
 
 function controllerFor(stub: { prompt?: unknown; continue?: unknown }): AgentRunController {
 	const agent = fromPartial<Agent>(stub);
@@ -38,7 +35,7 @@ describe("AgentRunController.run — happy path", () => {
 				called = true;
 			},
 		});
-		const program = controller.run({ kind: "prompt", input: "hi" }).pipe(Effect.provide(TestLayer));
+		const program = controller.run({ kind: "prompt", input: "hi" }).pipe(Effect.provide(LiveClock));
 		const result = await runUnwrap(program);
 		expect(result.ok).toBe(true);
 		expect(called).toBe(true);
@@ -51,7 +48,7 @@ describe("AgentRunController.run — happy path", () => {
 				called = true;
 			},
 		});
-		const program = controller.run({ kind: "continue" }).pipe(Effect.provide(TestLayer));
+		const program = controller.run({ kind: "continue" }).pipe(Effect.provide(LiveClock));
 		const result = await runUnwrap(program);
 		expect(result.ok).toBe(true);
 		expect(called).toBe(true);
@@ -66,7 +63,7 @@ describe("AgentRunController.run — failure channel preserves tagged errors", (
 				throw original;
 			},
 		});
-		const program = controller.run({ kind: "prompt", input: "x" }).pipe(Effect.provide(TestLayer));
+		const program = controller.run({ kind: "prompt", input: "x" }).pipe(Effect.provide(LiveClock));
 		const result = await runUnwrap(program);
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -81,7 +78,7 @@ describe("AgentRunController.run — failure channel preserves tagged errors", (
 				throw original;
 			},
 		});
-		const program = controller.run({ kind: "prompt", input: "x" }).pipe(Effect.provide(TestLayer));
+		const program = controller.run({ kind: "prompt", input: "x" }).pipe(Effect.provide(LiveClock));
 		const result = await runUnwrap(program);
 		if (result.ok) {
 			expect(result.ok).toBe(false);
@@ -102,7 +99,7 @@ describe("AgentRunController.run — failure channel preserves tagged errors", (
 				throw original;
 			},
 		});
-		const program = controller.run({ kind: "continue" }).pipe(Effect.provide(TestLayer));
+		const program = controller.run({ kind: "continue" }).pipe(Effect.provide(LiveClock));
 		const result = await runUnwrap(program);
 		if (result.ok) {
 			expect(result.ok).toBe(false);
@@ -119,7 +116,7 @@ describe("AgentRunController.run — non-tagged errors get wrapped", () => {
 				throw new Error("kaboom");
 			},
 		});
-		const program = controller.run({ kind: "prompt", input: "x" }).pipe(Effect.provide(TestLayer));
+		const program = controller.run({ kind: "prompt", input: "x" }).pipe(Effect.provide(LiveClock));
 		const result = await runUnwrap(program);
 		if (result.ok) {
 			expect(result.ok).toBe(false);
@@ -137,7 +134,7 @@ describe("AgentRunController.run — non-tagged errors get wrapped", () => {
 				throw "raw string";
 			},
 		});
-		const program = controller.run({ kind: "prompt", input: "x" }).pipe(Effect.provide(TestLayer));
+		const program = controller.run({ kind: "prompt", input: "x" }).pipe(Effect.provide(LiveClock));
 		const result = await runUnwrap(program);
 		if (result.ok) {
 			expect(result.ok).toBe(false);

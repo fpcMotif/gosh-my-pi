@@ -1,16 +1,17 @@
-// RecoveryMarker — the Effect service that AgentRunController uses to write
-// `event: "recovery-marker"` JSONL lines into the session log at three safe
-// points (after `message_end`, after each `tool_execution_end`, after
-// `turn_end`). The classifier in `RecoveryPolicy` (in coding-agent) reads
-// these on session reopen to decide whether the prior process exit left
-// the agent in `safe` / `mid-stream` / `mid-tool` state.
+// RecoveryMarker — the Effect service used by coding-agent's RecoveryLedger
+// writer adapter to append `event: "recovery-marker"` JSONL lines into the
+// session log at three safe points (after `message_end`, after each
+// `tool_execution_end`, after `turn_end`). The classifier in `RecoveryPolicy`
+// (in coding-agent) reads these on session reopen to decide whether the prior
+// process exit left the agent in `safe` / `mid-stream` / `mid-tool` state.
 //
 // Per ADR-0003: thin pass-through. The Live binding (in coding-agent) just
 // appends one JSONL line via the existing NdjsonFileWriter; no new
-// durability infrastructure is introduced. The Layer interface here exists
-// so AgentRunController has a typed test seam.
+// durability infrastructure is introduced. AgentRunController intentionally
+// does not depend on this service; marker emission belongs to the event-stream
+// write-side ledger.
 //
-// Naming policy: `recovery-marker` is the canonical term per CONTEXT.md:486.
+// Naming policy: `recovery-marker` is the canonical term per CONTEXT.md.
 // Avoid: `turn-checkpoint`, `durable-checkpoint`, `snapshot`.
 
 import { Context, Effect, Layer } from "@oh-my-pi/pi-utils/effect";
@@ -65,9 +66,8 @@ export class RecoveryMarker extends Context.Service<RecoveryMarker, RecoveryMark
 ) {}
 
 /**
- * Layer that drops every marker on the floor. Used by tests that don't care
- * about durability (most agent-loop tests) and as the default when
- * `OMP_RECOVERY_POLICY` is unset.
+ * Layer that drops every marker on the floor. Used by tests that exercise
+ * marker-writing code without durability.
  */
 export const NoopRecoveryMarker: Layer.Layer<RecoveryMarker> = Layer.succeed(RecoveryMarker)({
 	append: () => Effect.void,

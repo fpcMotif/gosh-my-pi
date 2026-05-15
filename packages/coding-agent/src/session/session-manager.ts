@@ -207,12 +207,12 @@ export interface CustomMessageEntry<T = unknown> extends SessionEntryBase {
 
 /** Session entry - has id/parentId for tree structure (returned by "read" methods in SessionManager) */
 /**
- * RecoveryMarker JSONL entry — appended by AgentRunController at three
+ * RecoveryMarker JSONL entry — appended by RecoveryLedger at three
  * safe points (post-`message_end`, post-`tool_execution_end`, post-
  * `turn_end`) when crash recovery is enabled. Read once on session reopen by
  * `RecoveryPolicy` to classify the prior process exit into
  * `safe`/`mid-stream`/`mid-tool`. Skipped by LLM-context construction
- * (same family as `CustomEntry`). See ADR-0003 + CONTEXT.md:486.
+ * (same family as `CustomEntry`). See ADR-0003 + CONTEXT.md.
  */
 export interface RecoveryMarkerEntry extends SessionEntryBase {
 	type: "recovery-marker";
@@ -2461,7 +2461,7 @@ export class SessionManager {
 
 	/**
 	 * Append a recovery-marker entry as child of current leaf, then advance leaf.
-	 * Used by `RecoveryMarker` Live Layer (P3b). Skipped by LLM-context construction
+	 * Used by RecoveryLedger's writer Adapter. Skipped by LLM-context construction
 	 * — only `RecoveryPolicy` reads it on session reopen. Returns entry id.
 	 */
 	appendRecoveryMarker(payload: {

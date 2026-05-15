@@ -45,14 +45,7 @@ import type {
 } from "@oh-my-pi/pi-ai";
 import { Effort, getSupportedEfforts, isContextOverflow, modelsAreEqual, streamSimple } from "@oh-my-pi/pi-ai";
 import { killTree, MacOSPowerAssertion } from "@oh-my-pi/pi-natives";
-import {
-	getAgentDbPath,
-	isEnoent,
-	logger,
-	prompt,
-	Snowflake,
-	setNativeKillTree,
-} from "@oh-my-pi/pi-utils";
+import { getAgentDbPath, isEnoent, logger, prompt, Snowflake, setNativeKillTree } from "@oh-my-pi/pi-utils";
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry } from "../config/model-registry";
@@ -763,7 +756,7 @@ export class AgentSession {
 		// P3b: per-event sequence counter for recovery markers. Incremented on
 		// every event so each marker payload's `lastEventSeq` is monotonic
 		// across the session lifetime.
-		this.#recoveryLedger.trackEvent();
+		this.#recoveryLedger.observeEventStart();
 
 		// P3b: marker emission for tool_execution_end + turn_end. Handled at
 		// the top of the dispatcher so they fire regardless of any later
@@ -772,9 +765,9 @@ export class AgentSession {
 		// pending-tool-call set has been initialised from the message content
 		// before the marker is written.
 		if (event.type === "tool_execution_end") {
-			await this.#recoveryLedger.observeToolExecutionEnd(event.toolCallId);
+			await this.#recoveryLedger.observeToolCompleted(event.toolCallId);
 		} else if (event.type === "turn_end") {
-			await this.#recoveryLedger.observeTurnEnd();
+			await this.#recoveryLedger.observeTurnCompleted();
 		}
 
 		await this.#eventRouter.handle(event);
@@ -953,7 +946,7 @@ export class AgentSession {
 			// `tool_execution_end` will leave these ids unfinished and
 			// RecoveryPolicy.classifyCrashState will flag them.
 			if (event.message.role === "assistant") {
-				await this.#recoveryLedger.observeAssistantMessageEnd(event.message as AssistantMessage, true);
+				await this.#recoveryLedger.observeAssistantPersisted(event.message as AssistantMessage, true);
 			}
 
 			// Track assistant message for auto-compaction (checked on agent_end)

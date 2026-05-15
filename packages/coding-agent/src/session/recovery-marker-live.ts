@@ -1,7 +1,7 @@
 // Live binding for the `RecoveryMarker` Effect service (defined in
 // pi-agent-core's `run/recovery-marker.ts`). Wraps a `SessionManager`'s
-// `appendRecoveryMarker` Promise method as an Effect that maps any
-// thrown error into the typed `SessionStorageError` failure channel.
+// `appendRecoveryMarker` method as an Effect that maps any thrown error
+// into the typed `SessionStorageError` failure channel.
 //
 // Per ADR-0003: this is a thin pass-through. We do NOT introduce a new
 // durability infrastructure — the existing `NdjsonFileWriter` queue +

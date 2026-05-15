@@ -29,7 +29,10 @@ export class RecoveryLedger {
 	#eventSeq = 0;
 	#pendingToolCallIds = new Set<string>();
 
-	constructor(ctx: { isRecoveryPolicyEnabled: () => boolean; appendRecoveryMarker?: RecoveryLedgerContext["appendRecoveryMarker"] }) {
+	constructor(ctx: {
+		isRecoveryPolicyEnabled: () => boolean;
+		appendRecoveryMarker?: RecoveryLedgerContext["appendRecoveryMarker"];
+	}) {
 		this.#ctx = {
 			isRecoveryPolicyEnabled: ctx.isRecoveryPolicyEnabled,
 			appendRecoveryMarker: ctx.appendRecoveryMarker ?? (async () => undefined),
@@ -51,9 +54,10 @@ export class RecoveryLedger {
 	}
 
 	/**
-	 * Call once for each observed AgentEvent, before branch-specific handling.
+	 * Call once at the start of each observed AgentEvent, before
+	 * branch-specific handling.
 	 */
-	trackEvent(): void {
+	observeEventStart(): void {
 		this.#eventSeq += 1;
 	}
 
@@ -62,7 +66,7 @@ export class RecoveryLedger {
 	 * persisted. `isStreaming` is true for assistant message-end markers and
 	 * drives the `mid-stream` recovery branch.
 	 */
-	async observeAssistantMessageEnd(message: AssistantMessage, isStreaming: boolean): Promise<void> {
+	async observeAssistantPersisted(message: AssistantMessage, isStreaming: boolean): Promise<void> {
 		if (!this.#ctx.isRecoveryPolicyEnabled()) return;
 		if (message.role !== "assistant") return;
 
@@ -79,7 +83,7 @@ export class RecoveryLedger {
 	 * Persist a marker when a tool call completes and removes that id from
 	 * the pending set.
 	 */
-	async observeToolExecutionEnd(toolCallId: string): Promise<void> {
+	async observeToolCompleted(toolCallId: string): Promise<void> {
 		if (!this.#ctx.isRecoveryPolicyEnabled()) return;
 		this.#pendingToolCallIds.delete(toolCallId);
 		await this.#appendMarker(false);
@@ -88,7 +92,7 @@ export class RecoveryLedger {
 	/**
 	 * Persist a marker at turn end and clear pending ids.
 	 */
-	async observeTurnEnd(): Promise<void> {
+	async observeTurnCompleted(): Promise<void> {
 		if (!this.#ctx.isRecoveryPolicyEnabled()) return;
 		this.#pendingToolCallIds.clear();
 		await this.#appendMarker(false);
