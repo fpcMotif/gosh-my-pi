@@ -109,7 +109,8 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 								<button
 									type="button"
 									onClick={() => setExpandedKey(isExpanded ? null : key)}
-									className="w-full bg-transparent border-none text-left px-5 py-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+									aria-expanded={isExpanded}
+									className="w-full bg-transparent border-none text-left px-5 py-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors focus-visible:outline-none focus-visible:bg-[var(--bg-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-cyan)]"
 								>
 									<div
 										className="grid gap-3 items-center"
