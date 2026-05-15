@@ -37,7 +37,8 @@ This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architect
   - _Downside/rollback:_ `PostPromptScheduler` centralizes all delayed continuation logic; if regressions appear around scheduling edges (cancel vs skip semantics, prompt-generation mismatch, or continuation nesting with retry/TTSR), rollback by restoring local `#schedulePostPromptTask` plus direct `#postPromptTasks*`/`#waitForPostPromptRecovery` handling in `AgentSession` for one change set before reworking with narrower helpers.
 - [x] **Step 3 complete** — RecoveryLedger write-side extraction.
   - _Downside/rollback:_ RecoveryLedger centralizes recovery-marker write timing and state; if it causes sequencing confusion, rollback by moving write timing back into AgentSession while keeping RecoveryMarker writes in one place and reintroducing a thinner helper on a smaller scope.
-- [ ] **Step 4 pending** — ContextPressure decision module.
+- [x] **Step 4 complete** - ContextPressure decision module.
+  - _Downside/rollback:_ `ContextPressurePolicy` improves decision-table testability but adds one more hop between the automatic compaction trigger and the session mutations. If debugging pressure decisions gets harder, rollback by moving `decideContextPressure` back into `#checkCompaction` while keeping the pure candidate-ordering tests as a guard.
 - [ ] **Step 5 pending** — ToolPresentation module.
 - [ ] **Step 6 pending** — Direct `RpcModelCatalog` picker.
 - [ ] **Step 7 pending** — Collapse gmp-only `Workspace` seam.

@@ -153,9 +153,17 @@ from the error string. Bails to "next candidate" when delay exceeds
 `maxAcceptableDelayMs` (default 30s) and another candidate is available.
 Lives in `packages/coding-agent/src/session/compaction-retry.ts`.
 
-The compaction orchestrator itself (`#runAutoCompaction`, `#checkCompaction`,
-`#tryContextPromotion`, `#getCompactionModelCandidates`, `#pruneToolOutputs`,
-`compact()` from `./compaction`) intentionally stays on AgentSession — it
+**ContextPressurePolicy**:
+A pure decision Module for automatic context pressure. It classifies assistant
+messages into overflow, threshold, and skip decisions; applies pruning token
+savings to threshold checks; resolves configured promotion targets; and orders
+auto-compaction model candidates from role models plus the largest remaining
+fallback. Lives in
+`packages/coding-agent/src/session/context-pressure-policy.ts`.
+
+The mutating compaction orchestrator itself (`#runAutoCompaction`,
+`#checkCompaction`, `#tryContextPromotion`, `#pruneToolOutputs`, `compact()`
+from `./compaction`) intentionally stays on AgentSession - it
 has 12+ session-callback dependencies (handoff, schedulePostPromptTask,
 emitSessionEvent, scheduleAutoContinuePrompt, scheduleAgentContinue,
 syncTodoPhasesFromBranch, providerSessions.closeForCodexHistoryRewrite,

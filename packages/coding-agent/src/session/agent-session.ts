@@ -43,7 +43,7 @@ import type {
 	Usage,
 	UsageReport,
 } from "@oh-my-pi/pi-ai";
-import { Effort, getSupportedEfforts, isContextOverflow, modelsAreEqual, streamSimple } from "@oh-my-pi/pi-ai";
+import { Effort, getSupportedEfforts, modelsAreEqual, streamSimple } from "@oh-my-pi/pi-ai";
 import { killTree, MacOSPowerAssertion } from "@oh-my-pi/pi-natives";
 import { getAgentDbPath, isEnoent, logger, prompt, Snowflake, setNativeKillTree } from "@oh-my-pi/pi-utils";
 import type { AsyncJob, AsyncJobManager } from "../async";
@@ -53,7 +53,6 @@ import {
 	extractExplicitThinkingSelector,
 	formatModelSelectorValue,
 	formatModelString,
-	parseModelString,
 	type ResolvedModelRoleValue,
 	resolveModelRoleValue,
 } from "../config/model-resolver";
@@ -131,9 +130,14 @@ import {
 	estimateTokens,
 	generateBranchSummary,
 	prepareCompaction,
-	shouldCompact,
 } from "./compaction";
 import { DEFAULT_PRUNE_CONFIG, pruneToolOutputs } from "./compaction/pruning";
+import {
+	decideContextPressure,
+	orderContextPressureModelCandidates,
+	resolveContextPromotionConfiguredTarget,
+	shouldPruneForContextPressure,
+} from "./context-pressure-policy";
 import { type CompactionSummaryMessage, type CustomMessage, convertToLlm, type FileMentionMessage } from "./messages";
 import { ActiveRetryFallback } from "./active-retry-fallback";
 import { deriveAssistantStreamMessage } from "./assistant-stream-message";
@@ -3534,16 +3538,9 @@ export class AgentSession {
 	 * @param skipAbortedCheck If false, include aborted messages (for pre-prompt check). Default: true
 	 */
 	async #checkCompaction(assistantMessage: AssistantMessage, skipAbortedCheck = true): Promise<void> {
-		// Skip if message was aborted (user cancelled) - unless skipAbortedCheck is false
-		if (skipAbortedCheck && assistantMessage.stopReason === "aborted") return;
-		const contextWindow = this.model?.contextWindow ?? 0;
+		const currentModel = this.model;
+		const compactionSettings = this.settings.getGroup("compaction");
 		const generation = this.#promptGeneration;
-		// Skip overflow check if the message came from a different model.
-		// This handles the case where user switched from a smaller-context model (e.g. opus)
-		// to a larger-context model (e.g. codex) - the overflow error from the old model
-		// shouldn't trigger compaction for the new model.
-		const sameModel =
-			this.model && assistantMessage.provider === this.model.provider && assistantMessage.model === this.model.id;
 		// This handles the case where an error was kept after compaction (in the "kept" region).
 		// The error shouldn't trigger another compaction since we already compacted.
 		// Example: opus fails -> switch to codex -> compact -> switch back to opus -> opus error
@@ -3551,46 +3548,37 @@ export class AgentSession {
 		const compactionEntry = getLatestCompactionEntry(this.sessionManager.getBranch());
 		const errorIsFromBeforeCompaction =
 			compactionEntry !== null && assistantMessage.timestamp < new Date(compactionEntry.timestamp).getTime();
-		if (sameModel === true && !errorIsFromBeforeCompaction && isContextOverflow(assistantMessage, contextWindow)) {
+
+		const policyInput = {
+			assistantMessage,
+			currentModel,
+			compactionSettings,
+			skipAbortedCheck,
+			errorIsFromBeforeCompaction,
+		};
+		const pruneResult = shouldPruneForContextPressure(policyInput) ? await this.#pruneToolOutputs() : undefined;
+		const decision = decideContextPressure({ ...policyInput, pruneResult });
+		if (decision.kind === "skip") return;
+
+		if (decision.reason === "overflow") {
 			// Remove the error message from agent state (it IS saved to session for history,
 			// but we don't want it in context for the retry)
 			const messages = this.agent.state.messages;
 			if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
 				this.agent.replaceMessages(messages.slice(0, -1));
 			}
+		}
 
-			// Try context promotion first - switch to a larger model and retry without compacting
-			const promoted = await this.#tryContextPromotion(assistantMessage);
-			if (promoted) {
-				// Retry on the promoted (larger) model without compacting
+		const promoted = await this.#tryContextPromotion(assistantMessage);
+		if (promoted) {
+			if (decision.willRetry) {
 				this.#scheduleAgentContinue({ delayMs: 100, generation });
-				return;
-			}
-
-			// No promotion target available fall through to compaction
-			const compactionSettings = this.settings.getGroup("compaction");
-			if (compactionSettings.enabled && compactionSettings.strategy !== "off") {
-				await this.#runAutoCompaction("overflow", true);
 			}
 			return;
 		}
-		const compactionSettings = this.settings.getGroup("compaction");
-		if (!compactionSettings.enabled || compactionSettings.strategy === "off") return;
 
-		// Case 2: Threshold - turn succeeded but context is getting large
-		// Skip if this was an error (non-overflow errors don't have usage data)
-		if (assistantMessage.stopReason === "error") return;
-		const pruneResult = await this.#pruneToolOutputs();
-		let contextTokens = calculateContextTokens(assistantMessage.usage);
-		if (pruneResult) {
-			contextTokens = Math.max(0, contextTokens - pruneResult.tokensSaved);
-		}
-		if (shouldCompact(contextTokens, contextWindow, compactionSettings)) {
-			// Try promotion first — if a larger model is available, switch instead of compacting
-			const promoted = await this.#tryContextPromotion(assistantMessage);
-			if (!promoted) {
-				await this.#runAutoCompaction("threshold", false);
-			}
+		if (decision.compactIfPromotionUnavailable) {
+			await this.#runAutoCompaction(decision.reason, decision.willRetry);
 		}
 	}
 	#assistantEndedWithSuccessfulYield(assistantMessage: AssistantMessage): boolean {
@@ -3867,7 +3855,7 @@ export class AgentSession {
 		const availableModels = this.#modelRegistry.getAvailable();
 		if (availableModels.length === 0) return undefined;
 
-		const candidate = this.#resolveContextPromotionConfiguredTarget(currentModel, availableModels);
+		const candidate = resolveContextPromotionConfiguredTarget(currentModel, availableModels);
 		if (!candidate) return undefined;
 		if (modelsAreEqual(candidate, currentModel)) return undefined;
 		if (candidate.contextWindow <= contextWindow) return undefined;
@@ -4026,10 +4014,6 @@ export class AgentSession {
 		);
 	}
 
-	#getModelKey(model: Model): string {
-		return `${model.provider}/${model.id}`;
-	}
-
 	#formatRoleModelValue(
 		role: string,
 		model: Model,
@@ -4046,19 +4030,6 @@ export class AgentSession {
 		const thinkingLevel = extractExplicitThinkingSelector(existingRoleValue, this.settings);
 		return formatModelSelectorValue(modelKey, thinkingLevel);
 	}
-	#resolveContextPromotionConfiguredTarget(currentModel: Model, availableModels: Model[]): Model | undefined {
-		const configuredTarget = currentModel.contextPromotionTarget?.trim();
-		if (configuredTarget === null || configuredTarget === undefined || configuredTarget === "") return undefined;
-
-		const parsed = parseModelString(configuredTarget);
-		if (parsed) {
-			const explicitModel = availableModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-			if (explicitModel) return explicitModel;
-		}
-
-		return availableModels.find(m => m.provider === currentModel.provider && m.id === configuredTarget);
-	}
-
 	#resolveRoleModelFull(
 		role: string,
 		availableModels: Model[],
@@ -4082,31 +4053,11 @@ export class AgentSession {
 	}
 
 	#getCompactionModelCandidates(availableModels: Model[]): Model[] {
-		const candidates: Model[] = [];
-		const seen = new Set<string>();
-
-		const addCandidate = (model: Model | undefined): void => {
-			if (!model) return;
-			const key = this.#getModelKey(model);
-			if (seen.has(key)) return;
-			seen.add(key);
-			candidates.push(model);
-		};
-
 		const currentModel = this.model;
-		for (const role of MODEL_ROLE_IDS) {
-			addCandidate(this.#resolveRoleModelFull(role, availableModels, currentModel).model);
-		}
-
-		const sortedByContext = [...availableModels].sort((a, b) => b.contextWindow - a.contextWindow);
-		for (const model of sortedByContext) {
-			if (!seen.has(this.#getModelKey(model))) {
-				addCandidate(model);
-				break;
-			}
-		}
-
-		return candidates;
+		const roleModels = MODEL_ROLE_IDS.map(
+			role => this.#resolveRoleModelFull(role, availableModels, currentModel).model,
+		);
+		return orderContextPressureModelCandidates({ availableModels, roleModels });
 	}
 
 	/**
