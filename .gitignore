@@ -35,6 +35,8 @@ tui-debug.log
 
 # Test & coverage
 coverage/
+coverage-*/
+packages/*/coverage-*/
 .nyc_output/
 packages/ai/test/.temp-images/
 
