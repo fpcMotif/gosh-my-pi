@@ -1,0 +1,3 @@
+## 2025-05-15 - Promise Coalescing for Concurrent API Requests
+**Learning:** In the stats dashboard architecture, the frontend frequently makes concurrent calls to `/api/stats`, `/api/stats/recent`, and `/api/stats/errors`. Because the backend (server.ts) awaited `syncAllSessions()` on every request, this caused 3 parallel executions of the sync process, leading to redundant and heavy filesystem I/O operations (statting all session files).
+**Action:** Apply the promise coalescing pattern to deduplicate concurrent file I/O or expensive backend operations when multiple API endpoints trigger them simultaneously.
