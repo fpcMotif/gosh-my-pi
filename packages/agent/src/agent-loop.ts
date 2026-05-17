@@ -19,6 +19,65 @@ function lastAssistantErrorKind(messages: AgentMessage[], contextWindow?: number
 	return undefined;
 }
 
+function errorMessageFromUnknown(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function createEmptyUsage(): AssistantMessage["usage"] {
+	return {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+}
+
+function createTerminalErrorMessage(error: unknown, config: AgentLoopConfig): AssistantMessage {
+	const errorMessage = errorMessageFromUnknown(error);
+
+	return {
+		role: "assistant",
+		content: [{ type: "text", text: `Error: ${errorMessage}` }],
+		api: config.model.api,
+		provider: config.model.provider,
+		model: config.model.id,
+		usage: createEmptyUsage(),
+		stopReason: "error",
+		errorMessage,
+		timestamp: Date.now(),
+	};
+}
+
+function pushTerminalError(
+	error: unknown,
+	config: AgentLoopConfig,
+	currentContext: AgentContext,
+	newMessages: AgentMessage[],
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+): void {
+	const message = createTerminalErrorMessage(error, config);
+
+	currentContext.messages.push(message);
+	newMessages.push(message);
+	stream.push({ type: "message_start", message });
+	stream.push({ type: "message_end", message });
+}
+
+function pushAgentEnd(
+	newMessages: AgentMessage[],
+	config: AgentLoopConfig,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+): void {
+	stream.push({
+		type: "agent_end",
+		messages: newMessages,
+		errorKind: lastAssistantErrorKind(newMessages, config.model?.contextWindow),
+	});
+	stream.end(newMessages);
+}
+
 interface RunLoopState {
 	readonly firstTurn: boolean;
 	readonly pendingMessages: AgentMessage[];
@@ -43,37 +102,37 @@ async function runLoop(
 	initialMessages: AgentMessage[] = [],
 ): Promise<void> {
 	stream.push({ type: "agent_start" });
-	// When the caller already supplied initialMessages (e.g. an explicit prompt or a single
-	// dequeued steering message in one-at-a-time mode), don't drain the steering queue here.
-	// the inner loop polls on subsequent iterations so each queued message gets its own turn.
-	const steeringMessages = initialMessages.length > 0 ? [] : ((await config.getSteeringMessages?.()) ?? []);
-	const stateRef: { current: RunLoopState } = {
-		current: {
-			firstTurn: true,
-			pendingMessages: [...initialMessages, ...steeringMessages],
-			done: false,
-		},
-	};
 
-	await Effect.runPromise(
-		Effect.whileLoop({
-			while: () => !stateRef.current.done,
-			body: () =>
-				Effect.promise(() =>
-					stepRunLoop(stateRef.current, currentContext, newMessages, config, signal, stream, streamFn),
-				),
-			step: (next: RunLoopState) => {
-				stateRef.current = next;
+	try {
+		// When the caller already supplied initialMessages (e.g. an explicit prompt or a single
+		// dequeued steering message in one-at-a-time mode), don't drain the steering queue here.
+		// the inner loop polls on subsequent iterations so each queued message gets its own turn.
+		const steeringMessages = initialMessages.length > 0 ? [] : ((await config.getSteeringMessages?.()) ?? []);
+		const stateRef: { current: RunLoopState } = {
+			current: {
+				firstTurn: true,
+				pendingMessages: [...initialMessages, ...steeringMessages],
+				done: false,
 			},
-		}),
-	);
+		};
 
-	stream.push({
-		type: "agent_end",
-		messages: newMessages,
-		errorKind: lastAssistantErrorKind(newMessages, config.model?.contextWindow),
-	});
-	stream.end(newMessages);
+		await Effect.runPromise(
+			Effect.whileLoop({
+				while: () => !stateRef.current.done,
+				body: () =>
+					Effect.promise(() =>
+						stepRunLoop(stateRef.current, currentContext, newMessages, config, signal, stream, streamFn),
+					),
+				step: (next: RunLoopState) => {
+					stateRef.current = next;
+				},
+			}),
+		);
+	} catch (error) {
+		pushTerminalError(error, config, currentContext, newMessages, stream);
+	}
+
+	pushAgentEnd(newMessages, config, stream);
 }
 
 async function stepRunLoop(
