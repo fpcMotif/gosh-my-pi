@@ -1,7 +1,12 @@
 /**
  * TUI renderers for built-in tools.
  *
- * These provide rich visualization for tool calls and results in the TUI.
+ * Each entry produces pi-tui {@link Component}s for the in-process TUI. The
+ * separate `toolPresenters` registry ({@link "./presenters"}) carries the neutral
+ * {@link ToolPresentation} data consumed by the OMP-RPC wire translator and by
+ * this file's consumers as the preferred presentation source. Keeping the two
+ * registries separate means the wire layer stays free of pi-tui transitive
+ * imports.
  */
 import type { Component } from "@oh-my-pi/pi-tui";
 import { editToolRenderer } from "../edit/renderer";
@@ -10,7 +15,6 @@ import { lspToolRenderer } from "../lsp/render";
 import type { Theme } from "../modes/theme/theme";
 import { taskToolRenderer } from "../task/render";
 import { webSearchToolRenderer } from "../web/search/render";
-import type { ToolPresentationOptions, ToolPresentationResult } from "./presentation";
 import { askToolRenderer } from "./ask";
 import { astEditToolRenderer } from "./ast-edit";
 import { astGrepToolRenderer } from "./ast-grep";
@@ -33,12 +37,6 @@ import { todoWriteToolRenderer } from "./todo-write";
 import { writeToolRenderer } from "./write";
 
 export type ToolRenderer = {
-	presentCall?: (args: unknown, options: ToolPresentationOptions) => ToolPresentationResult;
-	presentResult?: (
-		result: { content: Array<{ type: string; text?: string }>; details?: unknown; isError?: boolean },
-		options: ToolPresentationOptions,
-		args?: unknown,
-	) => ToolPresentationResult;
 	renderCall: (args: unknown, options: RenderResultOptions, theme: Theme) => Component;
 	renderResult: (
 		result: { content: Array<{ type: string; text?: string }>; details?: unknown; isError?: boolean },

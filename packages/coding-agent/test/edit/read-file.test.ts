@@ -1,42 +1,24 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { readEditFileText } from "../../src/edit/read-file";
 
-let tempDirs: string[] = [];
-
-afterEach(async () => {
-	await Promise.all(tempDirs.map(dir => fs.rm(dir, { recursive: true, force: true })));
-	tempDirs = [];
-});
-
-async function makeTempDir(): Promise<string> {
-	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "read-edit-file-"));
-	tempDirs.push(dir);
-	return dir;
-}
-
 describe("readEditFileText", () => {
-	it("reads files as utf8 text", async () => {
-		const dir = await makeTempDir();
-		const filePath = path.join(dir, "note.txt");
-		await Bun.write(filePath, "hello\n");
+	it("reads UTF-8 text and maps missing files to the display path", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "read-edit-file-"));
+		const file = path.join(dir, "sample.txt");
+		await Bun.write(file, "hello");
 
-		await expect(readEditFileText(filePath, "note.txt")).resolves.toBe("hello\n");
-	});
-
-	it("maps missing files to a display-path error", async () => {
-		const dir = await makeTempDir();
-
-		await expect(readEditFileText(path.join(dir, "missing.txt"), "shown/path.txt")).rejects.toThrow(
-			"File not found: shown/path.txt",
+		await expect(readEditFileText(file, "sample.txt")).resolves.toBe("hello");
+		await expect(readEditFileText(path.join(dir, "missing.txt"), "shown/missing.txt")).rejects.toThrow(
+			"File not found: shown/missing.txt",
 		);
 	});
 
-	it("rethrows non-missing filesystem errors", async () => {
-		const dir = await makeTempDir();
+	it("rethrows non-missing read errors without remapping them to a not-found message", async () => {
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "read-edit-dir-"));
 
-		await expect(readEditFileText(dir, "directory")).rejects.toThrow();
+		await expect(readEditFileText(dir, "shown/dir")).rejects.not.toThrow("File not found: shown/dir");
 	});
 });

@@ -36,6 +36,27 @@ describe("renderOutputBlock", () => {
 		expect(regularLine).not.toBe("regular line");
 	});
 
+	it("restores block background after SGR resets inside content", async () => {
+		const theme = await getThemeByName("dark");
+		expect(theme).toBeDefined();
+		const uiTheme = theme!;
+		const bgAnsi = uiTheme.getBgAnsi("toolPendingBg");
+
+		const lines = renderOutputBlock(
+			{
+				width: 60,
+				state: "running",
+				sections: [{ lines: [`before\x1b[0mafter\x1b[49mdone`] }],
+			},
+			uiTheme,
+		);
+		const contentLine = lines.find(line => line.includes("before"));
+
+		expect(contentLine).toBeDefined();
+		expect(contentLine).toContain(`\x1b[0m${bgAnsi}`);
+		expect(contentLine).toContain(`\x1b[49m${bgAnsi}`);
+	});
+
 	it("reuses cached block renders until explicitly invalidated", async () => {
 		const theme = await getThemeByName("dark");
 		expect(theme).toBeDefined();

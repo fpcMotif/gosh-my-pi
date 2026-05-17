@@ -579,8 +579,8 @@ export class SettingsSelectorComponent extends Container {
 
 	#showPluginsTab(): void {
 		this.#pluginComponent = new PluginSettingsComponent(this.context.cwd, {
-			onClose: () => this.callbacks.onCancel(),
-			onPluginChanged: () => this.callbacks.onPluginsChanged?.(),
+			onClose: this.callbacks.onCancel,
+			onPluginChanged: this.callbacks.onPluginsChanged ?? Function.prototype,
 		});
 		this.addChild(this.#pluginComponent);
 	}

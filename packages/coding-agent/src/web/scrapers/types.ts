@@ -276,7 +276,7 @@ export function formatMediaDuration(totalSeconds: number): string {
 export type LocalizedText = string | Record<string, string | null> | null | undefined;
 
 export function getLocalizedText(value: LocalizedText, defaultLocale?: string): string | undefined {
-	if (value === null) return undefined;
+	if (value === null || value === undefined) return undefined;
 	if (typeof value === "string") return value;
 	if (defaultLocale && value[defaultLocale]) return value[defaultLocale];
 	return (

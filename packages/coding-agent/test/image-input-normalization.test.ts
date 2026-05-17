@@ -27,4 +27,13 @@ describe("ensureSupportedImageInput", () => {
 		expect(convertToPngSpy).toHaveBeenCalledWith("bmpdata", "image/bmp");
 		expect(result).toEqual({ type: "image", data: "pngdata", mimeType: "image/png" });
 	});
+
+	test("rejects unsupported image input when conversion cannot produce png data", async () => {
+		const convertToPngSpy = vi.spyOn(imageConvert, "convertToPng").mockResolvedValue(null);
+
+		const result = await ensureSupportedImageInput({ type: "image", data: "bad", mimeType: "image/bmp" });
+
+		expect(convertToPngSpy).toHaveBeenCalledWith("bad", "image/bmp");
+		expect(result).toBeNull();
+	});
 });

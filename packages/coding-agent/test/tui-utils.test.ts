@@ -1,7 +1,14 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { getThemeByName } from "../src/modes/theme/theme";
 import type { Theme } from "../src/modes/theme/theme";
-import { buildTreePrefix, getStateBgColor, getTreeBranch, Hasher, padToWidth } from "../src/tui/utils";
+import {
+	buildTreePrefix,
+	getStateBgColor,
+	getTreeBranch,
+	getTreeContinuePrefix,
+	Hasher,
+	padToWidth,
+} from "../src/tui/utils";
 
 let uiTheme: Theme;
 
@@ -26,6 +33,8 @@ describe("tree rendering helpers", () => {
 		expect(buildTreePrefix([true, false], uiTheme)).toBe(`${uiTheme.tree.vertical}     `);
 		expect(getTreeBranch(true, uiTheme)).toBe(uiTheme.tree.last);
 		expect(getTreeBranch(false, uiTheme)).toBe(uiTheme.tree.branch);
+		expect(getTreeContinuePrefix(true, uiTheme)).toBe("   ");
+		expect(getTreeContinuePrefix(false, uiTheme)).toBe(`${uiTheme.tree.vertical}  `);
 	});
 });
 

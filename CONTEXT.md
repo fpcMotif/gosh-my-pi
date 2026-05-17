@@ -151,7 +151,43 @@ orchestrator's per-candidate retry loop. Runs an attempt with transient-error
 retry, exponential backoff, and respect for `Retry-After` headers parsed
 from the error string. Bails to "next candidate" when delay exceeds
 `maxAcceptableDelayMs` (default 30s) and another candidate is available.
-Lives in `packages/coding-agent/src/session/compaction-retry.ts`.
+Lives in `packages/coding-agent/src/session/compaction-retry.ts`. Documented
+non-adopter of **retryWithState** — the "bail to next candidate" escalation
+is not a {`retry` | `return` | `fail`} decision; it hands control back to a
+different outer loop (the compaction candidate orchestrator).
+
+**retryWithState**:
+Generic Effect-native retry primitive in `packages/ai/src/utils/retry.ts`.
+Owns the loop, the sleep, and the decision routing; callers supply
+`attempt(state)`, `onSuccess(output, state)`, `onFailure(error, state)`, and
+an `initialState`. Outcomes are tagged: `{ _tag: "retry", delayMs, nextState,
+beforeRetry? }`, `{ _tag: "return", value }`, or `{ _tag: "fail", error }`.
+Adopters today: `codexFetchRetryEffect`, `openCodexWebSocketTransport` retry,
+`processCodexResponseStream` retry — all on the Codex provider stack, which
+already lives behind the Effect Layer surface.
+
+The seam is intentionally narrow. Documented non-adopters:
+
+- **RetryController** owns an awaitable Promise boundary (`waitFor()` /
+  `resolve()`) so consumers outside the loop can observe in-flight retries;
+  Effect's interrupt channel does not map onto that surface without surrendering
+  the visible boundary.
+- **runCompactionWithRetry** has the "bail to next candidate" escalation noted
+  above.
+- **Promise-based retry loops in coding-agent** (e.g. `commit/map-reduce/
+map-phase.ts::withRetry`, `config/file-lock.ts::acquireLock`,
+  `mcp/manager.ts::#doReconnect`, `commit/pipeline.ts::generateSummaryWithRetry`)
+  stay inline. Each is ≤30 LOC; an Effect boundary at the call site (Effect
+  imports, `Effect.tryPromise`, `Effect.runPromiseExit`, `Cause.squash`) would
+  add more surface than the loop itself carries. Two of them additionally have
+  structural mismatch — `acquireLock` is attempt-with-retry-on-falsy plus
+  interleaved stale-lock cleanup, and `#doReconnect`'s epoch guard fires both
+  before each attempt and mid-error.
+
+The rule going forward: reach for `retryWithState` when the call site is
+already Effect-native or about to become so; keep small Promise loops inline
+otherwise; revisit when a fifth Effect-side retry caller arrives or when an
+inline loop grows past ~50 LOC.
 
 **ContextPressurePolicy**:
 A pure decision Module for automatic context pressure. It classifies assistant

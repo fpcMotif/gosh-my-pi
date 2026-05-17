@@ -50,4 +50,34 @@ describe("renderCodeCell", () => {
 		const defaultTitleLines = renderCodeCell({ code: "echo ok", width: 80 }, theme!);
 		expect(defaultTitleLines.join("\n")).toContain("Code");
 	});
+
+	it("maps settled statuses and includes cell ordinal and duration metadata", async () => {
+		const theme = await getThemeByName("dark");
+		expect(theme).toBeDefined();
+
+		const complete = Bun.stripANSI(
+			renderCodeCell(
+				{
+					code: "print('done')",
+					title: "Notebook",
+					status: "complete",
+					index: 1,
+					total: 3,
+					duration: 1250,
+					width: 80,
+				},
+				theme!,
+			).join("\n"),
+		);
+		const warning = Bun.stripANSI(
+			renderCodeCell({ code: "warn()", status: "warning", width: 80 }, theme!).join("\n"),
+		);
+		const error = Bun.stripANSI(renderCodeCell({ code: "raise()", status: "error", width: 80 }, theme!).join("\n"));
+
+		expect(complete).toContain("[2/3]");
+		expect(complete).toContain("Notebook");
+		expect(complete).toContain("1.3s");
+		expect(warning).toContain("warn()");
+		expect(error).toContain("raise()");
+	});
 });

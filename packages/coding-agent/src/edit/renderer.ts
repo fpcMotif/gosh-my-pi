@@ -220,7 +220,8 @@ function getResolvedCallFileCount(resolved: ResolvedCallContext): number {
 function buildRenderCallText(ctx: RenderCallContext, resolved: ResolvedCallContext): string {
 	const { args, options, uiTheme } = ctx;
 	const { rawPath, rename, op, atomFileCount, applyPatchFileCount, applyPatchError, editsFileCount } = resolved;
-	const { description } = formatEditDescription(rawPath, uiTheme, { rename });
+	const firstChangedLine = getCallFirstChangedLine(options);
+	const { description } = formatEditDescription(rawPath, uiTheme, { rename, firstChangedLine });
 	const spinner =
 		options?.spinnerFrame === undefined ? "" : formatStatusIcon("running", uiTheme, options.spinnerFrame);
 	let text = `${formatTitle(getOperationTitle(op), uiTheme)} ${spinner === "" ? "" : `${spinner} `}${description}`;
@@ -296,16 +297,27 @@ function getPlainCallPreviewLines(
 	return [];
 }
 
+function getCallFirstChangedLine(
+	options: RenderResultOptions & { renderContext?: EditRenderContext },
+): number | undefined {
+	const editDiffPreview = options.renderContext?.editDiffPreview;
+	if (editDiffPreview && "firstChangedLine" in editDiffPreview) {
+		return editDiffPreview.firstChangedLine;
+	}
+	return undefined;
+}
+
 function presentEditCall(ctx: EditCallContext, resolved: ResolvedCallContext): ToolPresentation {
 	const { args, options } = ctx;
 	const { rawPath, rename, op, applyPatchError } = resolved;
 	const fileCount = getResolvedCallFileCount(resolved);
 	const fileSuffix = fileCount > 1 ? ` (+${fileCount - 1} more)` : "";
+	const firstChangedLine = getCallFirstChangedLine(options);
 	const status = {
 		icon: "pending" as const,
 		spinnerFrame: options.spinnerFrame,
 		title: getOperationTitle(op),
-		description: `${formatPlainEditDescription(rawPath, { rename })}${fileSuffix}`,
+		description: `${formatPlainEditDescription(rawPath, { rename, firstChangedLine })}${fileSuffix}`,
 	};
 	const previewLines = getPlainCallPreviewLines(args, rawPath, options);
 	const errorLines = isNonEmpty(applyPatchError)
@@ -318,9 +330,7 @@ function presentEditCall(ctx: EditCallContext, resolved: ResolvedCallContext): T
 	return { type: "block", status, sections: [{ lines }] };
 }
 
-export const editToolRenderer = {
-	mergeCallAndResult: true,
-
+export const editToolPresenter = {
 	presentCall(
 		args: EditRenderArgs | VimRenderArgs | undefined,
 		options: RenderResultOptions & { renderContext?: EditRenderContext },
@@ -334,6 +344,10 @@ export const editToolRenderer = {
 		const resolved = resolveCallContext({ args: editArgs, options });
 		return presentEditCall({ args: editArgs, options }, resolved);
 	},
+};
+
+export const editToolRenderer = {
+	mergeCallAndResult: true,
 
 	renderCall(
 		args: EditRenderArgs | VimRenderArgs,

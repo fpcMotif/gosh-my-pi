@@ -163,6 +163,7 @@ import type {
 } from "./session-manager";
 import { getLatestCompactionEntry } from "./session-manager";
 import { ToolChoiceQueue } from "./tool-choice-queue";
+import { SessionLifecycleController } from "./session-lifecycle-controller";
 import { TodoPhaseState } from "./todo-phase-state";
 
 /** Session-specific events that extend the core AgentEvent */
@@ -410,6 +411,7 @@ export class AgentSession {
 	#todoReminderCount = 0;
 	#todoPhaseState: TodoPhaseState;
 	#toolChoiceQueue = new ToolChoiceQueue();
+	#lifecycle: SessionLifecycleController;
 
 	#bash: BashController;
 
@@ -586,6 +588,14 @@ export class AgentSession {
 				defaultToolNames: config.defaultSelectedMCPToolNames ?? [],
 			},
 		);
+		this.#lifecycle = new SessionLifecycleController({
+			mcp: this.#mcp,
+			todoPhaseState: this.#todoPhaseState,
+			sessionManager: this.sessionManager,
+			getSessionFile: () => this.sessionFile,
+			getActiveNonMCPToolNames: () => this.#getActiveNonMCPToolNames(),
+			applyActiveToolsByName: (toolNames, options) => this.#applyActiveToolsByName(toolNames, options),
+		});
 		this.#mcp.setDiscoverableFromRegistry();
 		this.#mcp.pruneSelected();
 		const persistedSelectedMCPToolNames = this.buildDisplaySessionContext().selectedMCPToolNames;
@@ -635,7 +645,7 @@ export class AgentSession {
 			this.#streamingEditGuard.maybeAbort(event);
 		});
 		this.agent.providerSessionState = this.#providerSessions.state;
-		this.#syncTodoPhasesFromBranch();
+		this.#lifecycle.syncTodoPhasesFromBranch();
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, hooks, auto-compaction, retry logic)
@@ -1633,21 +1643,6 @@ export class AgentSession {
 		await this.#applyActiveToolsByName(toolNames);
 	}
 
-	async #restoreMCPSelectionsForSessionContext(
-		sessionContext: SessionContext,
-		options?: { fallbackSelectedMCPToolNames?: Iterable<string> },
-	): Promise<void> {
-		if (!this.#mcp.isEnabled) return;
-		const nextActiveNonMCPToolNames = this.#getActiveNonMCPToolNames();
-		const fallbackSelectedMCPToolNames = options?.fallbackSelectedMCPToolNames ?? this.#mcp.getConfiguredDefaults();
-		const restoredMCPToolNames = sessionContext.hasPersistedMCPToolSelection
-			? this.#mcp.filterSelectable(sessionContext.selectedMCPToolNames)
-			: this.#mcp.filterSelectable(fallbackSelectedMCPToolNames);
-		this.#mcp.rememberSessionDefault(this.sessionFile, this.#mcp.getConfiguredDefaults());
-		await this.#applyActiveToolsByName([...nextActiveNonMCPToolNames, ...restoredMCPToolNames], {
-			persistMCPSelection: false,
-		});
-	}
 	/** Rebuild the base system prompt using the current active tool set. */
 	async refreshBaseSystemPrompt(): Promise<void> {
 		if (!this.#rebuildSystemPrompt) return;
@@ -2642,10 +2637,6 @@ export class AgentSession {
 		this.#todoPhaseState.set(phases);
 	}
 
-	#syncTodoPhasesFromBranch(): void {
-		this.#todoPhaseState.syncFromBranch(this.sessionManager.getBranch());
-	}
-
 	/**
 	 * Abort current operation and wait for agent to become idle.
 	 */
@@ -3163,7 +3154,7 @@ export class AgentSession {
 		await this.sessionManager.rewriteEntries();
 		const sessionContext = this.buildDisplaySessionContext();
 		this.agent.replaceMessages(sessionContext.messages);
-		this.#syncTodoPhasesFromBranch();
+		this.#lifecycle.syncTodoPhasesFromBranch();
 		this.#providerSessions.closeForCodexHistoryRewrite(this.model);
 		return result;
 	}
@@ -3293,7 +3284,7 @@ export class AgentSession {
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.buildDisplaySessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
-			this.#syncTodoPhasesFromBranch();
+			this.#lifecycle.syncTodoPhasesFromBranch();
 			this.#providerSessions.closeForCodexHistoryRewrite(this.model);
 
 			// Get the saved compaction entry for the hook
@@ -3513,7 +3504,7 @@ export class AgentSession {
 			// Rebuild agent messages from session
 			const sessionContext = this.buildDisplaySessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
-			this.#syncTodoPhasesFromBranch();
+			this.#lifecycle.syncTodoPhasesFromBranch();
 
 			return { document: handoffText, savedPath };
 		} finally {
@@ -4310,7 +4301,7 @@ export class AgentSession {
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.buildDisplaySessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
-			this.#syncTodoPhasesFromBranch();
+			this.#lifecycle.syncTodoPhasesFromBranch();
 			this.#providerSessions.closeForCodexHistoryRewrite(this.model);
 
 			// Get the saved compaction entry for the hook
@@ -4817,7 +4808,7 @@ export class AgentSession {
 				!switchingToDifferentSession &&
 				this.#didSessionMessagesChange(previousSessionContext.messages, sessionContext.messages);
 			const fallbackSelectedMCPToolNames = this.#mcp.getSessionDefault(sessionPath);
-			await this.#restoreMCPSelectionsForSessionContext(sessionContext, { fallbackSelectedMCPToolNames });
+			await this.#lifecycle.restoreMCPSelections(sessionContext, { fallbackSelectedMCPToolNames });
 
 			// Emit session_switch event to hooks
 			if (this.#extensionRunner) {
@@ -4829,7 +4820,7 @@ export class AgentSession {
 			}
 
 			this.agent.replaceMessages(sessionContext.messages);
-			this.#syncTodoPhasesFromBranch();
+			this.#lifecycle.syncTodoPhasesFromBranch();
 			if (switchingToDifferentSession) {
 				this.#providerSessions.closeAll("session switch");
 			} else if (didReloadConversationChange) {
@@ -4887,7 +4878,7 @@ export class AgentSession {
 			this.agent.sessionId = previousSessionState.sessionId;
 			let restoreMcpError: unknown;
 			try {
-				await this.#restoreMCPSelectionsForSessionContext(previousSessionContext, {
+				await this.#lifecycle.restoreMCPSelections(previousSessionContext, {
 					fallbackSelectedMCPToolNames: previousFallbackSelectedMCPToolNames,
 				});
 			} catch (mcpError) {
@@ -4912,7 +4903,7 @@ export class AgentSession {
 			this.#thinkingLevel = previousThinkingLevel;
 			this.agent.setThinkingLevel(toReasoningEffort(previousThinkingLevel) ?? Effort.Medium);
 			this.agent.serviceTier = previousServiceTier;
-			this.#syncTodoPhasesFromBranch();
+			this.#lifecycle.syncTodoPhasesFromBranch();
 			this.#reconnectToAgent();
 			if (restoreMcpError !== null && restoreMcpError !== undefined) {
 				throw restoreMcpError;
@@ -4970,13 +4961,13 @@ export class AgentSession {
 		} else {
 			this.sessionManager.createBranchedSession(selectedEntry.parentId);
 		}
-		this.#syncTodoPhasesFromBranch();
+		this.#lifecycle.syncTodoPhasesFromBranch();
 		this.agent.sessionId = this.sessionManager.getSessionId();
 
 		// Reload messages from entries (works for both file and in-memory mode)
 		const sessionContext = this.buildDisplaySessionContext();
 
-		await this.#restoreMCPSelectionsForSessionContext(sessionContext);
+		await this.#lifecycle.restoreMCPSelections(sessionContext);
 
 		// Emit session_branch event to hooks (after branch completes)
 		if (this.#extensionRunner) {
@@ -5150,9 +5141,9 @@ export class AgentSession {
 		// Update agent state — build display context to populate agent messages.
 		const stateContext = this.sessionManager.buildSessionContext();
 		const displayContext = deobfuscateSessionContext(stateContext, this.#obfuscator);
-		await this.#restoreMCPSelectionsForSessionContext(displayContext);
+		await this.#lifecycle.restoreMCPSelections(displayContext);
 		this.agent.replaceMessages(displayContext.messages);
-		this.#syncTodoPhasesFromBranch();
+		this.#lifecycle.syncTodoPhasesFromBranch();
 		this.#providerSessions.closeForCodexHistoryRewrite(this.model);
 
 		this.#branchSummaryAbortController = undefined;

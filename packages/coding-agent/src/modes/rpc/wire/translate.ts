@@ -26,6 +26,7 @@ import type {
 	Usage,
 	UserMessage,
 } from "@oh-my-pi/pi-ai";
+import { logger } from "@oh-my-pi/pi-utils";
 import type { AgentSessionEvent } from "../../../session/agent-session";
 import type {
 	BashExecutionMessage,
@@ -34,7 +35,7 @@ import type {
 	PythonExecutionMessage,
 } from "../../../session/messages";
 import type { ToolPresentation, ToolPresentationCode, ToolPresentationStatus } from "../../../tools/presentation";
-import { toolRenderers } from "../../../tools/renderers";
+import { toolPresenters } from "../../../tools/presenters";
 import type { RenderResultOptions } from "../../../extensibility/custom-tools/types";
 import type {
 	WireAssistantContentBlockV1,
@@ -159,15 +160,14 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 		case "irc_message":
 			return null;
 
-		default: {
-			// Exhaustiveness check — every AgentSessionEvent variant must be handled.
-			// If a new internal event is added without a translator entry, this assertion
-			// fails at compile time.
-			const _exhaustive: never = event;
-			void _exhaustive;
-			return null;
-		}
+		default:
+			return dropUnknownWireEvent(event);
 	}
+}
+
+function dropUnknownWireEvent(event: never): null {
+	void event;
+	return null;
 }
 
 // ============================================================================
@@ -387,21 +387,19 @@ function toWireMessage(msg: AgentMessage): WireMessageV1 {
 			return toWireCustomMessage(msg);
 		case "hookMessage":
 			return toWireHookMessage(msg);
-		default: {
-			// Fallback for any custom AgentMessage role added via declaration merging
-			// that we haven't projected. Stringify the role as a best-effort to avoid
-			// losing the message entirely; this should be rare since CustomAgentMessages
-			// is currently bashExecution/pythonExecution/custom/hookMessage only.
-			const fallback: WireCustomMessageV1 = {
-				role: "custom",
-				customType: (msg as { role: string }).role,
-				content: JSON.stringify(msg),
-				display: false,
-				timestamp: (msg as { timestamp?: number }).timestamp ?? Date.now(),
-			};
-			return fallback;
-		}
+		default:
+			return toWireFallbackMessage(msg);
 	}
+}
+
+function toWireFallbackMessage(msg: AgentMessage & { role: string; timestamp?: number }): WireCustomMessageV1 {
+	return {
+		role: "custom",
+		customType: msg.role,
+		content: JSON.stringify(msg),
+		display: false,
+		timestamp: msg.timestamp ?? Date.now(),
+	};
 }
 
 function toWireToolResult(result: { content: (TextContent | ImageContent)[]; details?: unknown }): WireToolResultV1 {
@@ -431,12 +429,15 @@ function withWirePresentation(
 }
 
 function toWireCallPresentation(toolName: string, args: Record<string, unknown>): WireToolPresentationV1 | undefined {
-	const renderer = toolRenderers[toolName];
-	if (!renderer?.presentCall) return undefined;
+	const presenter = toolPresenters[toolName];
+	if (!presenter?.presentCall) return undefined;
 	try {
-		const presentation = renderer.presentCall(args, { expanded: false, isPartial: true });
+		const presentation = presenter.presentCall(args, { expanded: false, isPartial: true });
 		return presentation === undefined ? undefined : toWireToolPresentation(presentation);
-	} catch {
+	} catch (error) {
+		// Presenter contract: must not throw. Log so silent wire drift is at least
+		// observable, and drop the presentation field for this frame.
+		logger.warn("tool presenter threw on presentCall", { toolName, error: String(error) });
 		return undefined;
 	}
 }
@@ -447,12 +448,14 @@ function toWireResultPresentation(
 	options: RenderResultOptions,
 	args?: Record<string, unknown>,
 ): WireToolPresentationV1 | undefined {
-	const renderer = toolRenderers[toolName];
-	if (!renderer?.presentResult) return undefined;
+	const presenter = toolPresenters[toolName];
+	if (!presenter?.presentResult) return undefined;
 	try {
-		const presentation = renderer.presentResult(result, options, args);
+		const presentation = presenter.presentResult(result, options, args);
 		return presentation === undefined ? undefined : toWireToolPresentation(presentation);
-	} catch {
+	} catch (error) {
+		// Presenter contract: must not throw. See toWireCallPresentation.
+		logger.warn("tool presenter threw on presentResult", { toolName, error: String(error) });
 		return undefined;
 	}
 }

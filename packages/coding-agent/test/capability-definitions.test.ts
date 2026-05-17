@@ -1,11 +1,15 @@
 import { describe, expect, it } from "bun:test";
+import { contextFileCapability, type ContextFile } from "../src/capability/context-file";
+import { extensionModuleCapability, type ExtensionModule } from "../src/capability/extension-module";
 import { extensionCapability } from "../src/capability/extension";
 import { hookCapability, type Hook } from "../src/capability/hook";
 import { instructionCapability, type Instruction } from "../src/capability/instruction";
 import { mcpCapability, type MCPServer } from "../src/capability/mcp";
 import { promptCapability, type Prompt } from "../src/capability/prompt";
+import { skillCapability, type Skill } from "../src/capability/skill";
 import { slashCommandCapability, type SlashCommand } from "../src/capability/slash-command";
 import { sshCapability, type SSHHost } from "../src/capability/ssh";
+import { systemPromptCapability, type SystemPrompt } from "../src/capability/system-prompt";
 import { toolCapability, type CustomTool } from "../src/capability/tool";
 import type { SourceMeta } from "../src/capability/types";
 
@@ -26,6 +30,16 @@ describe("capability definitions", () => {
 		expect(extensionCapability.validate?.({ ...valid, path: "" })).toBe("Missing extension path");
 	});
 
+	it("validates extension module entries and extension ids", () => {
+		const valid: ExtensionModule = { name: "review", path: "/tmp/review.ts", level: "project", _source: source };
+
+		expect(extensionModuleCapability.key(valid)).toBe("review");
+		expect(extensionModuleCapability.toExtensionId?.(valid)).toBe("extension-module:review");
+		expect(extensionModuleCapability.validate?.(valid)).toBeUndefined();
+		expect(extensionModuleCapability.validate?.({ ...valid, name: "" })).toBe("Missing name");
+		expect(extensionModuleCapability.validate?.({ ...valid, path: "" })).toBe("Missing path");
+	});
+
 	it("validates SSH host entries", () => {
 		const valid: SSHHost = { name: "prod", host: "prod.example.com", _source: source };
 
@@ -33,6 +47,46 @@ describe("capability definitions", () => {
 		expect(sshCapability.validate?.(valid)).toBeUndefined();
 		expect(sshCapability.validate?.({ ...valid, name: "" })).toBe("Missing name");
 		expect(sshCapability.validate?.({ ...valid, host: "" })).toBe("Missing host");
+	});
+
+	it("validates system prompt files", () => {
+		const valid: SystemPrompt = { path: "/tmp/SYSTEM.md", content: "Be precise", level: "project", _source: source };
+
+		expect(systemPromptCapability.key(valid)).toBe("project");
+		expect(systemPromptCapability.validate?.(valid)).toBeUndefined();
+		expect(systemPromptCapability.validate?.({ ...valid, path: "" })).toBe("Missing path");
+		expect(systemPromptCapability.validate?.({ ...valid, content: undefined as unknown as string })).toBe(
+			"Missing content",
+		);
+	});
+
+	it("deduplicates context files by source scope and validates content", () => {
+		const project: ContextFile = {
+			path: "/repo/AGENTS.md",
+			content: "Project rules",
+			level: "project",
+			depth: 2,
+			_source: source,
+		};
+		const user: ContextFile = {
+			...project,
+			path: "/home/user/AGENTS.md",
+			level: "user",
+			depth: undefined,
+		};
+
+		expect(contextFileCapability.key(project)).toBe("project:2");
+		expect(contextFileCapability.key({ ...project, depth: -1 })).toBe("project:0");
+		expect(contextFileCapability.key(user)).toBe("user");
+		expect(contextFileCapability.toExtensionId?.(project)).toBe("context-file:project:AGENTS.md");
+		expect(contextFileCapability.validate?.(project)).toBeUndefined();
+		expect(contextFileCapability.validate?.({ ...project, path: "" })).toBe("Missing path");
+		expect(contextFileCapability.validate?.({ ...project, content: undefined as unknown as string })).toBe(
+			"Missing content",
+		);
+		expect(contextFileCapability.validate?.({ ...project, level: "workspace" as "project" })).toBe(
+			"Invalid level: must be 'user' or 'project'",
+		);
 	});
 
 	it("validates custom tool entries and extension ids", () => {
@@ -49,6 +103,22 @@ describe("capability definitions", () => {
 		expect(toolCapability.validate?.(valid)).toBeUndefined();
 		expect(toolCapability.validate?.({ ...valid, name: "" })).toBe("Missing name");
 		expect(toolCapability.validate?.({ ...valid, path: "" })).toBe("Missing path");
+	});
+
+	it("validates skill entries and extension ids", () => {
+		const valid: Skill = {
+			name: "diagnose",
+			path: "/tmp/diagnose/SKILL.md",
+			content: "Diagnose failures",
+			level: "project",
+			_source: source,
+		};
+
+		expect(skillCapability.key(valid)).toBe("diagnose");
+		expect(skillCapability.toExtensionId?.(valid)).toBe("skill:diagnose");
+		expect(skillCapability.validate?.(valid)).toBeUndefined();
+		expect(skillCapability.validate?.({ ...valid, name: "" })).toBe("Missing skill name");
+		expect(skillCapability.validate?.({ ...valid, path: "" })).toBe("Missing skill path");
 	});
 
 	it("validates hook entries and extension ids", () => {

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { readToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/read";
+import { readToolPresenter } from "@oh-my-pi/pi-coding-agent/tools/read";
 
-describe("readToolRenderer presentation", () => {
+describe("readToolPresenter presentation", () => {
 	it("exposes neutral code presentation data for non-url read results", () => {
-		const presentation = readToolRenderer.presentResult(
+		const presentation = readToolPresenter.presentResult(
 			{
 				content: [{ type: "text", text: "1|const value = 1;" }],
 				details: {

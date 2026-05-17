@@ -632,10 +632,6 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 		const shouldAddHashLines = displayMode.hashLines;
 		const shouldAddLineNumbers = shouldAddHashLines ? false : displayMode.lineNumbers;
-		const formatText = (content: string, startNum: number): string => {
-			details.displayContent = { text: content, startLine: startNum };
-			return formatTextWithMode(content, startNum, shouldAddHashLines, shouldAddLineNumbers);
-		};
 
 		let outputText: string;
 		let truncationInfo:
@@ -652,7 +648,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					firstLineBytes,
 				)}, exceeds ${formatBytes(DEFAULT_MAX_BYTES)} limit. Hashline output requires full lines; cannot compute hashes for a truncated preview.]`;
 			} else {
-				outputText = formatText(snippet.text, startLineDisplay);
+				details.displayContent = { text: snippet.text, startLine: startLineDisplay };
+				outputText = formatTextWithMode(snippet.text, startLineDisplay, shouldAddHashLines, shouldAddLineNumbers);
 			}
 
 			if (snippet.text.length === 0) {
@@ -667,7 +664,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				options: { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines },
 			};
 		} else if (truncation.truncated === true) {
-			outputText = formatText(truncation.content, startLineDisplay);
+			details.displayContent = { text: truncation.content, startLine: startLineDisplay };
+			outputText = formatTextWithMode(
+				truncation.content,
+				startLineDisplay,
+				shouldAddHashLines,
+				shouldAddLineNumbers,
+			);
 			details.truncation = truncation;
 			truncationInfo = {
 				result: truncation,
@@ -677,10 +680,17 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const remaining = allLines.length - (startLine + userLimitedLines);
 			const nextOffset = startLine + userLimitedLines + 1;
 
-			outputText = formatText(selectedContent, startLineDisplay);
+			details.displayContent = { text: selectedContent, startLine: startLineDisplay };
+			outputText = formatTextWithMode(selectedContent, startLineDisplay, shouldAddHashLines, shouldAddLineNumbers);
 			outputText += `\n\n[${remaining} more lines in ${options.entityLabel}. Use sel=${nextOffset} to continue]`;
 		} else {
-			outputText = formatText(truncation.content, startLineDisplay);
+			details.displayContent = { text: truncation.content, startLine: startLineDisplay };
+			outputText = formatTextWithMode(
+				truncation.content,
+				startLineDisplay,
+				shouldAddHashLines,
+				shouldAddLineNumbers,
+			);
 		}
 
 		resultBuilder.text(outputText);
@@ -1179,10 +1189,6 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const shouldAddHashLines = !isRawMode && displayMode.hashLines;
 			const shouldAddLineNumbers = isRawMode ? false : shouldAddHashLines ? false : displayMode.lineNumbers;
 			let capturedDisplayContent: { text: string; startLine: number } | undefined;
-			const formatText = (text: string, startNum: number): string => {
-				capturedDisplayContent = { text, startLine: startNum };
-				return formatTextWithMode(text, startNum, shouldAddHashLines, shouldAddLineNumbers);
-			};
 
 			let outputText: string;
 
@@ -1195,7 +1201,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 						firstLineBytes,
 					)}, exceeds ${formatBytes(maxBytesForRead)} limit. Hashline output requires full lines; cannot compute hashes for a truncated preview.]`;
 				} else {
-					outputText = formatText(snippet.text, startLineDisplay);
+					capturedDisplayContent = { text: snippet.text, startLine: startLineDisplay };
+					outputText = formatTextWithMode(
+						snippet.text,
+						startLineDisplay,
+						shouldAddHashLines,
+						shouldAddLineNumbers,
+					);
 				}
 				if (snippet.text.length === 0) {
 					outputText = `[Line ${startLineDisplay} is ${formatBytes(
@@ -1209,7 +1221,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					options: { direction: "head", startLine: startLineDisplay, totalFileLines },
 				};
 			} else if (truncation.truncated === true) {
-				outputText = formatText(truncation.content, startLineDisplay);
+				capturedDisplayContent = { text: truncation.content, startLine: startLineDisplay };
+				outputText = formatTextWithMode(
+					truncation.content,
+					startLineDisplay,
+					shouldAddHashLines,
+					shouldAddLineNumbers,
+				);
 				details = { truncation };
 				sourcePath = absolutePath;
 				truncationInfo = {
@@ -1220,13 +1238,25 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				const remaining = totalFileLines - (startLine + userLimitedLines);
 				const nextOffset = startLine + userLimitedLines + 1;
 
-				outputText = formatText(truncation.content, startLineDisplay);
+				capturedDisplayContent = { text: truncation.content, startLine: startLineDisplay };
+				outputText = formatTextWithMode(
+					truncation.content,
+					startLineDisplay,
+					shouldAddHashLines,
+					shouldAddLineNumbers,
+				);
 				outputText += `\n\n[${remaining} more lines in file. Use sel=${nextOffset} to continue]`;
 				details = {};
 				sourcePath = absolutePath;
 			} else {
 				// No truncation, no user limit exceeded
-				outputText = formatText(truncation.content, startLineDisplay);
+				capturedDisplayContent = { text: truncation.content, startLine: startLineDisplay };
+				outputText = formatTextWithMode(
+					truncation.content,
+					startLineDisplay,
+					shouldAddHashLines,
+					shouldAddLineNumbers,
+				);
 				details = {};
 				sourcePath = absolutePath;
 			}
@@ -1484,7 +1514,7 @@ function presentReadResult(
 	};
 }
 
-export const readToolRenderer = {
+export const readToolPresenter = {
 	presentCall(args: ReadRenderArgs | undefined): ToolPresentationResult {
 		if (isReadableUrlPath(args?.file_path ?? args?.path ?? "")) {
 			return undefined;
@@ -1505,7 +1535,9 @@ export const readToolRenderer = {
 
 		return presentReadResult(result, options, args);
 	},
+};
 
+export const readToolRenderer = {
 	renderCall(args: ReadRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		if (isReadableUrlPath(args.file_path ?? args.path ?? "")) {
 			return renderReadUrlCall(args, _options, uiTheme);

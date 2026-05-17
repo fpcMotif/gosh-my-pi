@@ -1048,6 +1048,88 @@ function b() {
 			await asyncJobManager.dispose();
 		});
 
+		it("should start explicit async bash jobs when async mode is enabled", async () => {
+			const deliveries: Array<{ jobId: string; text: string }> = [];
+			const asyncJobManager = new AsyncJobManager({
+				onJobComplete: async (jobId, text) => {
+					deliveries.push({ jobId, text });
+				},
+			});
+			const asyncBashTool = wrapToolWithMetaNotice(
+				new BashTool(
+					createTestToolSession(
+						testDir,
+						Settings.isolated({
+							"async.enabled": true,
+						}),
+						{
+							asyncJobManager,
+							getSessionId: () => "test-session",
+						},
+					),
+				),
+			);
+
+			try {
+				const result = await asyncBashTool.execute("test-call-9-explicit-async", {
+					command: "printf 'async-start\\n'; sleep 0.05; printf 'async-done\\n'",
+					async: true,
+				});
+
+				expect(result.details?.async?.state).toBe("running");
+				expect(result.details?.async?.type).toBe("bash");
+				expect(getTextOutput(result)).toContain("Background job");
+				const jobId = result.details?.async?.jobId;
+				if (jobId === null || jobId === undefined || jobId === "") {
+					throw new Error("expected an async job id");
+				}
+				const runningJob = asyncJobManager.getJob(jobId);
+				expect(runningJob?.status).toBe("running");
+				await runningJob?.promise;
+				await Bun.sleep(50);
+				expect(deliveries).toHaveLength(1);
+				expect(deliveries[0]?.jobId).toBe(jobId);
+				expect(deliveries[0]?.text).toContain("async-done");
+			} finally {
+				await asyncJobManager.dispose();
+			}
+		});
+
+		it("should abort while waiting for auto-background promotion", async () => {
+			const asyncJobManager = new AsyncJobManager({
+				onJobComplete: async () => {},
+			});
+			const autoBackgroundBashTool = wrapToolWithMetaNotice(
+				new BashTool(
+					createTestToolSession(
+						testDir,
+						Settings.isolated({
+							"bash.autoBackground.enabled": true,
+							"bash.autoBackground.thresholdMs": 500,
+						}),
+						{
+							asyncJobManager,
+							getSessionId: () => "test-session",
+						},
+					),
+				),
+			);
+			const controller = new AbortController();
+
+			try {
+				const result = autoBackgroundBashTool.execute(
+					"test-call-9-auto-abort-wait",
+					{ command: "printf 'started\\n'; sleep 1; printf 'finished\\n'" },
+					controller.signal,
+				);
+				await Bun.sleep(50);
+				controller.abort();
+				await expect(result).rejects.toThrow(/started|abort|cancel/i);
+			} finally {
+				await asyncJobManager.dispose();
+			}
+		});
+
 		it("should background instead of timing out when auto-background wait exceeds the effective timeout", async () => {
 			const deliveries: Array<{ jobId: string; text: string }> = [];
 			const asyncJobManager = new AsyncJobManager({

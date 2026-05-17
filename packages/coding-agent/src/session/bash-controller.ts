@@ -4,6 +4,7 @@ import type { ExtensionRunner } from "../extensibility/extensions/runner";
 import type { BashExecutionMessage } from "./messages";
 import { outputMeta } from "../tools/output-meta";
 import { clampTimeout } from "../tools/tool-timeouts";
+import { UserExecutionQueue } from "./user-execution-queue";
 
 /**
  * Dependencies the {@link BashController} needs from its owning session.
@@ -21,26 +22,31 @@ export interface BashControllerContext {
 }
 
 /**
- * Owns the per-session "user-initiated bash command" subsystem: tracking
- * in-flight commands' abort controllers, queueing bash messages emitted
- * during streaming so they don't break tool_use/tool_result ordering, and
- * flushing the queue before the next prompt.
+ * Owns the per-session "user-initiated bash command" subsystem. Delegates the
+ * streaming-deferred execution queue (in-flight aborts, pending-message buffer,
+ * flush-on-idle) to {@link UserExecutionQueue}; this class owns the bash-specific
+ * concerns: extension hook routing, the bash-executor call, artifact persistence,
+ * and constructing the {@link BashExecutionMessage} from a {@link BashResult}.
  */
 export class BashController {
 	#ctx: BashControllerContext;
-	#abortControllers = new Set<AbortController>();
-	#pendingMessages: BashExecutionMessage[] = [];
+	#queue: UserExecutionQueue<BashExecutionMessage>;
 
 	constructor(ctx: BashControllerContext) {
 		this.#ctx = ctx;
+		this.#queue = new UserExecutionQueue<BashExecutionMessage>({
+			agent: ctx.agent,
+			sessionManager: ctx.sessionManager,
+			isStreaming: () => ctx.isStreaming(),
+		});
 	}
 
 	get isRunning(): boolean {
-		return this.#abortControllers.size > 0;
+		return this.#queue.isRunning;
 	}
 
 	get hasPending(): boolean {
-		return this.#pendingMessages.length > 0;
+		return this.#queue.hasPending;
 	}
 
 	/**
@@ -69,13 +75,10 @@ export class BashController {
 			}
 		}
 
-		const abortController = new AbortController();
-		this.#abortControllers.add(abortController);
-
-		try {
+		return this.#queue.runTracked(async signal => {
 			const result = await executeBash(command, {
 				onChunk,
-				signal: abortController.signal,
+				signal,
 				sessionKey: this.#ctx.sessionId,
 				timeout: clampTimeout("bash") * 1000,
 				onMinimizedSave: originalText => this.#saveOriginalArtifact(originalText),
@@ -83,9 +86,7 @@ export class BashController {
 
 			this.recordResult(command, result, options);
 			return result;
-		} finally {
-			this.#abortControllers.delete(abortController);
-		}
+		});
 	}
 
 	/**
@@ -105,21 +106,12 @@ export class BashController {
 			timestamp: Date.now(),
 			excludeFromContext: options?.excludeFromContext,
 		};
-
-		// If agent is streaming, defer adding to avoid breaking tool_use/tool_result ordering
-		if (this.#ctx.isStreaming()) {
-			this.#pendingMessages.push(bashMessage);
-		} else {
-			this.#ctx.agent.appendMessage(bashMessage);
-			this.#ctx.sessionManager.appendMessage(bashMessage);
-		}
+		this.#queue.recordMessage(bashMessage);
 	}
 
 	/** Cancel every in-flight bash command. */
 	abort(): void {
-		for (const abortController of this.#abortControllers) {
-			abortController.abort();
-		}
+		this.#queue.abort();
 	}
 
 	/**
@@ -127,13 +119,7 @@ export class BashController {
 	 * the next prompt to maintain message ordering.
 	 */
 	flushPending(): void {
-		if (this.#pendingMessages.length === 0) return;
-
-		for (const bashMessage of this.#pendingMessages) {
-			this.#ctx.agent.appendMessage(bashMessage);
-			this.#ctx.sessionManager.appendMessage(bashMessage);
-		}
-		this.#pendingMessages = [];
+		this.#queue.flushPending();
 	}
 
 	async #saveOriginalArtifact(originalText: string): Promise<string | undefined> {

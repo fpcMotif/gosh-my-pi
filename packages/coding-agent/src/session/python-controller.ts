@@ -5,6 +5,7 @@ import type { ExtensionRunner } from "../extensibility/extensions/runner";
 import { disposeKernelSessionsByOwner, executePython, type PythonResult } from "../ipy/executor";
 import { outputMeta } from "../tools/output-meta";
 import type { PythonExecutionMessage } from "./messages";
+import { UserExecutionQueue } from "./user-execution-queue";
 
 /**
  * Dependencies the {@link PythonController} needs from its owning session.
@@ -23,28 +24,33 @@ export interface PythonControllerContext {
 }
 
 /**
- * Owns the per-session "user-initiated Python execution" subsystem: tracks
- * in-flight kernel executions (so dispose can wait/abort), queues messages
- * emitted during streaming, manages a per-session kernel owner id used to
- * scope kernel-session disposal.
+ * Owns the per-session "user-initiated Python execution" subsystem. The streaming-
+ * deferred queue (in-flight aborts, pending-message buffer, flush-on-idle, active-
+ * execution tracking, await-settlement) lives in {@link UserExecutionQueue}; this
+ * class adds the Python-specific concerns: extension hook routing, the kernel call,
+ * the kernel-owner id, and the disposal lifecycle (`markDisposing`,
+ * `prepareForDispose`, `disposeKernel`) the bash controller does not have.
  */
 export class PythonController {
 	#ctx: PythonControllerContext;
-	#abortControllers = new Set<AbortController>();
-	#pendingMessages: PythonExecutionMessage[] = [];
-	#activeExecutions = new Set<Promise<unknown>>();
+	#queue: UserExecutionQueue<PythonExecutionMessage>;
 	#disposing = false;
 
 	constructor(ctx: PythonControllerContext) {
 		this.#ctx = ctx;
+		this.#queue = new UserExecutionQueue<PythonExecutionMessage>({
+			agent: ctx.agent,
+			sessionManager: ctx.sessionManager,
+			isStreaming: () => ctx.isStreaming(),
+		});
 	}
 
 	get isRunning(): boolean {
-		return this.#abortControllers.size > 0;
+		return this.#queue.isRunning;
 	}
 
 	get hasPending(): boolean {
-		return this.#pendingMessages.length > 0;
+		return this.#queue.hasPending;
 	}
 
 	/** Throws if execution is currently disabled (during session disposal). */
@@ -68,8 +74,7 @@ export class PythonController {
 		const cwd = this.#ctx.sessionManager.getCwd();
 		this.assertAllowed();
 
-		const abortController = new AbortController();
-		const execution = (async (): Promise<PythonResult> => {
+		return this.#queue.runTracked(async signal => {
 			if (this.#ctx.extensionRunner?.hasHandlers("user_python") === true) {
 				const hookResult = await this.#ctx.extensionRunner.emitUserPython({
 					type: "user_python",
@@ -96,12 +101,11 @@ export class PythonController {
 				kernelMode: this.#ctx.settings.get("python.kernelMode"),
 				useSharedGateway: this.#ctx.settings.get("python.sharedGateway"),
 				onChunk,
-				signal: abortController.signal,
+				signal,
 			});
 			this.recordResult(code, result, options);
 			return result;
-		})();
-		return await this.track(execution, abortController);
+		});
 	}
 
 	/**
@@ -109,19 +113,7 @@ export class PythonController {
 	 * await and abort it too.
 	 */
 	track<T>(execution: Promise<T>, abortController: AbortController): Promise<T> {
-		this.#abortControllers.add(abortController);
-		this.#activeExecutions.add(execution);
-		void execution.then(
-			() => {
-				this.#abortControllers.delete(abortController);
-				this.#activeExecutions.delete(execution);
-			},
-			() => {
-				this.#abortControllers.delete(abortController);
-				this.#activeExecutions.delete(execution);
-			},
-		);
-		return execution;
+		return this.#queue.track(execution, abortController);
 	}
 
 	recordResult(code: string, result: PythonResult, options?: { excludeFromContext?: boolean }): void {
@@ -137,28 +129,15 @@ export class PythonController {
 			timestamp: Date.now(),
 			excludeFromContext: options?.excludeFromContext,
 		};
-
-		if (this.#ctx.isStreaming()) {
-			this.#pendingMessages.push(pythonMessage);
-		} else {
-			this.#ctx.agent.appendMessage(pythonMessage);
-			this.#ctx.sessionManager.appendMessage(pythonMessage);
-		}
+		this.#queue.recordMessage(pythonMessage);
 	}
 
 	abort(): void {
-		for (const abortController of this.#abortControllers) {
-			abortController.abort();
-		}
+		this.#queue.abort();
 	}
 
 	flushPending(): void {
-		if (this.#pendingMessages.length === 0) return;
-		for (const pythonMessage of this.#pendingMessages) {
-			this.#ctx.agent.appendMessage(pythonMessage);
-			this.#ctx.sessionManager.appendMessage(pythonMessage);
-		}
-		this.#pendingMessages = [];
+		this.#queue.flushPending();
 	}
 
 	/** Mark the controller as disposing so further executions are rejected. */
@@ -171,10 +150,10 @@ export class PythonController {
 	 * and wait again. Returns true if all executions settled cooperatively.
 	 */
 	async prepareForDispose(): Promise<boolean> {
-		if (!(await this.#waitForExecutionsToSettle(3_000))) {
+		if (!(await this.#queue.awaitSettlement(3_000))) {
 			logger.warn("Aborting active Python execution during dispose before retained kernel cleanup");
 			this.abort();
-			if (!(await this.#waitForExecutionsToSettle(1_000))) {
+			if (!(await this.#queue.awaitSettlement(1_000))) {
 				logger.warn(
 					"Python execution is still active after dispose aborted all active runs; retained kernel ownership will still be detached",
 				);
@@ -187,23 +166,5 @@ export class PythonController {
 	/** Detach this controller's retained kernel ownership. Called once during dispose. */
 	disposeKernel(): Promise<void> {
 		return disposeKernelSessionsByOwner(this.#ctx.kernelOwnerId);
-	}
-
-	async #waitForExecutionsToSettle(timeoutMs: number): Promise<boolean> {
-		const deadline = Date.now() + timeoutMs;
-		while (this.#activeExecutions.size > 0) {
-			const remainingMs = deadline - Date.now();
-			if (remainingMs <= 0) {
-				return false;
-			}
-			const settled = await Promise.race([
-				Promise.allSettled(Array.from(this.#activeExecutions)).then(() => true),
-				Bun.sleep(remainingMs).then(() => false),
-			]);
-			if (!settled && this.#activeExecutions.size > 0) {
-				return false;
-			}
-		}
-		return true;
 	}
 }

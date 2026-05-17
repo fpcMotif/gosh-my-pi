@@ -252,6 +252,10 @@ function formatTimeoutClampNotice(requestedTimeoutSec: number, effectiveTimeoutS
 		: undefined;
 }
 
+function definedNotices(...notices: Array<string | undefined>): string[] {
+	return notices.filter((notice): notice is string => Boolean(notice));
+}
+
 /**
  * Bash tool implementation.
  *
@@ -424,7 +428,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 						options.tailLines,
 						{
 							requestedTimeoutSec: options.requestedTimeoutSec,
-							notices: [options.timeoutClampNotice].filter((notice): notice is string => Boolean(notice)),
+							notices: definedNotices(options.timeoutClampNotice),
 						},
 					);
 					const finalText = this.#extractTextResult(finalResult);
@@ -615,7 +619,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 			});
 			return this.#buildBackgroundStartResult(job.jobId, job.label, "", timeoutSec, {
 				requestedTimeoutSec,
-				notices: [timeoutClampNotice].filter((notice): notice is string => Boolean(notice)),
+				notices: definedNotices(timeoutClampNotice),
 			});
 		}
 
@@ -638,7 +642,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 			if (startBackgrounded) {
 				return this.#buildBackgroundStartResult(job.jobId, job.label, "", timeoutSec, {
 					requestedTimeoutSec,
-					notices: [timeoutClampNotice].filter((notice): notice is string => Boolean(notice)),
+					notices: definedNotices(timeoutClampNotice),
 				});
 			}
 			const waitResult = await this.#waitForManagedBashJob(job, autoBackgroundWaitMs, signal);
@@ -658,7 +662,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 			job.setBackgrounded(true);
 			return this.#buildBackgroundStartResult(job.jobId, job.label, job.getLatestText(), timeoutSec, {
 				requestedTimeoutSec,
-				notices: [timeoutClampNotice].filter((notice): notice is string => Boolean(notice)),
+				notices: definedNotices(timeoutClampNotice),
 			});
 		}
 
@@ -701,7 +705,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		}
 		return this.#buildCompletedResult(result, timeoutSec, headLines, tailLines, {
 			requestedTimeoutSec,
-			notices: [timeoutClampNotice].filter((notice): notice is string => Boolean(notice)),
+			notices: definedNotices(timeoutClampNotice),
 		});
 	}
 }
@@ -789,12 +793,22 @@ function presentShellCall<TArgs>(
 	};
 }
 
-export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
+/**
+ * Shell-style presenter factory. Mirrors {@link createShellRenderer} but returns
+ * only the neutral {@link ToolPresentation} data — no pi-tui dependency. Consumed
+ * by the OMP-RPC wire translator and (via the in-process TUI fallback chain) the
+ * Component renderer below.
+ */
+export function createShellPresenter<TArgs>(config: ShellRendererConfig<TArgs>) {
 	return {
 		presentCall(args: TArgs, options: RenderResultOptions): ToolPresentation {
 			return presentShellCall(args, options, config);
 		},
+	};
+}
 
+export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
+	return {
 		renderCall(args: TArgs, options: RenderResultOptions, uiTheme: Theme): Component {
 			return renderToolPresentation(presentShellCall(args, options, config), uiTheme);
 		},
@@ -913,9 +927,12 @@ export function createShellRenderer<TArgs>(config: ShellRendererConfig<TArgs>) {
 	};
 }
 
-export const bashToolRenderer = createShellRenderer<BashRenderArgs>({
+const bashShellConfig: ShellRendererConfig<BashRenderArgs> = {
 	resolveTitle: () => "Bash",
 	resolveCommand: args => args?.command,
 	resolveCwd: args => args?.cwd,
 	resolveEnv: args => args?.env,
-});
+};
+
+export const bashToolPresenter = createShellPresenter<BashRenderArgs>(bashShellConfig);
+export const bashToolRenderer = createShellRenderer<BashRenderArgs>(bashShellConfig);

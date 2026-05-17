@@ -48,7 +48,8 @@ import {
 	type PythonExecutionMessage,
 	sanitizeRehydratedOpenAIResponsesAssistantMessage,
 } from "./messages";
-import type { SessionStorage, SessionStorageWriter } from "./session-storage";
+import { NdjsonAppendLog } from "./ndjson-append-log";
+import type { SessionStorage } from "./session-storage";
 import { FileSessionStorage, MemorySessionStorage } from "./session-storage";
 
 export const CURRENT_SESSION_VERSION = 3;
@@ -1147,123 +1148,6 @@ async function prepareEntryForPersistence(entry: FileEntry, blobStore: BlobStore
 	return truncateForPersistence(entry, blobStore);
 }
 
-class NdjsonFileWriter {
-	#writer: SessionStorageWriter;
-	#closed = false;
-	#closing = false;
-	#error: Error | undefined;
-	#pendingWrites: Promise<void> = Promise.resolve();
-	#onError: ((err: Error) => void) | undefined;
-
-	constructor(storage: SessionStorage, path: string, options?: { flags?: "a" | "w"; onError?: (err: Error) => void }) {
-		this.#onError = options?.onError;
-		this.#writer = storage.openWriter(path, {
-			flags: options?.flags ?? "a",
-			onError: (err: Error) => this.#recordError(err),
-		});
-	}
-
-	#recordError(err: unknown): Error {
-		const writeErr = toError(err);
-		if (!this.#error) this.#error = writeErr;
-		this.#onError?.(writeErr);
-		return writeErr;
-	}
-
-	#enqueue(task: () => Promise<void>): Promise<void> {
-		const run = async () => {
-			if (this.#error) throw this.#error;
-			await task();
-		};
-		const next = this.#pendingWrites.then(run);
-		void next.catch((error: unknown) => {
-			if (!this.#error) this.#error = toError(error);
-		});
-		this.#pendingWrites = next;
-		return next;
-	}
-
-	async #writeLine(line: string): Promise<void> {
-		if (this.#error) throw this.#error;
-		try {
-			await this.#writer.writeLine(line);
-		} catch (error) {
-			throw this.#recordError(error);
-		}
-	}
-
-	/** Queue a write. Returns a promise so callers can await if needed. */
-	write(entry: FileEntry): Promise<void> {
-		if (this.#closed || this.#closing) throw new Error("Writer closed");
-		if (this.#error) throw this.#error;
-		const line = `${JSON.stringify(entry)}\n`;
-		return this.#enqueue(() => this.#writeLine(line));
-	}
-
-	/** Flush all buffered data to disk. Waits for all queued writes. */
-	async flush(): Promise<void> {
-		if (this.#closed) return;
-		if (this.#error) throw this.#error;
-
-		await this.#enqueue(async () => {});
-
-		if (this.#error) throw this.#error;
-
-		try {
-			await this.#writer.flush();
-		} catch (error) {
-			throw this.#recordError(error);
-		}
-	}
-
-	/** Sync data to persistent storage. */
-	async fsync(): Promise<void> {
-		if (this.#closed) return;
-		if (this.#error) throw this.#error;
-		try {
-			await this.#writer.fsync();
-		} catch (error) {
-			throw this.#recordError(error);
-		}
-	}
-
-	/** Close the writer, flushing all data. */
-	async close(): Promise<void> {
-		if (this.#closed || this.#closing) return;
-		this.#closing = true;
-
-		let closeError: Error | undefined;
-		try {
-			await this.flush();
-		} catch (error) {
-			closeError = toError(error);
-		}
-
-		try {
-			await this.#pendingWrites;
-		} catch (error) {
-			if (!closeError) closeError = toError(error);
-		}
-
-		try {
-			await this.#writer.close();
-		} catch (error) {
-			const endErr = this.#recordError(error);
-			if (!closeError) closeError = endErr;
-		}
-
-		this.#closed = true;
-
-		if (!closeError && this.#error) closeError = this.#error;
-		if (closeError) throw closeError;
-	}
-
-	/** Check if there's a stored error. */
-	getError(): Error | undefined {
-		return this.#error;
-	}
-}
-
 /** Get recent sessions for display in welcome screen */
 export async function getRecentSessions(
 	sessionDir: string,
@@ -1622,7 +1506,6 @@ export class SessionManager {
 	#titleSource: "auto" | "user" | undefined;
 	#sessionFile: string | undefined;
 	#flushed: boolean = false;
-	#needsFullRewriteOnNextPersist: boolean = false;
 	#ensuredOnDisk: boolean = false;
 	#fileEntries: FileEntry[] = [];
 	#byId: Map<string, SessionEntry> = new Map();
@@ -1636,11 +1519,7 @@ export class SessionManager {
 		premiumRequests: 0,
 		cost: 0,
 	} satisfies UsageStatistics;
-	#persistWriter: NdjsonFileWriter | undefined;
-	#persistWriterPath: string | undefined;
-	#persistChain: Promise<void> = Promise.resolve();
-	#persistError: Error | undefined;
-	#persistErrorReported = false;
+	#log: NdjsonAppendLog;
 	#artifactManager: ArtifactManager | null = null;
 	#artifactManagerSessionFile: string | null = null;
 	// In-memory artifact fallback for non-persistent sessions (persist=false).
@@ -1656,6 +1535,11 @@ export class SessionManager {
 		private readonly storage: SessionStorage,
 	) {
 		this.#blobStore = new BlobStore(getBlobsDir());
+		this.#log = new NdjsonAppendLog({
+			persist,
+			storage,
+			getSessionFile: () => this.#sessionFile,
+		});
 		if (persist && sessionDir) {
 			this.storage.ensureDirSync(sessionDir);
 		}
@@ -1674,7 +1558,7 @@ export class SessionManager {
 			titleSource: this.#titleSource,
 			sessionFile: this.#sessionFile,
 			flushed: this.#flushed,
-			needsFullRewriteOnNextPersist: this.#needsFullRewriteOnNextPersist,
+			needsFullRewriteOnNextPersist: this.#log.needsFullRewrite(),
 			// Snapshot entry objects by reference: switch/reload replaces the active entry array,
 			// so rollback does not need structured cloning of extension/custom details.
 			fileEntries: [...this.#fileEntries],
@@ -1687,13 +1571,9 @@ export class SessionManager {
 		this.#titleSource = snapshot.titleSource;
 		this.#sessionFile = snapshot.sessionFile;
 		this.#flushed = snapshot.flushed;
-		this.#needsFullRewriteOnNextPersist = snapshot.needsFullRewriteOnNextPersist;
+		this.#log.setFullRewriteFlag(snapshot.needsFullRewriteOnNextPersist);
 		this.#fileEntries = [...snapshot.fileEntries];
-		this.#persistWriter = undefined;
-		this.#persistWriterPath = undefined;
-		this.#persistChain = Promise.resolve();
-		this.#persistError = undefined;
-		this.#persistErrorReported = false;
+		this.#log.resetTransientState();
 		this.#artifactManager = null;
 		this.#artifactManagerSessionFile = null;
 		this.#buildIndex();
@@ -1714,9 +1594,8 @@ export class SessionManager {
 
 	/** Switch to a different session file (used for resume and branching) */
 	async setSessionFile(sessionFile: string): Promise<void> {
-		await this.#closePersistWriter();
-		this.#persistError = undefined;
-		this.#persistErrorReported = false;
+		await this.#log.closeWriter();
+		this.#log.resetTransientState();
 		this.#sessionFile = path.resolve(sessionFile);
 		writeTerminalBreadcrumb(this.cwd, this.#sessionFile);
 		this.#fileEntries = await loadEntriesFromFile(this.#sessionFile, this.storage);
@@ -1726,7 +1605,9 @@ export class SessionManager {
 			this.#sessionName = header?.title;
 			this.#titleSource = header?.titleSource;
 
-			this.#needsFullRewriteOnNextPersist = migrateToCurrentVersion(this.#fileEntries);
+			if (migrateToCurrentVersion(this.#fileEntries)) {
+				this.#log.requestFullRewriteOnNextAppend();
+			}
 
 			await resolveBlobRefsInEntries(this.#fileEntries, this.#blobStore);
 			this.sanitizeLoadedOpenAIResponsesReplayMetadata();
@@ -1746,13 +1627,13 @@ export class SessionManager {
 
 	/** Start a new session. Closes any existing writer first. */
 	async newSession(options?: NewSessionOptions): Promise<string | undefined> {
-		await this.#closePersistWriter();
+		await this.#log.closeWriter();
 		return this.#newSessionSync(options);
 	}
 
 	/** Delete a session file and its artifacts. Drains the persist writer first to avoid EPERM on Windows. ENOENT is treated as success. */
 	async dropSession(sessionPath: string): Promise<void> {
-		await this.#closePersistWriter();
+		await this.#log.closeWriter();
 		try {
 			await this.storage.deleteSessionWithArtifacts(sessionPath);
 		} catch (error) {
@@ -1775,10 +1656,8 @@ export class SessionManager {
 		const oldSessionId = this.#sessionId;
 
 		// Close the current writer
-		await this.#closePersistWriter();
-		this.#persistChain = Promise.resolve();
-		this.#persistError = undefined;
-		this.#persistErrorReported = false;
+		await this.#log.closeWriter();
+		this.#log.resetTransientState();
 
 		// Create new session ID and header
 		this.#sessionId = createSessionId();
@@ -1830,10 +1709,8 @@ export class SessionManager {
 
 		if (this.persist && this.#sessionFile) {
 			// Close the persist writer before moving files
-			await this.#closePersistWriter();
-			this.#persistChain = Promise.resolve();
-			this.#persistError = undefined;
-			this.#persistErrorReported = false;
+			await this.#log.closeWriter();
+			this.#log.resetTransientState();
 
 			const oldSessionFile = this.#sessionFile;
 			const newSessionFile = path.join(newSessionDir, path.basename(oldSessionFile));
@@ -1910,9 +1787,7 @@ export class SessionManager {
 
 	/** Sync version for initial creation (no existing writer to close) */
 	#newSessionSync(options?: NewSessionOptions): string | undefined {
-		this.#persistChain = Promise.resolve();
-		this.#persistError = undefined;
-		this.#persistErrorReported = false;
+		this.#log.resetTransientState();
 		this.#sessionId = createSessionId();
 		this.#sessionName = undefined;
 		this.#titleSource = undefined;
@@ -1930,7 +1805,7 @@ export class SessionManager {
 		this.#labelsById.clear();
 		this.#leafId = null;
 		this.#flushed = false;
-		this.#needsFullRewriteOnNextPersist = false;
+		this.#log.clearFullRewriteFlag();
 		this.#ensuredOnDisk = false;
 		this.#usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, premiumRequests: 0, cost: 0 };
 		this.#inMemoryArtifacts = null;
@@ -1984,103 +1859,13 @@ export class SessionManager {
 		}
 	}
 
-	#recordPersistError(err: unknown): Error {
-		const normalized = toError(err);
-		if (!this.#persistError) this.#persistError = normalized;
-		if (!this.#persistErrorReported) {
-			this.#persistErrorReported = true;
-			logger.error("Session persistence error.", {
-				sessionFile: this.#sessionFile,
-				error: normalized.message,
-				stack: normalized.stack,
-			});
-		}
-		return normalized;
-	}
-
-	#queuePersistTask(task: () => Promise<void>, options?: { ignoreError?: boolean }): Promise<void> {
-		const next = this.#persistChain.then(async () => {
-			if (this.#persistError && options?.ignoreError !== true) throw this.#persistError;
-			await task();
-		});
-		this.#persistChain = next.catch(error => {
-			this.#recordPersistError(error);
-		});
-		return next;
-	}
-
-	#ensurePersistWriter(): NdjsonFileWriter | undefined {
-		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
-			return undefined;
-		if (this.#persistError) throw this.#persistError;
-		if (this.#persistWriter && this.#persistWriterPath === this.#sessionFile) return this.#persistWriter;
-		// Note: caller must await _closePersistWriter() before calling this if switching files
-		this.#persistWriter = new NdjsonFileWriter(this.storage, this.#sessionFile, {
-			onError: err => {
-				this.#recordPersistError(err);
-			},
-		});
-		this.#persistWriterPath = this.#sessionFile;
-		return this.#persistWriter;
-	}
-
-	async #closePersistWriterInternal(): Promise<void> {
-		if (this.#persistWriter) {
-			await this.#persistWriter.close();
-			this.#persistWriter = undefined;
-		}
-		this.#persistWriterPath = undefined;
-	}
-
-	async #closePersistWriter(): Promise<void> {
-		await this.#queuePersistTask(
-			async () => {
-				await this.#closePersistWriterInternal();
-			},
-			{ ignoreError: true },
-		);
-	}
-
-	async #writeEntriesAtomically(entries: FileEntry[]): Promise<void> {
-		if (this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "") return;
-		const dir = path.resolve(this.#sessionFile, "..");
-		const tempPath = path.join(dir, `.${path.basename(this.#sessionFile)}.${Snowflake.next()}.tmp`);
-		const writer = new NdjsonFileWriter(this.storage, tempPath, { flags: "w" });
-		try {
-			for (const entry of entries) {
-				await writer.write(entry);
-			}
-			await writer.flush();
-			await writer.fsync();
-			await writer.close();
-			await this.storage.rename(tempPath, this.#sessionFile);
-		} catch (error) {
-			try {
-				await writer.close();
-			} catch {
-				// Ignore cleanup errors
-			}
-			try {
-				await this.storage.unlink(tempPath);
-			} catch {
-				// Ignore cleanup errors
-			}
-			throw toError(error);
-		}
-	}
-
 	async #rewriteFile(): Promise<void> {
 		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
 			return;
-		await this.#queuePersistTask(async () => {
-			await this.#closePersistWriterInternal();
-			const entries = await Promise.all(
-				this.#fileEntries.map(entry => prepareEntryForPersistence(entry, this.#blobStore)),
-			);
-			await this.#writeEntriesAtomically(entries);
-			this.#needsFullRewriteOnNextPersist = false;
-			this.#flushed = true;
-		});
+		await this.#log.rewriteAll(() =>
+			Promise.all(this.#fileEntries.map(entry => prepareEntryForPersistence(entry, this.#blobStore))),
+		);
+		this.#flushed = true;
 	}
 
 	isPersisted(): boolean {
@@ -2094,30 +1879,21 @@ export class SessionManager {
 	async ensureOnDisk(): Promise<void> {
 		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
 			return;
-		if (this.#flushed && !this.#needsFullRewriteOnNextPersist) return;
+		if (this.#flushed && !this.#log.needsFullRewrite()) return;
 		await this.#rewriteFile();
 		this.#ensuredOnDisk = true;
 	}
 
 	/** Flush pending writes to disk. Call before switching sessions or on shutdown. */
 	async flush(): Promise<void> {
-		await this.#queuePersistTask(async () => {
-			if (this.#persistWriter) {
-				await this.#persistWriter.flush();
-				await this.#persistWriter.fsync();
-			}
-		});
-		if (this.#persistError) throw this.#persistError;
+		await this.#log.flushActiveWriter();
 	}
 
 	/** Close the persistent writer after flushing all pending data. */
 	async close(): Promise<void> {
-		if (!this.#persistWriter) return;
-		await this.#queuePersistTask(async () => {
-			await this.#closePersistWriterInternal();
-			this.#flushed = true;
-		});
-		if (this.#persistError) throw this.#persistError;
+		if (!this.#log.hasOpenWriter()) return;
+		await this.#log.closeWriterOrThrow();
+		this.#flushed = true;
 	}
 
 	getCwd(): string {
@@ -2262,7 +2038,8 @@ export class SessionManager {
 	_persist(entry: SessionEntry): void {
 		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
 			return;
-		if (this.#persistError) throw this.#persistError;
+		const persistError = this.#log.getError();
+		if (persistError) throw persistError;
 
 		// Normally we wait for the first assistant message before persisting to avoid
 		// creating files for sessions that never produce output. Once ensureOnDisk() has
@@ -2276,21 +2053,23 @@ export class SessionManager {
 			}
 		}
 
-		if (this.#needsFullRewriteOnNextPersist || !this.#flushed) {
+		if (this.#log.needsFullRewrite() || !this.#flushed) {
 			// Full flush: rewrite the entire file atomically to avoid
 			// duplicating entries if the file already exists (e.g. from ensureOnDisk).
-			// Errors are already surfaced through #persistChain/#persistError; the
-			// caller intentionally fires-and-forgets, so swallow the awaited rejection
-			// here to avoid an unhandled rejection when the persist dir races with
-			// test-level tempDir cleanup.
+			// Errors are already surfaced through the log's persist chain; the caller
+			// intentionally fires-and-forgets, so swallow the awaited rejection here to
+			// avoid an unhandled rejection when the persist dir races with test-level
+			// tempDir cleanup.
 			this.#rewriteFile().catch(() => {});
 		} else {
-			this.#queuePersistTask(async () => {
-				const writer = this.#ensurePersistWriter();
-				if (!writer) return;
-				const persistedEntry = await prepareEntryForPersistence(entry, this.#blobStore);
-				await writer.write(persistedEntry);
-			}).catch(() => {});
+			this.#log
+				.queueTask(async () => {
+					const writer = this.#log.ensureWriter();
+					if (!writer) return;
+					const persistedEntry = await prepareEntryForPersistence(entry, this.#blobStore);
+					await writer.write(persistedEntry);
+				})
+				.catch(() => {});
 		}
 	}
 
