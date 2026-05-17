@@ -51,6 +51,11 @@ export function effectFromSignal<A, E, R>(
  *
  * The returned controller is owned by the caller; aborting it externally has
  * no effect on the fiber (use Fiber.interrupt for that).
+ *
+ * Caveat: the internal watch fiber spawned via `Effect.runFork` is not bound
+ * to any scope and lives until the supplied fiber resolves. Do not call this
+ * with a fiber that may never complete — that leaks the watcher for the
+ * lifetime of the process.
  */
 export function signalFromFiber(fiber: Fiber.Fiber<unknown, unknown>): AbortSignal {
 	const controller = new AbortController();

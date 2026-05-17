@@ -35,10 +35,3 @@ export function runEffectStream(
 		}
 	});
 }
-
-/**
- * Helper to convert an AsyncIterable to an Effect Stream.
- */
-export function fromAsyncIterable<A>(iterable: AsyncIterable<A>): Stream.Stream<A, Error> {
-	return Stream.fromAsyncIterable(iterable, error => (error instanceof Error ? error : new Error(String(error))));
-}

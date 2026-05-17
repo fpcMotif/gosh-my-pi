@@ -28,8 +28,6 @@
 			"@oh-my-pi/pi-utils": "14.5.11",
 			"@puppeteer/browsers": "^2.13.0",
 			"effect": "4.0.0-beta.66",
-			"@effect/ai-openai": "4.0.0-beta.66",
-			"@effect/platform-bun": "4.0.0-beta.66",
 			"@effect/language-service": "0.85.1",
 			"@sinclair/typebox": "^0.34.49",
 			"@smithy/node-http-handler": "^4.6.1",

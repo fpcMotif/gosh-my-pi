@@ -64,13 +64,14 @@ export const runWithLocalAbortWatchdog = (opts: LocalAbortWatchdogOpts): Effect.
 			// The body's own rejection is swallowed: the helper's contract is
 			// race outcome only — body errors are surfaced through the body's
 			// own iterator/output channel, not this Effect.
-			const work = Effect.suspend(() => {
-				const promise = opts.body(controller.signal).then(
-					() => undefined,
-					() => undefined,
-				);
-				return Effect.promise(() => promise);
-			});
+			const work = Effect.suspend(() =>
+				Effect.promise(() =>
+					opts.body(controller.signal).then(
+						() => undefined,
+						() => undefined,
+					),
+				),
+			);
 
 			const watchdog = watchdogFailureEffect(opts.watchdog.kind, opts.watchdog.timeoutMs);
 

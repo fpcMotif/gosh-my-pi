@@ -26,7 +26,10 @@ export function streamKimi(
 
 	const stream: Stream.Stream<AssistantMessageEvent, Error> = Stream.unwrap(
 		Effect.gen(function* () {
-			const kimiHeaders = yield* Effect.promise(() => getKimiCommonHeaders());
+			const kimiHeaders = yield* Effect.tryPromise({
+				try: () => getKimiCommonHeaders(),
+				catch: error => (error instanceof Error ? error : new Error(String(error))),
+			});
 			const innerStream = streamOpenAICompletions(model, context, {
 				apiKey: options?.apiKey,
 				temperature: options?.temperature,
