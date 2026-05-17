@@ -17,14 +17,7 @@ import { createFileRecorder, formatResultPath } from "./file-recorder";
 import { formatGroupedFiles } from "./grouped-file-output";
 import { formatMatchLine } from "./match-line-format";
 import { formatFullOutputReference, type OutputMeta } from "./output-meta";
-import {
-	formatPathRelativeToCwd,
-	hasGlobPathChars,
-	normalizePathLikeInput,
-	parseSearchPath,
-	resolveMultiSearchPath,
-	resolveToCwd,
-} from "./path-utils";
+import { resolveSearchLikePathInput } from "./path-utils";
 import {
 	formatCodeFrameLine,
 	formatCount,
@@ -114,40 +107,13 @@ export class SearchTool implements AgentTool<typeof searchSchema, SearchToolDeta
 			const effectiveMultiline = patternHasNewline;
 
 			const useHashLines = resolveFileDisplayMode(this.session).hashLines;
-			const formatScopePath = (targetPath: string): string => formatPathRelativeToCwd(targetPath, this.session.cwd);
-			let searchPath: string;
-			let scopePath: string;
-			let exactFilePaths: string[] | undefined;
-			let globFilter: string | undefined;
-			const rawPath = normalizePathLikeInput(searchDir);
-			if (rawPath.length === 0) {
-				throw new ToolError("`path` must be a non-empty path or glob");
-			}
-			const internalRouter = this.session.internalRouter;
-			if (internalRouter?.canHandle(rawPath) === true) {
-				if (hasGlobPathChars(rawPath)) {
-					throw new ToolError(`Glob patterns are not supported for internal URLs: ${rawPath}`);
-				}
-				const resource = await internalRouter.resolve(rawPath);
-				if (resource.sourcePath === null || resource.sourcePath === undefined || resource.sourcePath === "") {
-					throw new ToolError(`Cannot search internal URL without a backing file: ${rawPath}`);
-				}
-				searchPath = resource.sourcePath;
-				scopePath = formatScopePath(searchPath);
-			} else {
-				const multiSearchPath = await resolveMultiSearchPath(rawPath, this.session.cwd, globFilter);
-				if (multiSearchPath) {
-					searchPath = multiSearchPath.basePath;
-					globFilter = multiSearchPath.exactFilePaths ? undefined : multiSearchPath.glob;
-					exactFilePaths = multiSearchPath.exactFilePaths;
-					scopePath = multiSearchPath.scopePath;
-				} else {
-					const parsedPath = parseSearchPath(rawPath);
-					searchPath = resolveToCwd(parsedPath.basePath, this.session.cwd);
-					globFilter = parsedPath.glob;
-					scopePath = formatScopePath(searchPath);
-				}
-			}
+			const { searchPath, scopePath, exactFilePaths, globFilter } = await resolveSearchLikePathInput({
+				rawPath: searchDir,
+				cwd: this.session.cwd,
+				internalRouter: this.session.internalRouter,
+				createError: message => new ToolError(message),
+				internalUrlMissingSourceMessage: rawPath => `Cannot search internal URL without a backing file: ${rawPath}`,
+			});
 			let isDirectory: boolean;
 			try {
 				const stat = await Bun.file(searchPath).stat();

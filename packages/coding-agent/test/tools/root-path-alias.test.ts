@@ -5,7 +5,11 @@ import * as path from "node:path";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { ToolChoiceQueue } from "@oh-my-pi/pi-coding-agent/session/tool-choice-queue";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { resolveToCwd } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
+import {
+	type ResolveSearchLikePathInputOptions,
+	resolveSearchLikePathInput,
+	resolveToCwd,
+} from "@oh-my-pi/pi-coding-agent/tools/path-utils";
 
 function createTestSession(cwd: string, overrides: Partial<ToolSession> = {}): ToolSession {
 	return {
@@ -60,6 +64,53 @@ describe("tool path root alias", () => {
 
 	it("rejects @local:// (at-prefix double-slash) as an internal URL", () => {
 		expect(() => resolveToCwd("@local://PLAN.md", tempDir)).toThrow("internal scheme");
+	});
+
+	it("resolves search-like internal URL source paths through the shared helper", async () => {
+		const internalRouter: NonNullable<ResolveSearchLikePathInputOptions["internalRouter"]> = {
+			canHandle: input => input === "agent://sample",
+			async resolve(input) {
+				return {
+					url: input,
+					content: "",
+					contentType: "text/plain",
+					sourcePath: path.join(tempDir, "sample.ts"),
+				};
+			},
+		};
+
+		const resolved = await resolveSearchLikePathInput({
+			rawPath: "agent://sample",
+			cwd: tempDir,
+			internalRouter,
+		});
+
+		expect(resolved).toEqual({
+			searchPath: path.join(tempDir, "sample.ts"),
+			scopePath: "sample.ts",
+		});
+	});
+
+	it("keeps caller-specific internal URL missing-source errors", async () => {
+		const internalRouter: NonNullable<ResolveSearchLikePathInputOptions["internalRouter"]> = {
+			canHandle: input => input === "agent://missing",
+			async resolve(input) {
+				return {
+					url: input,
+					content: "",
+					contentType: "text/plain",
+				};
+			},
+		};
+
+		await expect(
+			resolveSearchLikePathInput({
+				rawPath: "agent://missing",
+				cwd: tempDir,
+				internalRouter,
+				internalUrlMissingSourceMessage: rawPath => `Cannot rewrite internal URL without backing file: ${rawPath}`,
+			}),
+		).rejects.toThrow("Cannot rewrite internal URL without backing file: agent://missing");
 	});
 
 	it("searches from cwd when path is slash", async () => {
