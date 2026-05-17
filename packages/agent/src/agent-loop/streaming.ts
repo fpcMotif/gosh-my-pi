@@ -109,8 +109,7 @@ async function processAssistantStream(
 	// stopReason rather than an unhandled rejection.
 	await Effect.runPromise(
 		Effect.whileLoop({
-			while: () =>
-				!stateRef.current.streamDone && stateRef.current.terminal === null && !stateRef.current.aborted,
+			while: () => !stateRef.current.streamDone && stateRef.current.terminal === null && !stateRef.current.aborted,
 			body: () =>
 				Effect.tryPromise({
 					try: () => stepIteratorPump(iterator, signal, context, stream, stateRef.current),
