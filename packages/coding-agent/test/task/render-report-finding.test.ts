@@ -270,7 +270,7 @@ describe("taskToolRenderer report_finding safety", () => {
 					description: "Warned worker",
 					assignment: "Target\nChange\tone",
 					output:
-						"SYSTEM WARNING: Subagent exited without calling yield tool before stop\n{\"status\":\"kept\",\"count\":2}",
+						'SYSTEM WARNING: Subagent exited without calling yield tool before stop\n{"status":"kept","count":2}',
 					durationMs: 1111,
 					tokens: 333,
 					patchPath: "/tmp/worker.patch",
@@ -316,7 +316,7 @@ describe("taskToolRenderer report_finding safety", () => {
 		expect(text).toContain("Task");
 		expect(text).toContain("Change   one");
 		expect(text).toContain("SYSTEM WARNING: Subagent exited without calling yield tool");
-		expect(text).toContain("status: \"kept\"");
+		expect(text).toContain('status: "kept"');
 		expect(text).toContain("Patch: /tmp/worker.patch");
 		expect(text).toContain("Branch: task/branch-worker");
 		expect(text).toContain("merge failed");

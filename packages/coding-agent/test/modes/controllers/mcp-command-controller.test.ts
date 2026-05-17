@@ -3,13 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { Container } from "@oh-my-pi/pi-tui";
-import {
-	getAgentDir,
-	getMCPConfigPath,
-	getProjectDir,
-	setAgentDir,
-	setProjectDir,
-} from "@oh-my-pi/pi-utils";
+import { getAgentDir, getMCPConfigPath, getProjectDir, setAgentDir, setProjectDir } from "@oh-my-pi/pi-utils";
 import { sanitizeText } from "@oh-my-pi/pi-natives";
 import { fromAny } from "@total-typescript/shoehorn";
 import { MCPCommandController } from "../../../src/modes/controllers/mcp-command-controller";
@@ -73,7 +67,9 @@ function createMCPManager() {
 			statuses.set(name, "disconnected");
 			connections.delete(name);
 		}),
-		getConnectedServers: vi.fn(() => [...statuses.entries()].filter(([, status]) => status === "connected").map(([name]) => name)),
+		getConnectedServers: vi.fn(() =>
+			[...statuses.entries()].filter(([, status]) => status === "connected").map(([name]) => name),
+		),
 		getServerResources: vi.fn((name: string) => resources.get(name)),
 		getServerPrompts: vi.fn((name: string) => prompts.get(name)),
 		getNotificationState: vi.fn(() => ({

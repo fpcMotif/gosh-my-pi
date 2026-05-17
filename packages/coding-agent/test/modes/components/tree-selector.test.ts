@@ -29,7 +29,12 @@ function buildTree(): SessionTreeNode[] {
 			role: "assistant",
 			stopReason: "toolUse",
 			content: [
-				{ type: "toolCall", id: "read-call", name: "read", arguments: { path: "src/read.ts", offset: 2, limit: 3 } },
+				{
+					type: "toolCall",
+					id: "read-call",
+					name: "read",
+					arguments: { path: "src/read.ts", offset: 2, limit: 3 },
+				},
 				{ type: "toolCall", id: "write-call", name: "write", arguments: { path: "src/write.ts" } },
 				{ type: "toolCall", id: "edit-call", name: "edit", arguments: { file_path: "src/edit.ts" } },
 				{
@@ -137,7 +142,11 @@ function buildTree(): SessionTreeNode[] {
 				node(entry("model", "root", { type: "model_change", model: "openai/gpt-test", role: "default" })),
 				node(entry("thinking", "root", { type: "thinking_level_change", thinkingLevel: "high" })),
 				node(entry("custom", "root", { type: "custom", customType: "marker", data: { ok: true } })),
-				node(entry("label", "root", { type: "label", targetId: "assistant-text", label: "bookmark" }), [], "bookmark"),
+				node(
+					entry("label", "root", { type: "label", targetId: "assistant-text", label: "bookmark" }),
+					[],
+					"bookmark",
+				),
 			],
 		),
 		node(

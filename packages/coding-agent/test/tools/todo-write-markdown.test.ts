@@ -82,14 +82,7 @@ describe("todo-write markdown helpers", () => {
 	});
 
 	it("reports unknown markers and unrecognized syntax without dropping later valid tasks", () => {
-		const parsed = markdownToPhases(
-			[
-				"# Broken",
-				"- [?] mystery",
-				"plain text",
-				"- [x] valid",
-			].join("\n"),
-		);
+		const parsed = markdownToPhases(["# Broken", "- [?] mystery", "plain text", "- [x] valid"].join("\n"));
 
 		expect(parsed.errors).toEqual([
 			'Line 2: unknown status marker "[?]" (use [ ], [x], [/], [-])',
@@ -105,12 +98,7 @@ describe("todo-write markdown helpers", () => {
 
 	it("normalizes multiple in-progress parsed tasks so only the first remains active", () => {
 		const parsed = markdownToPhases(
-			[
-				"# Work",
-				"- [/] first active",
-				"- [/] second active",
-				"- [ ] pending",
-			].join("\n"),
+			["# Work", "- [/] first active", "- [/] second active", "- [ ] pending"].join("\n"),
 		);
 
 		expect(parsed.errors).toEqual([]);

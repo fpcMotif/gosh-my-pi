@@ -14,7 +14,9 @@ describe("AgentEventRouter", () => {
 			},
 			getUserMessageText: message => {
 				if (typeof message.content === "string") return message.content;
-				const text = message.content.filter((part): part is TextContent => part.type === "text").map(part => part.text);
+				const text = message.content
+					.filter((part): part is TextContent => part.type === "text")
+					.map(part => part.text);
 				return text.join("");
 			},
 			removeVisibleQueuedMessage: messageText => {
@@ -36,9 +38,7 @@ describe("AgentEventRouter", () => {
 	});
 
 	it("emits deobfuscated assistant content while preserving obfuscated source event", async () => {
-		const obfuscator = new SecretObfuscator([
-			{ type: "plain", content: "api-key-123", mode: "obfuscate" },
-		]);
+		const obfuscator = new SecretObfuscator([{ type: "plain", content: "api-key-123", mode: "obfuscate" }]);
 		const obfuscated = obfuscator.obfuscate("api-key-123");
 
 		const emitted: AgentEvent[] = [];

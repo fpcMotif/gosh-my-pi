@@ -14,21 +14,12 @@ import {
 	refreshState,
 	toggleProvider,
 } from "../../../../src/modes/components/extensions/state-manager";
-import type {
-	DashboardState,
-	Extension,
-	ExtensionKind,
-} from "../../../../src/modes/components/extensions/types";
+import type { DashboardState, Extension, ExtensionKind } from "../../../../src/modes/components/extensions/types";
 
 let disabledProvidersBefore: string[];
 let tempRoot: string;
 
-function extension(
-	name: string,
-	kind: ExtensionKind,
-	provider: string,
-	overrides: Partial<Extension> = {},
-): Extension {
+function extension(name: string, kind: ExtensionKind, provider: string, overrides: Partial<Extension> = {}): Extension {
 	return {
 		id: `${kind}:${name}`,
 		kind,
@@ -57,11 +48,7 @@ async function createNativeProject(): Promise<string> {
 	await fs.mkdir(cwd, { recursive: true });
 	await writeProjectFile(cwd, ".omp/commands/review.md", "Review the current diff.");
 	await writeProjectFile(cwd, ".omp/prompts/brief.md", "Create a brief.");
-	await writeProjectFile(
-		cwd,
-		".omp/tools/echo.json",
-		JSON.stringify({ name: "echoer", description: "Echo input" }),
-	);
+	await writeProjectFile(cwd, ".omp/tools/echo.json", JSON.stringify({ name: "echoer", description: "Echo input" }));
 	await writeProjectFile(
 		cwd,
 		".omp/mcp.json",

@@ -45,11 +45,15 @@ describe("renderTemplate", () => {
 	});
 
 	test("independent simple mode wraps assignment without shared context", () => {
-		const result = renderTemplate(undefined, {
-			id: "solo",
-			description: "Independent",
-			assignment: "Do this without shared context.",
-		}, "independent");
+		const result = renderTemplate(
+			undefined,
+			{
+				id: "solo",
+				description: "Independent",
+				assignment: "Do this without shared context.",
+			},
+			"independent",
+		);
 
 		expect(result.task).toContain("Do this without shared context.");
 		expect(result.task).toContain(sectionSeparator("Task").trimStart());

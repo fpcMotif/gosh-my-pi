@@ -4,7 +4,7 @@ import { PostPromptScheduler, type PostPromptSchedulerContext } from "../src/ses
 function createControlledContext(): {
 	calls: string[];
 	setGeneration: (generation: number) => void;
-	setRetryGate: () => {	resolve: () => void };
+	setRetryGate: () => { resolve: () => void };
 	setTtsrGate: () => { resolve: () => void };
 	setStreaming: (streaming: boolean) => void;
 	resolveStreamingIdle: () => void;
@@ -82,9 +82,12 @@ describe("PostPromptScheduler", () => {
 		let ran = false;
 		const started = performance.now();
 
-		scheduler.schedulePostPromptTask(async () => {
-			ran = true;
-		}, { delayMs: 25 });
+		scheduler.schedulePostPromptTask(
+			async () => {
+				ran = true;
+			},
+			{ delayMs: 25 },
+		);
 
 		await Bun.sleep(10);
 		expect(ran).toBe(false);
@@ -101,9 +104,12 @@ describe("PostPromptScheduler", () => {
 		let ran = false;
 		let skipped = 0;
 
-		scheduler.schedulePostPromptTask(async () => {
-			ran = true;
-		}, { delayMs: 0, generation: 1, onSkip: () => skipped++ });
+		scheduler.schedulePostPromptTask(
+			async () => {
+				ran = true;
+			},
+			{ delayMs: 0, generation: 1, onSkip: () => skipped++ },
+		);
 
 		await Bun.sleep(10);
 		expect(ran).toBe(false);
@@ -116,9 +122,12 @@ describe("PostPromptScheduler", () => {
 		let ran = false;
 		let skipped = 0;
 
-		scheduler.schedulePostPromptTask(async () => {
-			ran = true;
-		}, { delayMs: 50, onSkip: () => skipped++ });
+		scheduler.schedulePostPromptTask(
+			async () => {
+				ran = true;
+			},
+			{ delayMs: 50, onSkip: () => skipped++ },
+		);
 
 		await Bun.sleep(10);
 		await scheduler.cancel();

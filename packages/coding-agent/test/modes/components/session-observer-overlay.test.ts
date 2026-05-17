@@ -67,7 +67,10 @@ async function writeEntries(filePath: string, entries: Array<ModelChangeEntry | 
 	await Bun.write(filePath, `${entries.map(entry => JSON.stringify(entry)).join("\n")}\n`);
 }
 
-async function createSessionFile(name: string, entries: Array<ModelChangeEntry | SessionMessageEntry>): Promise<string> {
+async function createSessionFile(
+	name: string,
+	entries: Array<ModelChangeEntry | SessionMessageEntry>,
+): Promise<string> {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "session-observer-overlay-"));
 	const filePath = path.join(dir, `${name}.jsonl`);
 	await writeEntries(filePath, entries);
@@ -120,7 +123,10 @@ describe("SessionObserverOverlayComponent", () => {
 				"4",
 				assistantMessage([
 					{ type: "thinking", thinking: `dense reasoning ${"x".repeat(240)}\nextra thought` },
-					{ type: "text", text: "first response line\nsecond response line\nthird response line\nfourth response line" },
+					{
+						type: "text",
+						text: "first response line\nsecond response line\nthird response line\nfourth response line",
+					},
 					{
 						type: "toolCall",
 						id: "bash-call",
