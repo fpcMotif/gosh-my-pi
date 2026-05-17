@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { discoverPythonModules, loadPythonModules, type PythonModuleExecutor } from "@oh-my-pi/pi-coding-agent/ipy/modules";
+import {
+	discoverPythonModules,
+	loadPythonModules,
+	type PythonModuleExecutor,
+} from "@oh-my-pi/pi-coding-agent/ipy/modules";
 import { getAgentModulesDir, getProjectModulesDir, TempDir } from "@oh-my-pi/pi-utils";
 
 const fixturesDir = path.resolve(import.meta.dir, "../../test/fixtures/python-modules");

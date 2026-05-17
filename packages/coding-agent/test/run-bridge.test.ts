@@ -86,10 +86,17 @@ describe("runAgentRequest (enabled: false — direct path)", () => {
 
 	it("calls the image overload when a string prompt includes image content", async () => {
 		const { agent, calls } = fakeAgent();
-		const images: ImageContent[] = [{ type: "image", source: { type: "base64", mediaType: "image/png", data: "abc" } }];
+		const images: ImageContent[] = [
+			{ type: "image", source: { type: "base64", mediaType: "image/png", data: "abc" } },
+		];
 		const options = { messageSource: "user" as const };
 
-		await runAgentRequest(agent, fakeSessionManager(), { kind: "prompt", input: "see this", images, options }, { enabled: false });
+		await runAgentRequest(
+			agent,
+			fakeSessionManager(),
+			{ kind: "prompt", input: "see this", images, options },
+			{ enabled: false },
+		);
 
 		expect(calls).toEqual([{ name: "prompt", args: ["see this", images, options] }]);
 	});
@@ -99,7 +106,12 @@ describe("runAgentRequest (enabled: false — direct path)", () => {
 		const message: AgentMessage = { role: "user", content: "hello", timestamp: 123 };
 		const options = { messageSource: "synthetic" as const };
 
-		await runAgentRequest(agent, fakeSessionManager(), { kind: "prompt", input: message, options }, { enabled: false });
+		await runAgentRequest(
+			agent,
+			fakeSessionManager(),
+			{ kind: "prompt", input: message, options },
+			{ enabled: false },
+		);
 
 		expect(calls).toEqual([{ name: "prompt", args: [message, options] }]);
 	});

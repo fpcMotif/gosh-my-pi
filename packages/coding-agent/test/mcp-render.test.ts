@@ -12,7 +12,10 @@ beforeAll(async () => {
 });
 
 function renderedText(component: { render(width: number): string[] }, width = 200): string {
-	return component.render(width).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+	return component
+		.render(width)
+		.join("\n")
+		.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
 describe("renderMCPCall", () => {
@@ -35,12 +38,10 @@ describe("renderMCPCall", () => {
 describe("renderMCPResult", () => {
 	it("renders expanded arguments before the text output", () => {
 		const rendered = renderedText(
-			renderMCPResult(
-				{ content: [{ type: "text", text: "done" }] },
-				{ expanded: true, isPartial: false },
-				uiTheme,
-				{ path: "src/index.ts", recursive: false },
-			),
+			renderMCPResult({ content: [{ type: "text", text: "done" }] }, { expanded: true, isPartial: false }, uiTheme, {
+				path: "src/index.ts",
+				recursive: false,
+			}),
 		);
 
 		expect(rendered).toContain("Args");
@@ -68,7 +69,11 @@ describe("renderMCPResult", () => {
 
 	it("renders a no-output marker when the selected text content is empty", () => {
 		const rendered = renderedText(
-			renderMCPResult({ content: [{ type: "text", text: "   \n" }] }, { expanded: false, isPartial: false }, uiTheme),
+			renderMCPResult(
+				{ content: [{ type: "text", text: "   \n" }] },
+				{ expanded: false, isPartial: false },
+				uiTheme,
+			),
 		);
 
 		expect(rendered).toContain("(no output)");
@@ -106,7 +111,11 @@ describe("renderMCPResult", () => {
 
 	it("falls back to raw text when JSON-shaped output cannot be parsed", () => {
 		const rendered = renderedText(
-			renderMCPResult({ content: [{ type: "text", text: "{not json}" }] }, { expanded: false, isPartial: false }, uiTheme),
+			renderMCPResult(
+				{ content: [{ type: "text", text: "{not json}" }] },
+				{ expanded: false, isPartial: false },
+				uiTheme,
+			),
 		);
 
 		expect(rendered).toContain("{not json}");
@@ -132,7 +141,11 @@ describe("renderMCPResult", () => {
 	it("bounds raw expanded output without showing a collapsed expand hint", () => {
 		const lines = Array.from({ length: 14 }, (_, index) => `line ${index + 1}`);
 		const rendered = renderedText(
-			renderMCPResult({ content: [{ type: "text", text: lines.join("\n") }] }, { expanded: true, isPartial: false }, uiTheme),
+			renderMCPResult(
+				{ content: [{ type: "text", text: lines.join("\n") }] },
+				{ expanded: true, isPartial: false },
+				uiTheme,
+			),
 		);
 
 		expect(rendered).toContain("line 1");
@@ -144,7 +157,11 @@ describe("renderMCPResult", () => {
 
 	it("still shows the collapsed expand hint when all raw preview lines fit", () => {
 		const rendered = renderedText(
-			renderMCPResult({ content: [{ type: "text", text: "short output" }] }, { expanded: false, isPartial: false }, uiTheme),
+			renderMCPResult(
+				{ content: [{ type: "text", text: "short output" }] },
+				{ expanded: false, isPartial: false },
+				uiTheme,
+			),
 		);
 
 		expect(rendered).toContain("short output");

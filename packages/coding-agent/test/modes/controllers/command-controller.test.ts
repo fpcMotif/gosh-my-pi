@@ -138,7 +138,17 @@ function createHarness() {
 		refreshSlashCommandState: vi.fn(async () => {}),
 		flushCompactionQueue: vi.fn(async () => {}),
 	});
-	return { ctx, session, sessionManager, chatContainer, pendingMessagesContainer, statusContainer, errors, warnings, statuses };
+	return {
+		ctx,
+		session,
+		sessionManager,
+		chatContainer,
+		pendingMessagesContainer,
+		statusContainer,
+		errors,
+		warnings,
+		statuses,
+	};
 }
 
 describe("CommandController", () => {
@@ -269,9 +279,11 @@ describe("CommandController", () => {
 		await new CommandController(noUsageHarness.ctx).handleUsageCommand(null);
 		expect(noUsageHarness.warnings.at(-1)).toBe("Usage reporting is not configured for this session.");
 
-		fromAny<{ fetchUsageReports: () => Promise<UsageReport[] | null> }>(harness.session).fetchUsageReports = vi.fn(async () => {
-			throw new Error("provider down");
-		});
+		fromAny<{ fetchUsageReports: () => Promise<UsageReport[] | null> }>(harness.session).fetchUsageReports = vi.fn(
+			async () => {
+				throw new Error("provider down");
+			},
+		);
 		await controller.handleUsageCommand();
 		expect(harness.errors.at(-1)).toBe("Failed to fetch usage data: provider down");
 
@@ -342,10 +354,7 @@ describe("CommandController", () => {
 		await controller.handleCompactCommand();
 		expect(harness.warnings.at(-1)).toBe("Nothing to compact (no messages yet)");
 
-		harness.sessionManager.getEntries.mockReturnValue([
-			{ type: "message" },
-			{ type: "message" },
-		]);
+		harness.sessionManager.getEntries.mockReturnValue([{ type: "message" }, { type: "message" }]);
 		await controller.handleCompactCommand("keep tests");
 		expect(harness.session.compact).toHaveBeenCalledWith("keep tests", undefined);
 		expect(harness.ctx.rebuildChatFromMessages).toHaveBeenCalled();
@@ -355,16 +364,15 @@ describe("CommandController", () => {
 		await controller.handleHandoffCommand();
 		expect(harness.warnings.at(-1)).toBe("Nothing to hand off (no messages yet)");
 
-		harness.sessionManager.getEntries.mockReturnValue([
-			{ type: "message" },
-			{ type: "message" },
-		]);
+		harness.sessionManager.getEntries.mockReturnValue([{ type: "message" }, { type: "message" }]);
 		await controller.handleHandoffCommand("handoff note");
 		expect(harness.session.handoff).toHaveBeenCalledWith("handoff note");
 		expect(harness.statuses.at(-1)).toBe("Handoff document saved to: /tmp/handoff.md");
 
 		await controller.handleBashCommand("echo hi", true);
-		expect(harness.session.executeBash).toHaveBeenCalledWith("echo hi", expect.any(Function), { excludeFromContext: true });
+		expect(harness.session.executeBash).toHaveBeenCalledWith("echo hi", expect.any(Function), {
+			excludeFromContext: true,
+		});
 		expect(harness.ctx.bashComponent).toBeUndefined();
 
 		await controller.handlePythonCommand("print('hi')");
@@ -478,10 +486,7 @@ describe("CommandController", () => {
 	});
 
 	it("renders provider details through the exported provider-section helper", () => {
-		const output = renderProviderSection(
-			{ provider: "openai", fields: [{ label: "Auth", value: "oauth" }] },
-			theme,
-		);
+		const output = renderProviderSection({ provider: "openai", fields: [{ label: "Auth", value: "oauth" }] }, theme);
 		expect(sanitizeText(Bun.stripANSI(output))).toContain("Name: openai");
 		expect(sanitizeText(Bun.stripANSI(output))).toContain("Auth: oauth");
 	});

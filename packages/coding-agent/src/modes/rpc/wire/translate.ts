@@ -430,10 +430,7 @@ function withWirePresentation(
 	return presentation === undefined ? {} : { presentation };
 }
 
-function toWireCallPresentation(
-	toolName: string,
-	args: Record<string, unknown>,
-): WireToolPresentationV1 | undefined {
+function toWireCallPresentation(toolName: string, args: Record<string, unknown>): WireToolPresentationV1 | undefined {
 	const renderer = toolRenderers[toolName];
 	if (!renderer?.presentCall) return undefined;
 	try {
@@ -471,7 +468,9 @@ function toWireToolPresentationStatus(status: ToolPresentationStatus): WireToolP
 	};
 }
 
-function toWireToolPresentationCode(code: ToolPresentationCode): Extract<WireToolPresentationV1, { type: "code" }>["code"] {
+function toWireToolPresentationCode(
+	code: ToolPresentationCode,
+): Extract<WireToolPresentationV1, { type: "code" }>["code"] {
 	return {
 		code: code.code,
 		...(code.language !== undefined && { language: code.language }),

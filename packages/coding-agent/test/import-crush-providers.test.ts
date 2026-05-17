@@ -123,7 +123,12 @@ describe("importCrushProviders", () => {
 		const { config, providers } = buildModelsConfigFromCrushConfig({
 			providers: [
 				{ id: "openai", type: "openai", base_url: "https://openai.example/v1", models: [{ id: "gpt" }] },
-				{ id: "fallback", type: "unsupported", base_url: "https://fallback.example/v1", models: [{ id: "fallback" }] },
+				{
+					id: "fallback",
+					type: "unsupported",
+					base_url: "https://fallback.example/v1",
+					models: [{ id: "fallback" }],
+				},
 				{ id: "gemini", type: "gemini", base_url: "https://gemini.example/v1", models: [{ id: "gemini-pro" }] },
 				{ id: "vertex", type: "vertexai", base_url: "https://vertex.example/v1", models: [{ id: "vertex-pro" }] },
 				{ type: "openai", base_url: "https://missing-id.example/v1", models: [{ id: "missing-id" }] },

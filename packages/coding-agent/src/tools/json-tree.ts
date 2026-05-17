@@ -133,11 +133,11 @@ export function renderJsonTreeLines(
 					const firstLine = truncateToWidth(strLines[0], maxScalarLen);
 					pushLine(`${prefix}${iconScalar} ${label}: ${theme.fg("dim", `"${firstLine}`)}`);
 
-				// Subsequent lines indented
-				for (let i = 1; i < maxStrLines; i++) {
-					const line = truncateToWidth(strLines[i], maxScalarLen);
-					pushLine(`${continuePrefix}   ${theme.fg("dim", ` ${line}`)}`);
-				}
+					// Subsequent lines indented
+					for (let i = 1; i < maxStrLines; i++) {
+						const line = truncateToWidth(strLines[i], maxScalarLen);
+						pushLine(`${continuePrefix}   ${theme.fg("dim", ` ${line}`)}`);
+					}
 
 					// Show truncation and closing quote
 					if (strLines.length > maxStrLines) {
