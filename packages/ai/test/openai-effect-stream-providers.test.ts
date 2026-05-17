@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { LocalAbort } from "@oh-my-pi/pi-ai/errors";
 import type { HttpShape, HttpStreamOpts } from "@oh-my-pi/pi-ai/layers/http";
 import { HttpError } from "@oh-my-pi/pi-ai/layers/http";
+import { streamOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import { streamOpenAICompletions } from "@oh-my-pi/pi-ai/providers/openai-completions";
 import { streamOpenAIResponses } from "@oh-my-pi/pi-ai/providers/openai-responses";
 import type { AssistantMessage, Context, Model } from "@oh-my-pi/pi-ai/types";
@@ -68,6 +69,21 @@ function makeCompletionsModel(): Model<"openai-completions"> {
 		contextWindow: 128_000,
 		maxTokens: 16_000,
 		reasoning: false,
+	};
+}
+
+function makeCodexModel(): Model<"openai-codex-responses"> {
+	return {
+		id: "gpt-5.3-codex-spark",
+		name: "GPT-5.3 Codex Spark",
+		api: "openai-codex-responses",
+		provider: "openai-codex",
+		baseUrl: "https://chatgpt.com/backend-api",
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 128_000,
+		maxTokens: 128_000,
+		reasoning: true,
 	};
 }
 
@@ -199,5 +215,91 @@ describe("OpenAI providers Effect stream integration", () => {
 		expect(calls).toHaveLength(1);
 		expect(result.stopReason).toBe("error");
 		expect(result.errorMessage).toBe("OpenAI completions stream idle after 23ms");
+	});
+
+	it("routes openai-codex responses through Http.requestStream with caller signal and first-event watchdog", async () => {
+		const calls: HttpStreamOpts<unknown>[] = [];
+		const controller = new AbortController();
+		const events: readonly unknown[] = [
+			{
+				type: "response.output_item.added",
+				item: { type: "message", id: "msg_1", role: "assistant", status: "in_progress", content: [] },
+			},
+			{ type: "response.content_part.added", part: { type: "output_text", text: "" } },
+			{ type: "response.output_text.delta", delta: "Hi" },
+			{
+				type: "response.output_item.done",
+				item: {
+					type: "message",
+					id: "msg_1",
+					role: "assistant",
+					status: "completed",
+					content: [{ type: "output_text", text: "Hi" }],
+				},
+			},
+			{
+				type: "response.done",
+				response: {
+					id: "resp_1",
+					status: "completed",
+					usage: {
+						input_tokens: 1,
+						output_tokens: 1,
+						total_tokens: 2,
+						input_tokens_details: { cached_tokens: 0 },
+					},
+				},
+			},
+		];
+		const httpService = makeSuccessfulHttp(events, calls);
+		const token = (() => {
+			const payload = Buffer.from(
+				JSON.stringify({
+					"https://api.openai.com/auth": { chatgpt_account_id: "acc_test" },
+				}),
+				"utf8",
+			).toBase64();
+			return `aaa.${payload}.bbb`;
+		})();
+
+		const result = await finalMessage(
+			streamOpenAICodexResponses(makeCodexModel(), makeContext(), {
+				apiKey: token,
+				httpService,
+				signal: controller.signal,
+				streamFirstEventTimeoutMs: 123,
+			}),
+		);
+
+		expect(result.stopReason).toBe("stop");
+		expect(result.content.find(block => block.type === "text")?.text).toBe("Hi");
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.callerSignal).toBe(controller.signal);
+		expect(calls[0]?.firstEventWatchdog).toEqual({ kind: "timeout", timeoutMs: 123 });
+		expect(calls[0]?.label).toBe("OpenAI Codex SSE stream");
+	});
+
+	it("maps openai-codex LocalAbort to an error stop reason", async () => {
+		const calls: HttpStreamOpts<unknown>[] = [];
+		const token = (() => {
+			const payload = Buffer.from(
+				JSON.stringify({
+					"https://api.openai.com/auth": { chatgpt_account_id: "acc_test" },
+				}),
+				"utf8",
+			).toBase64();
+			return `aaa.${payload}.bbb`;
+		})();
+
+		const result = await finalMessage(
+			streamOpenAICodexResponses(makeCodexModel(), makeContext(), {
+				apiKey: token,
+				httpService: makeFailingHttp(new LocalAbort({ kind: "timeout", durationMs: 17 }), calls),
+			}),
+		);
+
+		expect(calls).toHaveLength(1);
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toBe("Codex stream timeout after 17ms");
 	});
 });

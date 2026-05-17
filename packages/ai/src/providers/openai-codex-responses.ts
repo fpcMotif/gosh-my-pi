@@ -655,7 +655,7 @@ async function openCodexSseTransport(
 }> {
 	const idleTimeoutMs = getOpenAIStreamIdleTimeoutMs();
 	const firstEventTimeoutMs = options?.streamFirstEventTimeoutMs ?? getStreamFirstEventTimeoutMs(idleTimeoutMs);
-	const wrapped = await Effect.runPromise(
+	const wrappedStream = await Effect.runPromise(
 		requestContext.http.requestStream<Record<string, unknown>>({
 			callerSignal: requestSetup.callerSignal,
 			label: "OpenAI Codex SSE stream",
@@ -677,14 +677,11 @@ async function openCodexSseTransport(
 				),
 		}),
 	);
-	const eventStream = adaptIterableToGenerator(wrapped);
-	return { eventStream, requestBodyForState: structuredCloneJSON(body), transport: "sse" };
-}
-
-async function* adaptIterableToGenerator<T>(source: AsyncIterable<T>): AsyncGenerator<T> {
-	for await (const item of source) {
-		yield item;
-	}
+	return {
+		eventStream: wrappedStream as AsyncGenerator<Record<string, unknown>>,
+		requestBodyForState: structuredCloneJSON(body),
+		transport: "sse",
+	};
 }
 
 async function reopenCodexWebSocketRuntimeStream(
