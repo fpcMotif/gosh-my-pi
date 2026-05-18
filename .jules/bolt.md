@@ -1,0 +1,3 @@
+## 2024-05-18 - [Deduplicate redundant file I/O using promise coalescing]
+**Learning:** In scenarios where multiple UI or API components concurrently request a heavy synchronization process (like parsing sessions and syncing to SQLite), processing identical, concurrent requests individually scales poorly and leads to redundant file reads and database writes.
+**Action:** Use promise coalescing to deduplicate concurrent requests. By storing the active promise and returning it for any subsequent identical requests made while the first is pending, the heavy work is only done once per "batch" of concurrent requests, and all callers still receive the correct resolved value.
