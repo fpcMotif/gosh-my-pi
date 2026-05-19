@@ -58,3 +58,25 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, message: string,
 
 	return wrapped;
 }
+
+/**
+ * Returns a new function that will deduplicate concurrent executions.
+ * If the function is called while a promise from a previous call is still pending,
+ * it returns the same promise. Once the promise settles, the next call will
+ * invoke the function again.
+ *
+ * NOTE: This function does NOT differentiate based on arguments!
+ * It strictly treats all concurrent calls as identical.
+ */
+export function coalesce<T>(fn: () => Promise<T>): () => Promise<T> {
+	let activePromise: Promise<T> | null = null;
+	return () => {
+		if (activePromise) {
+			return activePromise;
+		}
+		activePromise = fn().finally(() => {
+			activePromise = null;
+		});
+		return activePromise;
+	};
+}

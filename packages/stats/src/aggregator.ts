@@ -16,6 +16,7 @@ import {
 	insertMessageStats,
 	setFileOffset,
 } from "./db";
+import { coalesce } from "@oh-my-pi/pi-utils";
 import { getSessionEntry, listAllSessionFiles, parseSessionFile } from "./parser";
 import type { DashboardStats, MessageStats, RequestDetails } from "./types";
 
@@ -58,7 +59,7 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
  * Sync all session files to the database.
  * Returns the number of new entries processed.
  */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+export const syncAllSessions = coalesce(async (): Promise<{ processed: number; files: number }> => {
 	await initDb();
 
 	const files = await listAllSessionFiles();
@@ -73,12 +74,12 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 	}
 
 	return { processed: totalProcessed, files: filesProcessed };
-}
+});
 
 /**
  * Get all dashboard stats.
  */
-export async function getDashboardStats(): Promise<DashboardStats> {
+export const getDashboardStats = coalesce(async (): Promise<DashboardStats> => {
 	await initDb();
 
 	return {
@@ -90,7 +91,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 		modelPerformanceSeries: getModelPerformanceSeries(14),
 		costSeries: getCostTimeSeries(90),
 	};
-}
+});
 export async function getRecentRequests(limit?: number): Promise<MessageStats[]> {
 	await initDb();
 	return dbGetRecentRequests(limit);
