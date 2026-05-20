@@ -54,25 +54,46 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
+// ⚡ Bolt: Promise Coalescing Optimization
+// What: Maintain a single active promise for the `syncAllSessions` operation.
+// Why: When the frontend hits `/api/stats`, `/api/stats/recent`, etc. simultaneously,
+//      each route calls `syncAllSessions`. This was causing redundant recursive `fs.readdir`
+//      calls and DB init operations to fire concurrently.
+// Impact: Reduces filesystem I/O and DB contention when loading the dashboard. Concurrent
+//         requests now await the same underlying sync operation.
+let syncPromise: Promise<{ processed: number; files: number }> | null = null;
+
 /**
  * Sync all session files to the database.
  * Returns the number of new entries processed.
  */
 export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
-	await initDb();
-
-	const files = await listAllSessionFiles();
-	const counts = await Promise.all(files.map(file => syncSessionFile(file)));
-	let totalProcessed = 0;
-	let filesProcessed = 0;
-	for (const count of counts) {
-		if (count > 0) {
-			totalProcessed += count;
-			filesProcessed++;
-		}
+	if (syncPromise) {
+		return syncPromise;
 	}
 
-	return { processed: totalProcessed, files: filesProcessed };
+	syncPromise = (async () => {
+		try {
+			await initDb();
+
+			const files = await listAllSessionFiles();
+			const counts = await Promise.all(files.map(file => syncSessionFile(file)));
+			let totalProcessed = 0;
+			let filesProcessed = 0;
+			for (const count of counts) {
+				if (count > 0) {
+					totalProcessed += count;
+					filesProcessed++;
+				}
+			}
+
+			return { processed: totalProcessed, files: filesProcessed };
+		} finally {
+			syncPromise = null;
+		}
+	})();
+
+	return syncPromise;
 }
 
 /**
