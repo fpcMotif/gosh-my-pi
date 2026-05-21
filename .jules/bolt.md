@@ -1,0 +1,3 @@
+## 2024-05-21 - [Promise Coalescing for File Parsing]
+**Learning:** React frontends that perform concurrent identical API requests during initial load (e.g. `Promise.all` fetching different slices of dashboard state) can cause the backend to simultaneously spawn expensive redundant operations. In this codebase, the stats frontend fired multiple requests, each triggering an un-debounced file system scan + database load in `packages/stats/src/aggregator.ts`.
+**Action:** Implemented Promise coalescing logic (request deduplication) directly within the backend function (`syncAllSessions`) so that parallel API calls wait on the same shared promise, eliminating redundant disk I/O and DB processing.
