@@ -1,0 +1,3 @@
+## 2025-02-12 - [Promise Coalescing for DB Sync]
+**Learning:** Initial page loads of the frontend dashboard trigger multiple concurrent backend API queries (`/api/stats`, `/api/stats/recent`, etc.). If each of these triggers a filesystem/DB synchronization logic independently, they will race to read files and write to the database concurrently.
+**Action:** Use request deduplication (promise coalescing) to store a single `Promise` instance globally for heavy read-only/synchronization functions like `syncAllSessions`. Subsequent concurrent API calls can then `await` the single active promise instead of spawning redundant duplicate workloads.
