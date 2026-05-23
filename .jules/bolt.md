@@ -1,0 +1,1 @@
+## 2025-05-18 - Promise Coalescing for DB Sync\n**Learning:** Implementing promise coalescing for redundant I/O requests deduplicates operations without compromising codebase architecture or causing memory leaks.\n**Action:** Use this technique when dealing with repetitive and expensive I/O operations such as DB sync triggered from parallel API requests.
