@@ -54,25 +54,44 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
+let _syncPromise: Promise<{ processed: number; files: number }> | null = null;
+
 /**
  * Sync all session files to the database.
  * Returns the number of new entries processed.
+ *
+ * ⚡ Bolt Performance Optimization:
+ * Applies promise coalescing to prevent redundant file I/O and DB contention
+ * when the frontend fires multiple concurrent API requests (e.g. stats, requests, errors)
+ * that all trigger syncAllSessions() in the backend middleware.
  */
 export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
-	await initDb();
-
-	const files = await listAllSessionFiles();
-	const counts = await Promise.all(files.map(file => syncSessionFile(file)));
-	let totalProcessed = 0;
-	let filesProcessed = 0;
-	for (const count of counts) {
-		if (count > 0) {
-			totalProcessed += count;
-			filesProcessed++;
-		}
+	if (_syncPromise) {
+		return _syncPromise;
 	}
 
-	return { processed: totalProcessed, files: filesProcessed };
+	_syncPromise = (async () => {
+		try {
+			await initDb();
+
+			const files = await listAllSessionFiles();
+			const counts = await Promise.all(files.map(file => syncSessionFile(file)));
+			let totalProcessed = 0;
+			let filesProcessed = 0;
+			for (const count of counts) {
+				if (count > 0) {
+					totalProcessed += count;
+					filesProcessed++;
+				}
+			}
+
+			return { processed: totalProcessed, files: filesProcessed };
+		} finally {
+			_syncPromise = null;
+		}
+	})();
+
+	return _syncPromise;
 }
 
 /**
