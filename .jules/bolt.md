@@ -1,0 +1,3 @@
+## 2025-05-25 - Backend Promise Coalescing Optimization
+**Learning:** In the stats backend, the `syncAllSessions` function was being executed multiple times simultaneously whenever a client requested multiple data endpoints at once (e.g., frontend dashboard loading `/stats`, `/stats/recent`, etc., all in parallel). This redundant execution caused unnecessary filesystem I/O and DB contention, creating a noticeable overhead.
+**Action:** Always consider using promise coalescing (storing the active promise in a module-level variable and returning it for subsequent calls) for expensive backend operations that might be triggered concurrently by multiple incoming API requests.
