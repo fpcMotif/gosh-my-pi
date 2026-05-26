@@ -54,25 +54,41 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
+// Promise coalescing to deduplicate concurrent file and db syncs during polling/load
+let activeSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+
 /**
  * Sync all session files to the database.
  * Returns the number of new entries processed.
  */
 export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
-	await initDb();
-
-	const files = await listAllSessionFiles();
-	const counts = await Promise.all(files.map(file => syncSessionFile(file)));
-	let totalProcessed = 0;
-	let filesProcessed = 0;
-	for (const count of counts) {
-		if (count > 0) {
-			totalProcessed += count;
-			filesProcessed++;
-		}
+	// If a sync is already running, await it to avoid redundant file I/O and db operations
+	if (activeSyncPromise) {
+		return activeSyncPromise;
 	}
 
-	return { processed: totalProcessed, files: filesProcessed };
+	activeSyncPromise = (async () => {
+		try {
+			await initDb();
+
+			const files = await listAllSessionFiles();
+			const counts = await Promise.all(files.map(file => syncSessionFile(file)));
+			let totalProcessed = 0;
+			let filesProcessed = 0;
+			for (const count of counts) {
+				if (count > 0) {
+					totalProcessed += count;
+					filesProcessed++;
+				}
+			}
+
+			return { processed: totalProcessed, files: filesProcessed };
+		} finally {
+			activeSyncPromise = null;
+		}
+	})();
+
+	return activeSyncPromise;
 }
 
 /**
