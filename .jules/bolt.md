@@ -1,0 +1,3 @@
+## 2024-05-28 - [Promise Coalescing for DB Operations]
+**Learning:** Heavy API endpoints that hit the database and read from the filesystem simultaneously across parallel requests can lead to redundant work. `syncAllSessions` was being called redundantly in concurrent API requests to the stats backend (like `/api/stats`, `/api/stats/recent`, etc) causing redundant file reads and database work.
+**Action:** Always implement promise coalescing for heavy operations that are triggered simultaneously and repeatedly across endpoints by storing the executing promise and returning it if subsequent calls are made before it completes.

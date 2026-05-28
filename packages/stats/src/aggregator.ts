@@ -54,42 +54,66 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
+let syncPromise: Promise<{ processed: number; files: number }> | null = null;
+
 /**
  * Sync all session files to the database.
  * Returns the number of new entries processed.
  */
 export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
-	await initDb();
+	if (syncPromise) return syncPromise;
 
-	const files = await listAllSessionFiles();
-	const counts = await Promise.all(files.map(file => syncSessionFile(file)));
-	let totalProcessed = 0;
-	let filesProcessed = 0;
-	for (const count of counts) {
-		if (count > 0) {
-			totalProcessed += count;
-			filesProcessed++;
+	syncPromise = (async () => {
+		try {
+			await initDb();
+
+			const files = await listAllSessionFiles();
+			const counts = await Promise.all(files.map(file => syncSessionFile(file)));
+			let totalProcessed = 0;
+			let filesProcessed = 0;
+			for (const count of counts) {
+				if (count > 0) {
+					totalProcessed += count;
+					filesProcessed++;
+				}
+			}
+
+			return { processed: totalProcessed, files: filesProcessed };
+		} finally {
+			syncPromise = null;
 		}
-	}
+	})();
 
-	return { processed: totalProcessed, files: filesProcessed };
+	return syncPromise;
 }
+
+let statsPromise: Promise<DashboardStats> | null = null;
 
 /**
  * Get all dashboard stats.
  */
 export async function getDashboardStats(): Promise<DashboardStats> {
-	await initDb();
+	if (statsPromise) return statsPromise;
 
-	return {
-		overall: getOverallStats(),
-		byModel: getStatsByModel(),
-		byFolder: getStatsByFolder(),
-		timeSeries: getTimeSeries(24),
-		modelSeries: getModelTimeSeries(14),
-		modelPerformanceSeries: getModelPerformanceSeries(14),
-		costSeries: getCostTimeSeries(90),
-	};
+	statsPromise = (async () => {
+		try {
+			await initDb();
+
+			return {
+				overall: getOverallStats(),
+				byModel: getStatsByModel(),
+				byFolder: getStatsByFolder(),
+				timeSeries: getTimeSeries(24),
+				modelSeries: getModelTimeSeries(14),
+				modelPerformanceSeries: getModelPerformanceSeries(14),
+				costSeries: getCostTimeSeries(90),
+			};
+		} finally {
+			statsPromise = null;
+		}
+	})();
+
+	return statsPromise;
 }
 export async function getRecentRequests(limit?: number): Promise<MessageStats[]> {
 	await initDb();
