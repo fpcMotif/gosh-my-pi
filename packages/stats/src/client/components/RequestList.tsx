@@ -31,7 +31,15 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 							<tr
 								key={`${req.sessionFile}-${req.entryId}`}
 								onClick={() => onSelect(req)}
-								className="table-row cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0"
+								onKeyDown={e => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										onSelect(req);
+									}
+								}}
+								tabIndex={0}
+								aria-label={`View details for ${req.model} request`}
+								className="table-row cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0 focus-visible:outline-none focus-visible:bg-[var(--bg-hover)] focus-visible:ring-2 focus-visible:ring-[var(--accent-cyan)] focus-visible:ring-inset"
 							>
 								<td className="py-3 px-4">
 									<div className="font-medium text-[var(--text-primary)] text-sm">{req.model}</div>
@@ -51,9 +59,9 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 								</td>
 								<td className="py-3 px-4 text-center">
 									{req.errorMessage ? (
-										<XCircle size={16} className="text-[var(--accent-red)] mx-auto" />
+										<XCircle size={16} className="text-[var(--accent-red)] mx-auto" aria-label="Error" />
 									) : (
-										<CheckCircle2 size={16} className="text-[var(--accent-green)] mx-auto" />
+										<CheckCircle2 size={16} className="text-[var(--accent-green)] mx-auto" aria-label="Success" />
 									)}
 								</td>
 							</tr>
