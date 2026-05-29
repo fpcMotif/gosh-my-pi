@@ -61,7 +61,11 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 									{req.errorMessage ? (
 										<XCircle size={16} className="text-[var(--accent-red)] mx-auto" aria-label="Error" />
 									) : (
-										<CheckCircle2 size={16} className="text-[var(--accent-green)] mx-auto" aria-label="Success" />
+										<CheckCircle2
+											size={16}
+											className="text-[var(--accent-green)] mx-auto"
+											aria-label="Success"
+										/>
 									)}
 								</td>
 							</tr>
