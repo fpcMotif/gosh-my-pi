@@ -104,12 +104,18 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 						const isExpanded = expandedKey === key;
 						const errorRate = model.errorRate * 100;
 
+						const panelId = `panel-${index}`;
+						const headerId = `header-${index}`;
+
 						return (
 							<div key={key} className="border-t border-[var(--border-subtle)]">
 								<button
+									id={headerId}
 									type="button"
+									aria-expanded={isExpanded}
+									aria-controls={isExpanded ? panelId : undefined}
 									onClick={() => setExpandedKey(isExpanded ? null : key)}
-									className="w-full bg-transparent border-none text-left px-5 py-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+									className="w-full bg-transparent border-none text-left px-5 py-3 cursor-pointer hover:bg-[var(--bg-hover)] focus-visible:bg-[var(--bg-hover)] focus-visible:outline-none transition-colors"
 								>
 									<div
 										className="grid gap-3 items-center"
@@ -148,7 +154,12 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 								</button>
 
 								{isExpanded && (
-									<div className="px-5 py-4 bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)]">
+									<div
+										id={panelId}
+										role="region"
+										aria-labelledby={headerId}
+										className="px-5 py-4 bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)]"
+									>
 										<div className="grid gap-4" style={{ gridTemplateColumns: "200px 1fr" }}>
 											<div className="space-y-4 text-sm">
 												<div>
