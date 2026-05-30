@@ -541,15 +541,18 @@ def main():
         seen_files.add(file_path)
         if package is None:
             package = pkg
-        for msg in messages_by_file.get(file_path, []):
-            if msg.type_name not in all_messages:
-                all_messages[msg.type_name] = msg
-        for enum in enums_by_file.get(file_path, []):
-            if enum.type_name not in all_enums:
-                all_enums[enum.type_name] = enum
-        for svc in services_by_file.get(file_path, []):
-            if svc.type_name not in all_services:
-                all_services[svc.type_name] = svc
+        if file_path in messages_by_file:
+            for msg in messages_by_file[file_path]:
+                if msg.type_name not in all_messages:
+                    all_messages[msg.type_name] = msg
+        if file_path in enums_by_file:
+            for enum in enums_by_file[file_path]:
+                if enum.type_name not in all_enums:
+                    all_enums[enum.type_name] = enum
+        if file_path in services_by_file:
+            for svc in services_by_file[file_path]:
+                if svc.type_name not in all_services:
+                    all_services[svc.type_name] = svc
 
     if package is None:
         print("No matching proto files found", file=sys.stderr)
