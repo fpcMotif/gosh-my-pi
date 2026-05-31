@@ -6,11 +6,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/anim"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // assistantMessageTruncateFormat is the text shown when an assistant message is
@@ -33,6 +33,12 @@ type AssistantMessageItem struct {
 	anim              *anim.Anim
 	thinkingExpanded  bool
 	thinkingBoxHeight int // Tracks the rendered thinking box height for click detection.
+	// streamingContent caches a stable-prefix glamour render so each
+	// streaming flush only re-renders the growing tail rather than the
+	// whole accumulated body (gap G5). It invalidates itself on width
+	// change and on non-prefix content edits; clearCache resets it on
+	// style/theme change.
+	streamingContent streamingMarkdown
 }
 
 // NewAssistantMessageItem creates a new AssistantMessageItem.
@@ -200,14 +206,28 @@ func (a *AssistantMessageItem) renderThinking(thinking string, width int) string
 	return result
 }
 
-// renderMarkdown renders content as markdown.
+// renderMarkdown renders content as markdown. G5 routes the call
+// through streamingContent, which caches the glamour render of a
+// "stable prefix" so each streaming flush only re-renders the
+// trailing partial. The streaming cache invalidates itself on width
+// change and on any content that is not a prefix-extension of the
+// previously rendered content (e.g. user retried the turn), and
+// falls back to a full render whenever boundary detection has the
+// slightest doubt — see findSafeMarkdownBoundary.
 func (a *AssistantMessageItem) renderMarkdown(content string, width int) string {
 	renderer := common.MarkdownRenderer(a.sty, width)
-	result, err := renderer.Render(content)
-	if err != nil {
-		return content
-	}
-	return strings.TrimSuffix(result, "\n")
+	return a.streamingContent.Render(content, width, renderer)
+}
+
+// clearCache drops the per-width render cache and resets the
+// streaming-markdown stable-prefix cache. Resetting the streaming
+// cache here is required on a style/theme change: without it the
+// OLD style's ANSI sequences would stay embedded in the cached
+// stable-prefix render and the next flush would visually mix
+// styles. ClearItemCaches (invoked on theme change) calls this.
+func (a *AssistantMessageItem) clearCache() {
+	a.cachedMessageItem.clearCache()
+	a.streamingContent.Reset()
 }
 
 func (a *AssistantMessageItem) renderSpinning() string {
