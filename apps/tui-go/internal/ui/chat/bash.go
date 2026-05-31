@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // -----------------------------------------------------------------------------
@@ -40,12 +40,16 @@ type BashToolRenderContext struct{}
 // RenderTool implements the [ToolRenderer] interface.
 func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
 	cappedWidth := cappedMessageWidth(width)
-	if opts.IsPending() {
-		return pendingTool(sty, "Bash", opts.Anim, opts.Compact)
-	}
 
 	var params tools.BashParams
-	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
+	argsErr := json.Unmarshal([]byte(opts.ToolCall.Input), &params)
+	// While the command is still running the resolved command is already in the
+	// call args, so render the command header + running state instead of a bare
+	// spinner. Fall back to the spinner only when the args aren't parseable yet.
+	if opts.IsPending() && (argsErr != nil || params.Command == "") {
+		return pendingTool(sty, "Bash", opts.Anim, opts.Compact)
+	}
+	if argsErr != nil {
 		params.Command = "failed to parse command"
 	}
 
