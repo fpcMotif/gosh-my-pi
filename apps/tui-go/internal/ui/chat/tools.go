@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/tree"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/diff"
@@ -19,8 +20,8 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/stringext"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/anim"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // responseContextHeight limits the number of lines displayed in tool output.
@@ -135,6 +136,7 @@ func (f ToolRendererFunc) RenderTool(sty *styles.Styles, width int, opts *ToolRe
 
 // baseToolMessageItem represents a tool call message that can be displayed in the UI.
 type baseToolMessageItem struct {
+	*list.Versioned
 	*highlightableMessageItem
 	*cachedMessageItem
 	*focusableMessageItem
@@ -176,10 +178,12 @@ func newBaseToolMessageItem(
 		status = ToolStatusCanceled
 	}
 
+	v := list.NewVersioned()
 	t := &baseToolMessageItem{
-		highlightableMessageItem: defaultHighlighter(sty),
+		Versioned:                v,
+		highlightableMessageItem: defaultHighlighter(sty, v),
 		cachedMessageItem:        &cachedMessageItem{},
-		focusableMessageItem:     &focusableMessageItem{},
+		focusableMessageItem:     newFocusableMessageItem(v),
 		sty:                      sty,
 		toolRenderer:             toolRenderer,
 		toolCall:                 toolCall,
@@ -270,8 +274,12 @@ func NewToolMessageItem(
 
 // SetCompact implements the Compactable interface.
 func (t *baseToolMessageItem) SetCompact(compact bool) {
+	if t.isCompact == compact {
+		return
+	}
 	t.isCompact = compact
 	t.clearCache()
+	t.Bump()
 }
 
 // ID returns the unique identifier for this tool message item.
@@ -292,6 +300,15 @@ func (t *baseToolMessageItem) Animate(msg anim.StepMsg) tea.Cmd {
 	if !t.isSpinning() {
 		return nil
 	}
+	if msg.ID != t.toolCall.ID {
+		// A foreign StepMsg is a no-op for this tool's anim; bumping
+		// here would churn the G6 list cache every frame.
+		return nil
+	}
+	// Bump the G6 list-cache version so the next draw re-renders the
+	// advanced spinner frame; the anim's internal step counter is
+	// invisible to the cached content otherwise.
+	t.Bump()
 	return t.anim.Animate(msg)
 }
 
@@ -356,12 +373,14 @@ func (t *baseToolMessageItem) ToolCall() message.ToolCall {
 func (t *baseToolMessageItem) SetToolCall(tc message.ToolCall) {
 	t.toolCall = tc
 	t.clearCache()
+	t.Bump()
 }
 
 // SetResult sets the tool result associated with this message item.
 func (t *baseToolMessageItem) SetResult(res *message.ToolResult) {
 	t.result = res
 	t.clearCache()
+	t.Bump()
 }
 
 // MessageID returns the ID of the message containing this tool call.
@@ -376,8 +395,12 @@ func (t *baseToolMessageItem) SetMessageID(id string) {
 
 // SetStatus sets the tool status.
 func (t *baseToolMessageItem) SetStatus(status ToolStatus) {
+	if t.status == status {
+		return
+	}
 	t.status = status
 	t.clearCache()
+	t.Bump()
 }
 
 // Status returns the current tool status.
@@ -417,7 +440,21 @@ func (t *baseToolMessageItem) SetSpinningFunc(fn SpinningFunc) {
 func (t *baseToolMessageItem) ToggleExpanded() bool {
 	t.expandedContent = !t.expandedContent
 	t.clearCache()
+	t.Bump()
 	return t.expandedContent
+}
+
+// Finished implements list.Item. A still-running tool reports false;
+// once the tool call is finished and a result lands (or the tool is
+// canceled), its rendered output is terminal and may be frozen.
+func (t *baseToolMessageItem) Finished() bool {
+	if t.isSpinning() {
+		return false
+	}
+	if t.status == ToolStatusCanceled {
+		return true
+	}
+	return t.toolCall.Finished && t.result != nil
 }
 
 // HandleMouseClick implements MouseClickable.

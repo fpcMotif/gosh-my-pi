@@ -34,8 +34,8 @@ func TestChatDrawCache_HitOnIdenticalRender(t *testing.T) {
 
 	u := newTestUI()
 	u.chat.SetMessages(
-		testMessageItem{id: "a", text: "alpha"},
-		testMessageItem{id: "b", text: "beta"},
+		newTestMessageItem("a", "alpha"),
+		newTestMessageItem("b", "beta"),
 	)
 	u.updateLayoutAndSize()
 
@@ -60,7 +60,7 @@ func TestChatDrawCache_MissOnDifferentRender(t *testing.T) {
 
 	u := newTestUI()
 	u.chat.SetMessages(
-		testMessageItem{id: "a", text: "alpha"},
+		newTestMessageItem("a", "alpha"),
 	)
 	u.updateLayoutAndSize()
 
@@ -71,7 +71,7 @@ func TestChatDrawCache_MissOnDifferentRender(t *testing.T) {
 
 	// Replace the items so the rendered string differs.
 	u.chat.SetMessages(
-		testMessageItem{id: "c", text: "gamma delta"},
+		newTestMessageItem("c", "gamma delta"),
 	)
 	u.updateLayoutAndSize()
 
@@ -95,8 +95,8 @@ func TestChatDrawCache_ReusedAcrossDifferentArea(t *testing.T) {
 
 	u := newTestUI()
 	u.chat.SetMessages(
-		testMessageItem{id: "a", text: "alpha"},
-		testMessageItem{id: "b", text: "beta"},
+		newTestMessageItem("a", "alpha"),
+		newTestMessageItem("b", "beta"),
 	)
 	u.updateLayoutAndSize()
 
@@ -137,7 +137,7 @@ func TestChatDrawCache_BoundedSize(t *testing.T) {
 	// recent rendered string each time.
 	for i := range 5 {
 		u.chat.SetMessages(
-			testMessageItem{id: "x", text: "tick " + strconv.Itoa(i)},
+			newTestMessageItem("x", "tick "+strconv.Itoa(i)),
 		)
 		u.updateLayoutAndSize()
 		_ = renderToBuffer(t, u.chat, w, h)
@@ -175,7 +175,7 @@ func TestChatDrawCache_InvalidatedByWidthMethodSwap(t *testing.T) {
 	// woman-technologist ZWJ sequence is one cell under GraphemeWidth
 	// but two under WcWidth (the components combine).
 	u.chat.SetMessages(
-		testMessageItem{id: "a", text: "hi 👩‍💻 there"},
+		newTestMessageItem("a", "hi 👩‍💻 there"),
 	)
 	u.updateLayoutAndSize()
 
@@ -233,8 +233,8 @@ func TestChatDrawCache_FallbackOnNonAnsiMethod(t *testing.T) {
 
 	u := newTestUI()
 	u.chat.SetMessages(
-		testMessageItem{id: "a", text: "alpha"},
-		testMessageItem{id: "b", text: "beta"},
+		newTestMessageItem("a", "alpha"),
+		newTestMessageItem("b", "beta"),
 	)
 	u.updateLayoutAndSize()
 

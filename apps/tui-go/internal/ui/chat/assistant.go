@@ -10,6 +10,7 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/anim"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 )
 
@@ -24,6 +25,7 @@ const maxCollapsedThinkingHeight = 10
 //
 // This item includes thinking, and the content but does not include the tool calls.
 type AssistantMessageItem struct {
+	*list.Versioned
 	*highlightableMessageItem
 	*cachedMessageItem
 	*focusableMessageItem
@@ -43,10 +45,12 @@ type AssistantMessageItem struct {
 
 // NewAssistantMessageItem creates a new AssistantMessageItem.
 func NewAssistantMessageItem(sty *styles.Styles, message *message.Message) MessageItem {
+	v := list.NewVersioned()
 	a := &AssistantMessageItem{
-		highlightableMessageItem: defaultHighlighter(sty),
+		Versioned:                v,
+		highlightableMessageItem: defaultHighlighter(sty, v),
 		cachedMessageItem:        &cachedMessageItem{},
-		focusableMessageItem:     &focusableMessageItem{},
+		focusableMessageItem:     newFocusableMessageItem(v),
 		message:                  message,
 		sty:                      sty,
 	}
@@ -75,6 +79,13 @@ func (a *AssistantMessageItem) Animate(msg anim.StepMsg) tea.Cmd {
 	if !a.isSpinning() {
 		return nil
 	}
+	// Bump the G6 list-cache version so the next draw re-renders
+	// this item: a spinner tick mutates anim's internal frame
+	// counter, which changes the rendered output but is invisible
+	// to the cached content. Without the bump the list cache would
+	// serve the previously rendered frame indefinitely and the
+	// spinner would appear frozen.
+	a.Bump()
 	return a.anim.Animate(msg)
 }
 
@@ -263,16 +274,29 @@ func (a *AssistantMessageItem) SetMessage(message *message.Message) tea.Cmd {
 	wasSpinning := a.isSpinning()
 	a.message = message
 	a.clearCache()
+	// Bump the G6 version even if the underlying *message.Message
+	// pointer is identical: callers mutate the message in place
+	// (delta append) and we cannot tell from here. A redundant bump
+	// only costs one list-cache repopulation.
+	a.Bump()
 	if !wasSpinning && a.isSpinning() {
 		return a.StartAnimation()
 	}
 	return nil
 }
 
+// Finished implements list.Item. A streaming assistant message reports
+// false; once the message reports IsFinished() and is no longer
+// spinning, the rendered output is terminal and may be frozen.
+func (a *AssistantMessageItem) Finished() bool {
+	return a.message.IsFinished() && !a.isSpinning()
+}
+
 // ToggleExpanded toggles the expanded state of the thinking box.
 func (a *AssistantMessageItem) ToggleExpanded() {
 	a.thinkingExpanded = !a.thinkingExpanded
 	a.clearCache()
+	a.Bump()
 }
 
 // HandleMouseClick implements MouseClickable.

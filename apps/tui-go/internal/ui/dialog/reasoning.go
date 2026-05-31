@@ -7,11 +7,11 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
-	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/sahilm/fuzzy"
 )
 
@@ -40,6 +40,7 @@ type Reasoning struct {
 
 // ReasoningItem represents a reasoning effort list item.
 type ReasoningItem struct {
+	*list.Versioned
 	effort    string
 	title     string
 	isCurrent bool
@@ -243,6 +244,7 @@ func (r *Reasoning) setReasoningItems() error {
 	selectedIndex := 0
 	for i, effort := range model.ReasoningLevels {
 		item := &ReasoningItem{
+			Versioned: list.NewVersioned(),
 			effort:    effort,
 			title:     common.FormatReasoningEffort(effort),
 			isCurrent: effort == currentEffort,
@@ -265,6 +267,12 @@ func (r *ReasoningItem) Filter() string {
 	return r.title
 }
 
+// Finished implements [list.Item]. Reasoning items are static; focus
+// and match changes bump the version, so freezing them is safe.
+func (r *ReasoningItem) Finished() bool {
+	return true
+}
+
 // ID returns the unique identifier for the reasoning effort.
 func (r *ReasoningItem) ID() string {
 	return r.effort
@@ -274,6 +282,7 @@ func (r *ReasoningItem) ID() string {
 func (r *ReasoningItem) SetFocused(focused bool) {
 	if r.focused != focused {
 		r.cache = nil
+		r.Bump()
 	}
 	r.focused = focused
 }
@@ -282,6 +291,7 @@ func (r *ReasoningItem) SetFocused(focused bool) {
 func (r *ReasoningItem) SetMatch(m fuzzy.Match) {
 	r.cache = nil
 	r.m = m
+	r.Bump()
 }
 
 // Render returns the string representation of the reasoning item.

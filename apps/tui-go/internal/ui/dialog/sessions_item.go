@@ -8,11 +8,11 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/dustin/go-humanize"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/dustin/go-humanize"
 	"github.com/rivo/uniseg"
 	"github.com/sahilm/fuzzy"
 )
@@ -29,6 +29,7 @@ type ListItem interface {
 
 // SessionItem wraps a [session.Session] to implement the [ListItem] interface.
 type SessionItem struct {
+	*list.Versioned
 	session.Session
 	t                *styles.Styles
 	sessionsMode     sessionsMode
@@ -45,6 +46,12 @@ func (s *SessionItem) Filter() string {
 	return s.Title
 }
 
+// Finished implements [list.Item]. Session items are static; focus and
+// match changes bump the version, so freezing them is safe.
+func (s *SessionItem) Finished() bool {
+	return true
+}
+
 // ID returns the unique identifier of the session.
 func (s *SessionItem) ID() string {
 	return s.Session.ID
@@ -54,6 +61,7 @@ func (s *SessionItem) ID() string {
 func (s *SessionItem) SetMatch(m fuzzy.Match) {
 	s.cache = nil
 	s.m = m
+	s.Bump()
 }
 
 // InputValue returns the updated title value
@@ -179,6 +187,7 @@ func renderItem(t ListItemStyles, title string, info string, focused bool, width
 func (s *SessionItem) SetFocused(focused bool) {
 	if s.focused != focused {
 		s.cache = nil
+		s.Bump()
 	}
 	s.focused = focused
 }
@@ -188,7 +197,7 @@ func (s *SessionItem) SetFocused(focused bool) {
 func sessionItems(t *styles.Styles, mode sessionsMode, sessions ...session.Session) []list.FilterableItem {
 	items := make([]list.FilterableItem, len(sessions))
 	for i, s := range sessions {
-		item := &SessionItem{Session: s, t: t, sessionsMode: mode}
+		item := &SessionItem{Versioned: list.NewVersioned(), Session: s, t: t, sessionsMode: mode}
 		if mode == sessionsModeUpdating {
 			item.updateTitleInput = textinput.New()
 			item.updateTitleInput.SetVirtualCursor(false)
