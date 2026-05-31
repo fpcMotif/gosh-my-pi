@@ -12,6 +12,7 @@ import {
 	type ProviderSessionState,
 	type ServiceTier,
 	type ThinkingBudgets,
+	type ToolCall,
 	type ToolChoice,
 	type ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
@@ -28,6 +29,7 @@ import {
 	type AgentPromptOptions,
 	type AgentState,
 	type AnyAgentTool,
+	type ToolApprovalDecision,
 } from "./types";
 import { handleTurnEnd, handleToolExecutionStart, handleToolExecutionEnd } from "./agent/loop-handlers";
 import { emitCursorSplitAssistantMessage } from "./agent/cursor-utils";
@@ -94,6 +96,14 @@ export class Agent {
 
 	setAssistantMessageEventInterceptor(fn: ((event: AssistantMessageEvent) => void) | undefined): void {
 		this.#onAssistantMessageEvent = fn;
+	}
+
+	/**
+	 * Attach (or clear) the host tool-approval gate. Picked up on the next
+	 * prompt via {@link #createLoopConfig}. Absent = no gate. See ADR 0007.
+	 */
+	setToolApprovalHook(fn: ((toolCall: ToolCall) => Promise<ToolApprovalDecision>) | undefined): void {
+		this.#opts.requestToolApproval = fn;
 	}
 
 	emitExternalEvent(event: AgentEvent) {
@@ -459,6 +469,7 @@ export class Agent {
 				context.tools = this.#state.tools;
 			},
 			transformToolCallArguments: this.#opts.transformToolCallArguments,
+			requestToolApproval: this.#opts.requestToolApproval,
 			intentTracing: this.#opts.intentTracing,
 			onAssistantMessageEvent: this.#onAssistantMessageEvent,
 			getToolChoice,
