@@ -1,0 +1,3 @@
+## 2024-06-03 - Interactive Table Row Accessibility
+**Learning:** Table rows (`<tr>`) that act as custom interactive elements (e.g., clicking the row opens a modal/detail view) need specific handling for keyboard navigation. By default, they cannot be focused and do not capture keyboard events.
+**Action:** When making non-standard elements (like table rows, divs, or spans) interactive via `onClick`, always include `tabIndex={0}` to add them to the document's tab order, attach an `onKeyDown` handler that triggers the action on "Enter" or " " (Space), provide an `aria-label` for screen reader context, and ensure a visible focus state (e.g., via `focus-visible:` classes).
