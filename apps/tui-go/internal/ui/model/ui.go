@@ -46,6 +46,7 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/skills"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/toolapproval"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/anim"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/attachments"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/chat"
@@ -698,6 +699,15 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case auth.Submit, auth.Confirm, auth.Cancel:
 		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
 			gw.HandleAuthReply(msg)
+		}
+
+	// Tool-approval gate (ADR 0007): gmp emits tool.request_approval before
+	// a gated built-in tool runs. Open the existing permissions dialog built
+	// from the wire payload; the dialog's ActionPermissionResponse is routed
+	// back to the gmp side (in gmp mode) below.
+	case toolapproval.Request:
+		if cmd := m.openPermissionsDialog(workspace.ToolApprovalPermissionRequest(msg)); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 
 	case cancelTimerExpiredMsg:
@@ -1531,6 +1541,15 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		m.dialog.CloseDialog(dialog.ReasoningID)
 	case dialog.ActionPermissionResponse:
 		m.dialog.CloseDialog(dialog.PermissionsID)
+		// In gmp bridge mode the only permission dialogs come from the
+		// tool-approval gate (the in-process Crush permission service is
+		// inert — ADR 0001/0002), so route the decision back over the wire
+		// instead of to the no-op PermissionGrant/Deny. allow_session maps
+		// to a single approve for now (ADR 0007 out-of-scope note).
+		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
+			gw.HandleToolApprovalReply(msg.Permission, msg.Action != dialog.PermissionDeny)
+			break
+		}
 		switch msg.Action {
 		case dialog.PermissionAllow:
 			m.com.Workspace.PermissionGrant(msg.Permission)

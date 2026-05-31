@@ -31,6 +31,7 @@ import { getKnownRoleIds } from "../../config/model-registry";
 import { isRpcHostToolResult, isRpcHostToolUpdate, RpcHostToolBridge } from "./host-tools";
 import { RequestCorrelator } from "./request-correlator";
 import { RpcOAuthController } from "./rpc-oauth-controller";
+import { createToolApprovalHook } from "./rpc-tool-approval";
 import { AuthMethod } from "./rpc-types";
 import type {
 	RpcModelCatalog,
@@ -651,6 +652,14 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		const wire = toWireEvent(event);
 		if (wire !== null) output(wire);
 	});
+
+	// Host tool-approval gate (ADR 0007, G11 part 2). Gated built-in tools
+	// (bash/edit/apply_patch/write) emit a correlated tool.request_approval
+	// extension_ui_request and await the host's reply; every other tool
+	// auto-approves with no round-trip. Gate-by-default — the runtime denies
+	// on a dismissed/timed-out dialog. The gate is inert for embedders that
+	// never set the hook; here we set it for the lifetime of the RPC session.
+	session.agent.setToolApprovalHook(createToolApprovalHook({ correlator: extensionUIRequests, output }));
 
 	// Handle a single command
 	const handleCommand = async (command: RpcCommand): Promise<RpcResponse> => {
