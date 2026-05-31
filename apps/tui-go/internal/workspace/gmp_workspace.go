@@ -1385,7 +1385,7 @@ func (w *GmpWorkspace) handleToolExecutionStart(raw []byte) tea.Msg {
 	return w.updateAssistant(func(msg *message.Message) {
 		msg.AddToolCall(message.ToolCall{
 			ID:    p.ToolCallID,
-			Name:  p.ToolName,
+			Name:  mapWireToolName(p.ToolName),
 			Input: string(args),
 		})
 	})
@@ -1403,12 +1403,14 @@ func (w *GmpWorkspace) handleToolExecutionUpdate(raw []byte) tea.Msg {
 	id := p.ToolCallID + "-result"
 	now := time.Now().Unix()
 	content := stringifyToolResult(p.PartialResult)
+	metadata := toWireToolResultMetadata(p.ToolName, p.PartialResult)
 	sessionID := w.sessionID()
 	w.mu.Lock()
 	msg, ok := w.messages[id]
 	if ok && len(msg.Parts) > 0 {
 		if tr, ok := msg.Parts[0].(message.ToolResult); ok {
 			tr.Content = content
+			tr.Metadata = metadata
 			msg.Parts[0] = tr
 			msg.UpdatedAt = now
 			w.messages[id] = msg
@@ -1422,8 +1424,9 @@ func (w *GmpWorkspace) handleToolExecutionUpdate(raw []byte) tea.Msg {
 			Parts: []message.ContentPart{
 				message.ToolResult{
 					ToolCallID: p.ToolCallID,
-					Name:       p.ToolName,
+					Name:       mapWireToolName(p.ToolName),
 					Content:    content,
+					Metadata:   metadata,
 				},
 			},
 			CreatedAt: now,
@@ -1464,8 +1467,9 @@ func (w *GmpWorkspace) handleToolExecutionEnd(raw []byte) tea.Msg {
 		Parts: []message.ContentPart{
 			message.ToolResult{
 				ToolCallID: p.ToolCallID,
-				Name:       p.ToolName,
+				Name:       mapWireToolName(p.ToolName),
 				Content:    stringifyToolResult(p.Result),
+				Metadata:   toWireToolResultMetadata(p.ToolName, p.Result),
 				IsError:    p.IsError,
 			},
 		},
@@ -1665,8 +1669,9 @@ func (w *GmpWorkspace) parseToolResultContent(raw []byte) []message.ContentPart 
 	return []message.ContentPart{
 		message.ToolResult{
 			ToolCallID: p.ToolCallID,
-			Name:       p.ToolName,
+			Name:       mapWireToolName(p.ToolName),
 			Content:    extractTextString(p.Content),
+			Metadata:   toWireToolResultMetadata(p.ToolName, raw),
 			IsError:    p.IsError,
 		},
 	}
