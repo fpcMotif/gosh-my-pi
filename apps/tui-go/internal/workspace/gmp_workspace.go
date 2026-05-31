@@ -1137,7 +1137,11 @@ func (w *GmpWorkspace) translateEvent(ev *ompclient.AgentEvent) tea.Msg {
 			w.sendUI(msg)
 		}
 		if !containsAssistantMessageEvent(finalEvents) {
-			if msg := w.finishAssistant(message.FinishReasonEndTurn, "", ""); msg != nil {
+			reason, text := message.FinishReasonEndTurn, ""
+			if desc, ok := describeAgentErrorKind(ev.Payload); ok {
+				reason, text = message.FinishReasonError, desc
+			}
+			if msg := w.finishAssistant(reason, text, ""); msg != nil {
 				w.sendUI(msg)
 			}
 		}
@@ -1273,6 +1277,7 @@ func (w *GmpWorkspace) handleMessageEnd(raw []byte) tea.Msg {
 	if msg.Role == message.Assistant && w.currentAssistantID != "" {
 		msg.ID = w.currentAssistantID
 	}
+	applyWireErrorKind(&msg, raw)
 	if msg.ID != "" {
 		w.upsertMessageLocked(msg)
 		if msg.Role == message.Assistant {
@@ -1357,6 +1362,7 @@ func (w *GmpWorkspace) handleAgentEnd(raw []byte) []tea.Msg {
 				msg.ID = id
 			}
 		}
+		applyWireErrorKind(&msg, raw)
 		if _, exists := w.messages[msg.ID]; exists {
 			eventType = pubsub.UpdatedEvent
 		}
