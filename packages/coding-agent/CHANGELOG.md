@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Run the full agentic loop through the `gmp-tui-go` Go (Bubble Tea) frontend over the OMP-RPC bridge: ship and auto-launch the binary from the release pipeline, render tool diffs and file views in the Go TUI, gate destructive built-in tools (bash/edit/apply_patch/write) behind a host approval round-trip ([ADR 0007](../../docs/adr/0007-tool-approval-trust-boundary.md)), surface recoverable failures (usage-limit / context-overflow / detached-prompt rejections) and a dead-backend banner, and add ompclient transport + wire-schema test coverage.
+- Streaming-render performance for the Go TUI: stable-prefix streaming-markdown cache, decoded draw-buffer cache, per-item list freeze-memo, per-section assistant caches, a deterministic spinner, and a three-state thinking view with a tail window for long reasoning blocks.
+
 ### Changed
 
 - Refreshed the default coding-agent TUI with the pi-vivid theme, compact status/tool chrome, conversation rails, and a lower-noise welcome surface.
