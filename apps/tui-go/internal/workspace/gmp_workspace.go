@@ -1719,7 +1719,7 @@ func (w *GmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 	case "bashExecution", "pythonExecution":
 		msg.Parts = w.parseExecutionContent(body)
 		msg.ID = w.nextID("exec")
-	case "custom", "hookMessage":
+	case "custom", "hookMessage", "developer":
 		msg.Parts = w.parseTextWrappedContent(body)
 		msg.ID = w.nextID("custom")
 	default:
