@@ -54,25 +54,40 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
+let syncPromise: Promise<{ processed: number; files: number }> | null = null;
+
 /**
  * Sync all session files to the database.
  * Returns the number of new entries processed.
+ * Uses promise coalescing to prevent redundant database operations from concurrent requests.
  */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
-	await initDb();
-
-	const files = await listAllSessionFiles();
-	const counts = await Promise.all(files.map(file => syncSessionFile(file)));
-	let totalProcessed = 0;
-	let filesProcessed = 0;
-	for (const count of counts) {
-		if (count > 0) {
-			totalProcessed += count;
-			filesProcessed++;
-		}
+export function syncAllSessions(): Promise<{ processed: number; files: number }> {
+	if (syncPromise) {
+		return syncPromise;
 	}
 
-	return { processed: totalProcessed, files: filesProcessed };
+	syncPromise = (async () => {
+		try {
+			await initDb();
+
+			const files = await listAllSessionFiles();
+			const counts = await Promise.all(files.map(file => syncSessionFile(file)));
+			let totalProcessed = 0;
+			let filesProcessed = 0;
+			for (const count of counts) {
+				if (count > 0) {
+					totalProcessed += count;
+					filesProcessed++;
+				}
+			}
+
+			return { processed: totalProcessed, files: filesProcessed };
+		} finally {
+			syncPromise = null;
+		}
+	})();
+
+	return syncPromise;
 }
 
 /**
