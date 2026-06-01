@@ -254,6 +254,11 @@ type UI struct {
 	// sidebarLogo keeps a cached version of the sidebar sidebarLogo.
 	sidebarLogo string
 
+	// themeName is the name of the currently active theme, tracked so the
+	// theme picker can mark the current entry. Updated by applyThemeByName and
+	// by provider-driven theme swaps.
+	themeName string
+
 	// Notification state
 	notifyBackend       notification.Backend
 	notifyWindowFocused bool
@@ -450,14 +455,50 @@ func (m *UI) sendNotification(n notification.Notification) tea.Cmd {
 	if !m.shouldSendNotification() {
 		return nil
 	}
+	return m.notifyBackend.Send(n)
+}
 
-	backend := m.notifyBackend
-	return func() tea.Msg {
-		if err := backend.Send(n); err != nil {
-			slog.Error("Failed to send notification", "error", err)
-		}
-		return nil
+// selectNotificationBackend chooses the appropriate notification backend based
+// on terminal capabilities and environment. Remote/SSH sessions can't reach a
+// local OS notification daemon, so they fall back to terminal escape sequences
+// (OSC 99 -> OSC 777 -> bell). Local sessions use native OS notifications when
+// focus events are supported; otherwise nothing is selected.
+func selectNotificationBackend(caps common.Capabilities) notification.Backend {
+	_, isSSH := caps.Env.LookupEnv("SSH_TTY")
+	if !isSSH {
+		_, isSSH = caps.Env.LookupEnv("SSH_CONNECTION")
 	}
+
+	// Remote/SSH sessions use terminal-based notifications: OSC 99 if the
+	// terminal advertised support, otherwise OSC 777 (urxvt extension). Both
+	// degrade to the bell automatically via the OSC backend's protocol choice.
+	if isSSH {
+		slog.Debug("Selected OSCBackend for remote session", "osc99_supported", caps.OSC99Notifications)
+		return notification.NewOSCBackend(notification.Icon, caps.OSC99Notifications)
+	}
+
+	// Local sessions with focus reporting use native OS notifications.
+	if caps.ReportFocusEvents {
+		slog.Debug("Selected NativeBackend for local session")
+		return notification.NewNativeBackend(notification.Icon)
+	}
+
+	// Local, headless terminal with no focus reporting and no OS daemon path.
+	// Prefer OSC if the terminal advertised OSC 99; otherwise ring the bell so
+	// the user still gets a turn-complete alert instead of silence.
+	if caps.OSC99Notifications {
+		slog.Debug("Selected OSCBackend for headless local session")
+		return notification.NewOSCBackend(notification.Icon, true)
+	}
+
+	slog.Debug("Selected BellBackend (no native or OSC support)")
+	return notification.NewBellBackend()
+}
+
+// updateNotificationBackend re-selects the notification backend from the
+// current terminal capabilities. Called whenever capabilities change.
+func (m *UI) updateNotificationBackend() {
+	m.notifyBackend = selectNotificationBackend(m.caps)
 }
 
 // shouldSendNotification returns true if notifications should be sent based on
@@ -527,9 +568,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, common.QueryCmd(uv.Environ(msg)))
 	case tea.ModeReportMsg:
-		if m.caps.ReportFocusEvents {
-			m.notifyBackend = notification.NewNativeBackend(notification.Icon)
-		}
+		m.updateNotificationBackend()
+	case uv.UnknownOscEvent:
+		m.updateNotificationBackend()
 	case tea.FocusMsg:
 		m.notifyWindowFocused = true
 	case tea.BlurMsg:
@@ -1559,6 +1600,13 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
 		})
 		m.dialog.CloseDialog(dialog.ReasoningID)
+	case dialog.ActionSelectTheme:
+		m.dialog.CloseDialog(dialog.ThemeID)
+		if m.applyThemeByName(msg.Name) {
+			cmds = append(cmds, util.ReportInfo("Theme changed to "+msg.Name))
+		} else {
+			cmds = append(cmds, util.ReportError(fmt.Errorf("unknown theme: %s", msg.Name)))
+		}
 	case dialog.ActionPermissionResponse:
 		m.dialog.CloseDialog(dialog.PermissionsID)
 		// In gmp bridge mode the only permission dialogs come from the
@@ -1739,7 +1787,7 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 		if msg.ModelType == config.SelectedModelTypeLarge {
 			// Swap the theme live based on the newly selected large
 			// model's provider.
-			m.applyTheme(styles.ThemeForProvider(providerID))
+			m.applyProviderTheme(providerID)
 		}
 		if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
 			// Ensure small model is set is unset.
@@ -1813,7 +1861,7 @@ func (m *UI) applyGmpModelSelection(gw *workspace.GmpWorkspace, msg dialog.Actio
 	cancel()
 
 	if msg.ModelType == config.SelectedModelTypeLarge {
-		m.applyTheme(styles.ThemeForProvider(providerID))
+		m.applyProviderTheme(providerID)
 	}
 
 	m.dialog.CloseDialog(dialog.GmpAuthID)
@@ -2422,13 +2470,16 @@ func (m *UI) trapLocalSlash(content string) (tea.Cmd, bool) {
 	case "/quit", "/exit":
 		return tea.Quit, true
 	case "/help":
-		help := "Local commands: /quit /exit /help /clear /debug /login /logout. Press / or Ctrl+P for the full palette. Anything else starting with / is sent to the omp agent."
+		help := "Local commands: /quit /exit /help /clear /debug /theme /login /logout. Press / or Ctrl+P for the full palette. Anything else starting with / is sent to the omp agent."
 		return util.ReportInfo(help), true
 	case "/clear":
 		m.textarea.Reset()
 		return nil, true
 	case "/debug":
 		return util.ReportInfo("debug overlay deferred — tail ~/.gmp/tui.log or run with --debug to mirror to stderr"), true
+	case "/theme":
+		m.textarea.Reset()
+		return m.openDialog(dialog.ThemeID), true
 	case "/login":
 		m.textarea.Reset()
 		return m.runGmpAuthCommand(auth.CommandLogin, strings.TrimSpace(rest)), true
@@ -3354,6 +3405,38 @@ func (m *UI) applyTheme(s styles.Styles) {
 	m.refreshStyles()
 }
 
+// applyProviderTheme swaps to the theme associated with the given provider and
+// records its name so the theme picker stays in sync with provider-driven swaps.
+func (m *UI) applyProviderTheme(providerID string) {
+	m.themeName = styles.ThemeNameForProvider(providerID)
+	m.applyTheme(styles.ThemeForProvider(providerID))
+}
+
+// applyThemeByName looks up a named theme and applies it, recording the name
+// so the theme picker can mark the active entry. Returns false if the name is
+// not a known theme.
+func (m *UI) applyThemeByName(name string) bool {
+	s, ok := styles.ThemeByName(name)
+	if !ok {
+		return false
+	}
+	m.themeName = name
+	m.applyTheme(s)
+	return true
+}
+
+// currentThemeName returns the name of the active theme, defaulting to the
+// first available theme when none has been explicitly selected.
+func (m *UI) currentThemeName() string {
+	if m.themeName != "" {
+		return m.themeName
+	}
+	if options := styles.AvailableThemes(); len(options) > 0 {
+		return options[0].Name
+	}
+	return ""
+}
+
 // refreshStyles pushes the current *m.com.Styles into every subcomponent
 // that copies or pre-renders style-dependent values at construction time.
 func (m *UI) refreshStyles() {
@@ -3490,6 +3573,10 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		if cmd := m.openReasoningDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case dialog.ThemeID:
+		if cmd := m.openThemeDialog(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case dialog.FilePickerID:
 		if cmd := m.openFilesDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -3584,6 +3671,22 @@ func (m *UI) openReasoningDialog() tea.Cmd {
 	}
 
 	m.dialog.OpenDialog(reasoningDialog)
+	return nil
+}
+
+// openThemeDialog opens the theme picker dialog.
+func (m *UI) openThemeDialog() tea.Cmd {
+	if m.dialog.ContainsDialog(dialog.ThemeID) {
+		m.dialog.BringToFront(dialog.ThemeID)
+		return nil
+	}
+
+	themeDialog, err := dialog.NewTheme(m.com, m.currentThemeName())
+	if err != nil {
+		return util.ReportError(err)
+	}
+
+	m.dialog.OpenDialog(themeDialog)
 	return nil
 }
 

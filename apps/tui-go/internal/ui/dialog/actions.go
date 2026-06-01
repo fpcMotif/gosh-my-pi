@@ -61,6 +61,10 @@ type (
 	ActionSelectReasoningEffort struct {
 		Effort string
 	}
+	// ActionSelectTheme is a message indicating a theme has been selected.
+	ActionSelectTheme struct {
+		Name string
+	}
 	ActionPermissionResponse struct {
 		Permission permission.PermissionRequest
 		Action     PermissionAction

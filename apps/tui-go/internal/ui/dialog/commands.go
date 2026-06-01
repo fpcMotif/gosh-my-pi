@@ -511,6 +511,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_notifications", notificationLabel, "", ActionToggleNotifications{}))
 
 	commands = append(commands,
+		NewCommandItem(c.com.Styles, "change_theme", "Change Theme", "", ActionOpenDialog{ThemeID}),
 		NewCommandItem(c.com.Styles, "toggle_yolo", "Toggle Yolo Mode", "", ActionToggleYoloMode{}),
 		NewCommandItem(c.com.Styles, "toggle_help", "Toggle Help", "ctrl+g", ActionToggleHelp{}),
 		NewCommandItem(c.com.Styles, "init", "Initialize Project", "", ActionInitializeProject{}),
