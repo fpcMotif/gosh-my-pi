@@ -1,0 +1,11 @@
+{
+	"type": "tool_execution_start",
+	"toolCallId": "call-bash-1",
+	"toolName": "bash",
+	"args": { "command": "ls -la" },
+	"intent": "list files",
+	"presentation": {
+		"type": "status",
+		"status": { "icon": "pending", "title": "Bash", "description": "$ ls -la" }
+	}
+}
