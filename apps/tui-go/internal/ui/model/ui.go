@@ -242,9 +242,6 @@ type UI struct {
 		yesInitializeSelected bool
 	}
 
-	// lsp
-	lspStates map[string]app.LSPClientInfo
-
 	// mcp
 	mcpStates map[string]mcp.ClientInfo
 
@@ -365,7 +362,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		completions:         comp,
 		attachments:         attachments,
 		todoSpinner:         todoSpinner,
-		lspStates:           make(map[string]app.LSPClientInfo),
 		mcpStates:           make(map[string]mcp.ClientInfo),
 		notifyBackend:       notification.NoopBackend{},
 		notifyWindowFocused: true,
@@ -704,8 +700,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renderPills()
 	case pubsub.Event[history.File]:
 		cmds = append(cmds, m.handleFileEvent(msg.Payload))
-	case pubsub.Event[app.LSPEvent]:
-		m.lspStates = app.GetLSPStates()
 	case pubsub.Event[skills.Event]:
 		m.skillStates = msg.Payload.States
 	case pubsub.Event[mcp.Event]:
@@ -1430,11 +1424,6 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, msg.Cmd)
 		}
 
-	// Session dialog messages.
-	case dialog.ActionSelectSession:
-		m.dialog.CloseDialog(dialog.SessionsID)
-		cmds = append(cmds, m.loadSession(msg.Session.ID))
-
 	// Open dialog message.
 	case dialog.ActionOpenDialog:
 		m.dialog.CloseDialog(dialog.CommandsID)
@@ -1926,11 +1915,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			return true
 		case key.Matches(msg, m.keyMap.Models):
 			if cmd := m.openModelsDialog(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return true
-		case key.Matches(msg, m.keyMap.Sessions):
-			if cmd := m.openSessionsDialog(); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 			return true
@@ -2689,7 +2673,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 			tab,
 			commands,
 			k.Models,
-			k.Sessions,
 		)
 		if hasSession {
 			mainBinds = append(mainBinds, k.Chat.NewSession)
@@ -2747,7 +2730,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 				[]key.Binding{
 					commands,
 					k.Models,
-					k.Sessions,
 				},
 			)
 			editorBinds := []key.Binding{
@@ -3557,10 +3539,6 @@ func (m *UI) cancelAgent() tea.Cmd {
 func (m *UI) openDialog(id string) tea.Cmd {
 	var cmds []tea.Cmd
 	switch id {
-	case dialog.SessionsID:
-		if cmd := m.openSessionsDialog(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 	case dialog.ModelsID:
 		if cmd := m.openModelsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -3687,30 +3665,6 @@ func (m *UI) openThemeDialog() tea.Cmd {
 	}
 
 	m.dialog.OpenDialog(themeDialog)
-	return nil
-}
-
-// openSessionsDialog opens the sessions dialog. If the dialog is already open,
-// it brings it to the front. Otherwise, it will list all the sessions and open
-// the dialog.
-func (m *UI) openSessionsDialog() tea.Cmd {
-	if m.dialog.ContainsDialog(dialog.SessionsID) {
-		// Bring to front
-		m.dialog.BringToFront(dialog.SessionsID)
-		return nil
-	}
-
-	selectedSessionID := ""
-	if m.session != nil {
-		selectedSessionID = m.session.ID
-	}
-
-	dialog, err := dialog.NewSessions(m.com, selectedSessionID)
-	if err != nil {
-		return util.ReportError(err)
-	}
-
-	m.dialog.OpenDialog(dialog)
 	return nil
 }
 
@@ -4081,11 +4035,10 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	sectionWidth := max(1, min(maxSectionWidth, width/4-2)) // account for spacing between sections
 	maxItemsPerSection := remainingHeight - 3               // Account for section title and spacing
 
-	lspSection := m.lspInfo(sectionWidth, maxItemsPerSection, false)
 	mcpSection := m.mcpInfo(sectionWidth, maxItemsPerSection, false)
 	skillsSection := m.skillsInfo(sectionWidth, maxItemsPerSection, false)
 	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), sectionWidth, maxItemsPerSection, false)
-	sections := lipgloss.JoinHorizontal(lipgloss.Top, filesSection, " ", lspSection, " ", mcpSection, " ", skillsSection)
+	sections := lipgloss.JoinHorizontal(lipgloss.Top, filesSection, " ", mcpSection, " ", skillsSection)
 	uv.NewStyledString(
 		s.CompactDetails.View.
 			Width(area.Dx()).
