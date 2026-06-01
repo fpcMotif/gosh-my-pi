@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -27,7 +26,6 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/event"
 	crushlog "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/log"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/server"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	ui "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/model"
@@ -39,12 +37,19 @@ import (
 var clientHost string
 var executablePath = os.Executable
 
+// defaultClientHost is the placeholder default for the advanced `--host`
+// flag. The flag targets the carved-out (inert) Crush client/server
+// runtime, which is no longer reachable from the gmp-only TUI, so the
+// value is never dialed. A static default avoids importing internal/server
+// just for its per-user socket derivation.
+const defaultClientHost = "unix:///tmp/crush.sock"
+
 func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
 	rootCmd.PersistentFlags().StringP("data-dir", "D", "", "Custom crush data directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
 	rootCmd.PersistentFlags().StringP("agent-cmd", "a", "", "Path to gmp binary or full command line (overrides sibling-binary lookup, PATH, GMP_TUI_BACKEND, and OMP_TUI_BACKEND)")
-	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific crush server host (for advanced users)")
+	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", defaultClientHost, "Connect to a specific crush server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
@@ -53,15 +58,10 @@ func init() {
 
 	rootCmd.AddCommand(
 		runCmd,
-		dirsCmd,
-		projectsCmd,
-		updateProvidersCmd,
-		logsCmd,
 		schemaCmd,
 		loginCmd,
 		logoutCmd,
 		statsCmd,
-		sessionCmd,
 	)
 }
 
@@ -414,27 +414,3 @@ func ResolveCwd(cmd *cobra.Command) (string, error) {
 	}
 	return cwd, nil
 }
-
-func createDotCrushDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("failed to create data directory: %q %w", dir, err)
-	}
-
-	gitIgnorePath := filepath.Join(dir, ".gitignore")
-	content, err := os.ReadFile(gitIgnorePath)
-
-	// create or update if old version
-	if os.IsNotExist(err) || string(content) == oldGitIgnore {
-		if err := os.WriteFile(gitIgnorePath, []byte(defaultGitIgnore), 0o644); err != nil {
-			return fmt.Errorf("failed to create .gitignore file: %q %w", gitIgnorePath, err)
-		}
-	}
-
-	return nil
-}
-
-//go:embed gitignore/old
-var oldGitIgnore string
-
-//go:embed gitignore/default
-var defaultGitIgnore string
