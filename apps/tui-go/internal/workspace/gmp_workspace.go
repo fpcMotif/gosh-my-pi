@@ -1388,9 +1388,12 @@ func (w *GmpWorkspace) handleMessageStart(raw []byte) tea.Msg {
 func (w *GmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 	var delta struct {
 		AssistantMessageEvent struct {
-			Type  string `json:"type"`
-			Delta string `json:"delta"`
-			Error *struct {
+			Type         string          `json:"type"`
+			Delta        string          `json:"delta"`
+			ContentIndex int             `json:"contentIndex"`
+			Partial      json.RawMessage `json:"partial"`
+			ToolCall     json.RawMessage `json:"toolCall"`
+			Error        *struct {
 				ErrorMessage string `json:"errorMessage"`
 			} `json:"error"`
 		} `json:"assistantMessageEvent"`
@@ -1411,6 +1414,33 @@ func (w *GmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 			}
 			return w.updateAssistant(func(msg *message.Message) {
 				msg.AppendReasoningContent(ev.Delta)
+			})
+		case "toolcall_start", "toolcall_delta":
+			// Reconcile the in-progress tool call from the `partial` snapshot
+			// rather than accumulating `delta`. `partial.content[contentIndex]`
+			// is the backend's fully-parsed accumulated tool call (id, name,
+			// arguments), so this is immune to dropped or duplicated deltas and
+			// always yields valid JSON args. AddToolCall is keyed by id, so the
+			// same toolCallId arriving later via tool_execution_start updates
+			// the same card instead of creating a duplicate.
+			tc, ok := toolCallFromPartial(ev.Partial, ev.ContentIndex)
+			if !ok {
+				return nil
+			}
+			return w.updateAssistant(func(msg *message.Message) {
+				msg.AddToolCall(tc)
+			})
+		case "toolcall_end":
+			tc, ok := toolCallFromWireBlock(ev.ToolCall)
+			if !ok {
+				tc, ok = toolCallFromPartial(ev.Partial, ev.ContentIndex)
+			}
+			if !ok {
+				return nil
+			}
+			tc.Finished = true
+			return w.updateAssistant(func(msg *message.Message) {
+				msg.AddToolCall(tc)
 			})
 		case "error":
 			text := "Request failed"
@@ -1443,6 +1473,55 @@ func (w *GmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 		return nil
 	}
 	return pubsub.Event[message.Message]{Type: pubsub.UpdatedEvent, Payload: msg.Clone()}
+}
+
+// toolCallFromPartial extracts the tool call at contentIndex from a streaming
+// `partial` WireAssistantMessageV1 snapshot. It returns false when the index is
+// out of range or the block at that index is not a tool call (e.g. interleaved
+// text/thinking blocks), so callers ignore non-tool-call sub-events safely.
+func toolCallFromPartial(partial json.RawMessage, contentIndex int) (message.ToolCall, bool) {
+	if len(partial) == 0 || contentIndex < 0 {
+		return message.ToolCall{}, false
+	}
+	var p struct {
+		Content []json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(partial, &p); err != nil {
+		return message.ToolCall{}, false
+	}
+	if contentIndex >= len(p.Content) {
+		return message.ToolCall{}, false
+	}
+	return toolCallFromWireBlock(p.Content[contentIndex])
+}
+
+// toolCallFromWireBlock parses a single WireToolCallV1 content block
+// ({type:"toolCall", id, name, arguments}) into a message.ToolCall. The wire
+// `arguments` is an already-parsed JSON object, so re-marshaling always yields
+// valid JSON for the renderers. The tool name is mapped to the renderer name to
+// match handleToolExecutionStart, keeping a single card across both paths.
+func toolCallFromWireBlock(block json.RawMessage) (message.ToolCall, bool) {
+	if len(block) == 0 {
+		return message.ToolCall{}, false
+	}
+	var tc struct {
+		Type      string          `json:"type"`
+		ID        string          `json:"id"`
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
+	}
+	if err := json.Unmarshal(block, &tc); err != nil || tc.Type != "toolCall" || tc.ID == "" {
+		return message.ToolCall{}, false
+	}
+	input := string(tc.Arguments)
+	if input == "" {
+		input = "{}"
+	}
+	return message.ToolCall{
+		ID:    tc.ID,
+		Name:  mapWireToolName(tc.Name),
+		Input: input,
+	}, true
 }
 
 func (w *GmpWorkspace) handleMessageEnd(raw []byte) tea.Msg {
