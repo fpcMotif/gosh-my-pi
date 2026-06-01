@@ -1243,10 +1243,12 @@ func buildToolApprovalReplyFrame(id string, approved bool) ompclient.ExtensionUI
 	return ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: id, Confirmed: &confirmed}
 }
 
-// drainHostToolCalls rejects every incoming host tool invocation with
-// an error result. The Go TUI does not currently register host tools
-// via set_host_tools, so a host_tool_call frame here is unexpected; we
-// fail it explicitly rather than let omp hang on a missing response.
+// drainHostToolCalls rejects every incoming host tool invocation with an
+// error result. The Go TUI never registers host tools via set_host_tools, so
+// host-side tools are an intentional, documented gmp-mode limitation (gap G29):
+// a host_tool_call frame is unexpected. We always reply — failing the call
+// explicitly rather than letting the backend hang on a missing response — so
+// the read loop can never deadlock on an unregistered host tool.
 func (w *GmpWorkspace) drainHostToolCalls() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -1260,7 +1262,7 @@ func (w *GmpWorkspace) drainHostToolCalls() {
 		resp := ompclient.HostToolResult{
 			Type:    "host_tool_result",
 			ID:      req.ID,
-			Result:  "host tool not registered by gmp-tui-go",
+			Result:  "host tools are not supported by gmp-tui-go (the Go frontend registers none)",
 			IsError: true,
 		}
 		if err := w.client.Send(resp); err != nil {
