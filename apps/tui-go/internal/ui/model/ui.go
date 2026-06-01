@@ -79,6 +79,11 @@ const (
 	minViewportHeight = 10
 )
 
+// backendExitedHeading is the heading shown when the gmp RPC subprocess
+// exits unexpectedly. Exported as a constant so the render state can be
+// asserted by tests without matching on incidental layout.
+const backendExitedHeading = "Backend connection lost"
+
 // If pasted text has more than 10 newlines, treat it as a file attachment.
 const pasteLinesThreshold = 10
 
@@ -290,6 +295,13 @@ type UI struct {
 	}
 
 	pendingGmpModelSelection *dialog.ActionSelectModel
+
+	// backendExited is set when the gmp RPC subprocess has exited
+	// unexpectedly (see workspace.BackendExitedMsg). While true, View
+	// renders a legible "backend connection lost" banner instead of the
+	// frozen transcript. There is no auto-respawn/reconnect — this is only
+	// the render state.
+	backendExited bool
 }
 
 // New creates a new instance of the [UI] model.
@@ -709,6 +721,14 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.openPermissionsDialog(workspace.ToolApprovalPermissionRequest(msg)); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+
+	// The gmp RPC subprocess exited unexpectedly (peer EOF / crash). Enter
+	// the backend-exited render state so View draws a legible banner instead
+	// of a frozen transcript. No auto-respawn — render state only.
+	case workspace.BackendExitedMsg:
+		m.backendExited = true
+		m.todoIsSpinning = false
+		return m, nil
 
 	case cancelTimerExpiredMsg:
 		m.isCanceling = false
@@ -2363,6 +2383,11 @@ func (m *UI) View() tea.View {
 		return v
 	}
 
+	if m.backendExited {
+		v.Content = renderBackendExitedBanner(m.width, m.height)
+		return v
+	}
+
 	canvas := uv.NewScreenBuffer(m.width, m.height)
 	v.Cursor = m.Draw(canvas, canvas.Bounds())
 
@@ -2461,6 +2486,34 @@ func renderTooSmallBanner(width, height int) string {
 		if width > 0 {
 			line = lipgloss.PlaceHorizontal(width, lipgloss.Center, line)
 		}
+		b.WriteString(line)
+		if i < len(lines)-1 {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+// renderBackendExitedBanner produces a centred, styled notice shown when the
+// gmp RPC subprocess exits unexpectedly. It reuses renderTooSmallBanner's
+// centring approach but colours the heading so the lost-connection state is
+// legible and distinct from a frozen transcript. There is no reconnect hint
+// — the MVP does not auto-respawn; the user restarts gmp-tui-go.
+func renderBackendExitedBanner(width, height int) string {
+	if width <= 0 || height <= 0 {
+		return ""
+	}
+	heading := lipgloss.NewStyle().Foreground(lipgloss.Red).Bold(true).Render(backendExitedHeading)
+	detail := "The gmp backend process exited unexpectedly."
+	hint := "Restart gmp-tui-go to reconnect."
+	lines := []string{heading, "", detail, "", hint}
+	var b strings.Builder
+	verticalPad := (height - len(lines)) / 2
+	for range verticalPad {
+		b.WriteByte('\n')
+	}
+	for i, line := range lines {
+		line = lipgloss.PlaceHorizontal(width, lipgloss.Center, line)
 		b.WriteString(line)
 		if i < len(lines)-1 {
 			b.WriteByte('\n')

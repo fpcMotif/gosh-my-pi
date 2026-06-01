@@ -47,6 +47,14 @@ const (
 
 var ErrUnsupported = errors.New("gmp backend: operation not supported in MVP")
 
+// BackendExitedMsg is the typed tea.Msg delivered through the normal
+// program.Send / events path when the gmp RPC subprocess exits
+// unexpectedly (peer EOF / crash) rather than via an intentional
+// Shutdown/Close. The model layer renders a legible "backend connection
+// lost" banner on it instead of leaving the transcript frozen. It carries
+// no payload: the transport-local exit is the whole signal.
+type BackendExitedMsg struct{}
+
 // GmpModelCatalogEntry is the Go-side projection of the backend-owned
 // models.catalog entry. It is intentionally provider/model centric:
 // GmpWorkspace uses it to build the Bridge Model Catalog that the Crush
@@ -793,6 +801,18 @@ func (w *GmpWorkspace) Subscribe(program *tea.Program) {
 		w.handleAgentEvent(ev)
 	}
 	w.setAgentBusy(false)
+
+	// The events channel only closes once the transport read loop ends. If
+	// that was an unexpected exit (peer EOF / subprocess crash) rather than
+	// an intentional Shutdown/Close, surface it to the UI as a typed message
+	// so the model can enter a legible "backend connection lost" state
+	// instead of freezing on the last transcript. Intentional shutdown
+	// leaves BackendExited open, so no false banner appears on a clean quit.
+	select {
+	case <-w.client.BackendExited():
+		w.sendUI(BackendExitedMsg{})
+	default:
+	}
 }
 
 // drainExtensionUI consumes incoming UI prompts from the agent. For

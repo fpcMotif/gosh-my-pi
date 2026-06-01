@@ -260,6 +260,81 @@ func TestClose_ReturnsWithoutSubprocess(t *testing.T) {
 	}
 }
 
+// TestBackendExited_UnexpectedEOFSignalsOnce asserts an unexpected peer
+// exit — closing the Client's stdout source WITHOUT calling Close — fires
+// the BackendExited signal exactly once. This is the transport-local
+// lifecycle signal the UI observes to render a "connection lost" banner
+// instead of freezing.
+func TestBackendExited_UnexpectedEOFSignalsOnce(t *testing.T) {
+	fp := newFakePeer(t)
+
+	// Peer crash: closing stdout EOFs the read loop. Since Close was never
+	// called, this is an unexpected exit and must surface BackendExited.
+	_ = fp.peerWrite.Close()
+
+	select {
+	case <-fp.client.BackendExited():
+	case <-time.After(testTimeout):
+		t.Fatal("BackendExited not signalled after unexpected peer EOF")
+	}
+
+	// Exactly once: the channel is closed (not a one-shot send), so a second
+	// read must also be ready — and crucially must not panic from a double
+	// close. A fresh select observing it again confirms idempotency.
+	select {
+	case <-fp.client.BackendExited():
+	case <-time.After(testTimeout):
+		t.Fatal("BackendExited should stay observable after the first read")
+	}
+}
+
+// TestBackendExited_IntentionalCloseDoesNotSignal asserts a normal Close —
+// the intentional-shutdown path — does NOT fire BackendExited, so the UI
+// never shows a false "connection lost" banner on a clean quit. Close marks
+// the shutdown intentional before the read loop's EOF, so the resulting
+// loop termination is not mistaken for a crash.
+func TestBackendExited_IntentionalCloseDoesNotSignal(t *testing.T) {
+	fp := newFakePeer(t)
+
+	// Close drives the intentional shutdown. With a real subprocess, closing
+	// stdin makes the peer exit and close its stdout, which EOFs the read
+	// loop. The fake peer has no such linkage, so model the peer winding
+	// down in response: close its stdout writer once Close has marked the
+	// shutdown intentional, letting the read loop drain.
+	go func() {
+		// Close blocks on <-c.done until the read loop ends; closing the
+		// peer's stdout from here is what ends it. closeRequested is already
+		// set by the time Close reaches the wait, so the EOF is classified as
+		// intentional, not a crash.
+		<-time.After(20 * time.Millisecond)
+		_ = fp.peerWrite.Close()
+	}()
+
+	done := make(chan error, 1)
+	go func() { done <- fp.client.Close() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Close returned %v, want nil", err)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("Close blocked beyond timeout")
+	}
+
+	// Read loop ended (Done closed), but BackendExited must remain open
+	// because the shutdown was intentional.
+	select {
+	case <-fp.client.Done():
+	case <-time.After(testTimeout):
+		t.Fatal("Done not closed after Close")
+	}
+	select {
+	case <-fp.client.BackendExited():
+		t.Fatal("BackendExited fired on intentional Close — false connection-lost signal")
+	default:
+	}
+}
+
 // TestReadySchema_Match asserts the canonical ready frame negotiates the
 // expected schema, sets no mismatch flag, and is preserved as a raw
 // agent event (soft-buffer fan-out, not dropped).

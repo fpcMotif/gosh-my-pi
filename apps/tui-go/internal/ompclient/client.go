@@ -90,6 +90,17 @@ type Client struct {
 	readErr   atomic.Pointer[error]
 	done      chan struct{}
 
+	// exited is closed exactly once when the read loop terminates
+	// unexpectedly (peer EOF / subprocess crash) rather than via an
+	// intentional Close. closeRequested gates this: Close sets it before
+	// winding the loop down so the EOF that Close itself triggers does NOT
+	// surface as a backend-exited signal (no false "connection lost" banner
+	// on a clean quit). BackendExited exposes the channel; the UI observes
+	// it to enter a legible "backend exited" render state.
+	exited         chan struct{}
+	exitedOnce     sync.Once
+	closeRequested atomic.Bool
+
 	// schema holds the wire schema string from the `ready` handshake frame
 	// (empty until the frame arrives). schemaMismatch records whether it
 	// diverged from ExpectedSchema. Soft-buffer per OMP-RPC v1: a mismatch
@@ -146,6 +157,7 @@ func Spawn(ctx context.Context, opts Options) (*Client, error) {
 		hostToolCall:   make(chan *HostToolCallReq, sideChannelBufferSize),
 		hostToolCancel: make(chan *HostToolCancelReq, sideChannelBufferSize),
 		done:           make(chan struct{}),
+		exited:         make(chan struct{}),
 	}
 	go c.readLoop()
 	return c, nil
@@ -167,6 +179,7 @@ func NewWithIO(stdin io.WriteCloser, stdout io.ReadCloser) *Client {
 		hostToolCall:   make(chan *HostToolCallReq, sideChannelBufferSize),
 		hostToolCancel: make(chan *HostToolCancelReq, sideChannelBufferSize),
 		done:           make(chan struct{}),
+		exited:         make(chan struct{}),
 	}
 	go c.readLoop()
 	return c
@@ -187,6 +200,13 @@ func (c *Client) HostToolCancels() <-chan *HostToolCancelReq { return c.hostTool
 
 // Done is closed once the read loop exits (subprocess gone).
 func (c *Client) Done() <-chan struct{} { return c.done }
+
+// BackendExited is closed exactly once when the read loop terminates
+// unexpectedly — peer EOF or subprocess crash — and NOT when the loop is
+// wound down by an intentional Close. Consumers select on it to surface a
+// legible "backend connection lost" state instead of a frozen UI. An
+// intentional quit leaves this channel open so no false banner appears.
+func (c *Client) BackendExited() <-chan struct{} { return c.exited }
 
 // Schema returns the wire schema negotiated on the `ready` handshake
 // frame, or "" if no ready frame has been observed yet.
@@ -282,6 +302,10 @@ func (c *Client) Call(ctx context.Context, cmd Command) (*Response, error) {
 func (c *Client) Close() error {
 	var firstErr error
 	c.closeOnce.Do(func() {
+		// Mark the shutdown as intentional BEFORE closing stdin so the read
+		// loop's resulting EOF is not mistaken for a crash and does not fire
+		// the BackendExited signal.
+		c.closeRequested.Store(true)
 		c.closed.Store(true)
 		_ = c.stdin.Close()
 		// Best-effort termination if it doesn't exit on its own. cmd is nil
@@ -328,6 +352,13 @@ func (c *Client) readLoop() {
 	}
 	if err := scanner.Err(); err != nil {
 		c.readErr.Store(&err)
+	}
+	// The loop only reaches here when stdout hits EOF / error, i.e. the peer
+	// is gone. If Close did not request this shutdown, it is an unexpected
+	// exit (subprocess crash / peer EOF): fire BackendExited exactly once so
+	// the UI can render a legible "connection lost" state.
+	if !c.closeRequested.Load() {
+		c.exitedOnce.Do(func() { close(c.exited) })
 	}
 	// Wake any pending callers.
 	c.mu.Lock()
