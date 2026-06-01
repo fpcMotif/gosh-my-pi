@@ -513,10 +513,25 @@ func toolErrorContent(sty *styles.Styles, result *message.ToolResult, width int)
 		return ""
 	}
 	errContent := strings.ReplaceAll(result.Content, "\n", " ")
+	// A tool the user denied via the approval gate is a routine choice, not a
+	// failure: amber WARN, not red ERROR (gap G19).
+	if isUserDenial(result.Content) {
+		warnTag := sty.Tool.WarnTag.Render("WARN")
+		tagWidth := lipgloss.Width(warnTag)
+		errContent = ansi.Truncate(errContent, width-tagWidth-3, "…")
+		return fmt.Sprintf("%s %s", warnTag, sty.Tool.ErrorMessage.Render(errContent))
+	}
 	errTag := sty.Tool.ErrorTag.Render("ERROR")
 	tagWidth := lipgloss.Width(errTag)
 	errContent = ansi.Truncate(errContent, width-tagWidth-3, "…")
 	return fmt.Sprintf("%s %s", errTag, sty.Tool.ErrorMessage.Render(errContent))
+}
+
+// isUserDenial reports whether a tool error result is a user denial from the
+// approval gate (G11: "Denied by user") or the legacy Crush permission service
+// ("User denied permission"), rather than a real tool failure.
+func isUserDenial(content string) bool {
+	return strings.Contains(content, "Denied by user") || strings.Contains(content, "User denied permission")
 }
 
 // toolIcon returns the status icon for a tool call.
