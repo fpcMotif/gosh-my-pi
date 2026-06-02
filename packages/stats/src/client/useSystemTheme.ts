@@ -21,8 +21,6 @@ export function useSystemTheme(): SystemTheme {
 			setTheme(media.matches ? "dark" : "light");
 		};
 
-		applyTheme();
-
 		media.addEventListener("change", applyTheme);
 		return () => media.removeEventListener("change", applyTheme);
 	}, []);

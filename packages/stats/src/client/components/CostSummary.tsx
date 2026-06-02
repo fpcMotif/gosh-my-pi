@@ -11,6 +11,12 @@ function formatCost(value: number): string {
 	return `$${Math.round(value)}`;
 }
 
+function costColorClass(positive: boolean | null): string {
+	if (positive === true) return "text-[var(--accent-green,#4ade80)]";
+	if (positive === false) return "text-[var(--accent-pink)]";
+	return "text-[var(--text-primary)]";
+}
+
 export function CostSummary({ costSeries }: CostSummaryProps) {
 	const cutoff = Date.now() - SUMMARY_DAYS * 86400000;
 	const prevCutoff = cutoff - SUMMARY_DAYS * 86400000;
@@ -73,17 +79,7 @@ export function CostSummary({ costSeries }: CostSummaryProps) {
 			{cards.map(card => (
 				<div key={card.label} className="surface px-4 py-3">
 					<p className="text-xs text-[var(--text-muted)] mb-1">{card.label}</p>
-					<p
-						className={`text-lg font-semibold ${
-							card.positive === true
-								? "text-[var(--accent-green,#4ade80)]"
-								: card.positive === false
-									? "text-[var(--accent-pink)]"
-									: "text-[var(--text-primary)]"
-						}`}
-					>
-						{card.value}
-					</p>
+					<p className={`text-lg font-semibold ${costColorClass(card.positive)}`}>{card.value}</p>
 					{card.sub && <p className="text-xs text-[var(--text-muted)] mt-0.5">{card.sub}</p>}
 				</div>
 			))}

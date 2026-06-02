@@ -12,20 +12,28 @@ import type { DashboardStats, MessageStats } from "./types";
 
 type Tab = "overview" | "requests" | "errors" | "models" | "costs";
 
+type DashboardData = {
+	stats: DashboardStats | null;
+	recentRequests: MessageStats[];
+	recentErrors: MessageStats[];
+};
+
+const INITIAL_DATA: DashboardData = { stats: null, recentRequests: [], recentErrors: [] };
+
 export default function App() {
-	const [stats, setStats] = useState<DashboardStats | null>(null);
-	const [recentRequests, setRecentRequests] = useState<MessageStats[]>([]);
-	const [recentErrors, setRecentErrors] = useState<MessageStats[]>([]);
+	const [data, setData] = useState<DashboardData>(INITIAL_DATA);
 	const [selectedRequest, setSelectedRequest] = useState<number | null>(null);
 	const [syncing, setSyncing] = useState(false);
 	const [activeTab, setActiveTab] = useState<Tab>("overview");
 
 	const loadData = useCallback(async () => {
 		try {
-			const [s, r, e] = await Promise.all([getStats(), getRecentRequests(50), getRecentErrors(50)]);
-			setStats(s);
-			setRecentRequests(r);
-			setRecentErrors(e);
+			const [stats, recentRequests, recentErrors] = await Promise.all([
+				getStats(),
+				getRecentRequests(50),
+				getRecentErrors(50),
+			]);
+			setData({ stats, recentRequests, recentErrors });
 		} catch (error) {
 			console.error(error);
 		}
@@ -47,12 +55,14 @@ export default function App() {
 		return () => clearInterval(interval);
 	}, [loadData]);
 
+	const { stats, recentRequests, recentErrors } = data;
+
 	if (!stats) {
 		return (
 			<div className="min-h-screen flex items-center justify-center">
 				<div className="flex items-center gap-3 text-[var(--text-muted)]">
-					<div className="w-5 h-5 border-2 border-[var(--border-default)] border-t-[var(--accent-cyan)] rounded-full spin" />
-					<span className="text-sm">Loading analytics...</span>
+					<div className="size-5 border-2 border-[var(--border-default)] border-t-[var(--accent-cyan)] rounded-full spin" />
+					<span className="text-sm">Loading analytics…</span>
 				</div>
 			</div>
 		);
@@ -60,7 +70,7 @@ export default function App() {
 
 	return (
 		<div className="min-h-screen">
-			<div className="max-w-[1600px] mx-auto px-6 py-6">
+			<div className="max-w-[1600px] mx-auto p-6">
 				<Header activeTab={activeTab} onTabChange={setActiveTab} onSync={handleSync} syncing={syncing} />
 
 				{activeTab === "overview" && (

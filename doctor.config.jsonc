@@ -1,0 +1,19 @@
+{
+	// React Doctor config for @oh-my-pi/omp-stats.
+	// Each disabled rule mirrors a deliberate project decision; everything else is fixed in code.
+	"rules": {
+		// Disabled for packages/stats/** in .oxlintrc.json — the team opted out of these
+		// structural limits rather than splitting db.ts / the dashboard components.
+		"eslint/max-lines": "off",
+		"eslint/max-lines-per-function": "off",
+		"eslint/complexity": "off",
+		// Also off in .oxlintrc.json: tailwind.config.js and the React entry (App) require default exports.
+		"import/no-default-export": "off",
+		// Next.js-specific advice (next/dynamic). This is a Bun-bundled localhost-only dashboard,
+		// where eager chart.js loading is fine; React.lazy splitting adds risk for no real benefit here.
+		"react-doctor/prefer-dynamic-import": "off",
+		// syncAllSessions() intentionally runs before every stats endpoint; deferring it past the
+		// route guards would change behavior.
+		"react-doctor/async-defer-await": "off"
+	}
+}

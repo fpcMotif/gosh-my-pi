@@ -70,7 +70,7 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 	const performanceSeriesByKey = useMemo(() => buildModelPerformanceLookup(performanceSeries), [performanceSeries]);
 	const theme = useSystemTheme();
 	const chartTheme = CHART_THEMES[theme];
-	const sortedModels = [...models].sort(
+	const sortedModels = models.toSorted(
 		(a, b) => b.totalInputTokens + b.totalOutputTokens - (a.totalInputTokens + a.totalOutputTokens),
 	);
 
@@ -213,6 +213,16 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 	);
 }
 
+const TREND_CHART_OPTIONS = {
+	responsive: true,
+	maintainAspectRatio: false,
+	plugins: { legend: { display: false }, tooltip: { enabled: false } },
+	scales: {
+		x: { display: false },
+		y: { display: false, min: 0 },
+	},
+};
+
 function TrendChart({
 	data,
 	color,
@@ -234,17 +244,7 @@ function TrendChart({
 		],
 	};
 
-	const options = {
-		responsive: true,
-		maintainAspectRatio: false,
-		plugins: { legend: { display: false }, tooltip: { enabled: false } },
-		scales: {
-			x: { display: false },
-			y: { display: false, min: 0 },
-		},
-	};
-
-	return <Line data={chartData} options={options} />;
+	return <Line data={chartData} options={TREND_CHART_OPTIONS} />;
 }
 
 function PerformanceChart({
@@ -360,7 +360,7 @@ function buildModelPerformanceLookup(points: ModelPerformancePoint[], days = 14)
 
 		series.data[index] = {
 			timestamp: point.timestamp,
-			avgTtftSeconds: point.avgTtft !== null ? point.avgTtft / 1000 : null,
+			avgTtftSeconds: point.avgTtft === null ? null : point.avgTtft / 1000,
 			avgTokensPerSecond: point.avgTokensPerSecond,
 			requests: point.requests,
 		};

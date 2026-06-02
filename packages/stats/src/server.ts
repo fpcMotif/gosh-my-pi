@@ -41,6 +41,7 @@ async function extractEmbeddedClientArchive(archiveBytes: Buffer, outputDir: str
 	const files = await archive.files();
 	const extractRoot = path.resolve(outputDir);
 
+	const writes: Promise<number>[] = [];
 	for (const [archivePath, file] of files) {
 		const sanitizedPath = sanitizeArchivePath(archivePath);
 		if (sanitizedPath === null || sanitizedPath === undefined || sanitizedPath === "") continue;
@@ -48,8 +49,9 @@ async function extractEmbeddedClientArchive(archiveBytes: Buffer, outputDir: str
 		if (!destinationPath.startsWith(extractRoot + path.sep)) {
 			throw new Error(`Archive entry escapes extraction directory: ${archivePath}`);
 		}
-		await Bun.write(destinationPath, file);
+		writes.push(Bun.write(destinationPath, file));
 	}
+	await Promise.all(writes);
 }
 
 async function getCompiledClientDir(): Promise<string> {
@@ -269,13 +271,7 @@ export async function startServer(port = 3847): Promise<{ port: number; stop: ()
 			}
 
 			try {
-				let response: Response;
-
-				if (path.startsWith("/api/")) {
-					response = await handleApi(req);
-				} else {
-					response = await handleStatic(path);
-				}
+				const response = path.startsWith("/api/") ? await handleApi(req) : await handleStatic(path);
 
 				// Add CORS headers to all responses
 				const headers = new Headers(response.headers);
