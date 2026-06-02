@@ -17,6 +17,32 @@ export function shouldAttemptTuiGoLaunch(mode: string, isInteractive: boolean): 
 	return isInteractive && mode !== "rpc" && mode !== "acp";
 }
 
+export type TuiGoSpawnOutcome<T> = { kind: "spawned"; exitCode: number } | { kind: "session"; session: T };
+
+/**
+ * Resolve the Go TUI before paying for an in-process agent session.
+ *
+ * `gmp-tui-go` runs its own `omp --mode rpc` backend, so when it will be spawned
+ * the in-process session bootstrap (MCP + LSP discovery in `createAgentSession`)
+ * is pure waste — it used to be built and then immediately disposed (gap G24).
+ * The spawn is attempted first whenever the Go TUI is eligible; `buildSession`
+ * runs only on the fall-through (Go TUI ineligible, disabled, or unavailable).
+ */
+export async function spawnTuiGoOrBuildSession<T>(args: {
+	mode: string;
+	isInteractive: boolean;
+	spawn: () => Promise<number | null>;
+	buildSession: () => Promise<T>;
+}): Promise<TuiGoSpawnOutcome<T>> {
+	if (shouldAttemptTuiGoLaunch(args.mode, args.isInteractive)) {
+		const exitCode = await args.spawn();
+		if (exitCode !== null) {
+			return { kind: "spawned", exitCode };
+		}
+	}
+	return { kind: "session", session: await args.buildSession() };
+}
+
 export function resolveTuiGoLaunch(options: ResolveTuiGoLaunchOptions = {}): TuiGoLaunchResolution {
 	const env = options.env ?? process.env;
 	const which = options.which ?? $which;

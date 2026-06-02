@@ -20,7 +20,7 @@ import { processFileArguments } from "./cli/file-processor";
 import { buildInitialMessage } from "./cli/initial-message";
 import { listModels } from "./cli/list-models";
 import { selectSession } from "./cli/session-picker";
-import { resolveTuiGoLaunch, shouldAttemptTuiGoLaunch } from "./cli/tui-go-launcher";
+import { resolveTuiGoLaunch, shouldAttemptTuiGoLaunch, spawnTuiGoOrBuildSession } from "./cli/tui-go-launcher";
 import { findConfigFile } from "./config";
 import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
@@ -792,11 +792,23 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		}
 	}
 
-	const { session, setToolUIContext, modelFallbackMessage, lspServers, mcpManager, eventBus } = await logger.time(
-		"createAgentSession",
-		createAgentSession,
-		sessionOptions,
-	);
+	// Resolve the Go TUI before building the agent session: when gmp-tui-go will
+	// be spawned it runs its own `omp --mode rpc` backend, so the in-process
+	// session bootstrap (MCP + LSP discovery) here would just be built and
+	// immediately disposed (gap G24). Only fall through to createAgentSession
+	// when the Go TUI is ineligible, disabled, or unavailable.
+	const sessionOutcome = await spawnTuiGoOrBuildSession({
+		mode,
+		isInteractive,
+		spawn: tryAutoSpawnTuiGo,
+		buildSession: () => logger.time("createAgentSession", createAgentSession, sessionOptions),
+	});
+	if (sessionOutcome.kind === "spawned") {
+		stopThemeWatcher();
+		await postmortem.quit(sessionOutcome.exitCode);
+		return;
+	}
+	const { session, setToolUIContext, modelFallbackMessage, lspServers, mcpManager, eventBus } = sessionOutcome.session;
 	logger.time("main:afterCreateSession");
 	if (
 		parsedArgs.apiKey !== null &&
@@ -881,14 +893,9 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	} else if (mode === "acp") {
 		await runAcpMode(session, createAcpSession);
 	} else if (shouldAttemptTuiGoLaunch(mode, isInteractive)) {
-		const tuiGoExitCode = await tryAutoSpawnTuiGo();
-		if (tuiGoExitCode !== null) {
-			await session.dispose();
-			stopThemeWatcher();
-			await postmortem.quit(tuiGoExitCode);
-			return;
-		}
-
+		// The Go TUI was already resolved before the session was built (gap G24);
+		// reaching here means it was unavailable or disabled, so run the legacy
+		// in-process interactive TUI against the session we built.
 		const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
 		logger.time("main:getChangelogForDisplay");
 		const changelogMarkdown = await getChangelogForDisplay(parsedArgs);
