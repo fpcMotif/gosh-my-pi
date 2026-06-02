@@ -17,7 +17,20 @@ import type { TodoPhase } from "../../tools/todo-write";
 
 export type RpcCommand =
 	// Prompting
-	| { id?: string; type: "prompt"; message: string; images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" }
+	| {
+			id?: string;
+			type: "prompt";
+			message: string;
+			images?: ImageContent[];
+			streamingBehavior?: "steer" | "followUp";
+			/**
+			 * Optional client-supplied id for the resulting user message. The server
+			 * preserves it as the user message's `correlationId`, echoed on every
+			 * wire frame that carries the message, so the host can reconcile the
+			 * echoed message with its optimistically-rendered local copy by id.
+			 */
+			clientMessageId?: string;
+	  }
 	| { id?: string; type: "steer"; message: string; images?: ImageContent[] }
 	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
 	| { id?: string; type: "abort" }

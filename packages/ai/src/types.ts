@@ -289,6 +289,13 @@ export interface UserMessage {
 	synthetic?: boolean;
 	/** Who initiated this message for billing/attribution semantics. */
 	attribution?: MessageAttribution;
+	/**
+	 * Optional client-supplied correlation id, preserved end-to-end so a host
+	 * (e.g. the gmp-tui-go frontend over OMP-RPC) can reconcile this message with
+	 * its optimistically-rendered local copy by id instead of fragile text
+	 * equality. Opaque to providers — never sent to the LLM.
+	 */
+	correlationId?: string;
 	/** Provider-specific opaque payload used to reconstruct transport-native history. */
 	providerPayload?: ProviderPayload;
 	timestamp: number; // Unix timestamp in milliseconds
@@ -299,6 +306,11 @@ export interface DeveloperMessage {
 	content: string | (TextContent | ImageContent)[];
 	/** Who initiated this message for billing/attribution semantics. */
 	attribution?: MessageAttribution;
+	/**
+	 * Optional client-supplied correlation id, preserved end-to-end for host-side
+	 * reconciliation. See {@link UserMessage.correlationId}. Opaque to providers.
+	 */
+	correlationId?: string;
 	/** Provider-specific opaque payload used to reconstruct transport-native history. */
 	providerPayload?: ProviderPayload;
 	timestamp: number; // Unix timestamp in milliseconds

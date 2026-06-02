@@ -1,0 +1,10 @@
+{
+	"type": "message_start",
+	"message": {
+		"role": "user",
+		"content": "hello",
+		"attribution": "user",
+		"correlationId": "client-msg-7f3a2b1c",
+		"timestamp": 1717200000000
+	}
+}
