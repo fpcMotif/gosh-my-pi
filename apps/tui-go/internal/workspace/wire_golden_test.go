@@ -313,3 +313,36 @@ func TestWireGoldenOrderingSequence(t *testing.T) {
 		}
 	}
 }
+
+// TestWireGoldenExtensionErrorFrame pins the extension_error diagnostic frame
+// (wire-02 / G22). The TS server emits {type, extensionPath, event, error}
+// (rpc-mode.ts extensionRunner.onError). Decoding into the three-field struct
+// catches a TS-side field rename, and the second half asserts that the gmp
+// bridge actually consumes the frame in translateEvent rather than dropping it
+// on the unknown-kind default — a frozen-looking transcript with no log line
+// was the bug GMP-CORR-3 fixed.
+func TestWireGoldenExtensionErrorFrame(t *testing.T) {
+	raw := loadWireFixture(t, "extension_error.json")
+	var frame struct {
+		Type          string `json:"type"`
+		ExtensionPath string `json:"extensionPath"`
+		Event         string `json:"event"`
+		Error         string `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		t.Fatalf("decode extension_error frame: %v", err)
+	}
+	if frame.Type != "extension_error" {
+		t.Errorf("Type = %q, want extension_error", frame.Type)
+	}
+	if frame.ExtensionPath == "" || frame.Event == "" || frame.Error == "" {
+		t.Errorf("extension_error fields must all decode non-empty, got %+v", frame)
+	}
+
+	// The diagnostic frame must be consumed (logged, returns nil) by
+	// translateEvent, not routed to the unknown-kind default and silently lost.
+	w := NewGmpWorkspace(nil, t.TempDir())
+	if msg := w.translateEvent(&ompclient.AgentEvent{Kind: "extension_error", Payload: raw}); msg != nil {
+		t.Errorf("translateEvent(extension_error) = %T, want nil (diagnostic logged, not surfaced)", msg)
+	}
+}

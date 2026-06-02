@@ -982,20 +982,33 @@ func (r *recordingSender) count() int {
 	return len(r.msgs)
 }
 
-// TestSendUI_DoesNotBlockCallerWhenProgramSendBlocks pins Bug A
-// (the synchronous program.Send deadlock fixed in b83fca9). Pre-fix,
-// program.Send was called synchronously, so a blocked Send would freeze
-// the caller. The fix dispatches via `go program.Send(msg)`. This test
-// blocks the sender and asserts the caller still returns within the
-// timeout. Without `go`, this test deadlocks until t.Fatal.
-func TestSendUI_DoesNotBlockCallerWhenProgramSendBlocks(t *testing.T) {
+// TestSendUI_DoesNotBlockCallerAndPreservesOrder pins the two invariants of
+// the program-bound UI path:
+//
+//   - Non-blocking: sendUI must not block its caller even when program.Send is
+//     blocked. sendUI may run on the Bubble Tea Update goroutine, which also
+//     drains program.Send, so a synchronous Send there deadlocks (the b83fca9
+//     fix). It enqueues to uiQueue instead.
+//   - FIFO order: a single drain goroutine calls program.Send in submission
+//     order. The previous per-message `go program.Send` raced one goroutine
+//     per message, so an earlier streamed snapshot could overwrite a later
+//     one. Here we submit N distinguishable messages while Send is held, then
+//     release and assert they arrive strictly in order.
+func TestSendUI_DoesNotBlockCallerAndPreservesOrder(t *testing.T) {
 	w := NewGmpWorkspace(nil, "/tmp/project")
 	sender := &recordingSender{hold: make(chan struct{})}
 	w.program = sender
+	go w.drainUI()
 
+	const n = 8
 	done := make(chan struct{})
 	go func() {
-		w.sendUI(pubsub.Event[session.Session]{Type: pubsub.CreatedEvent})
+		for i := range n {
+			w.sendUI(pubsub.Event[session.Session]{
+				Type:    pubsub.CreatedEvent,
+				Payload: session.Session{ID: fmt.Sprintf("%d", i)},
+			})
+		}
 		close(done)
 	}()
 
@@ -1007,11 +1020,23 @@ func TestSendUI_DoesNotBlockCallerWhenProgramSendBlocks(t *testing.T) {
 
 	close(sender.hold)
 	deadline := time.Now().Add(testEventTimeout)
-	for sender.count() == 0 && time.Now().Before(deadline) {
+	for sender.count() < n && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
-	if sender.count() != 1 {
-		t.Fatalf("sender saw %d messages after release, want 1", sender.count())
+	if sender.count() != n {
+		t.Fatalf("sender saw %d messages after release, want %d", sender.count(), n)
+	}
+
+	sender.mu.Lock()
+	defer sender.mu.Unlock()
+	for i, msg := range sender.msgs {
+		ev, ok := msg.(pubsub.Event[session.Session])
+		if !ok {
+			t.Fatalf("message %d has unexpected type %T", i, msg)
+		}
+		if want := fmt.Sprintf("%d", i); ev.Payload.ID != want {
+			t.Fatalf("message %d out of FIFO order: got ID %q, want %q", i, ev.Payload.ID, want)
+		}
 	}
 }
 

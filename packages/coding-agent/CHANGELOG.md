@@ -12,6 +12,7 @@
 - Refreshed the default coding-agent TUI with the pi-vivid theme, compact status/tool chrome, conversation rails, and a lower-noise welcome surface.
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt and updated TypeScript project diagnostics to use tsgo.
 - Renamed the installed CLI command and prebuilt binary artifacts from `omp` to `gmp` to avoid collisions with an existing `omp` command.
+- Decomposed the 2,200-line `gmp_workspace.go` god-file into eight focused `package workspace` files (catalog, auth, tool-approval, subscribe, events, parse, stubs) with no behavior change; removed dead wire/auth/catalog types across the seam; and tightened the `RpcClient` model-command return types and the tool-approval emit type-lock.
 
 ### Removed
 
@@ -23,6 +24,12 @@
 - Kept vivid sidebar and minimized welcome chrome in sync after session, cwd, model, and thinking-level changes.
 - Fixed RPC extension editor requests so aborts and timeouts resolve when `defaultValue` is explicitly `undefined`.
 - Removed stale Claude/marketplace discovery imports that could break extension, CLI help, and session replay startup paths.
+- Hardened the OMP-RPC seam after an adversarial audit of the `gmp-tui-go` bridge:
+   - `omp --mode rpc` no longer crashes on a single malformed stdin line — a bad frame now surfaces a recoverable `parse` error response instead of throwing out of the read loop and stranding every in-flight request.
+   - `RpcClient.stop()` now rejects in-flight command promises (instead of dropping them to hang until timeout); the client read loop tolerates a malformed mid-stream frame; and a host-tool reply written after the transport is gone no longer becomes an unhandled rejection.
+   - Go TUI: streamed UI events are delivered to the program in submission order through a single drain goroutine, fixing the per-message `go program.Send` race that could leave an assistant message rendering a stale snapshot.
+   - Go TUI: the stub `host_tool_result` reply is now a well-formed `AgentToolResult`, so the backend's host-tool call no longer deadlocks on a reply the TS guard silently dropped; `redactedThinking` assistant blocks render a placeholder instead of vanishing; and transport diagnostic frames (`_raw` / `extension_error`) are logged instead of dropped.
+   - ompclient: malformed-frame, duplicate-response, and full-buffer dispatch are non-blocking so a misbehaving or slow consumer can no longer wedge command-response delivery.
 
 ## [14.5.11] - 2026-04-30
 
