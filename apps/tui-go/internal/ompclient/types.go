@@ -195,13 +195,6 @@ type HostToolResult struct {
 	IsError bool   `json:"isError,omitempty"`
 }
 
-// HostToolUpdate mirrors RpcHostToolUpdate.
-type HostToolUpdate struct {
-	Type          string `json:"type"` // "host_tool_update"
-	ID            string `json:"id"`
-	PartialResult any    `json:"partialResult"`
-}
-
 // ExtensionUIResp mirrors RpcExtensionUIResponse. Exactly one of
 // Value / Confirmed / Cancelled should be set.
 type ExtensionUIResp struct {

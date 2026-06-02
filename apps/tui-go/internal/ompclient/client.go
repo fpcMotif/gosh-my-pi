@@ -369,6 +369,21 @@ func (c *Client) readLoop() {
 	c.mu.Unlock()
 }
 
+// emitEvent delivers an agent event to the Events() consumer without ever
+// blocking the read loop. A blocked send would also stall response dispatch
+// (both run in this single goroutine), freezing every in-flight Call. The
+// 256-slot buffer plus a fast consumer means the default branch is a
+// last-resort safety valve; dropping is correctness-safe because v1 streaming
+// frames each carry a full accumulated snapshot, so a later frame restores any
+// skipped intermediate state.
+func (c *Client) emitEvent(ev *AgentEvent) {
+	select {
+	case c.events <- ev:
+	default:
+		slog.Warn("ompclient: events buffer full, dropping frame to keep response dispatch alive", "kind", ev.Kind)
+	}
+}
+
 // dispatch routes a single decoded frame to the right channel.
 func (c *Client) dispatch(line []byte) {
 	var probe struct {
@@ -377,7 +392,7 @@ func (c *Client) dispatch(line []byte) {
 	}
 	if err := json.Unmarshal(line, &probe); err != nil {
 		// Malformed; surface as best-effort agent_event with raw payload.
-		c.events <- &AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)}
+		c.emitEvent(&AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)})
 		return
 	}
 
@@ -385,14 +400,24 @@ func (c *Client) dispatch(line []byte) {
 	case "response":
 		var r Response
 		if err := json.Unmarshal(line, &r); err != nil {
-			c.events <- &AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)}
+			c.emitEvent(&AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)})
 			return
 		}
+		// Delete the pending entry under the lock before delivering so a
+		// duplicate/late response with the same id finds no waiter (ok=false)
+		// instead of blocking forever on the already-drained buffer-1 channel.
 		c.mu.Lock()
 		ch, ok := c.pending[r.ID]
+		if ok {
+			delete(c.pending, r.ID)
+		}
 		c.mu.Unlock()
 		if ok {
-			ch <- &r
+			select {
+			case ch <- &r:
+			default:
+				slog.Warn("ompclient: dropping duplicate/late response", "id", r.ID)
+			}
 		}
 	case "extension_ui_request":
 		var r ExtensionUIReq
@@ -415,15 +440,15 @@ func (c *Client) dispatch(line []byte) {
 		// Soft-buffer: preserve the ready frame as a raw agent event so a
 		// consumer can still observe the handshake (and any unknown schema)
 		// instead of silently dropping it.
-		c.events <- &AgentEvent{Kind: probe.Type, Payload: bytes.Clone(line)}
+		c.emitEvent(&AgentEvent{Kind: probe.Type, Payload: bytes.Clone(line)})
 	default:
 		// Treat everything else as an agent event. The frame's "type"
 		// becomes the event Kind (message_update, tool_execution_start,
 		// etc.); the full body is preserved for the consumer to parse.
-		c.events <- &AgentEvent{
+		c.emitEvent(&AgentEvent{
 			Kind:    probe.Type,
 			Payload: bytes.Clone(line),
-		}
+		})
 	}
 }
 

@@ -16,8 +16,8 @@ const (
 )
 
 // CommandLogin / CommandLogout are the RpcCommand `type` values for the
-// outbound /login / /logout slash commands. Mirror of AuthCommand in
-// rpc-types.ts.
+// outbound /login / /logout slash commands. They mirror the inline
+// "auth.login" / "auth.logout" literals used in rpc-mode.ts (runAuthCommand).
 const (
 	CommandLogin  = "auth.login"
 	CommandLogout = "auth.logout"

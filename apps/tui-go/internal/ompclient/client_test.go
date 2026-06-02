@@ -401,3 +401,37 @@ func TestReadySchema_Mismatch(t *testing.T) {
 		t.Fatal("read loop died after schema mismatch — Call hung")
 	}
 }
+
+// TestDispatch_MalformedAndUnknownFramesSoftBuffer pins the soft-buffer contract
+// (TC8): a non-JSON line surfaces as Kind "_raw" and an unknown frame type
+// surfaces with its type as the event Kind — both delivered via Events() through
+// the non-blocking emitEvent path (GMP-CORR-2), never crashing or wedging the
+// read loop on a frame the consumer doesn't recognize.
+func TestDispatch_MalformedAndUnknownFramesSoftBuffer(t *testing.T) {
+	fp := newFakePeer(t)
+
+	// A non-JSON line must not kill the read loop; it is preserved as _raw.
+	if _, err := fp.peerWrite.Write([]byte("this is not json\n")); err != nil {
+		t.Fatalf("write malformed line: %v", err)
+	}
+	select {
+	case ev := <-fp.client.Events():
+		if ev.Kind != "_raw" {
+			t.Errorf("malformed frame Kind = %q, want _raw", ev.Kind)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("timed out waiting for _raw event")
+	}
+
+	// An unknown frame type is preserved with its type as the Kind so the
+	// consumer can soft-buffer it (additive v1 evolution).
+	fp.writeFrame(t, map[string]any{"type": "totally_new_event", "payload": 1})
+	select {
+	case ev := <-fp.client.Events():
+		if ev.Kind != "totally_new_event" {
+			t.Errorf("unknown frame Kind = %q, want totally_new_event", ev.Kind)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("timed out waiting for unknown-type event")
+	}
+}
