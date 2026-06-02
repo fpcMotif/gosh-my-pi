@@ -1,7 +1,9 @@
 import type { AgentMessage, AgentEvent, AgentErrorKind } from "@oh-my-pi/pi-agent-core";
-import type { AssistantMessage, ToolResultMessage } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, AssistantMessageEvent, ToolCall, ToolResultMessage } from "@oh-my-pi/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionEvent } from "../../../session/agent-session";
+import { toolPresenters, type ToolPresenter } from "../../../tools/presenters";
 import { toWireEvent } from "./translate";
 import type { WireEventV1 } from "./v1";
 
@@ -82,6 +84,10 @@ describe("toWireEvent — exhaustiveness", () => {
 		// If a new variant is added without a translator entry, this list
 		// won't cover it and downstream tests will catch shape regressions.
 		expect(allEventTypes).toHaveLength(20);
+	});
+
+	test("unknown future events fail closed as internal-only", () => {
+		expect(toWireEvent(fromAny<AgentSessionEvent>({ type: "future_event" }))).toBeNull();
 	});
 });
 
@@ -174,6 +180,36 @@ describe("toWireEvent — AgentEvent variants → v1 wire", () => {
 		}
 	});
 
+	test("message_update projects every assistant stream sub-event", () => {
+		const partial = assistantMessage();
+		const toolCall: ToolCall = { type: "toolCall", id: "call-1", name: "read", arguments: { path: "src/value.ts" } };
+		const cases: AssistantMessageEvent[] = [
+			{ type: "start", partial },
+			{ type: "text_start", contentIndex: 0, partial },
+			{ type: "text_end", contentIndex: 0, content: "hello", partial },
+			{ type: "thinking_start", contentIndex: 1, partial },
+			{ type: "thinking_delta", contentIndex: 1, delta: "plan", partial },
+			{ type: "thinking_end", contentIndex: 1, content: "done thinking", partial },
+			{ type: "toolcall_start", contentIndex: 2, partial },
+			{ type: "toolcall_delta", contentIndex: 2, delta: '{"path"', partial },
+			{ type: "toolcall_end", contentIndex: 2, toolCall, partial },
+			{ type: "done", reason: "stop", message: partial },
+			{ type: "error", reason: "error", error: assistantMessage({ stopReason: "error" }) },
+		];
+
+		for (const assistantMessageEvent of cases) {
+			const wire = toWireEvent({
+				type: "message_update",
+				message: partial as AgentMessage,
+				assistantMessageEvent,
+			});
+			expect(wire?.type).toBe("message_update");
+			if (wire?.type === "message_update") {
+				expect(wire.assistantMessageEvent.type).toBe(assistantMessageEvent.type);
+			}
+		}
+	});
+
 	test("message_end with errorKind (regression for #1a)", () => {
 		const wire = toWireEvent({
 			type: "message_end",
@@ -183,6 +219,18 @@ describe("toWireEvent — AgentEvent variants → v1 wire", () => {
 		expect(wire?.type).toBe("message_end");
 		if (wire?.type === "message_end") {
 			expect(wire.errorKind).toEqual({ kind: "context_overflow", usedTokens: 250000 });
+		}
+	});
+
+	test("message_end projects fatal error kind without optional payload", () => {
+		const wire = toWireEvent({
+			type: "message_end",
+			message: assistantMessage({ stopReason: "error" }) as AgentMessage,
+			errorKind: { kind: "fatal" },
+		});
+		expect(wire?.type).toBe("message_end");
+		if (wire?.type === "message_end") {
+			expect(wire.errorKind).toEqual({ kind: "fatal" });
 		}
 	});
 
@@ -200,6 +248,10 @@ describe("toWireEvent — AgentEvent variants → v1 wire", () => {
 			toolName: "bash",
 			args: { command: "ls" },
 			intent: "list files",
+			presentation: {
+				type: "status",
+				status: { icon: "pending", title: "Bash", description: "$ ls" },
+			},
 		});
 	});
 
@@ -217,6 +269,115 @@ describe("toWireEvent — AgentEvent variants → v1 wire", () => {
 		}
 	});
 
+	test("tool_execution_update attaches neutral result presentation for tools with presenters", () => {
+		const wire = toWireEvent({
+			type: "tool_execution_update",
+			toolCallId: "call-1",
+			toolName: "read",
+			args: { path: "src/value.ts" },
+			partialResult: {
+				content: [{ type: "text", text: "1|const value = 1;" }],
+				details: { kind: "file", displayContent: { text: "const value = 1;", startLine: 1 } },
+			},
+		});
+		expect(wire?.type).toBe("tool_execution_update");
+		if (wire?.type === "tool_execution_update") {
+			expect(wire.partialResult.presentation).toEqual({
+				type: "code",
+				code: {
+					code: "const value = 1;",
+					language: "typescript",
+					title: "Read src/value.ts",
+					status: "complete",
+					expanded: false,
+				},
+			});
+		}
+	});
+
+	test("drops presentation when presenter throws", () => {
+		const previous = toolPresenters.throwing_demo;
+		const throwingPresenter: ToolPresenter = {
+			presentCall: () => {
+				throw new Error("call boom");
+			},
+			presentResult: () => {
+				throw new Error("result boom");
+			},
+		};
+		toolPresenters.throwing_demo = throwingPresenter;
+		try {
+			const start = toWireEvent({
+				type: "tool_execution_start",
+				toolCallId: "call-1",
+				toolName: "throwing_demo",
+				args: {},
+			});
+			expect(start).toEqual({
+				type: "tool_execution_start",
+				toolCallId: "call-1",
+				toolName: "throwing_demo",
+				args: {},
+			});
+
+			const update = toWireEvent({
+				type: "tool_execution_update",
+				toolCallId: "call-1",
+				toolName: "throwing_demo",
+				args: {},
+				partialResult: { content: [{ type: "text", text: "partial" }] },
+			});
+			expect(update?.type).toBe("tool_execution_update");
+			if (update?.type === "tool_execution_update") {
+				expect(update.partialResult.presentation).toBeUndefined();
+			}
+		} finally {
+			if (previous) {
+				toolPresenters.throwing_demo = previous;
+			} else {
+				delete toolPresenters.throwing_demo;
+			}
+		}
+	});
+
+	test("projects block presentations onto the wire vocabulary", () => {
+		const previous = toolPresenters.block_demo;
+		const blockPresenter: ToolPresenter = {
+			presentCall: () => ({
+				type: "block",
+				status: { icon: "success", title: "Block", meta: ["m1"] },
+				state: "success",
+				sections: [{ label: "Summary", lines: ["line 1"] }],
+				applyBg: true,
+			}),
+		};
+		toolPresenters.block_demo = blockPresenter;
+		try {
+			const wire = toWireEvent({
+				type: "tool_execution_start",
+				toolCallId: "call-1",
+				toolName: "block_demo",
+				args: {},
+			});
+			expect(wire?.type).toBe("tool_execution_start");
+			if (wire?.type === "tool_execution_start") {
+				expect(wire.presentation).toEqual({
+					type: "block",
+					status: { icon: "success", title: "Block", meta: ["m1"] },
+					state: "success",
+					sections: [{ label: "Summary", lines: ["line 1"] }],
+					applyBg: true,
+				});
+			}
+		} finally {
+			if (previous) {
+				toolPresenters.block_demo = previous;
+			} else {
+				delete toolPresenters.block_demo;
+			}
+		}
+	});
+
 	test("tool_execution_end", () => {
 		const wire = toWireEvent({
 			type: "tool_execution_end",
@@ -229,6 +390,177 @@ describe("toWireEvent — AgentEvent variants → v1 wire", () => {
 		if (wire?.type === "tool_execution_end") {
 			expect(wire.isError).toBe(false);
 			expect(wire.result.content).toHaveLength(1);
+		}
+	});
+});
+
+// ============================================================================
+// Message projection details
+// ============================================================================
+
+describe("toWireEvent — message projection details", () => {
+	test("projects assistant content variants and optional usage metadata", () => {
+		const wire = toWireEvent({
+			type: "message_start",
+			message: assistantMessage({
+				content: [
+					{ type: "text", text: "hello", textSignature: "text-sig" },
+					{ type: "thinking", thinking: "plan", thinkingSignature: "think-sig", itemId: "item-1" },
+					{ type: "redactedThinking", data: "redacted" },
+					{
+						type: "toolCall",
+						id: "call-1",
+						name: "read",
+						arguments: { path: "src/value.ts" },
+						thoughtSignature: "thought-sig",
+						intent: "inspect",
+						customWireName: "custom_read",
+					},
+				],
+				responseId: "resp-1",
+				usage: {
+					input: 10,
+					output: 20,
+					cacheRead: 1,
+					cacheWrite: 2,
+					totalTokens: 33,
+					premiumRequests: 1.5,
+					reasoningTokens: 7,
+					cttl: { ephemeral5m: 2, ephemeral1h: 3 },
+					server: { webSearch: 1, webFetch: 2 },
+					cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, total: 10 },
+				},
+				duration: 123,
+				ttft: 45,
+			}) as AgentMessage,
+		});
+
+		expect(wire?.type).toBe("message_start");
+		if (wire?.type === "message_start" && wire.message.role === "assistant") {
+			expect(wire.message.content).toEqual([
+				{ type: "text", text: "hello", textSignature: "text-sig" },
+				{ type: "thinking", thinking: "plan", thinkingSignature: "think-sig", itemId: "item-1" },
+				{ type: "redactedThinking", data: "redacted" },
+				{
+					type: "toolCall",
+					id: "call-1",
+					name: "read",
+					arguments: { path: "src/value.ts" },
+					thoughtSignature: "thought-sig",
+					intent: "inspect",
+					customWireName: "custom_read",
+				},
+			]);
+			expect(wire.message.usage).toMatchObject({
+				premiumRequests: 1.5,
+				reasoningTokens: 7,
+				cttl: { ephemeral5m: 2, ephemeral1h: 3 },
+				server: { webSearch: 1, webFetch: 2 },
+			});
+			expect(wire.message.responseId).toBe("resp-1");
+			expect(wire.message.duration).toBe(123);
+			expect(wire.message.ttft).toBe(45);
+		}
+	});
+
+	test("falls back to hidden custom wire messages for unknown custom roles", () => {
+		const message = fromAny<AgentMessage>({ role: "futureRole", payload: { value: 1 }, timestamp: 99 });
+		const wire = toWireEvent({ type: "agent_end", messages: [message] });
+
+		expect(wire?.type).toBe("agent_end");
+		if (wire?.type === "agent_end") {
+			expect(wire.messages[0]).toMatchObject({
+				role: "custom",
+				customType: "futureRole",
+				display: false,
+				timestamp: 99,
+			});
+			expect(wire.messages[0].content).toContain("futureRole");
+		}
+	});
+
+	test("projects custom coding-agent message roles and rich user/tool content", () => {
+		const messages: AgentMessage[] = [
+			{
+				role: "user",
+				content: [
+					{ type: "text", text: "look", textSignature: "user-sig" },
+					{ type: "image", data: "base64", mimeType: "image/png" },
+				],
+				synthetic: true,
+				attribution: "user",
+				timestamp: 1,
+			},
+			{ role: "developer", content: "dev", attribution: "agent", timestamp: 2 },
+			{
+				role: "toolResult",
+				toolCallId: "tool-1",
+				toolName: "read",
+				content: [{ type: "image", data: "img", mimeType: "image/jpeg" }],
+				details: { kind: "image" },
+				isError: false,
+				attribution: "agent",
+				prunedAt: 3,
+				timestamp: 4,
+			},
+			{
+				role: "bashExecution",
+				command: "printf ok",
+				output: "ok",
+				exitCode: 0,
+				cancelled: false,
+				truncated: false,
+				excludeFromContext: true,
+				timestamp: 5,
+			},
+			{
+				role: "pythonExecution",
+				code: "print('ok')",
+				output: "ok",
+				exitCode: 0,
+				cancelled: false,
+				truncated: false,
+				excludeFromContext: true,
+				timestamp: 6,
+			},
+			{
+				role: "custom",
+				customType: "custom:event",
+				content: [{ type: "text", text: "custom" }],
+				display: true,
+				details: { value: 1 },
+				attribution: "user",
+				timestamp: 7,
+			},
+			{
+				role: "hookMessage",
+				customType: "hook:event",
+				content: "hook",
+				display: false,
+				details: { ok: true },
+				attribution: "agent",
+				timestamp: 8,
+			},
+		];
+
+		const wire = toWireEvent({ type: "agent_end", messages });
+		expect(wire?.type).toBe("agent_end");
+		if (wire?.type === "agent_end") {
+			expect(wire.messages).toMatchObject([
+				{ role: "user", synthetic: true, attribution: "user" },
+				{ role: "developer", content: "dev", attribution: "agent" },
+				{ role: "toolResult", details: { kind: "image" }, prunedAt: 3 },
+				{ role: "bashExecution", command: "printf ok", excludeFromContext: true },
+				{ role: "pythonExecution", code: "print('ok')", excludeFromContext: true },
+				{ role: "custom", customType: "custom:event", details: { value: 1 } },
+				{ role: "hookMessage", customType: "hook:event", details: { ok: true } },
+			]);
+			expect(wire.messages[0]).toMatchObject({
+				content: [
+					{ type: "text", text: "look", textSignature: "user-sig" },
+					{ type: "image", data: "base64", mimeType: "image/png" },
+				],
+			});
 		}
 	});
 });

@@ -15,7 +15,7 @@ export interface Prompt {
 	/** Absolute path to prompt file */
 	path: string;
 	/** Prompt content (markdown) */
-	content: string;
+	content?: string;
 	/** Source metadata */
 	_source: SourceMeta;
 }

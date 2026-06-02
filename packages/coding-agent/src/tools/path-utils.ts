@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as url from "node:url";
+import type { InternalUrlRouter } from "../internal-urls/router";
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 const NARROW_NO_BREAK_SPACE = "\u202F";
@@ -215,6 +216,22 @@ export interface ResolvedMultiSearchPath {
 	glob?: string;
 	scopePath: string;
 	exactFilePaths?: string[];
+}
+
+export interface ResolvedSearchLikePathInput {
+	searchPath: string;
+	scopePath: string;
+	globFilter?: string;
+	exactFilePaths?: string[];
+}
+
+export interface ResolveSearchLikePathInputOptions {
+	rawPath: string;
+	cwd: string;
+	internalRouter?: Pick<InternalUrlRouter, "canHandle" | "resolve">;
+	createError?: (message: string) => Error;
+	emptyPathMessage?: string;
+	internalUrlMissingSourceMessage?: (rawPath: string) => string;
 }
 
 export interface ResolvedMultiFindPattern {
@@ -569,6 +586,55 @@ export async function resolveMultiSearchPath(
 		glob: buildBraceUnion(combinedPatterns),
 		scopePath: toScopeDisplay(pathItems, cwd),
 		exactFilePaths: allExactFiles ? parsedItems.map(item => item.absoluteBasePath) : undefined,
+	};
+}
+
+export async function resolveSearchLikePathInput(
+	options: ResolveSearchLikePathInputOptions,
+): Promise<ResolvedSearchLikePathInput> {
+	const createError = options.createError ?? ((message: string) => new Error(message));
+	const rawPath = normalizePathLikeInput(options.rawPath);
+	if (rawPath.length === 0) {
+		throw createError(options.emptyPathMessage ?? "`path` must be a non-empty path or glob");
+	}
+
+	const formatScopePath = (targetPath: string): string => formatPathRelativeToCwd(targetPath, options.cwd);
+	const internalRouter = options.internalRouter;
+	if (internalRouter?.canHandle(rawPath) === true) {
+		if (hasGlobPathChars(rawPath)) {
+			throw createError(`Glob patterns are not supported for internal URLs: ${rawPath}`);
+		}
+
+		const resource = await internalRouter.resolve(rawPath);
+		if (resource.sourcePath === null || resource.sourcePath === undefined || resource.sourcePath === "") {
+			const message =
+				options.internalUrlMissingSourceMessage?.(rawPath) ??
+				`Cannot search internal URL without a backing file: ${rawPath}`;
+			throw createError(message);
+		}
+
+		return {
+			searchPath: resource.sourcePath,
+			scopePath: formatScopePath(resource.sourcePath),
+		};
+	}
+
+	const multiSearchPath = await resolveMultiSearchPath(rawPath, options.cwd);
+	if (multiSearchPath) {
+		return {
+			searchPath: multiSearchPath.basePath,
+			scopePath: multiSearchPath.scopePath,
+			...(multiSearchPath.glob !== undefined ? { globFilter: multiSearchPath.glob } : {}),
+			...(multiSearchPath.exactFilePaths !== undefined ? { exactFilePaths: multiSearchPath.exactFilePaths } : {}),
+		};
+	}
+
+	const parsedPath = parseSearchPath(rawPath);
+	const searchPath = resolveToCwd(parsedPath.basePath, options.cwd);
+	return {
+		searchPath,
+		scopePath: formatScopePath(searchPath),
+		...(parsedPath.glob !== undefined ? { globFilter: parsedPath.glob } : {}),
 	};
 }
 

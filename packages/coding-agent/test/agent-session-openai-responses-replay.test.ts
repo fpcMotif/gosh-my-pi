@@ -213,13 +213,39 @@ describe("AgentSession OpenAI Responses replay boundaries", () => {
 		while (authStorages.length > 0) {
 			authStorages.pop()?.close();
 		}
+		// bun:sqlite holds Windows file handles briefly after `close()`;
+		// without this yield the synchronous `rmSync` below races the
+		// kernel and surfaces as `EBUSY`. Non-Windows platforms are
+		// unaffected.
+		await Bun.sleep(200);
 		while (tempDirs.length > 0) {
 			const tempDir = tempDirs.pop();
 			if (tempDir !== null && tempDir !== undefined && tempDir !== "" && fs.existsSync(tempDir)) {
-				fs.rmSync(tempDir, { recursive: true, force: true });
+				await removeWithRetry(tempDir);
 			}
 		}
 	});
+
+	async function removeWithRetry(target: string): Promise<void> {
+		// Mirrors TempDir.removeSync's Windows retry + cmd.exe fallback for
+		// the test files that use raw fs.rmSync rather than TempDir.
+		if (process.platform !== "win32") {
+			fs.rmSync(target, { recursive: true, force: true });
+			return;
+		}
+		for (let i = 0; i < 6; i += 1) {
+			try {
+				fs.rmSync(target, { recursive: true, force: true });
+				return;
+			} catch (error) {
+				const code = (error as NodeJS.ErrnoException).code;
+				if (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") throw error;
+				await Bun.sleep(250);
+			}
+		}
+		const { execSync } = await import("node:child_process");
+		execSync(`cmd.exe /c rd /s /q "${target}"`, { stdio: "ignore" });
+	}
 
 	it("sanitizes stale assistant replay metadata during startup resume while preserving user payloads", async () => {
 		const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `pi-issue-505-startup-${Snowflake.next()}-`));

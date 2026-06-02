@@ -2,9 +2,18 @@
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"$id": "https://github.com/fpcMotif/gosh-my-pi/apps/tui-go/prd.schema.json",
 	"title": "gmp-tui-go PRD progress board",
-	"description": "Schema for apps/tui-go/prd.json. Tracks phases, tasks, risks, and the most recent verification run for the gmp-tui-go (Crush hard-fork) implementation. The file is a committed, human-readable, machine-updatable progress board. Helper: apps/tui-go/scripts/prd.go.",
+	"description": "Schema for apps/tui-go/prd.json. Tracks ADR alignment, phases, tasks, risks, top priorities, and the most recent verification run for the gmp-tui-go (Crush hard-fork) implementation. The file is a committed, human-readable, machine-updatable progress board.",
 	"type": "object",
-	"required": ["meta", "phases", "tasks", "risks", "verification_run"],
+	"required": [
+		"meta",
+		"progress_summary",
+		"top_priorities",
+		"adr_alignment",
+		"phases",
+		"tasks",
+		"risks",
+		"verification_run"
+	],
 	"additionalProperties": false,
 	"properties": {
 		"$schema": { "type": "string" },
@@ -26,13 +35,64 @@
 				"bridge_branch": { "type": "string" },
 				"bridge_worktree": { "type": "string" },
 				"agent_protocol": { "type": "string" },
+				"binary": { "type": "string" },
+				"binary_previous": { "type": "string" },
 				"binary_current": { "type": "string" },
 				"binary_target": { "type": "string" },
+				"module_path": { "type": "string" },
+				"module_path_previous": { "type": "string" },
 				"module_path_current": { "type": "string" },
 				"module_path_target": { "type": "string" },
 				"module_path_rewrite": { "type": "string" },
 				"license_boundary": { "type": "object", "additionalProperties": { "type": "string" } },
 				"plan_doc": { "type": "string" }
+			}
+		},
+		"progress_summary": {
+			"type": "object",
+			"required": ["timestamp", "confidence", "confidence_note", "checked_evidence"],
+			"additionalProperties": false,
+			"properties": {
+				"timestamp": { "type": "string", "format": "date-time" },
+				"confidence": { "type": "string" },
+				"confidence_note": { "type": "string" },
+				"checked_evidence": { "type": "array", "items": { "type": "string" } },
+				"missing_runtime_evidence": { "type": "array", "items": { "type": "string" } }
+			}
+		},
+		"top_priorities": {
+			"type": "array",
+			"minItems": 3,
+			"maxItems": 3,
+			"items": {
+				"type": "object",
+				"required": ["rank", "title", "state", "why", "next_tasks"],
+				"additionalProperties": false,
+				"properties": {
+					"rank": { "type": "integer", "minimum": 1, "maximum": 3 },
+					"title": { "type": "string" },
+					"state": { "enum": ["pending", "in_progress", "done", "blocked", "deferred"] },
+					"why": { "type": "string" },
+					"adr_refs": { "type": "array", "items": { "type": "string" } },
+					"next_tasks": { "type": "array", "items": { "type": "string" } }
+				}
+			}
+		},
+		"adr_alignment": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["id", "status", "state", "decision", "evidence", "gaps", "next_actions"],
+				"additionalProperties": false,
+				"properties": {
+					"id": { "type": "string" },
+					"status": { "type": "string" },
+					"state": { "enum": ["pending", "in_progress", "done", "blocked", "deferred"] },
+					"decision": { "type": "string" },
+					"evidence": { "type": "array", "items": { "type": "string" } },
+					"gaps": { "type": "array", "items": { "type": "string" } },
+					"next_actions": { "type": "array", "items": { "type": "string" } }
+				}
 			}
 		},
 		"phases": {
@@ -42,9 +102,12 @@
 				"required": ["id", "name", "state"],
 				"additionalProperties": false,
 				"properties": {
-					"id": { "type": "string", "pattern": "^P[0-9]+$" },
+					"id": { "type": "string", "pattern": "^P[0-9]+[a-z]?$" },
 					"name": { "type": "string" },
 					"state": { "enum": ["pending", "in_progress", "done", "blocked", "deferred"] },
+					"branch": { "type": "string" },
+					"commit": { "type": "string" },
+					"production_couplings": { "type": "object", "additionalProperties": { "type": "string" } },
 					"acceptance_criteria": { "type": "array", "items": { "type": "string" } },
 					"evidence": { "type": "string" },
 					"notes": { "type": "string" }
@@ -59,9 +122,11 @@
 				"additionalProperties": false,
 				"properties": {
 					"id": { "type": "string", "pattern": "^T-P[0-9]+-[A-Za-z0-9_-]+$" },
-					"phase_id": { "type": "string", "pattern": "^P[0-9]+$" },
+					"phase_id": { "type": "string", "pattern": "^P[0-9]+[a-z]?$" },
 					"title": { "type": "string" },
 					"state": { "enum": ["pending", "in_progress", "done", "blocked", "deferred"] },
+					"priority": { "enum": ["low", "med", "high"] },
+					"adr_refs": { "type": "array", "items": { "type": "string" } },
 					"files_touched": { "type": "array", "items": { "type": "string" } },
 					"verification": { "type": "array", "items": { "type": "string" } },
 					"depends_on": {
@@ -84,6 +149,7 @@
 					"id": { "type": "string", "pattern": "^R[0-9]+$" },
 					"title": { "type": "string" },
 					"severity": { "enum": ["low", "med", "high"] },
+					"adr_refs": { "type": "array", "items": { "type": "string" } },
 					"owner": { "type": "string" },
 					"mitigation": { "type": "string" },
 					"notes": { "type": "string" }

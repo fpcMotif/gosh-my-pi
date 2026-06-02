@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { KeybindingsManager } from "../src/config/keybindings";
+import { KeybindingsManager, formatKeyHint } from "../src/config/keybindings";
 
 describe("KeybindingsManager.getDisplayString", () => {
 	it("formats a single binding as a human-readable key hint", () => {
@@ -24,5 +24,16 @@ describe("KeybindingsManager.getDisplayString", () => {
 		});
 
 		expect(keybindings.getDisplayString("app.clipboard.copyPrompt")).toBe("");
+	});
+
+	it("exposes effective resolved bindings and no-ops reload for in-memory managers", () => {
+		const keybindings = KeybindingsManager.inMemory({
+			"app.message.dequeue": "alt+up",
+		});
+
+		keybindings.reload();
+
+		expect(keybindings.getEffectiveConfig()["app.message.dequeue"]).toBe("alt+up");
+		expect(formatKeyHint("pageup")).toBe("PgUp");
 	});
 });

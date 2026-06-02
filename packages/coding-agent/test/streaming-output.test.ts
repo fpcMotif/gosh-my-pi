@@ -316,6 +316,19 @@ describe("OutputSink", () => {
 		expect(dumped.output).toBe("😀X");
 		expect(dumped.totalBytes).toBe(byteLength("😀X"));
 	});
+
+	test("replace swaps the retained buffer without rewriting streamed totals", async () => {
+		const sink = new OutputSink();
+		sink.push("raw-one\nraw-two");
+
+		sink.replace("summary");
+		const dumped = await sink.dump();
+
+		expect(dumped.output).toBe("summary");
+		expect(dumped.outputBytes).toBe(byteLength("summary"));
+		expect(dumped.totalLines).toBe(2);
+		expect(dumped.totalBytes).toBe(byteLength("raw-one\nraw-two"));
+	});
 });
 
 describe("truncation notice formatting", () => {

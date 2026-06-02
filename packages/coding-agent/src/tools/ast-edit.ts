@@ -14,14 +14,7 @@ import type { ToolSession } from ".";
 import { createFileRecorder, formatResultPath } from "./file-recorder";
 import { formatGroupedFiles } from "./grouped-file-output";
 import type { OutputMeta } from "./output-meta";
-import {
-	formatPathRelativeToCwd,
-	hasGlobPathChars,
-	normalizePathLikeInput,
-	parseSearchPath,
-	resolveMultiSearchPath,
-	resolveToCwd,
-} from "./path-utils";
+import { resolveSearchLikePathInput } from "./path-utils";
 import {
 	dedupeParseErrors,
 	formatCodeFrameLine,
@@ -106,42 +99,17 @@ export class AstEditTool implements AgentTool<typeof astEditSchema, AstEditToolD
 			const normalizedRewrites = Object.fromEntries(ops);
 			const maxFiles = $envpos("PI_MAX_AST_FILES", 1000);
 
-			const formatScopePath = (targetPath: string): string => formatPathRelativeToCwd(targetPath, this.session.cwd);
-			let searchPath: string | undefined;
-			let scopePath: string | undefined;
-			let globFilter: string | undefined;
-			const rawPath = normalizePathLikeInput(params.path);
-			if (rawPath.length === 0) {
-				throw new ToolError("`path` must be a non-empty path or glob");
-			}
-			if (rawPath) {
-				const internalRouter = this.session.internalRouter;
-				if (internalRouter?.canHandle(rawPath) === true) {
-					if (hasGlobPathChars(rawPath)) {
-						throw new ToolError(`Glob patterns are not supported for internal URLs: ${rawPath}`);
-					}
-					const resource = await internalRouter.resolve(rawPath);
-					if (resource.sourcePath === null || resource.sourcePath === undefined || resource.sourcePath === "") {
-						throw new ToolError(`Cannot rewrite internal URL without backing file: ${rawPath}`);
-					}
-					searchPath = resource.sourcePath;
-					scopePath = formatScopePath(searchPath);
-				} else {
-					const multiSearchPath = await resolveMultiSearchPath(rawPath, this.session.cwd, globFilter);
-					if (multiSearchPath) {
-						searchPath = multiSearchPath.basePath;
-						globFilter = multiSearchPath.glob;
-						scopePath = multiSearchPath.scopePath;
-					} else {
-						const parsedPath = parseSearchPath(rawPath);
-						searchPath = resolveToCwd(parsedPath.basePath, this.session.cwd);
-						globFilter = parsedPath.glob;
-						scopePath = formatScopePath(searchPath);
-					}
-				}
-			}
-			const resolvedSearchPath = searchPath ?? resolveToCwd(".", this.session.cwd);
-			scopePath = scopePath ?? formatScopePath(resolvedSearchPath);
+			const {
+				searchPath: resolvedSearchPath,
+				scopePath,
+				globFilter,
+			} = await resolveSearchLikePathInput({
+				rawPath: params.path,
+				cwd: this.session.cwd,
+				internalRouter: this.session.internalRouter,
+				createError: message => new ToolError(message),
+				internalUrlMissingSourceMessage: rawPath => `Cannot rewrite internal URL without backing file: ${rawPath}`,
+			});
 			let isDirectory: boolean;
 			try {
 				const stat = await Bun.file(resolvedSearchPath).stat();

@@ -14,6 +14,7 @@ import type {
 	TextContent,
 	ThinkingBudgets,
 	Tool,
+	ToolCall,
 	ToolChoice,
 	ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
@@ -25,6 +26,16 @@ import { AgentBusy } from "./errors";
 export type StreamFn = (
 	...args: Parameters<typeof streamSimple>
 ) => AssistantMessageEventStream | Promise<AssistantMessageEventStream>;
+
+/**
+ * Decision returned by the optional tool-approval hook.
+ * `approved: false` denies execution; `reason` is surfaced to the model in
+ * the denied tool result.
+ */
+export interface ToolApprovalDecision {
+	approved: boolean;
+	reason?: string;
+}
 
 /**
  * Configuration for the agent loop.
@@ -132,6 +143,20 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Use for deobfuscating secrets or rewriting arguments.
 	 */
 	transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
+
+	/**
+	 * Optional host-approval gate, invoked once per tool call after the tool is
+	 * resolved and `tool_execution_start` is emitted, but before the tool runs.
+	 *
+	 * When absent, every tool executes unconditionally (backward compatible).
+	 * When present, the runtime calls it for every tool and only executes on
+	 * `approved: true`. On `approved: false` the tool is skipped and an
+	 * `isError` tool result ("Denied by user" + optional reason) is produced.
+	 *
+	 * The runtime is host-agnostic: the policy of which tools require approval
+	 * lives in this callback, not the runtime. See ADR 0007.
+	 */
+	requestToolApproval?: (toolCall: ToolCall) => Promise<ToolApprovalDecision>;
 
 	/**
 	 * Enable intent tracing for tool calls.
@@ -322,6 +347,13 @@ export interface AgentOptions {
 	 * Optional hook for transforming tool call arguments before execution.
 	 */
 	transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
+
+	/**
+	 * Optional host-approval gate for tool execution (see ADR 0007).
+	 * Absent = no gate (every tool runs). Settable post-construction via
+	 * {@link Agent.setToolApprovalHook}.
+	 */
+	requestToolApproval?: (toolCall: ToolCall) => Promise<ToolApprovalDecision>;
 
 	/**
 	 * Sampling temperature.

@@ -11,7 +11,15 @@
 // `instanceof Error` and `instanceof AgentBusy` etc. work at every existing
 // throw site.
 
+import { LocalAbort } from "@oh-my-pi/pi-ai";
 import { Data } from "@oh-my-pi/pi-utils/effect";
+
+// Re-export LocalAbort so the AgentTaggedError union, errorToKind switch,
+// and downstream consumers keep a single import surface. The canonical
+// home is @oh-my-pi/pi-ai because the providers and Http Layer are the
+// only sites that raise it; pi-agent-core depends on pi-ai (not the
+// reverse), so defining it here would create an import cycle.
+export { LocalAbort };
 
 /** Concurrent operation attempted while the agent was already running. */
 export class AgentBusy extends Data.TaggedError("AgentBusy")<{
@@ -73,18 +81,10 @@ export class UsageLimitError extends Data.TaggedError("UsageLimitError")<{
 }> {}
 
 /**
- * Provider-local abort: the request was cancelled by infrastructure rather
- * than by the caller. Distinguishes timeout (no first-event within the
- * configured budget), idle (stream went silent past the inter-event
- * threshold), and stall (handshake or TLS negotiation never completed) so
- * the UI can surface "request stalled" instead of mis-labelling everything
- * as a user abort. Caller-initiated aborts surface as Effect's interrupt
- * channel, not this tag.
+ * Provider-local abort lives in @oh-my-pi/pi-ai (re-exported above) so the
+ * streaming providers and Http Layer have a tagged error to fail with
+ * without importing from pi-agent-core (which would cycle).
  */
-export class LocalAbort extends Data.TaggedError("LocalAbort")<{
-	readonly kind: "timeout" | "idle" | "stall";
-	readonly durationMs: number;
-}> {}
 
 /**
  * Turn aborted: the active AbortSignal was raised mid-turn. Bridges from

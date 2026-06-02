@@ -154,6 +154,21 @@ describe("IrcTool", () => {
 		expect(sub.calls).toEqual([{ from: "0-Main", message: "ping", awaitReply: true }]);
 	});
 
+	it("op=send reports missing message text before dispatch", async () => {
+		const main = makeFakeSession();
+		registry.register({ id: "0-Main", displayName: "main", kind: "main", session: main.session });
+
+		const tool = new IrcTool(makeToolSession(registry, "0-Main"));
+		const result = await tool.execute("call-missing-message", {
+			op: "send",
+			to: "0-AuthLoader",
+			message: "   ",
+		});
+
+		expect(result.content[0]?.text).toContain("`message` is required");
+		expect(result.details).toEqual({ op: "send", from: "0-Main" });
+	});
+
 	it("op=send returns immediately even when the recipient is mid-tool-call", async () => {
 		// Simulate "blocked recipient": gateNextCall holds respondAsBackground
 		// pending until we release it. From the sender's perspective the call

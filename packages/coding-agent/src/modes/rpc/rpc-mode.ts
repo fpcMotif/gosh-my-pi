@@ -15,7 +15,7 @@
  * - Events: WireEventV1 (10 variants), translated from internal AgentSessionEvent
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
-import { $env, readJsonl, Snowflake } from "@oh-my-pi/pi-utils";
+import { $env, logger, readJsonl, Snowflake } from "@oh-my-pi/pi-utils";
 import type {
 	ExtensionUIContext,
 	ExtensionUIDialogOptions,
@@ -31,6 +31,7 @@ import { getKnownRoleIds } from "../../config/model-registry";
 import { isRpcHostToolResult, isRpcHostToolUpdate, RpcHostToolBridge } from "./host-tools";
 import { RequestCorrelator } from "./request-correlator";
 import { RpcOAuthController } from "./rpc-oauth-controller";
+import { createToolApprovalHook } from "./rpc-tool-approval";
 import { AuthMethod } from "./rpc-types";
 import type {
 	RpcModelCatalog,
@@ -52,6 +53,20 @@ import { OMP_RPC_SCHEMA_V1, type WireFrame } from "./wire/v1";
 export type * from "./rpc-types";
 
 type RpcOutput = (frame: WireFrame) => void;
+
+/**
+ * Emits the terminal failure signal for a detached prompt that rejected after
+ * its synchronous ack. The ack already resolved the command id, so a late
+ * `errorResp` reusing that id is dropped by both reference clients (they delete
+ * the pending entry on the first response). Instead the failure is surfaced
+ * through the existing `agent_end{errorKind:"fatal"}` terminal vocabulary so
+ * every host's idle wait resolves and the loop never stalls silently (gap G12;
+ * the host reads `errorKind` per gap G3).
+ */
+export function emitDetachedPromptFailure(output: (frame: WireFrame) => void, error: Error): void {
+	logger.warn("detached prompt rejected after ack", { error: error.message });
+	output({ type: "agent_end", messages: [], errorKind: { kind: "fatal" } });
+}
 
 type AuthProviderMetadata = {
 	id: string;
@@ -638,6 +653,14 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		if (wire !== null) output(wire);
 	});
 
+	// Host tool-approval gate (ADR 0007, G11 part 2). Gated built-in tools
+	// (bash/edit/apply_patch/write) emit a correlated tool.request_approval
+	// extension_ui_request and await the host's reply; every other tool
+	// auto-approves with no round-trip. Gate-by-default — the runtime denies
+	// on a dismissed/timed-out dialog. The gate is inert for embedders that
+	// never set the hook; here we set it for the lifetime of the RPC session.
+	session.agent.setToolApprovalHook(createToolApprovalHook({ correlator: extensionUIRequests, output }));
+
 	// Handle a single command
 	const handleCommand = async (command: RpcCommand): Promise<RpcResponse> => {
 		const id = command.id;
@@ -652,7 +675,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 						images: command.images,
 						streamingBehavior: command.streamingBehavior,
 					})
-					.catch((error: Error) => output(errorResp(id, "prompt", error.message)));
+					.catch((error: Error) => emitDetachedPromptFailure(output, error));
 				return success(id, "prompt");
 			}
 
@@ -675,7 +698,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				await session.abort();
 				session
 					.prompt(command.message, { images: command.images })
-					.catch((error: Error) => output(errorResp(id, "abort_and_prompt", error.message)));
+					.catch((error: Error) => emitDetachedPromptFailure(output, error));
 				return success(id, "abort_and_prompt");
 			}
 

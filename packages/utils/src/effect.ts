@@ -14,6 +14,7 @@ export * as Effect from "effect/Effect";
 export * as Exit from "effect/Exit";
 export * as Fiber from "effect/Fiber";
 export * as Layer from "effect/Layer";
+export * as ManagedRuntime from "effect/ManagedRuntime";
 export * as Option from "effect/Option";
 export * as Schedule from "effect/Schedule";
 export * as Stream from "effect/Stream";

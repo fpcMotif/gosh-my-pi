@@ -85,6 +85,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 	readonly label = "Find";
 	readonly description: string;
 	readonly parameters = findSchema;
+	readonly idempotent = true;
 	readonly strict = true;
 
 	readonly #customOps?: FindOperations;

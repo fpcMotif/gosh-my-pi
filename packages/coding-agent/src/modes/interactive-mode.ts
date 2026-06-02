@@ -73,6 +73,7 @@ import { MCPCommandController } from "./controllers/mcp-command-controller";
 import type { MCPManager } from "../mcp";
 import { SelectorController } from "./controllers/selector-controller";
 import { SSHCommandController } from "./controllers/ssh-command-controller";
+import { ChatKeyNav } from "./components/chat-keynav";
 import { RowSplit } from "./components/row-split";
 import { Sidebar, type SidebarMcpServer, type SidebarModelCard } from "./components/sidebar";
 import { TodoCommandController } from "./controllers/todo-command-controller";

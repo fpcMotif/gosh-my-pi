@@ -9,12 +9,12 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/commands"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
-	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // CommandsID is the identifier for the commands dialog.
@@ -420,7 +420,6 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 func (c *Commands) defaultCommands() []*CommandItem {
 	commands := []*CommandItem{
 		NewCommandItem(c.com.Styles, "new_session", "New Session", "ctrl+n", ActionNewSession{}),
-		NewCommandItem(c.com.Styles, "switch_session", "Sessions", "ctrl+s", ActionOpenDialog{SessionsID}),
 		NewCommandItem(c.com.Styles, "switch_model", "Switch Model", "ctrl+l", ActionOpenDialog{ModelsID}),
 	}
 
@@ -511,6 +510,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_notifications", notificationLabel, "", ActionToggleNotifications{}))
 
 	commands = append(commands,
+		NewCommandItem(c.com.Styles, "change_theme", "Change Theme", "", ActionOpenDialog{ThemeID}),
 		NewCommandItem(c.com.Styles, "toggle_yolo", "Toggle Yolo Mode", "", ActionToggleYoloMode{}),
 		NewCommandItem(c.com.Styles, "toggle_help", "Toggle Help", "ctrl+g", ActionToggleHelp{}),
 		NewCommandItem(c.com.Styles, "init", "Initialize Project", "", ActionInitializeProject{}),

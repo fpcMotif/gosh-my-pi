@@ -119,6 +119,14 @@ export class SessionObserverOverlayComponent extends Container {
 		return this.#renderViewer(width);
 	}
 
+	handleInput(keyData: string): void {
+		if (this.#observeKeys.some(key => matchesKey(keyData, key))) {
+			if (!this.#navigateBack()) this.#onDone();
+			return;
+		}
+		this.#handleViewerInput(keyData);
+	}
+
 	#setupViewer(): void {
 		this.children = [];
 		this.#scrollOffset = 0;

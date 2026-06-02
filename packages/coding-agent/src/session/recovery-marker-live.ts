@@ -1,7 +1,7 @@
 // Live binding for the `RecoveryMarker` Effect service (defined in
 // pi-agent-core's `run/recovery-marker.ts`). Wraps a `SessionManager`'s
-// `appendRecoveryMarker` Promise method as an Effect that maps any
-// thrown error into the typed `SessionStorageError` failure channel.
+// `appendRecoveryMarker` method as an Effect that maps any thrown error
+// into the typed `SessionStorageError` failure channel.
 //
 // Per ADR-0003: this is a thin pass-through. We do NOT introduce a new
 // durability infrastructure — the existing `NdjsonFileWriter` queue +
@@ -23,7 +23,9 @@ import type { SessionManager } from "./session-manager";
  * from pi-agent-core directly, or by passing a stub SessionManager with a
  * spy on `appendRecoveryMarker`.
  */
-export function makeRecoveryMarkerLayer(sessionManager: SessionManager): Layer.Layer<RecoveryMarker> {
+type RecoveryMarkerSessionWriter = Pick<SessionManager, "appendRecoveryMarker">;
+
+export function makeRecoveryMarkerLayer(sessionManager: RecoveryMarkerSessionWriter): Layer.Layer<RecoveryMarker> {
 	return Layer.succeed(RecoveryMarker)({
 		append: (payload: RecoveryMarkerPayload) =>
 			Effect.try({
@@ -43,4 +45,21 @@ export function makeRecoveryMarkerLayer(sessionManager: SessionManager): Layer.L
 					}),
 			}),
 	});
+}
+
+export async function appendRecoveryMarker(
+	sessionManager: RecoveryMarkerSessionWriter,
+	payload: RecoveryMarkerPayload,
+): Promise<void> {
+	await Effect.runPromise(appendRecoveryMarkerEffect(sessionManager, payload));
+}
+
+export function appendRecoveryMarkerEffect(
+	sessionManager: RecoveryMarkerSessionWriter,
+	payload: RecoveryMarkerPayload,
+): Effect.Effect<void, SessionStorageError> {
+	return Effect.gen(function* () {
+		const marker = yield* RecoveryMarker;
+		yield* marker.append(payload);
+	}).pipe(Effect.provide(makeRecoveryMarkerLayer(sessionManager)));
 }

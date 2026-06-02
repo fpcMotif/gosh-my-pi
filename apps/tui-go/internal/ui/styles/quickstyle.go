@@ -10,8 +10,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2/ansi"
 	"charm.land/lipgloss/v2"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/diffview"
 	"github.com/charmbracelet/x/exp/charmtone"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/diffview"
 )
 
 // quickStyleOpts is the palette of colors used by quickStyle to simplify the
@@ -621,6 +621,7 @@ func quickStyle(o quickStyleOpts) Styles {
 
 	s.Tool.ErrorTag = base.Padding(0, 1).Background(o.destructive).Foreground(o.onPrimary)
 	s.Tool.ErrorMessage = base.Foreground(o.fgSubtle)
+	s.Tool.WarnTag = base.Padding(0, 1).Background(o.warning).Foreground(o.onPrimary)
 
 	// Diff and multi-edit styles
 	s.Tool.DiffTruncation = muted.Background(o.bgLeastVisible).PaddingLeft(2)

@@ -62,13 +62,15 @@ P3 introduces a **RecoveryPolicy**, not a durable workflow.
      `continue()`. **Never re-run the tool.**
 - The Effect surface introduced by P3 is `AgentRunController` in
   `packages/agent/src/run/agent-run.ts` — a thin
-  `Effect<void, AgentRunError, RecoveryMarker | Clock | Logger>`
-  shell over `Agent.prompt` / `Agent.continue`. Public callers see
-  `Promise<void>`. `RetryController` keeps owning the in-process retry
-  loop; `AgentRunController` does not replace it.
+  `Effect<void, AgentRunError, Clock>` shell over `Agent.prompt` /
+  `Agent.continue`. Public callers see `Promise<void>`.
+  `RetryController` keeps owning the in-process retry loop;
+  `AgentRunController` does not replace it and does not write recovery
+  markers. ADR-0006 assigns recovery-marker write-side state to
+  `RecoveryLedger`.
 - `NdjsonFileWriter` is **not** wrapped by a new Layer. The
-  `RecoveryMarker` Layer is ~40 lines and appends one line type via
-  the existing writer.
+  `RecoveryMarker` Layer is a small writer Adapter used by
+  `RecoveryLedger` to append one line type via the existing writer.
 
 ## Considered options
 

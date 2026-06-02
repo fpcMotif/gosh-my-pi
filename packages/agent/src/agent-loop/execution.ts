@@ -36,6 +36,30 @@ export function createAbortedToolResult(
 	return result;
 }
 
+/**
+ * Build the `isError` tool result for a tool denied by the host approval
+ * gate (ADR 0007). Mirrors the error-result shape the runtime already uses
+ * so the model sees a normal tool result, not a thrown error. The
+ * `tool_execution_start` event is emitted by the caller before the gate runs.
+ */
+function createDeniedToolResult(
+	toolCall: ToolCall,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	reason?: string,
+): ToolResultMessage {
+	const detail = reason !== undefined && reason !== null && reason !== "" ? `: ${reason}` : ".";
+	const result: ToolResultMessage = {
+		role: "toolResult",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		content: [{ type: "text", text: `Denied by user${detail}` }],
+		isError: true,
+		timestamp: Date.now(),
+	};
+	stream.push({ type: "tool_execution_end", toolCallId: toolCall.id, toolName: toolCall.name, result, isError: true });
+	return result;
+}
+
 function createSkippedToolResult(
 	toolCall: ToolCall,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
@@ -188,6 +212,14 @@ async function executeSingleToolCall(
 
 	if (!tool) {
 		return handleToolNotFound(toolCall, tools, stream);
+	}
+
+	// Host approval gate (ADR 0007). Absent hook = no gate (backward compatible).
+	if (config.requestToolApproval) {
+		const decision = await config.requestToolApproval(toolCall);
+		if (!decision.approved) {
+			return createDeniedToolResult(toolCall, stream, decision.reason);
+		}
 	}
 
 	try {

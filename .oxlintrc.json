@@ -234,7 +234,13 @@
 		"**/docs-index.generated.ts",
 		"**/gen/agent_pb.ts",
 		".worktrees/**/*",
-		".wt/**/*"
+		".wt/**/*",
+		"effect-main/**/*",
+		"effect-smol-main/**/*",
+		"language-service-main/**/*",
+		"tsgo-main/**/*",
+		"skills-main/**/*",
+		"pi/**/*"
 	],
 	"env": {
 		"builtin": true,

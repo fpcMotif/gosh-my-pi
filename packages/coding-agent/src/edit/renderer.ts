@@ -12,8 +12,10 @@ import {
 	formatStatusIcon,
 	formatTitle,
 	getLspBatchRequest,
+	shortenPath,
 	type LspBatchRequest,
 } from "../tools/render-utils";
+import { renderToolPresentation, type ToolPresentation, type ToolPresentationResult } from "../tools/presentation";
 import { type VimRenderArgs, vimToolRenderer } from "../tools/vim";
 import { Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
 import type { EditMode } from "../utils/edit-mode";
@@ -22,6 +24,7 @@ import type { DiffError, DiffResult } from "./diff";
 import type { Operation } from "./modes/patch";
 import {
 	CALL_TEXT_PREVIEW_WIDTH,
+	CALL_TEXT_PREVIEW_LINES,
 	countEditFiles,
 	countLines,
 	type EditRenderArgs,
@@ -137,10 +140,13 @@ function formatEditDescription(
 	};
 }
 
-interface RenderCallContext {
+interface EditCallContext {
 	args: EditRenderArgs;
-	uiTheme: Theme;
 	options: RenderResultOptions & { renderContext?: EditRenderContext };
+}
+
+interface RenderCallContext extends EditCallContext {
+	uiTheme: Theme;
 }
 
 interface ResolvedCallContext {
@@ -172,7 +178,7 @@ function getFirstEdit(args: EditRenderArgs): EditRenderEntry | undefined {
 	return args.edits[0];
 }
 
-function resolveCallContext(ctx: RenderCallContext): ResolvedCallContext {
+function resolveCallContext(ctx: EditCallContext): ResolvedCallContext {
 	const { args, options } = ctx;
 	const renderContext = options.renderContext;
 	const atomSummary = getAtomRenderSummary(args, renderContext?.editMode);
@@ -202,18 +208,25 @@ function resolveCallContext(ctx: RenderCallContext): ResolvedCallContext {
 	};
 }
 
-function buildRenderCallText(ctx: RenderCallContext, resolved: ResolvedCallContext): string {
-	const { args, options, uiTheme } = ctx;
-	const { rawPath, rename, op, atomFileCount, applyPatchFileCount, applyPatchError, editsFileCount } = resolved;
-	const { description } = formatEditDescription(rawPath, uiTheme, { rename });
-	const spinner =
-		options?.spinnerFrame === undefined ? "" : formatStatusIcon("running", uiTheme, options.spinnerFrame);
-	let text = `${formatTitle(getOperationTitle(op), uiTheme)} ${spinner === "" ? "" : `${spinner} `}${description}`;
-
+function getResolvedCallFileCount(resolved: ResolvedCallContext): number {
+	const { atomFileCount, applyPatchFileCount, editsFileCount } = resolved;
 	let fileCount = atomFileCount > 0 ? atomFileCount : applyPatchFileCount;
 	if (editsFileCount > 0) {
 		fileCount = editsFileCount;
 	}
+	return fileCount;
+}
+
+function buildRenderCallText(ctx: RenderCallContext, resolved: ResolvedCallContext): string {
+	const { args, options, uiTheme } = ctx;
+	const { rawPath, rename, op, atomFileCount, applyPatchFileCount, applyPatchError, editsFileCount } = resolved;
+	const firstChangedLine = getCallFirstChangedLine(options);
+	const { description } = formatEditDescription(rawPath, uiTheme, { rename, firstChangedLine });
+	const spinner =
+		options?.spinnerFrame === undefined ? "" : formatStatusIcon("running", uiTheme, options.spinnerFrame);
+	let text = `${formatTitle(getOperationTitle(op), uiTheme)} ${spinner === "" ? "" : `${spinner} `}${description}`;
+
+	const fileCount = getResolvedCallFileCount({ ...resolved, atomFileCount, applyPatchFileCount, editsFileCount });
 	if (fileCount > 1) {
 		text += uiTheme.fg("dim", ` (+${fileCount - 1} more)`);
 	}
@@ -226,6 +239,112 @@ function buildRenderCallText(ctx: RenderCallContext, resolved: ResolvedCallConte
 	}
 	return text;
 }
+
+function formatPlainEditDescription(rawPath: string, options?: { rename?: string; firstChangedLine?: number }): string {
+	let pathDisplay = rawPath === "" ? "(unknown)" : shortenPath(rawPath);
+
+	const firstChangedLine = options?.firstChangedLine;
+	if (firstChangedLine !== null && firstChangedLine !== undefined && firstChangedLine !== 0) {
+		pathDisplay += `:${firstChangedLine}`;
+	}
+
+	if (isNonEmpty(options?.rename)) {
+		pathDisplay += ` -> ${shortenPath(options.rename)}`;
+	}
+
+	return pathDisplay;
+}
+
+function truncatePlainPreviewLines(text: string, rawPath: string, label?: string): string[] {
+	const previewLines = sanitizeRendererText(text, rawPath).split("\n");
+	const lines = previewLines
+		.slice(0, CALL_TEXT_PREVIEW_LINES)
+		.map(line => truncateToWidth(line, CALL_TEXT_PREVIEW_WIDTH));
+	if (previewLines.length > CALL_TEXT_PREVIEW_LINES) {
+		lines.push(`... ${previewLines.length - CALL_TEXT_PREVIEW_LINES} more lines`);
+	}
+	if (label !== undefined) {
+		lines.push(`(${label})`);
+	}
+	return lines;
+}
+
+function getPlainCallPreviewLines(
+	args: EditRenderArgs,
+	rawPath: string,
+	options: RenderResultOptions & { renderContext?: EditRenderContext },
+): string[] {
+	const editDiffPreview = options.renderContext?.editDiffPreview;
+	if (editDiffPreview && "error" in editDiffPreview) {
+		return truncatePlainPreviewLines(editDiffPreview.error, rawPath);
+	}
+	if (editDiffPreview && isNonEmpty(editDiffPreview.diff)) {
+		return truncatePlainPreviewLines(editDiffPreview.diff, rawPath, "preview");
+	}
+	if (isNonEmpty(args.previewDiff)) {
+		return truncatePlainPreviewLines(args.previewDiff, rawPath, "preview");
+	}
+	if (isNonEmpty(args.diff) && args.op !== undefined) {
+		return truncatePlainPreviewLines(args.diff, rawPath, "streaming");
+	}
+	if (isNonEmpty(args.diff)) {
+		return truncatePlainPreviewLines(args.diff, rawPath);
+	}
+	const fallback = args.newText ?? (isNonEmpty(args.patch) ? args.patch : undefined);
+	if (isNonEmpty(fallback)) {
+		return truncatePlainPreviewLines(fallback, rawPath);
+	}
+	return [];
+}
+
+function getCallFirstChangedLine(
+	options: RenderResultOptions & { renderContext?: EditRenderContext },
+): number | undefined {
+	const editDiffPreview = options.renderContext?.editDiffPreview;
+	if (editDiffPreview && "firstChangedLine" in editDiffPreview) {
+		return editDiffPreview.firstChangedLine;
+	}
+	return undefined;
+}
+
+function presentEditCall(ctx: EditCallContext, resolved: ResolvedCallContext): ToolPresentation {
+	const { args, options } = ctx;
+	const { rawPath, rename, op, applyPatchError } = resolved;
+	const fileCount = getResolvedCallFileCount(resolved);
+	const fileSuffix = fileCount > 1 ? ` (+${fileCount - 1} more)` : "";
+	const firstChangedLine = getCallFirstChangedLine(options);
+	const status = {
+		icon: "pending" as const,
+		spinnerFrame: options.spinnerFrame,
+		title: getOperationTitle(op),
+		description: `${formatPlainEditDescription(rawPath, { rename, firstChangedLine })}${fileSuffix}`,
+	};
+	const previewLines = getPlainCallPreviewLines(args, rawPath, options);
+	const errorLines = isNonEmpty(applyPatchError)
+		? [truncateToWidth(sanitizeRendererText(applyPatchError, rawPath), CALL_TEXT_PREVIEW_WIDTH)]
+		: [];
+	const lines = [...previewLines, ...errorLines];
+	if (lines.length === 0) {
+		return { type: "status", status };
+	}
+	return { type: "block", status, sections: [{ lines }] };
+}
+
+export const editToolPresenter = {
+	presentCall(
+		args: EditRenderArgs | VimRenderArgs | undefined,
+		options: RenderResultOptions & { renderContext?: EditRenderContext },
+	): ToolPresentationResult {
+		const renderContext = options.renderContext;
+		if (renderContext?.editMode === "vim" || isVimRenderArgs(args as EditRenderArgs | VimRenderArgs)) {
+			return undefined;
+		}
+
+		const editArgs = (args ?? {}) as EditRenderArgs;
+		const resolved = resolveCallContext({ args: editArgs, options });
+		return presentEditCall({ args: editArgs, options }, resolved);
+	},
+};
 
 export const editToolRenderer = {
 	mergeCallAndResult: true,

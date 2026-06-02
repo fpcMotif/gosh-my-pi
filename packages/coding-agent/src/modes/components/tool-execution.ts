@@ -29,6 +29,8 @@ import {
 	renderJsonTreeLines,
 } from "../../tools/json-tree";
 import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../tools/python";
+import { renderToolPresentation } from "../../tools/presentation";
+import { toolPresenters } from "../../tools/presenters";
 import { formatExpandHint, replaceTabs, resolveImageOptions, truncateToWidth } from "../../tools/render-utils";
 import { toolRenderers } from "../../tools/renderers";
 import { renderStatusLine } from "../../tui";
@@ -61,6 +63,22 @@ function resolveEditModeForTool(toolName: string, tool: AgentTool | undefined): 
 	if (toolName === "apply_patch") return "apply_patch";
 	if (toolName !== "edit") return undefined;
 	return (tool as { mode?: EditMode } | undefined)?.mode;
+}
+
+function toolPendingBg(text: string): string {
+	return theme.bg("toolPendingBg", text);
+}
+
+function toolSuccessBg(text: string): string {
+	return theme.bg("toolSuccessBg", text);
+}
+
+function toolErrorBg(text: string): string {
+	return theme.bg("toolErrorBg", text);
+}
+
+function toolOutputFg(text: string): string {
+	return theme.fg("toolOutput", text);
 }
 
 export interface ToolExecutionOptions {
@@ -155,8 +173,8 @@ export class ToolExecutionComponent extends Container {
 		this.addChild(new Spacer(1));
 
 		// Always create both - contentBox for custom tools/bash/tools with renderers, contentText for other built-ins
-		this.#contentBox = new Box(1, 1, (text: string) => theme.bg("toolPendingBg", text));
-		this.#contentText = new Text("", 1, 1, (text: string) => theme.bg("toolPendingBg", text));
+		this.#contentBox = new Box(1, 1, toolPendingBg);
+		this.#contentText = new Text("", 1, 1, toolPendingBg);
 
 		// Use Box for custom tools or built-in tools that have renderers
 		const hasRenderer = toolName in toolRenderers;
@@ -394,11 +412,7 @@ export class ToolExecutionComponent extends Container {
 
 	#updateDisplay(): void {
 		// Set background based on state
-		const bgFn = this.#isPartial
-			? (text: string) => theme.bg("toolPendingBg", text)
-			: this.#result?.isError === true
-				? (text: string) => theme.bg("toolErrorBg", text)
-				: (text: string) => theme.bg("toolSuccessBg", text);
+		const bgFn = this.#isPartial ? toolPendingBg : this.#result?.isError === true ? toolErrorBg : toolSuccessBg;
 
 		// Sync shared mutable render state for component closures
 		this.#renderState.expanded = this.#expanded;
@@ -498,10 +512,7 @@ export class ToolExecutionComponent extends Container {
 						this.#multiFileBoxes.push(spacer);
 						this.addChild(spacer);
 					}
-					const fileBgFn =
-						fileResult.isError === true
-							? (text: string) => theme.bg("toolErrorBg", text)
-							: (text: string) => theme.bg("toolSuccessBg", text);
+					const fileBgFn = fileResult.isError === true ? toolErrorBg : toolSuccessBg;
 					const fileBox = new Box(1, 1, fileBgFn);
 					try {
 						const resultComponent = renderer.renderResult(
@@ -529,7 +540,7 @@ export class ToolExecutionComponent extends Container {
 					const pendingSpacer = new Spacer(1);
 					this.#multiFileBoxes.push(pendingSpacer);
 					this.addChild(pendingSpacer);
-					const pendingBox = new Box(1, 1, (text: string) => theme.bg("toolPendingBg", text));
+					const pendingBox = new Box(1, 1, toolPendingBg);
 					const pendingText = renderStatusLine(
 						{
 							icon: "pending",
@@ -551,11 +562,16 @@ export class ToolExecutionComponent extends Container {
 				const renderContext = this.#buildRenderContext();
 				this.#renderState.renderContext = renderContext;
 
+				const presenter = toolPresenters[this.#toolName];
 				const shouldRenderCall = !this.#result || renderer.mergeCallAndResult !== true;
 				if (shouldRenderCall) {
 					// Render call component
 					try {
-						const callComponent = renderer.renderCall(this.#getCallArgsForRender(), this.#renderState, theme);
+						const callArgs = this.#getCallArgsForRender();
+						const callPresentation = presenter?.presentCall?.(callArgs, this.#renderState);
+						const callComponent = callPresentation
+							? renderToolPresentation(callPresentation, theme)
+							: renderer.renderCall(callArgs, this.#renderState, theme);
 						if (callComponent) {
 							this.#contentBox.addChild(ensureInvalidate(callComponent));
 						}
@@ -569,16 +585,16 @@ export class ToolExecutionComponent extends Container {
 				// Render result component if we have a result
 				if (this.#result) {
 					try {
-						const resultComponent = renderer.renderResult(
-							{
-								content: this.#result.content as any,
-								details: this.#result.details,
-								isError: this.#result.isError,
-							},
-							this.#renderState,
-							theme,
-							this.#getCallArgsForRender(),
-						);
+						const result = {
+							content: this.#result.content as any,
+							details: this.#result.details,
+							isError: this.#result.isError,
+						};
+						const resultArgs = this.#getCallArgsForRender();
+						const resultPresentation = presenter?.presentResult?.(result, this.#renderState, resultArgs);
+						const resultComponent = resultPresentation
+							? renderToolPresentation(resultPresentation, theme)
+							: renderer.renderResult(result, this.#renderState, theme, resultArgs);
 						if (resultComponent) {
 							this.#contentBox.addChild(ensureInvalidate(resultComponent));
 						}
@@ -639,7 +655,7 @@ export class ToolExecutionComponent extends Container {
 					const imageComponent = new Image(
 						imageData,
 						imageMimeType,
-						{ fallbackColor: (s: string) => theme.fg("toolOutput", s) },
+						{ fallbackColor: toolOutputFg },
 						resolveImageOptions(),
 					);
 					this.#imageComponents.push(imageComponent);

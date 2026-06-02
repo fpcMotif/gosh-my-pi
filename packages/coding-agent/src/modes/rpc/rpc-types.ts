@@ -278,6 +278,43 @@ export const AuthCommand = {
 } as const;
 
 // ============================================================================
+// Tool-approval method discriminator (ADR 0007)
+// ============================================================================
+
+/**
+ * Method-name constant for the tool-approval extension_ui_request flow.
+ * Mirrored in apps/tui-go/internal/toolapproval/methods.go — keep in sync.
+ * The Go-side parity check (gmp_workspace.go::init) turns a method present in
+ * the const list but missing a decoder into a startup panic, mirroring how the
+ * auth.* methods are guarded.
+ */
+export const ToolApprovalMethod = {
+	RequestApproval: "tool.request_approval",
+} as const;
+
+/**
+ * Per-tool summary carried on a `tool.request_approval` request. Only the
+ * fields relevant to the gated tool are populated; the Go side renders this
+ * into the existing per-tool `dialog.Permissions` Params (bash command,
+ * file path + old/new content). Kept deliberately small — the full tool
+ * arguments are not on the wire.
+ */
+export interface ToolApprovalParams {
+	/** bash: the command line. */
+	command?: string;
+	/** bash: working directory, when known. */
+	workingDir?: string;
+	/** edit/write/apply_patch: the target file path. */
+	filePath?: string;
+	/** edit/write/apply_patch: prior file content (for the diff view). */
+	oldContent?: string;
+	/** edit/write/apply_patch: proposed file content (for the diff view). */
+	newContent?: string;
+	/** Free-form one-line description shown when no per-tool Params fit. */
+	description?: string;
+}
+
+// ============================================================================
 // Extension UI Events (stdout)
 // ============================================================================
 
@@ -373,6 +410,19 @@ export type RpcExtensionUIRequest =
 			method: "auth.pick_provider";
 			options: string[];
 			defaultId?: string;
+	  }
+
+	// Tool-approval gate (ADR 0007). Emitted before a gated built-in tool
+	// (bash/edit/apply_patch/write) executes; the host opens dialog.Permissions
+	// and replies with an extension_ui_response. Additive OMP-RPC v1 variant —
+	// the 10 WireEventV1 variants and the WireFrame envelope are untouched.
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "tool.request_approval";
+			toolCallId: string;
+			toolName: string;
+			params: ToolApprovalParams;
 	  };
 
 /**
@@ -394,6 +444,16 @@ export type AuthRequestPayload = AuthRequestFrame extends infer F
 		? Omit<F, "type" | "id">
 		: never
 	: never;
+
+/**
+ * Derived from `RpcExtensionUIRequest` above (ADR 0007). Type-locks the
+ * `tool.request_approval` emit the same way `AuthRequestPayload` locks the
+ * auth.* variants: the wire variant minus the transport-metadata fields
+ * (`type`, `id`) the emitter fills in. Adding a field to the wire variant
+ * automatically extends this payload type.
+ */
+export type ToolApprovalRequestFrame = Extract<RpcExtensionUIRequest, { method: "tool.request_approval" }>;
+export type ToolApprovalRequestPayload = Omit<ToolApprovalRequestFrame, "type" | "id">;
 
 // ============================================================================
 // Host Tool Frames (bidirectional)

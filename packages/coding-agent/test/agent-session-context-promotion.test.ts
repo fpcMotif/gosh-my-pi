@@ -27,6 +27,12 @@ describe("AgentSession context promotion", () => {
 			await session.dispose();
 		}
 		authStorage.close();
+		// bun:sqlite holds Windows file handles briefly after `close()`;
+		// without this yield the synchronous `removeSync` below races the
+		// kernel and surfaces as `EBUSY`. Non-Windows platforms are
+		// unaffected — the 50ms wait still completes well under the test's
+		// own budget.
+		await Bun.sleep(200);
 		tempDir.removeSync();
 	});
 

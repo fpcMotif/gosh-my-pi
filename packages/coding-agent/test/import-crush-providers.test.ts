@@ -123,6 +123,12 @@ describe("importCrushProviders", () => {
 		const { config, providers } = buildModelsConfigFromCrushConfig({
 			providers: [
 				{ id: "openai", type: "openai", base_url: "https://openai.example/v1", models: [{ id: "gpt" }] },
+				{
+					id: "fallback",
+					type: "unsupported",
+					base_url: "https://fallback.example/v1",
+					models: [{ id: "fallback" }],
+				},
 				{ id: "gemini", type: "gemini", base_url: "https://gemini.example/v1", models: [{ id: "gemini-pro" }] },
 				{ id: "vertex", type: "vertexai", base_url: "https://vertex.example/v1", models: [{ id: "vertex-pro" }] },
 				{ type: "openai", base_url: "https://missing-id.example/v1", models: [{ id: "missing-id" }] },
@@ -130,8 +136,9 @@ describe("importCrushProviders", () => {
 			],
 		});
 
-		expect(providers.map(provider => provider.id)).toEqual(["openai", "gemini", "vertex"]);
+		expect(providers.map(provider => provider.id)).toEqual(["openai", "fallback", "gemini", "vertex"]);
 		expect(config.providers?.openai?.api).toBe("openai-completions");
+		expect(config.providers?.fallback?.api).toBe("openai-completions");
 		expect(config.providers?.gemini?.api).toBe("google-generative-ai");
 		expect(config.providers?.vertex?.api).toBe("google-vertex");
 	});

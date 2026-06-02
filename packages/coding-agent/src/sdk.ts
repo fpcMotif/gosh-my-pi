@@ -249,12 +249,11 @@ export interface CreateAgentSessionResult {
 	/** Shared event bus for tool/extension communication */
 	eventBus: EventBus;
 	/**
-	 * Recovery action applied on reopen when `OMP_RECOVERY_POLICY === "1"`.
-	 * `undefined` if the env flag is unset or the session is fresh; `{ kind: "none" }`
-	 * if the flag is set but the classifier saw no recoverable state. Non-`"none"`
-	 * variants mean the session was reopened mid-stream or mid-tool and the
-	 * agent's message history was mutated to make `agent.continue()` safe to
-	 * call. Per ADR-0003, the original tool is **never** re-run.
+	 * Recovery action applied on reopen. `undefined` if recovery was explicitly
+	 * disabled or the session is fresh; `{ kind: "none" }` if the classifier
+	 * saw no recoverable state. Non-`"none"` variants mean the session was
+	 * reopened mid-stream or mid-tool and `AgentSession` scheduled a safe
+	 * continuation. Per ADR-0003, the original tool is **never** re-run.
 	 */
 	recoveryAction?: RecoveryAction;
 }
@@ -1613,15 +1612,15 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			sessionManager.appendThinkingLevelChange(thinkingLevel);
 		}
 
-		// Apply crash recovery on session reopen when OMP_RECOVERY_POLICY is set.
-		// Per ADR-0003 the caller drives `agent.continue()` after a non-`none`
-		// action; the SDK only exposes the applied action on the result.
+		// Apply crash recovery on session reopen unless explicitly disabled.
+		// AgentSession consumes non-none actions by scheduling the safe
+		// continuation after it subscribes to agent events.
 		let recoveryAction: RecoveryAction | undefined;
 		if (hasExistingSession && isRecoveryPolicyEnabled()) {
 			try {
 				recoveryAction = recoverIfNeeded(sessionManager.getEntries(), agent.messages, agent);
 				if (recoveryAction.kind !== "none") {
-					logger.info("Applied crash recovery on session reopen", { kind: recoveryAction.kind });
+					logger.debug("Applied crash recovery on session reopen", { kind: recoveryAction.kind });
 				}
 			} catch (error) {
 				logger.warn("Crash recovery failed; continuing without recovery", {
@@ -1657,6 +1656,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			persistInitialMCPToolSelection: !hasExistingSession,
 			defaultSelectedMCPServerNames: [...discoveryDefaultServers],
 			ttsrManager,
+			recoveryAction,
 			obfuscator,
 			asyncJobManager,
 			agentId: resolvedAgentId,

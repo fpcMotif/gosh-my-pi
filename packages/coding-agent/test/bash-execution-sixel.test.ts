@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { BashExecutionComponent } from "@oh-my-pi/pi-coding-agent/modes/components/bash-execution";
 import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
-import { sanitizeWithOptionalSixelPassthrough } from "@oh-my-pi/pi-coding-agent/utils/sixel";
+import { isSixelLine, sanitizeWithOptionalSixelPassthrough } from "@oh-my-pi/pi-coding-agent/utils/sixel";
 import { sanitizeText } from "@oh-my-pi/pi-natives";
 import type { TUI } from "@oh-my-pi/pi-tui";
 import { fromPartial } from "@total-typescript/shoehorn";
@@ -78,6 +78,11 @@ describe("BashExecutionComponent SIXEL sanitization", () => {
 
 		expect(component.getOutput()).not.toContain("\x1bPq");
 		expect(component.getOutput()).toBe("");
+	});
+
+	it("identifies SIXEL payload lines by their control-sequence prefix", () => {
+		expect(isSixelLine(SIXEL)).toBe(true);
+		expect(isSixelLine("plain text")).toBe(false);
 	});
 });
 

@@ -30,17 +30,33 @@ function createRouter(options: { artifactsDir?: string | null; sessionId?: strin
 }
 
 describe("LocalProtocolHandler", () => {
-	it("lists files at local://", async () => {
+	it("lists files at local:// sorted, recursing into subdirectories", async () => {
 		await withTempDir(async tempDir => {
 			const artifactsDir = path.join(tempDir, "artifacts");
-			await fs.mkdir(path.join(artifactsDir, "local"), { recursive: true });
-			await Bun.write(path.join(artifactsDir, "local", "handoff.json"), '{"ok":true}');
+			const localRoot = path.join(artifactsDir, "local");
+			await fs.mkdir(path.join(localRoot, "nested"), { recursive: true });
+			await Bun.write(path.join(localRoot, "zebra.json"), '{"ok":true}');
+			await Bun.write(path.join(localRoot, "alpha.txt"), "alpha");
+			await Bun.write(path.join(localRoot, "nested", "deep.md"), "deep");
 
 			const router = createRouter({ artifactsDir, sessionId: "session-a" });
 			const resource = await router.resolve("local://");
 
 			expect(resource.contentType).toBe("text/markdown");
-			expect(resource.content).toContain("handoff.json");
+			expect(resource.content).toContain("3 files available");
+			const order = ["alpha.txt", "nested/deep.md", "zebra.json"].map(name => resource.content.indexOf(name));
+			expect(order).toEqual([...order].sort((a, b) => a - b));
+			expect(order[0]).toBeGreaterThan(-1);
+		});
+	});
+
+	it("renders an empty-root listing with an explicit placeholder", async () => {
+		await withTempDir(async tempDir => {
+			const router = createRouter({ artifactsDir: path.join(tempDir, "artifacts"), sessionId: "session-empty" });
+			const resource = await router.resolve("local://");
+
+			expect(resource.content).toContain("0 files available");
+			expect(resource.content).toContain("(empty)");
 		});
 	});
 

@@ -3,6 +3,7 @@ import {
 	applyHashlineEdits,
 	buildCompactHashlineDiffPreview,
 	computeLineHash,
+	formatLineHash,
 	formatHashLines,
 	HASHLINE_BIGRAM_RE_SRC,
 	HASHLINE_BIGRAMS,
@@ -69,6 +70,10 @@ describe("computeLineHash", () => {
 		const a = computeLineHash(1, "hello");
 		const b = computeLineHash(2, "hello");
 		expect(a).toBe(b);
+	});
+
+	it("formats a compact line anchor without content separator", () => {
+		expect(formatLineHash(42, "return 42;")).toBe(`42${computeLineHash(42, "return 42;")}`);
 	});
 });
 

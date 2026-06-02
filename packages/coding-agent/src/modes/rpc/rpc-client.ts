@@ -20,6 +20,7 @@ import type {
 	RpcResponse,
 	RpcSessionState,
 } from "./rpc-types";
+import type { WireExtensionErrorFrameV1 } from "./wire/v1";
 
 /** Distributive Omit that works with union types */
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
@@ -49,6 +50,13 @@ export interface RpcClientOptions {
 export type ModelInfo = Pick<Model, "provider" | "id" | "contextWindow" | "reasoning" | "thinking">;
 
 export type RpcEventListener = (event: AgentEvent) => void;
+
+/**
+ * Diagnostic frames are out-of-band notices (currently `extension_error`) that
+ * are not part of the agent event stream. Hosts may surface them; they are safe
+ * to ignore.
+ */
+export type RpcDiagnosticListener = (frame: WireExtensionErrorFrameV1) => void;
 
 export interface RpcClientToolContext<TDetails = unknown> {
 	toolCallId: string;
@@ -124,6 +132,23 @@ function isRpcHostToolCancelRequest(value: unknown): value is RpcHostToolCancelR
 	return value.type === "host_tool_cancel" && typeof value.id === "string" && typeof value.targetId === "string";
 }
 
+/**
+ * Total normalizer for `extension_error` diagnostic frames. Returns null for
+ * anything else, and coerces missing fields to "" so a malformed frame still
+ * surfaces a typed diagnostic instead of crashing the read loop.
+ */
+function toWireExtensionError(value: unknown): WireExtensionErrorFrameV1 | null {
+	if (!isRecord(value) || value.type !== "extension_error") {
+		return null;
+	}
+	return {
+		type: "extension_error",
+		extensionPath: typeof value.extensionPath === "string" ? value.extensionPath : "",
+		event: typeof value.event === "string" ? value.event : "",
+		error: typeof value.error === "string" ? value.error : "",
+	};
+}
+
 function normalizeToolResult<TDetails>(result: RpcClientToolResult<TDetails>): AgentToolResult<TDetails> {
 	if (typeof result === "string") {
 		return {
@@ -140,6 +165,7 @@ function normalizeToolResult<TDetails>(result: RpcClientToolResult<TDetails>): A
 export class RpcClient {
 	#process: ptree.ChildProcess | null = null;
 	#eventListeners: RpcEventListener[] = [];
+	#diagnosticListeners: RpcDiagnosticListener[] = [];
 	#pendingRequests: Map<string, { resolve: (response: RpcResponse) => void; reject: (error: Error) => void }> =
 		new Map();
 	#customTools: RpcClientCustomTool[] = [];
@@ -273,6 +299,20 @@ export class RpcClient {
 			const index = this.#eventListeners.indexOf(listener);
 			if (index !== -1) {
 				this.#eventListeners.splice(index, 1);
+			}
+		};
+	}
+
+	/**
+	 * Subscribe to out-of-band diagnostic frames (currently `extension_error`).
+	 * These are not agent events; hosts may surface them or ignore them.
+	 */
+	onDiagnostic(listener: RpcDiagnosticListener): () => void {
+		this.#diagnosticListeners.push(listener);
+		return () => {
+			const index = this.#diagnosticListeners.indexOf(listener);
+			if (index !== -1) {
+				this.#diagnosticListeners.splice(index, 1);
 			}
 		};
 	}
@@ -618,11 +658,25 @@ export class RpcClient {
 			return;
 		}
 
+		// Diagnostic frames (extension_error) are not agent events and must not be
+		// dropped silently; surface them to diagnostic listeners (gap G22).
+		const extensionError = toWireExtensionError(data);
+		if (extensionError) {
+			this.#emitDiagnostic(extensionError);
+			return;
+		}
+
 		if (!isAgentEvent(data)) return;
 
 		// Otherwise it's an event
 		for (const listener of this.#eventListeners) {
 			listener(data);
+		}
+	}
+
+	#emitDiagnostic(frame: WireExtensionErrorFrameV1): void {
+		for (const listener of this.#diagnosticListeners) {
+			listener(frame);
 		}
 	}
 

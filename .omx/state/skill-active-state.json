@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "active": false,
+  "skill": "cancel",
+  "keyword": "abort",
+  "phase": "completing",
+  "activated_at": "2026-05-15T07:04:20.202Z",
+  "updated_at": "2026-05-15T07:15:27.971Z",
+  "source": "keyword-detector",
+  "input_lock": null
+}

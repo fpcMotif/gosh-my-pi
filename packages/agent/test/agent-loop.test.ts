@@ -95,6 +95,50 @@ describe("agentLoop with AgentMessage", () => {
 		expect(eventTypes).toContain("agent_end");
 	});
 
+	it("ends with an assistant error when follow-up message loading fails", async () => {
+		const context: AgentContext = {
+			systemPrompt: "You are helpful.",
+			messages: [],
+			tools: [],
+		};
+
+		const userPrompt: AgentMessage = createUserMessage("Hello");
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			getFollowUpMessages: async () => {
+				throw new Error("follow-up queue unavailable");
+			},
+		};
+
+		const streamFn = () => {
+			const stream = new MockAssistantStream();
+			queueMicrotask(() => {
+				const message = createAssistantMessage([{ type: "text", text: "initial response" }]);
+				stream.push({ type: "done", reason: "stop", message });
+			});
+			return stream;
+		};
+
+		const events: AgentEvent[] = [];
+		const stream = agentLoop([userPrompt], context, config, undefined, streamFn);
+
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		const messages = await stream.result();
+		const terminalMessage = messages[messages.length - 1];
+
+		expect(messages.map(message => message.role)).toEqual(["user", "assistant", "assistant"]);
+		expect(terminalMessage?.role).toBe("assistant");
+		if (terminalMessage?.role !== "assistant") return;
+		expect(terminalMessage.stopReason).toBe("error");
+		expect(terminalMessage.errorMessage).toBe("follow-up queue unavailable");
+		expect(terminalMessage.content).toEqual([{ type: "text", text: "Error: follow-up queue unavailable" }]);
+		expect(events[events.length - 1]?.type).toBe("agent_end");
+	});
+
 	it("should handle custom message types via convertToLlm", async () => {
 		// Create a custom message type
 		interface CustomNotification {

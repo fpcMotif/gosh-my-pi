@@ -1,4 +1,5 @@
 {
+	"$schema": "./node_modules/@effect/language-service/schema.json",
 	"compilerOptions": {
 		"target": "ES2024",
 		"module": "ESNext",
@@ -24,6 +25,12 @@
 		"useDefineForClassFields": false,
 		"types": ["bun", "assets"],
 		"typeRoots": ["./types", "./node_modules/@types"],
-		"assumeChangesOnlyAffectDirectDependencies": true
+		"assumeChangesOnlyAffectDirectDependencies": true,
+		"plugins": [
+			{
+				"name": "@effect/language-service",
+				"namespaceImportPackages": ["@oh-my-pi/pi-utils/effect"]
+			}
+		]
 	}
 }

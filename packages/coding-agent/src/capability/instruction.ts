@@ -15,7 +15,7 @@ export interface Instruction {
 	/** Absolute path to instruction file */
 	path: string;
 	/** Instruction content (markdown) */
-	content: string;
+	content?: string;
 	/** Glob pattern for files this applies to */
 	applyTo?: string;
 	/** Source metadata */

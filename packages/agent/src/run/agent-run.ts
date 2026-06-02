@@ -1,16 +1,11 @@
 // AgentRunController — the Effect-side wrapper introduced by ADR-0003.
 // A thin shell over `Agent.prompt` / `Agent.continue` that exposes the call
-// as `Effect<void, AgentRunError, RecoveryMarker | Clock>` so retries,
-// recovery, and durability hooks become Layer seams instead of inline
-// try/catch.
+// as `Effect<void, AgentRunError, Clock>` so retries and recovery keep the
+// Promise→Effect error seam without owning marker durability.
 //
-// Owns no new state. The marker emission itself happens in coding-agent's
-// `#handleAgentEvent` reactive subscription (P3b.4), which already
-// observes every AgentEvent. The controller's typed dependency on
-// RecoveryMarker means the OUTER seam (Agent.prompt's
-// OMP_RECOVERY_POLICY-gated branch) must provide a Layer — Live in
-// production (writing to NdjsonFileWriter via SessionManager.appendRecoveryMarker)
-// or NoopRecoveryMarker in tests that don't care about durability.
+// Owns no new state. Recovery marker emission happens in coding-agent's
+// RecoveryLedger, which observes the AgentEvent stream and writes markers at
+// the ADR-0003 safe points after session persistence.
 //
 // Public callers see `Promise<void>` — `Effect.runPromiseExit` lives at
 // the seam, with `Cause.failureOption` unwrapping the typed error so
@@ -24,11 +19,11 @@
 // CONTEXT.md:474-484 documents the term + the avoid list.
 
 import { Effect } from "@oh-my-pi/pi-utils/effect";
+import type { ImageContent } from "@oh-my-pi/pi-ai";
 import type { Agent } from "../agent";
 import { AgentBusy, type AgentRunError, ConfigInvalid } from "../errors";
-import type { AgentMessage, AgentPromptOptions, ImageContent } from "../types";
+import type { AgentMessage, AgentPromptOptions } from "../types";
 import type { Clock } from "./clock";
-import type { RecoveryMarker } from "./recovery-marker";
 
 /**
  * Discriminated request to AgentRunController. Mirrors the two public
@@ -93,7 +88,7 @@ export class AgentRunController {
 	 * Effect's interrupt channel (caller-aborted via `effectFromSignal` at
 	 * the seam).
 	 */
-	run(request: AgentRunRequest): Effect.Effect<void, AgentRunError, RecoveryMarker | Clock> {
+	run(request: AgentRunRequest): Effect.Effect<void, AgentRunError, Clock> {
 		const agent = this.#agent;
 		return Effect.tryPromise({
 			try: async signal => {

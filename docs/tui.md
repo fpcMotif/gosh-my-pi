@@ -158,6 +158,15 @@ Custom tools and extension tools can return components from:
 
 These renderers are mounted by `ToolExecutionComponent`.
 
+Built-in tool renderers may also expose neutral `ToolPresentation` data through
+`presentCall(...)` / `presentResult(...)`. `ToolExecutionComponent` prefers that
+data and adapts it back to the current `pi-tui` components with
+`renderToolPresentation(...)`; renderers that do not expose presentation data
+continue through the legacy component path. The first migration slices cover
+status and output-block vocabulary for simple call summaries, including
+`bash`, non-URL `read`, and non-vim `edit`/`apply_patch` calls. The same
+presentation module also has a code-cell shape used by non-URL `read` results.
+
 ## Lifecycle and cancellation
 
 - `dispose()` is optional at type level but should be implemented when you own timers, subprocesses, watchers, sockets, or overlays.

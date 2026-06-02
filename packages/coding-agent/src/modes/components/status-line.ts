@@ -256,7 +256,8 @@ export class StatusLineComponent implements Component {
 			};
 			try {
 				// Requires `gh repo set-default` to be configured; fails gracefully if not
-				const result = await $`gh pr view --json number,url`.quiet().nothrow();
+				const ghCommand = Bun.env.OMP_GH_PATH ?? "gh";
+				const result = await $`${ghCommand} pr view --json number,url`.quiet().nothrow();
 				if (result.exitCode !== 0) {
 					setCachedPr(null);
 					return;

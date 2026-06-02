@@ -32,6 +32,13 @@ describe("gradientText", () => {
 		expect(result).not.toMatch(/\x1b\[38;2;/);
 	});
 
+	it("preserves whitespace without color codes in 256-color mode", () => {
+		const result = gradientText("A B", { force: "256color", palette256: [1, 2] });
+
+		expect(result).toContain("\x1b[38;5;1mA");
+		expect(result).toContain(" \x1b[38;5;2mB");
+	});
+
 	it("returns empty string for empty input", () => {
 		expect(gradientText("", { force: "truecolor" })).toBe("");
 	});

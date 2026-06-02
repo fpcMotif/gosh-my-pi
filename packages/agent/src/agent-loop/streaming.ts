@@ -7,6 +7,7 @@ import {
 	type Tool,
 } from "@oh-my-pi/pi-ai";
 import type { EventStream } from "@oh-my-pi/pi-ai";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
 import { classifyAssistantError } from "../error-kind";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, AnyAgentTool, StreamFn } from "../types";
 
@@ -71,6 +72,18 @@ export async function streamAssistantResponse(
 	return processAssistantStream(response, config, signal, context, stream);
 }
 
+interface StreamPumpState {
+	readonly partialMessage: AssistantMessage | null;
+	readonly addedPartial: boolean;
+	readonly terminal: AssistantMessage | null;
+	readonly aborted: boolean;
+	readonly streamDone: boolean;
+}
+
+function isSignalAborted(signal: AbortSignal | undefined): boolean {
+	return signal !== undefined && signal.aborted;
+}
+
 async function processAssistantStream(
 	response: AsyncIterable<AssistantMessageEvent>,
 	config: AgentLoopConfig,
@@ -78,85 +91,128 @@ async function processAssistantStream(
 	context: AgentContext,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 ): Promise<AssistantMessage> {
-	let partialMessage: AssistantMessage | null = null;
-	let addedPartial = false;
 	const iterator = response[Symbol.asyncIterator]();
+	const stateRef: { current: StreamPumpState } = {
+		current: {
+			partialMessage: null,
+			addedPartial: false,
+			terminal: null,
+			aborted: false,
+			streamDone: false,
+		},
+	};
 
-	try {
-		while (true) {
-			if (signal?.aborted) {
-				return handleAbortedStream(config, partialMessage, addedPartial, context, stream);
-			}
+	// Drive the iterator drain through `Effect.whileLoop`. The loop body races
+	// `iterator.next()` against the abort signal so a hung provider still
+	// terminates within bounded time; `Effect.catchAll` maps an iterator throw
+	// onto a terminal error frame so the outer agent loop sees a clean
+	// stopReason rather than an unhandled rejection.
+	await Effect.runPromise(
+		Effect.whileLoop({
+			while: () => !stateRef.current.streamDone && stateRef.current.terminal === null && !stateRef.current.aborted,
+			body: () =>
+				Effect.tryPromise({
+					try: () => stepIteratorPump(iterator, signal, context, stream, stateRef.current),
+					catch: error => error,
+				}),
+			step: (next: StreamPumpState) => {
+				stateRef.current = next;
+			},
+		}).pipe(
+			Effect.catch(error =>
+				Effect.sync(() => {
+					stateRef.current = {
+						...stateRef.current,
+						terminal: buildTerminalStreamMessage(
+							config,
+							stateRef.current.partialMessage,
+							`Provider stream failed: ${error instanceof Error ? error.message : String(error)}`,
+						),
+						streamDone: true,
+					};
+				}),
+			),
+		),
+	);
 
-			// Race iterator.next() against the abort signal so a hung provider
-			// (no events arriving) still terminates within bounded time when
-			// the caller aborts mid-flight.
-			const result = await raceWithAbort(iterator.next(), signal);
-
-			if (signal?.aborted) {
-				return handleAbortedStream(config, partialMessage, addedPartial, context, stream);
-			}
-
-			if (result.done) break;
-
-			const event = result.value;
-			switch (event.type) {
-				case "start":
-					partialMessage = event.partial;
-					break;
-
-				case "done":
-					return finishPartialMessage(event.message, addedPartial, context, stream, config);
-
-				case "error":
-					return finishPartialMessage(event.error, addedPartial, context, stream, config);
-
-				default:
-					if (partialMessage) {
-						if (!addedPartial) {
-							context.messages.push(partialMessage);
-							stream.push({ type: "message_start", message: partialMessage });
-							addedPartial = true;
-						}
-						stream.push({ type: "message_update", message: partialMessage, assistantMessageEvent: event });
-					}
-					break;
-			}
-		}
-	} catch (error) {
-		// Iterator threw mid-stream (network error, malformed payload, etc.).
-		// Rather than propagate as unhandled, finalise as an error message.
-		const message = error instanceof Error ? error.message : String(error);
-		return finishPartialMessage(
-			buildTerminalStreamMessage(config, partialMessage, `Provider stream failed: ${message}`),
-			addedPartial,
-			context,
-			stream,
-			config,
-		);
+	const final = stateRef.current;
+	if (final.aborted) {
+		return handleAbortedStream(config, final.partialMessage, final.addedPartial, context, stream);
+	}
+	if (final.terminal !== null) {
+		return finishPartialMessage(final.terminal, final.addedPartial, context, stream, config);
 	}
 
 	// Stream iterator returned without emitting `done` or `error`. Treat as
 	// an error so the loop terminates cleanly via checkTerminalResponse.
 	return finishPartialMessage(
-		buildTerminalStreamMessage(config, partialMessage, "Provider stream ended without done or error event"),
-		addedPartial,
+		buildTerminalStreamMessage(config, final.partialMessage, "Provider stream ended without done or error event"),
+		final.addedPartial,
 		context,
 		stream,
 		config,
 	);
 }
 
+async function stepIteratorPump(
+	iterator: AsyncIterator<AssistantMessageEvent>,
+	signal: AbortSignal | undefined,
+	context: AgentContext,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	state: StreamPumpState,
+): Promise<StreamPumpState> {
+	if (isSignalAborted(signal)) {
+		return { ...state, aborted: true };
+	}
+
+	const result = await raceWithAbort(iterator.next(), signal);
+
+	if (isSignalAborted(signal)) {
+		return { ...state, aborted: true };
+	}
+	if (result.done) {
+		return { ...state, streamDone: true };
+	}
+
+	const event = result.value;
+	switch (event.type) {
+		case "start":
+			return { ...state, partialMessage: event.partial };
+
+		case "done":
+			return { ...state, terminal: event.message };
+
+		case "error":
+			return { ...state, terminal: event.error };
+
+		default:
+			if (state.partialMessage) {
+				let addedPartial = state.addedPartial;
+				if (!addedPartial) {
+					context.messages.push(state.partialMessage);
+					stream.push({ type: "message_start", message: state.partialMessage });
+					addedPartial = true;
+				}
+				stream.push({ type: "message_update", message: state.partialMessage, assistantMessageEvent: event });
+				return { ...state, addedPartial };
+			}
+			return state;
+	}
+}
+
 /**
  * Await `next` but resolve early as `{done: true}` when `signal` aborts.
  * Used to break out of provider streams that don't emit on abort.
+ *
+ * Promise-shell wrapper around the abort race; consumers stay Promise-typed
+ * while the surrounding pump is driven by `Effect.iterate`.
  */
 async function raceWithAbort<T>(
 	next: Promise<IteratorResult<T>>,
 	signal: AbortSignal | undefined,
 ): Promise<IteratorResult<T>> {
 	if (!signal) return next;
-	if (signal.aborted) return { done: true, value: undefined as never };
+	if (isSignalAborted(signal)) return { done: true, value: undefined as never };
 
 	const { promise: abortPromise, resolve } = Promise.withResolvers<IteratorResult<T>>();
 	const onAbort = (): void => resolve({ done: true, value: undefined as never });

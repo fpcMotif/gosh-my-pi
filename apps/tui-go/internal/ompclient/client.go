@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -32,7 +33,8 @@ type Options struct {
 	// Bin is the binary to spawn. Defaults to "gmp" (the local fork's
 	// renamed coding-agent binary; intentionally not "omp" to avoid
 	// collision with an upstream `omp` install on PATH).
-	// Override with the GMP_TUI_BACKEND env var (handled by caller).
+	// Override with the GMP_TUI_BACKEND env var or legacy OMP_TUI_BACKEND
+	// alias (handled by caller).
 	Bin string
 
 	// PrefixArgs are placed before "--mode rpc". This supports commands
@@ -87,6 +89,24 @@ type Client struct {
 	idCounter atomic.Uint64
 	readErr   atomic.Pointer[error]
 	done      chan struct{}
+
+	// exited is closed exactly once when the read loop terminates
+	// unexpectedly (peer EOF / subprocess crash) rather than via an
+	// intentional Close. closeRequested gates this: Close sets it before
+	// winding the loop down so the EOF that Close itself triggers does NOT
+	// surface as a backend-exited signal (no false "connection lost" banner
+	// on a clean quit). BackendExited exposes the channel; the UI observes
+	// it to enter a legible "backend exited" render state.
+	exited         chan struct{}
+	exitedOnce     sync.Once
+	closeRequested atomic.Bool
+
+	// schema holds the wire schema string from the `ready` handshake frame
+	// (empty until the frame arrives). schemaMismatch records whether it
+	// diverged from ExpectedSchema. Soft-buffer per OMP-RPC v1: a mismatch
+	// is surfaced via slog.Warn and the flag, never a crash.
+	schema         atomic.Pointer[string]
+	schemaMismatch atomic.Bool
 }
 
 // Spawn launches the configured omp binary in RPC mode and returns a
@@ -137,6 +157,7 @@ func Spawn(ctx context.Context, opts Options) (*Client, error) {
 		hostToolCall:   make(chan *HostToolCallReq, sideChannelBufferSize),
 		hostToolCancel: make(chan *HostToolCancelReq, sideChannelBufferSize),
 		done:           make(chan struct{}),
+		exited:         make(chan struct{}),
 	}
 	go c.readLoop()
 	return c, nil
@@ -158,6 +179,7 @@ func NewWithIO(stdin io.WriteCloser, stdout io.ReadCloser) *Client {
 		hostToolCall:   make(chan *HostToolCallReq, sideChannelBufferSize),
 		hostToolCancel: make(chan *HostToolCancelReq, sideChannelBufferSize),
 		done:           make(chan struct{}),
+		exited:         make(chan struct{}),
 	}
 	go c.readLoop()
 	return c
@@ -178,6 +200,27 @@ func (c *Client) HostToolCancels() <-chan *HostToolCancelReq { return c.hostTool
 
 // Done is closed once the read loop exits (subprocess gone).
 func (c *Client) Done() <-chan struct{} { return c.done }
+
+// BackendExited is closed exactly once when the read loop terminates
+// unexpectedly — peer EOF or subprocess crash — and NOT when the loop is
+// wound down by an intentional Close. Consumers select on it to surface a
+// legible "backend connection lost" state instead of a frozen UI. An
+// intentional quit leaves this channel open so no false banner appears.
+func (c *Client) BackendExited() <-chan struct{} { return c.exited }
+
+// Schema returns the wire schema negotiated on the `ready` handshake
+// frame, or "" if no ready frame has been observed yet.
+func (c *Client) Schema() string {
+	if s := c.schema.Load(); s != nil {
+		return *s
+	}
+	return ""
+}
+
+// SchemaMismatch reports whether the `ready` frame declared a schema
+// other than ExpectedSchema. Always false until a ready frame arrives;
+// a mismatch is soft-buffered (warned, not fatal) per OMP-RPC v1.
+func (c *Client) SchemaMismatch() bool { return c.schemaMismatch.Load() }
 
 // nextID returns a monotonically-increasing client-side correlation id.
 func (c *Client) nextID() string {
@@ -259,23 +302,31 @@ func (c *Client) Call(ctx context.Context, cmd Command) (*Response, error) {
 func (c *Client) Close() error {
 	var firstErr error
 	c.closeOnce.Do(func() {
+		// Mark the shutdown as intentional BEFORE closing stdin so the read
+		// loop's resulting EOF is not mistaken for a crash and does not fire
+		// the BackendExited signal.
+		c.closeRequested.Store(true)
 		c.closed.Store(true)
 		_ = c.stdin.Close()
-		// Best-effort termination if it doesn't exit on its own.
-		if c.cmd.Process != nil {
+		// Best-effort termination if it doesn't exit on its own. cmd is nil
+		// for NewWithIO clients (no subprocess); closing stdin is enough to
+		// wind down the peer-driven read loop.
+		if c.cmd != nil && c.cmd.Process != nil {
 			_ = c.cmd.Process.Signal(os.Interrupt)
 		}
 		// Wait for read loop to drain.
 		select {
 		case <-c.done:
 		case <-time.After(subprocessShutdownGrace):
-			if c.cmd.Process != nil {
+			if c.cmd != nil && c.cmd.Process != nil {
 				_ = c.cmd.Process.Kill()
 			}
 			<-c.done
 		}
-		if err := c.cmd.Wait(); err != nil {
-			firstErr = err
+		if c.cmd != nil {
+			if err := c.cmd.Wait(); err != nil {
+				firstErr = err
+			}
 		}
 	})
 	return firstErr
@@ -301,6 +352,13 @@ func (c *Client) readLoop() {
 	}
 	if err := scanner.Err(); err != nil {
 		c.readErr.Store(&err)
+	}
+	// The loop only reaches here when stdout hits EOF / error, i.e. the peer
+	// is gone. If Close did not request this shutdown, it is an unexpected
+	// exit (subprocess crash / peer EOF): fire BackendExited exactly once so
+	// the UI can render a legible "connection lost" state.
+	if !c.closeRequested.Load() {
+		c.exitedOnce.Do(func() { close(c.exited) })
 	}
 	// Wake any pending callers.
 	c.mu.Lock()
@@ -352,6 +410,12 @@ func (c *Client) dispatch(line []byte) {
 		if err := json.Unmarshal(line, &r); err == nil {
 			c.hostToolCancel <- &r
 		}
+	case "ready":
+		c.recordReadySchema(line)
+		// Soft-buffer: preserve the ready frame as a raw agent event so a
+		// consumer can still observe the handshake (and any unknown schema)
+		// instead of silently dropping it.
+		c.events <- &AgentEvent{Kind: probe.Type, Payload: bytes.Clone(line)}
 	default:
 		// Treat everything else as an agent event. The frame's "type"
 		// becomes the event Kind (message_update, tool_execution_start,
@@ -360,5 +424,26 @@ func (c *Client) dispatch(line []byte) {
 			Kind:    probe.Type,
 			Payload: bytes.Clone(line),
 		}
+	}
+}
+
+// recordReadySchema decodes the `ready` handshake frame, stores the
+// negotiated schema, and validates it against ExpectedSchema. On
+// mismatch it surfaces a slog.Warn and sets the schemaMismatch flag but
+// does NOT crash or stop the read loop — OMP-RPC v1 mandates soft
+// buffering so a host on a newer/older minor still functions on the
+// frames it understands.
+func (c *Client) recordReadySchema(line []byte) {
+	var frame ReadyFrame
+	if err := json.Unmarshal(line, &frame); err != nil {
+		slog.Warn("ompclient: malformed ready frame", "error", err)
+		return
+	}
+	schema := frame.Schema
+	c.schema.Store(&schema)
+	if schema != ExpectedSchema {
+		c.schemaMismatch.Store(true)
+		slog.Warn("ompclient: RPC wire schema mismatch; continuing in soft-buffer mode",
+			"expected", ExpectedSchema, "got", schema)
 	}
 }

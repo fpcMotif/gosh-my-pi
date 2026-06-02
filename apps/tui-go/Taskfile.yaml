@@ -45,7 +45,7 @@ tasks:
       vars:
          LDFLAGS: '{{if .VERSION}}-ldflags="-X github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/version.Version={{.VERSION}}"{{end}}'
       cmds:
-         - "go build -v {{if .RACE}}-race{{end}} {{.LDFLAGS}} ."
+         - "go build -v {{if .RACE}}-race{{end}} {{.LDFLAGS}} -o gmp-tui-go{{exeExt}} ."
       sources:
          - ./**/*.go
          - go.mod
@@ -53,13 +53,13 @@ tasks:
          - internal/agent/**/*.md.tpl
          - internal/agent/hyper/provider.json
       generates:
-         - crush{{exeExt}}
+         - gmp-tui-go{{exeExt}}
 
    run:
       desc: Run build
       cmds:
          - task: build
-         - "./crush{{exeExt}} {{.CLI_ARGS}} {{if .RACE}}2>race.log{{end}}"
+         - "./gmp-tui-go{{exeExt}} {{.CLI_ARGS}} {{if .RACE}}2>race.log{{end}}"
 
    run:catwalk:
       desc: Run build with local Catwalk
@@ -67,7 +67,7 @@ tasks:
          CATWALK_URL: http://localhost:8080
       cmds:
          - task: build
-         - ./crush{{exeExt}} {{.CLI_ARGS}}
+         - ./gmp-tui-go{{exeExt}} {{.CLI_ARGS}}
 
    run:onboarding:
       desc: Run build with custom config to test onboarding
@@ -77,7 +77,7 @@ tasks:
       cmds:
          - task: build
          - rm -rf tmp/onboarding
-         - ./crush{{exeExt}} {{.CLI_ARGS}}
+         - ./gmp-tui-go{{exeExt}} {{.CLI_ARGS}}
 
    test:
       desc: Run tests

@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/notify"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools"
 	mcptools "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools/mcp"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/auth"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
@@ -28,6 +29,7 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/toolapproval"
 )
 
 const (
@@ -44,6 +46,14 @@ const (
 )
 
 var ErrUnsupported = errors.New("gmp backend: operation not supported in MVP")
+
+// BackendExitedMsg is the typed tea.Msg delivered through the normal
+// program.Send / events path when the gmp RPC subprocess exits
+// unexpectedly (peer EOF / crash) rather than via an intentional
+// Shutdown/Close. The model layer renders a legible "backend connection
+// lost" banner on it instead of leaving the transcript frozen. It carries
+// no payload: the transport-local exit is the whole signal.
+type BackendExitedMsg struct{}
 
 // GmpModelCatalogEntry is the Go-side projection of the backend-owned
 // models.catalog entry. It is intentionally provider/model centric:
@@ -791,6 +801,18 @@ func (w *GmpWorkspace) Subscribe(program *tea.Program) {
 		w.handleAgentEvent(ev)
 	}
 	w.setAgentBusy(false)
+
+	// The events channel only closes once the transport read loop ends. If
+	// that was an unexpected exit (peer EOF / subprocess crash) rather than
+	// an intentional Shutdown/Close, surface it to the UI as a typed message
+	// so the model can enter a legible "backend connection lost" state
+	// instead of freezing on the last transcript. Intentional shutdown
+	// leaves BackendExited open, so no false banner appears on a clean quit.
+	select {
+	case <-w.client.BackendExited():
+		w.sendUI(BackendExitedMsg{})
+	default:
+	}
 }
 
 // drainExtensionUI consumes incoming UI prompts from the agent. For
@@ -821,6 +843,10 @@ func (w *GmpWorkspace) dispatchExtensionUIRequest(req *ompclient.ExtensionUIReq)
 		return
 	}
 	if msg := w.translateAuthRequest(req); msg != nil {
+		w.sendUI(msg)
+		return
+	}
+	if msg := w.translateToolApprovalRequest(req); msg != nil {
 		w.sendUI(msg)
 		return
 	}
@@ -1061,10 +1087,168 @@ func buildAuthReplyFrame(msg tea.Msg) (ompclient.ExtensionUIResp, bool) {
 	}
 }
 
-// drainHostToolCalls rejects every incoming host tool invocation with
-// an error result. The Go TUI does not currently register host tools
-// via set_host_tools, so a host_tool_call frame here is unexpected; we
-// fail it explicitly rather than let omp hang on a missing response.
+// ============================================================================
+// Tool-approval gate (ADR 0007)
+// ============================================================================
+
+// toolApprovalRequestPayload is the wire payload for a tool.request_approval
+// extension_ui_request. Pair-locked with ToolApprovalRequestPayload in
+// packages/coding-agent/src/modes/rpc/rpc-types.ts and asserted at startup
+// by the init() parity check below.
+type toolApprovalRequestPayload struct {
+	ToolCallID string              `json:"toolCallId"`
+	ToolName   string              `json:"toolName"`
+	Params     toolapproval.Params `json:"params"`
+}
+
+// toolApprovalDecoder mirrors authDecoder for the tool-approval flow: it
+// consumes the inbound id + raw JSON for the method and produces a typed
+// tea.Msg or a decode error.
+type toolApprovalDecoder func(id string, raw json.RawMessage) (tea.Msg, error)
+
+// toolApprovalMethods is the canonical list of tool-approval method
+// constants this dispatcher must support. Sourced once so the init()
+// parity check and TestToolApprovalDecoderParity drive off the same set —
+// adding a new method requires appending here AND adding a decoder, or the
+// init() check turns the omission into a startup panic.
+var toolApprovalMethods = []string{
+	toolapproval.MethodRequestApproval,
+}
+
+// toolApprovalDecoders maps each tool-approval method to its decoder.
+// Pair-locked with the TS-side ToolApprovalRequestPayload union; the init()
+// block below ensures every toolApprovalMethods entry has a decoder.
+var toolApprovalDecoders = map[string]toolApprovalDecoder{
+	toolapproval.MethodRequestApproval: func(id string, raw json.RawMessage) (tea.Msg, error) {
+		var p toolApprovalRequestPayload
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, err
+		}
+		return toolapproval.Request{ID: id, ToolCallID: p.ToolCallID, ToolName: p.ToolName, Params: p.Params}, nil
+	},
+}
+
+// init enforces every entry in toolApprovalMethods has a decoder, mirroring
+// the auth parity check. A method added to the const list but forgotten in
+// toolApprovalDecoders becomes a startup panic instead of a silent
+// auto-cancel at runtime.
+func init() {
+	ensureToolApprovalDecoderParity(toolApprovalMethods, toolApprovalDecoders)
+}
+
+// ensureToolApprovalDecoderParity panics if any entry in `methods` lacks an
+// entry in `decoders`. Extracted for testability.
+func ensureToolApprovalDecoderParity(methods []string, decoders map[string]toolApprovalDecoder) {
+	if missing := missingToolApprovalDecoders(methods, decoders); len(missing) > 0 {
+		panic("gmp workspace: tool-approval decoder missing for: " + strings.Join(missing, ", "))
+	}
+}
+
+// missingToolApprovalDecoders returns the entries in `methods` with no entry
+// in `decoders`. Pure for testability.
+func missingToolApprovalDecoders(methods []string, decoders map[string]toolApprovalDecoder) []string {
+	var missing []string
+	for _, m := range methods {
+		if _, ok := decoders[m]; !ok {
+			missing = append(missing, m)
+		}
+	}
+	return missing
+}
+
+// translateToolApprovalRequest returns a Bubble Tea message for an inbound
+// tool.request_approval extension_ui_request, or nil if the method is not a
+// known tool-approval method (drainExtensionUI then falls back to its
+// default-cancel response, which denies the tool — the safe default).
+func (w *GmpWorkspace) translateToolApprovalRequest(req *ompclient.ExtensionUIReq) tea.Msg {
+	decode, ok := toolApprovalDecoders[req.Method]
+	if !ok {
+		return nil
+	}
+	msg, err := decode(req.ID, req.Raw)
+	if err != nil {
+		slog.Warn("gmp workspace: failed to parse tool-approval payload", "method", req.Method, "id", req.ID, "error", err)
+		return nil
+	}
+	return msg
+}
+
+// ToolApprovalPermissionRequest builds a permission.PermissionRequest from
+// a tool-approval Request so the existing dialog.Permissions component can
+// render it. The wire request ID is carried in PermissionRequest.ID so the
+// approve/deny reply can be correlated back to the gmp side. Params are
+// mapped into the per-tool tools.*PermissionsParams the dialog renders by
+// ToolName; tools without a dedicated renderer fall back to the generic
+// description. Pure for testability.
+func ToolApprovalPermissionRequest(req toolapproval.Request) permission.PermissionRequest {
+	perm := permission.PermissionRequest{
+		ID:         req.ID,
+		ToolCallID: req.ToolCallID,
+		ToolName:   req.ToolName,
+		Action:     "execute",
+	}
+	switch req.ToolName {
+	case tools.BashToolName:
+		perm.Path = req.Params.WorkingDir
+		perm.Description = req.Params.Description
+		perm.Params = tools.BashPermissionsParams{
+			Description: req.Params.Description,
+			Command:     req.Params.Command,
+			WorkingDir:  req.Params.WorkingDir,
+		}
+	case tools.EditToolName:
+		perm.Path = req.Params.FilePath
+		perm.Params = tools.EditPermissionsParams{
+			FilePath:   req.Params.FilePath,
+			OldContent: req.Params.OldContent,
+			NewContent: req.Params.NewContent,
+		}
+	case tools.WriteToolName:
+		perm.Path = req.Params.FilePath
+		perm.Params = tools.WritePermissionsParams{
+			FilePath:   req.Params.FilePath,
+			OldContent: req.Params.OldContent,
+			NewContent: req.Params.NewContent,
+		}
+	default:
+		// apply_patch and any future gated tool without a dedicated
+		// renderer: carry the file path + a generic description so the
+		// default dialog content path has something to show.
+		perm.Path = req.Params.FilePath
+		perm.Description = cmp.Or(req.Params.Description, req.Params.Command)
+	}
+	return perm
+}
+
+// HandleToolApprovalReply translates the dialog's approve/deny decision into
+// the matching extension_ui_response on the wire, correlated by the wire
+// request ID stored in PermissionRequest.ID. Sent through the same path
+// HandleAuthReply uses. Approve → confirmed:true; deny (including a
+// dismissed dialog) → confirmed:false. The model layer calls this in gmp
+// mode instead of the inert Crush PermissionGrant/Deny no-ops.
+func (w *GmpWorkspace) HandleToolApprovalReply(perm permission.PermissionRequest, approved bool) {
+	if w.client == nil || perm.ID == "" {
+		return
+	}
+	resp := buildToolApprovalReplyFrame(perm.ID, approved)
+	if err := w.client.Send(resp); err != nil {
+		slog.Debug("gmp workspace: tool-approval reply send failed", "id", perm.ID, "error", err)
+	}
+}
+
+// buildToolApprovalReplyFrame assembles the extension_ui_response for a
+// tool-approval decision. Pure for testability.
+func buildToolApprovalReplyFrame(id string, approved bool) ompclient.ExtensionUIResp {
+	confirmed := approved
+	return ompclient.ExtensionUIResp{Type: "extension_ui_response", ID: id, Confirmed: &confirmed}
+}
+
+// drainHostToolCalls rejects every incoming host tool invocation with an
+// error result. The Go TUI never registers host tools via set_host_tools, so
+// host-side tools are an intentional, documented gmp-mode limitation (gap G29):
+// a host_tool_call frame is unexpected. We always reply — failing the call
+// explicitly rather than letting the backend hang on a missing response — so
+// the read loop can never deadlock on an unregistered host tool.
 func (w *GmpWorkspace) drainHostToolCalls() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -1078,7 +1262,7 @@ func (w *GmpWorkspace) drainHostToolCalls() {
 		resp := ompclient.HostToolResult{
 			Type:    "host_tool_result",
 			ID:      req.ID,
-			Result:  "host tool not registered by gmp-tui-go",
+			Result:  "host tools are not supported by gmp-tui-go (the Go frontend registers none)",
 			IsError: true,
 		}
 		if err := w.client.Send(resp); err != nil {
@@ -1137,7 +1321,11 @@ func (w *GmpWorkspace) translateEvent(ev *ompclient.AgentEvent) tea.Msg {
 			w.sendUI(msg)
 		}
 		if !containsAssistantMessageEvent(finalEvents) {
-			if msg := w.finishAssistant(message.FinishReasonEndTurn, "", ""); msg != nil {
+			reason, text := message.FinishReasonEndTurn, ""
+			if desc, ok := describeAgentErrorKind(ev.Payload); ok {
+				reason, text = message.FinishReasonError, desc
+			}
+			if msg := w.finishAssistant(reason, text, ""); msg != nil {
 				w.sendUI(msg)
 			}
 		}
@@ -1202,9 +1390,12 @@ func (w *GmpWorkspace) handleMessageStart(raw []byte) tea.Msg {
 func (w *GmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 	var delta struct {
 		AssistantMessageEvent struct {
-			Type  string `json:"type"`
-			Delta string `json:"delta"`
-			Error *struct {
+			Type         string          `json:"type"`
+			Delta        string          `json:"delta"`
+			ContentIndex int             `json:"contentIndex"`
+			Partial      json.RawMessage `json:"partial"`
+			ToolCall     json.RawMessage `json:"toolCall"`
+			Error        *struct {
 				ErrorMessage string `json:"errorMessage"`
 			} `json:"error"`
 		} `json:"assistantMessageEvent"`
@@ -1225,6 +1416,33 @@ func (w *GmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 			}
 			return w.updateAssistant(func(msg *message.Message) {
 				msg.AppendReasoningContent(ev.Delta)
+			})
+		case "toolcall_start", "toolcall_delta":
+			// Reconcile the in-progress tool call from the `partial` snapshot
+			// rather than accumulating `delta`. `partial.content[contentIndex]`
+			// is the backend's fully-parsed accumulated tool call (id, name,
+			// arguments), so this is immune to dropped or duplicated deltas and
+			// always yields valid JSON args. AddToolCall is keyed by id, so the
+			// same toolCallId arriving later via tool_execution_start updates
+			// the same card instead of creating a duplicate.
+			tc, ok := toolCallFromPartial(ev.Partial, ev.ContentIndex)
+			if !ok {
+				return nil
+			}
+			return w.updateAssistant(func(msg *message.Message) {
+				msg.AddToolCall(tc)
+			})
+		case "toolcall_end":
+			tc, ok := toolCallFromWireBlock(ev.ToolCall)
+			if !ok {
+				tc, ok = toolCallFromPartial(ev.Partial, ev.ContentIndex)
+			}
+			if !ok {
+				return nil
+			}
+			tc.Finished = true
+			return w.updateAssistant(func(msg *message.Message) {
+				msg.AddToolCall(tc)
 			})
 		case "error":
 			text := "Request failed"
@@ -1259,6 +1477,55 @@ func (w *GmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 	return pubsub.Event[message.Message]{Type: pubsub.UpdatedEvent, Payload: msg.Clone()}
 }
 
+// toolCallFromPartial extracts the tool call at contentIndex from a streaming
+// `partial` WireAssistantMessageV1 snapshot. It returns false when the index is
+// out of range or the block at that index is not a tool call (e.g. interleaved
+// text/thinking blocks), so callers ignore non-tool-call sub-events safely.
+func toolCallFromPartial(partial json.RawMessage, contentIndex int) (message.ToolCall, bool) {
+	if len(partial) == 0 || contentIndex < 0 {
+		return message.ToolCall{}, false
+	}
+	var p struct {
+		Content []json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(partial, &p); err != nil {
+		return message.ToolCall{}, false
+	}
+	if contentIndex >= len(p.Content) {
+		return message.ToolCall{}, false
+	}
+	return toolCallFromWireBlock(p.Content[contentIndex])
+}
+
+// toolCallFromWireBlock parses a single WireToolCallV1 content block
+// ({type:"toolCall", id, name, arguments}) into a message.ToolCall. The wire
+// `arguments` is an already-parsed JSON object, so re-marshaling always yields
+// valid JSON for the renderers. The tool name is mapped to the renderer name to
+// match handleToolExecutionStart, keeping a single card across both paths.
+func toolCallFromWireBlock(block json.RawMessage) (message.ToolCall, bool) {
+	if len(block) == 0 {
+		return message.ToolCall{}, false
+	}
+	var tc struct {
+		Type      string          `json:"type"`
+		ID        string          `json:"id"`
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
+	}
+	if err := json.Unmarshal(block, &tc); err != nil || tc.Type != "toolCall" || tc.ID == "" {
+		return message.ToolCall{}, false
+	}
+	input := string(tc.Arguments)
+	if input == "" {
+		input = "{}"
+	}
+	return message.ToolCall{
+		ID:    tc.ID,
+		Name:  mapWireToolName(tc.Name),
+		Input: input,
+	}, true
+}
+
 func (w *GmpWorkspace) handleMessageEnd(raw []byte) tea.Msg {
 	msg, ok := w.parseAgentMessage(raw, "message")
 	if !ok {
@@ -1273,6 +1540,7 @@ func (w *GmpWorkspace) handleMessageEnd(raw []byte) tea.Msg {
 	if msg.Role == message.Assistant && w.currentAssistantID != "" {
 		msg.ID = w.currentAssistantID
 	}
+	applyWireErrorKind(&msg, raw)
 	if msg.ID != "" {
 		w.upsertMessageLocked(msg)
 		if msg.Role == message.Assistant {
@@ -1357,6 +1625,7 @@ func (w *GmpWorkspace) handleAgentEnd(raw []byte) []tea.Msg {
 				msg.ID = id
 			}
 		}
+		applyWireErrorKind(&msg, raw)
 		if _, exists := w.messages[msg.ID]; exists {
 			eventType = pubsub.UpdatedEvent
 		}
@@ -1385,7 +1654,7 @@ func (w *GmpWorkspace) handleToolExecutionStart(raw []byte) tea.Msg {
 	return w.updateAssistant(func(msg *message.Message) {
 		msg.AddToolCall(message.ToolCall{
 			ID:    p.ToolCallID,
-			Name:  p.ToolName,
+			Name:  mapWireToolName(p.ToolName),
 			Input: string(args),
 		})
 	})
@@ -1403,12 +1672,14 @@ func (w *GmpWorkspace) handleToolExecutionUpdate(raw []byte) tea.Msg {
 	id := p.ToolCallID + "-result"
 	now := time.Now().Unix()
 	content := stringifyToolResult(p.PartialResult)
+	metadata := toWireToolResultMetadata(p.ToolName, p.PartialResult)
 	sessionID := w.sessionID()
 	w.mu.Lock()
 	msg, ok := w.messages[id]
 	if ok && len(msg.Parts) > 0 {
 		if tr, ok := msg.Parts[0].(message.ToolResult); ok {
 			tr.Content = content
+			tr.Metadata = metadata
 			msg.Parts[0] = tr
 			msg.UpdatedAt = now
 			w.messages[id] = msg
@@ -1422,8 +1693,9 @@ func (w *GmpWorkspace) handleToolExecutionUpdate(raw []byte) tea.Msg {
 			Parts: []message.ContentPart{
 				message.ToolResult{
 					ToolCallID: p.ToolCallID,
-					Name:       p.ToolName,
+					Name:       mapWireToolName(p.ToolName),
 					Content:    content,
+					Metadata:   metadata,
 				},
 			},
 			CreatedAt: now,
@@ -1464,8 +1736,9 @@ func (w *GmpWorkspace) handleToolExecutionEnd(raw []byte) tea.Msg {
 		Parts: []message.ContentPart{
 			message.ToolResult{
 				ToolCallID: p.ToolCallID,
-				Name:       p.ToolName,
+				Name:       mapWireToolName(p.ToolName),
 				Content:    stringifyToolResult(p.Result),
+				Metadata:   toWireToolResultMetadata(p.ToolName, p.Result),
 				IsError:    p.IsError,
 			},
 		},
@@ -1527,7 +1800,7 @@ func (w *GmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 	case "bashExecution", "pythonExecution":
 		msg.Parts = w.parseExecutionContent(body)
 		msg.ID = w.nextID("exec")
-	case "custom", "hookMessage":
+	case "custom", "hookMessage", "developer":
 		msg.Parts = w.parseTextWrappedContent(body)
 		msg.ID = w.nextID("custom")
 	default:
@@ -1662,14 +1935,42 @@ func (w *GmpWorkspace) parseToolResultContent(raw []byte) []message.ContentPart 
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil
 	}
+	data, mimeType := extractImageContent(p.Content)
 	return []message.ContentPart{
 		message.ToolResult{
 			ToolCallID: p.ToolCallID,
-			Name:       p.ToolName,
+			Name:       mapWireToolName(p.ToolName),
 			Content:    extractTextString(p.Content),
+			Data:       data,
+			MIMEType:   mimeType,
+			Metadata:   toWireToolResultMetadata(p.ToolName, raw),
 			IsError:    p.IsError,
 		},
 	}
+}
+
+// extractImageContent returns the first image block's base64 data and MIME type
+// from an RPC content value ([]{type:"image",data,mimeType}). The renderers
+// (internal/ui/chat) consume Data as a base64 string and compute the size from
+// it, so it is passed through undecoded.
+func extractImageContent(content any) (data, mimeType string) {
+	blocks, ok := content.([]any)
+	if !ok {
+		return "", ""
+	}
+	for _, item := range blocks {
+		m, ok := item.(map[string]any)
+		if !ok || m["type"] != "image" {
+			continue
+		}
+		d, _ := m["data"].(string)
+		if d == "" {
+			continue
+		}
+		mt, _ := m["mimeType"].(string)
+		return d, mt
+	}
+	return "", ""
 }
 
 func (w *GmpWorkspace) parseExecutionContent(raw []byte) []message.ContentPart {

@@ -22,6 +22,26 @@ describe("tool card chrome", () => {
 		expect(error).toContain("error");
 	});
 
+	it("renders custom badges and filters empty metadata from tool headers", async () => {
+		const uiTheme = await getUiTheme();
+		const line = Bun.stripANSI(
+			renderStatusLine(
+				{
+					title: "Search",
+					description: "pattern",
+					badge: { label: "cached", color: "warning" },
+					meta: [" ", "12 matches", ""],
+				},
+				uiTheme,
+			),
+		);
+
+		expect(line).toContain("Search: pattern");
+		expect(line).toContain("cached");
+		expect(line).toContain("12 matches");
+		expect(line).not.toContain("  12 matches");
+	});
+
 	it("renders rounded width-safe output blocks with sanitized tabs", async () => {
 		const uiTheme = await getUiTheme();
 		const lines = renderOutputBlock(

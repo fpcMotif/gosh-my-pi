@@ -43,4 +43,21 @@ describe("renderTemplate", () => {
 		});
 		expect(result.task).toBe("just the assignment");
 	});
+
+	test("independent simple mode wraps assignment without shared context", () => {
+		const result = renderTemplate(
+			undefined,
+			{
+				id: "solo",
+				description: "Independent",
+				assignment: "Do this without shared context.",
+			},
+			"independent",
+		);
+
+		expect(result.task).toContain("Do this without shared context.");
+		expect(result.task).toContain(sectionSeparator("Task").trimStart());
+		expect(result.task).not.toContain(sectionSeparator("Background").trimStart());
+		expect(result.assignment).toBe("Do this without shared context.");
+	});
 });

@@ -1,3 +1,17 @@
+// Effectful Codex WebSocket transport.
+//
+// Public surface is a thin async class (CodexWebSocketConnection) because
+// callers from openai-codex-responses.ts iterate it with `for await`, but the
+// internals are pure Effect:
+//   - The TCP handshake race against a connect-timeout uses Effect.timeoutFail.
+//   - The waiter loop inside #nextMessage uses Effect.race between an
+//     Effect.async waiter and Effect.sleep(timeoutMs), so no `setTimeout`
+//     handles leak across abort paths.
+//   - Caller-supplied AbortSignals are bridged through effectFromSignal so
+//     interruption tears down the fiber and any in-flight watchdogs.
+
+import { logger } from "@oh-my-pi/pi-utils";
+import { Duration, Effect, effectFromSignal } from "@oh-my-pi/pi-utils/effect";
 import type { RequestBody } from "./request-transformer";
 
 export type CodexTransport = "sse" | "websocket";
@@ -17,7 +31,7 @@ export type CodexWebSocketSessionState = {
 	prewarmed: boolean;
 };
 
-export const CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS = 10000;
+export const CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS = 10_000;
 export const CODEX_WEBSOCKET_TRANSPORT_ERROR_PREFIX = "Codex websocket transport error";
 
 export function createCodexWebSocketTransportError(message: string): Error {
@@ -38,6 +52,19 @@ export interface CodexWebSocketConnectionOptions {
 	onHandshakeHeaders?: (headers: Headers) => void;
 }
 
+type CodexWebSocketMessage = Record<string, unknown>;
+type CodexWebSocketQueueItem = CodexWebSocketMessage | Error | null;
+
+type WebSocketCtorWithHeaders = new (url: string, options?: { headers?: Record<string, string> }) => WebSocket;
+
+const TERMINAL_EVENT_TYPES: ReadonlySet<string> = new Set([
+	"response.completed",
+	"response.done",
+	"response.incomplete",
+	"response.failed",
+	"error",
+]);
+
 export class CodexWebSocketConnection {
 	#url: string;
 	#headers: Record<string, string>;
@@ -45,7 +72,7 @@ export class CodexWebSocketConnection {
 	#firstEventTimeoutMs: number;
 	#onHandshakeHeaders?: (headers: Headers) => void;
 	#socket: WebSocket | null = null;
-	#queue: Array<Record<string, unknown> | Error | null> = [];
+	#queue: Array<CodexWebSocketQueueItem> = [];
 	#waiters: Array<() => void> = [];
 	#connectPromise?: Promise<void>;
 	#activeRequest = false;
@@ -67,123 +94,36 @@ export class CodexWebSocketConnection {
 	}
 
 	close(reason = "done"): void {
-		if (
-			this.#socket !== null &&
-			(this.#socket.readyState === WebSocket.OPEN || this.#socket.readyState === WebSocket.CONNECTING)
-		) {
-			this.#socket.close(1000, reason);
+		const socket = this.#socket;
+		if (socket !== null && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+			socket.close(1000, reason);
 		}
 		this.#socket = null;
 	}
 
 	async connect(signal?: AbortSignal): Promise<void> {
 		if (this.isOpen()) return;
-		if (this.#connectPromise !== undefined && this.#connectPromise !== null) {
+		if (this.#connectPromise !== undefined) {
+			logger.time("codexWs:awaitSharedHandshake");
 			await this.#connectPromise;
 			return;
 		}
-		const WebSocketWithHeaders = WebSocket as unknown as {
-			new (url: string, options?: { headers?: Record<string, string> }): WebSocket;
-		};
-		const { promise, resolve, reject } = Promise.withResolvers<void>();
-		this.#connectPromise = promise;
-		const socket = new WebSocketWithHeaders(this.#url, { headers: this.#headers });
-		this.#socket = socket;
-		let settled = false;
-
-		const onAbort = () => {
-			socket.close(1000, "aborted");
-			if (settled === false) {
-				settled = true;
-				reject(createCodexWebSocketTransportError("request was aborted"));
-			}
-		};
-
-		if (signal !== undefined && signal !== null) {
-			if (signal.aborted === true) {
-				onAbort();
-			} else {
-				signal.addEventListener("abort", onAbort, { once: true });
-			}
-		}
-
-		const timeout = setTimeout(() => {
-			socket.close(1000, "connect-timeout");
-			if (settled === false) {
-				settled = true;
-				reject(createCodexWebSocketTransportError("connection timeout"));
-			}
-		}, CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS);
-		const clearPending = () => {
-			clearTimeout(timeout);
-			if (signal !== undefined && signal !== null) signal.removeEventListener("abort", onAbort);
-		};
-
-		socket.addEventListener("open", event => {
-			if (settled === false) {
-				settled = true;
-				clearPending();
-				this.#captureHandshakeHeaders(socket, event);
-				resolve();
-			}
+		logger.time("codexWs:awaitTcpHandshake");
+		const connectTimeout = Effect.sleep(Duration.millis(CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS)).pipe(
+			Effect.flatMap(() => {
+				this.close("connect-timeout");
+				return Effect.fail(createCodexWebSocketTransportError("connection timeout"));
+			}),
+		);
+		const handshake = Effect.raceFirst(this.#openSocketEffect(), connectTimeout);
+		const program = signal === undefined ? handshake : effectFromSignal(signal, handshake);
+		const settled = Effect.runPromise(program).catch((error: unknown) => {
+			throw this.#asTransportError(error);
 		});
-
-		socket.addEventListener("error", event => {
-			const eventRecord = event as unknown as Record<string, unknown>;
-			const detail =
-				(typeof eventRecord.message === "string" && eventRecord.message.length > 0
-					? eventRecord.message
-					: undefined) ||
-				(eventRecord.error instanceof Error && eventRecord.error.message.length > 0
-					? eventRecord.error.message
-					: undefined) ||
-				String(event.type);
-			const error = createCodexWebSocketTransportError(`websocket error: ${detail}`);
-			if (settled === false) {
-				settled = true;
-				clearPending();
-				reject(error);
-				return;
-			}
-			this.#push(error);
-		});
-
-		socket.addEventListener("close", event => {
-			this.#socket = null;
-			if (settled === false) {
-				settled = true;
-				clearPending();
-				reject(createCodexWebSocketTransportError(`websocket closed before open (${event.code})`));
-				return;
-			}
-			this.#push(createCodexWebSocketTransportError(`websocket closed (${event.code})`));
-			this.#push(null);
-		});
-
-		socket.addEventListener("message", event => {
-			if (typeof event.data !== "string") return;
-			try {
-				const parsed = JSON.parse(event.data) as Record<string, unknown>;
-				if (parsed.type === "error" && parsed.error !== null && typeof parsed.error === "object") {
-					const inner = parsed.error as Record<string, unknown>;
-					if (typeof parsed.code !== "string" && typeof inner.code === "string") {
-						parsed.code = inner.code;
-					}
-					if (typeof parsed.message !== "string" && typeof inner.message === "string") {
-						parsed.message = inner.message;
-					}
-				}
-				this.#push(parsed);
-			} catch (error) {
-				this.#push(createCodexWebSocketTransportError(String(error)));
-			}
-		});
-
-		try {
-			await promise;
-		} finally {
+		this.#connectPromise = settled.finally(() => {
 			this.#connectPromise = undefined;
-		}
+		});
+		await this.#connectPromise;
 	}
 
 	async *streamRequest(
@@ -193,18 +133,18 @@ export class CodexWebSocketConnection {
 		if (this.#socket === null || this.#socket.readyState !== WebSocket.OPEN) {
 			throw createCodexWebSocketTransportError("websocket connection is unavailable");
 		}
-		if (this.#activeRequest === true) {
+		if (this.#activeRequest) {
 			throw createCodexWebSocketTransportError("websocket request already in progress");
 		}
 		this.#activeRequest = true;
 
-		const onAbort = () => {
+		const onAbort = (): void => {
 			this.close("aborted");
 			this.#push(createCodexWebSocketTransportError("request was aborted"));
 		};
 
-		if (signal !== undefined && signal !== null) {
-			if (signal.aborted === true) {
+		if (signal !== undefined) {
+			if (signal.aborted) {
 				onAbort();
 			} else {
 				signal.addEventListener("abort", onAbort, { once: true });
@@ -216,7 +156,7 @@ export class CodexWebSocketConnection {
 			yield* this.#streamUntilTerminal(false);
 		} finally {
 			this.#activeRequest = false;
-			if (signal !== undefined && signal !== null) {
+			if (signal !== undefined) {
 				signal.removeEventListener("abort", onAbort);
 			}
 		}
@@ -227,77 +167,147 @@ export class CodexWebSocketConnection {
 			sawFirstEvent ? this.#idleTimeoutMs : this.#firstEventTimeoutMs,
 			sawFirstEvent ? "idle timeout waiting for websocket" : "timeout waiting for first websocket event",
 		);
-		if (next instanceof Error) {
-			throw next;
-		}
+		if (next instanceof Error) throw next;
 		if (next === null) {
 			throw createCodexWebSocketTransportError("websocket closed before response completion");
 		}
 		yield next;
 		const eventType = typeof next.type === "string" ? next.type : "";
-		if (
-			eventType === "response.completed" ||
-			eventType === "response.done" ||
-			eventType === "response.incomplete" ||
-			eventType === "response.failed" ||
-			eventType === "error"
-		) {
-			return;
-		}
+		if (TERMINAL_EVENT_TYPES.has(eventType)) return;
 		yield* this.#streamUntilTerminal(true);
 	}
 
+	#openSocketEffect(): Effect.Effect<void, Error> {
+		return Effect.suspend(() => {
+			const { promise, resolve, reject } = Promise.withResolvers<void>();
+			const WebSocketWithHeaders = WebSocket as unknown as WebSocketCtorWithHeaders;
+			const socket = new WebSocketWithHeaders(this.#url, { headers: this.#headers });
+			this.#socket = socket;
+			let settled = false;
+			const settleSuccess = (): void => {
+				if (settled) return;
+				settled = true;
+				resolve();
+			};
+			const settleFailure = (err: Error): void => {
+				if (settled) return;
+				settled = true;
+				reject(err);
+			};
+			const cleanup = (): void => {
+				if (settled) return;
+				socket.close(1000, "aborted");
+				settled = true;
+			};
+
+			// WebSocket lifecycle is exposed only as DOM events; Effect owns the
+			// handshake, timeout, and abort race around this listener boundary.
+			socket.addEventListener("open", event => {
+				this.#captureHandshakeHeaders(socket, event);
+				settleSuccess();
+			});
+			socket.addEventListener("error", event => {
+				const eventRecord = event as unknown as Record<string, unknown>;
+				const detail =
+					(typeof eventRecord.message === "string" && eventRecord.message.length > 0
+						? eventRecord.message
+						: undefined) ||
+					(eventRecord.error instanceof Error && eventRecord.error.message.length > 0
+						? eventRecord.error.message
+						: undefined) ||
+					String(event.type);
+				const transportError = createCodexWebSocketTransportError(`websocket error: ${detail}`);
+				if (settled) {
+					this.#push(transportError);
+					return;
+				}
+				settleFailure(transportError);
+			});
+			socket.addEventListener("close", event => {
+				this.#socket = null;
+				if (!settled) {
+					settleFailure(createCodexWebSocketTransportError(`websocket closed before open (${event.code})`));
+					return;
+				}
+				this.#push(createCodexWebSocketTransportError(`websocket closed (${event.code})`));
+				this.#push(null);
+			});
+			socket.addEventListener("message", event => this.#dispatchMessage(event));
+
+			return Effect.tryPromise({
+				try: () => promise,
+				catch: err => this.#asTransportError(err),
+			}).pipe(Effect.onInterrupt(() => Effect.sync(cleanup)));
+		});
+	}
+
+	#dispatchMessage(event: MessageEvent): void {
+		if (typeof event.data !== "string") return;
+		try {
+			const parsed = JSON.parse(event.data) as Record<string, unknown>;
+			if (parsed.type === "error" && parsed.error !== null && typeof parsed.error === "object") {
+				const inner = parsed.error as Record<string, unknown>;
+				if (typeof parsed.code !== "string" && typeof inner.code === "string") {
+					parsed.code = inner.code;
+				}
+				if (typeof parsed.message !== "string" && typeof inner.message === "string") {
+					parsed.message = inner.message;
+				}
+			}
+			this.#push(parsed);
+		} catch (error) {
+			this.#push(createCodexWebSocketTransportError(String(error)));
+		}
+	}
+
 	#captureHandshakeHeaders(socket: WebSocket, openEvent?: Event): void {
-		if (this.#onHandshakeHeaders === undefined || this.#onHandshakeHeaders === null) return;
+		if (this.#onHandshakeHeaders === undefined) return;
 		const headers = extractCodexWebSocketHandshakeHeaders(socket, openEvent);
-		if (headers === undefined || headers === null) return;
+		if (headers === undefined) return;
 		this.#onHandshakeHeaders(headers);
 	}
 
-	#push(item: Record<string, unknown> | Error | null): void {
+	#push(item: CodexWebSocketQueueItem): void {
 		this.#queue.push(item);
 		const waiter = this.#waiters.shift();
-		if (waiter !== undefined && waiter !== null) waiter();
+		if (waiter !== undefined) waiter();
 	}
 
-	async #nextMessage(timeoutMs: number, timeoutReason: string): Promise<Record<string, unknown> | Error | null> {
-		if (this.#queue.length > 0) {
-			return this.#queue.shift() ?? null;
-		}
-		const timedOut = await this.#waitOneCycle(timeoutMs);
-		if (timedOut === true && this.#queue.length === 0) {
+	async #nextMessage(timeoutMs: number, timeoutReason: string): Promise<CodexWebSocketQueueItem> {
+		const drained = this.#drainQueue();
+		if (drained !== undefined) return drained;
+		const outcome = await Effect.runPromise(this.#waitOneCycleEffect(timeoutMs));
+		if (outcome === "timeout" && this.#drainQueue() === undefined) {
 			return createCodexWebSocketTransportError(timeoutReason);
 		}
-		if (this.#queue.length === 0) {
-			return this.#nextMessage(timeoutMs, timeoutReason);
-		}
+		const drainedAfter = this.#drainQueue();
+		return drainedAfter ?? null;
+	}
+
+	#drainQueue(): CodexWebSocketQueueItem | undefined {
+		if (this.#queue.length === 0) return undefined;
 		return this.#queue.shift() ?? null;
 	}
 
-	#waitOneCycle(timeoutMs: number): Promise<boolean> {
-		return new Promise<boolean>(settle => {
-			let timedOut = false;
-			let settled = false;
-			const settleOnce = (didTimeOut: boolean) => {
-				if (settled === true) return;
-				settled = true;
-				if (timeout !== undefined && timeout !== null) clearTimeout(timeout);
-				settle(didTimeOut);
+	#waitOneCycleEffect(timeoutMs: number): Effect.Effect<"message" | "timeout"> {
+		return Effect.suspend(() => {
+			const { promise, resolve } = Promise.withResolvers<"message">();
+			const cb = (): void => resolve("message");
+			const removeWaiter = (): void => {
+				const idx = this.#waiters.indexOf(cb);
+				if (idx >= 0) this.#waiters.splice(idx, 1);
 			};
-			const resolve = () => settleOnce(timedOut);
-			this.#waiters.push(resolve);
-			let timeout: NodeJS.Timeout | undefined;
-			if (timeoutMs > 0) {
-				timeout = setTimeout(() => {
-					timedOut = true;
-					const waiterIndex = this.#waiters.indexOf(resolve);
-					if (waiterIndex >= 0) {
-						this.#waiters.splice(waiterIndex, 1);
-					}
-					settleOnce(true);
-				}, timeoutMs);
-			}
+			this.#waiters.push(cb);
+			const waiter = Effect.promise(() => promise);
+			if (timeoutMs <= 0) return waiter.pipe(Effect.ensuring(Effect.sync(removeWaiter)));
+			const timeout = Effect.sleep(Duration.millis(timeoutMs)).pipe(Effect.map(() => "timeout" as const));
+			return Effect.raceFirst(waiter, timeout).pipe(Effect.ensuring(Effect.sync(removeWaiter)));
 		});
+	}
+
+	#asTransportError(err: unknown): Error {
+		if (err instanceof Error) return err;
+		return createCodexWebSocketTransportError(String(err));
 	}
 }
 

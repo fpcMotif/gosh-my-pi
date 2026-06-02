@@ -53,4 +53,15 @@ describe("MessageFrame vivid layout", () => {
 		expect(allText).not.toContain("you");
 		expect(allText).toContain("hello");
 	});
+
+	it("removes child components from subsequent renders", () => {
+		const frame = new MessageFrame({ railColor: "borderRailUser" });
+		const child = new Text("temporary", 0, 0);
+		frame.addChild(child);
+		expect(Bun.stripANSI(frame.render(40).join("\n"))).toContain("temporary");
+
+		frame.removeChild(child);
+
+		expect(frame.render(40)).toEqual([]);
+	});
 });

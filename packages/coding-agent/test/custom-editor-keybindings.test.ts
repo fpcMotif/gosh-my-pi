@@ -37,3 +37,29 @@ describe("CustomEditor temporary model selector keybinding", () => {
 		expect(onSelectModelTemporary).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe("CustomEditor custom key handlers", () => {
+	it("registers, removes, and clears extension key handlers", () => {
+		const editor = createEditor();
+		const onCtrlY = vi.fn();
+		const onCtrlU = vi.fn();
+
+		editor.setCustomKeyHandler("ctrl+y", onCtrlY);
+		editor.setCustomKeyHandler("ctrl+u", onCtrlU);
+
+		editor.handleInput(ctrl("y"));
+		expect(onCtrlY).toHaveBeenCalledTimes(1);
+		expect(onCtrlU).not.toHaveBeenCalled();
+
+		editor.removeCustomKeyHandler("ctrl+y");
+		editor.handleInput(ctrl("y"));
+		expect(onCtrlY).toHaveBeenCalledTimes(1);
+
+		editor.handleInput(ctrl("u"));
+		expect(onCtrlU).toHaveBeenCalledTimes(1);
+
+		editor.clearCustomKeyHandlers();
+		editor.handleInput(ctrl("u"));
+		expect(onCtrlU).toHaveBeenCalledTimes(1);
+	});
+});

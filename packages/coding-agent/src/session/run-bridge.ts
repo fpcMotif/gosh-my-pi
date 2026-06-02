@@ -1,8 +1,7 @@
-// Run bridge — `OMP_RECOVERY_POLICY`-gated wrapper around `Agent.prompt` /
+// Run bridge — default Effect-backed wrapper around `Agent.prompt` /
 // `Agent.continue` that routes through `AgentRunController` via
-// `Effect.runPromiseExit` when the env flag is set, and calls the Agent
-// methods directly otherwise. Closes the last unfinished P3b.5+ deferred
-// item from the migration plan.
+// `Effect.runPromiseExit`. `OMP_RECOVERY_POLICY=0|false|off|no` remains as a
+// local escape hatch for comparing the legacy direct path.
 //
 // Per ADR-0003 / ADR-0004:
 //   - Failure channel preserves the typed `AgentRunError` so existing
@@ -17,28 +16,24 @@
 // branches without mutating `process.env` (forbidden per AGENTS.md
 // "Testing Guidance" — full-suite-safe rule).
 
-import {
-	type Agent,
-	AgentRunController,
-	type AgentRunRequest,
-	LiveClock,
-	type RecoveryMarker,
-} from "@oh-my-pi/pi-agent-core";
-import { Cause, Effect, Layer, Option } from "@oh-my-pi/pi-utils/effect";
-import { makeRecoveryMarkerLayer } from "./recovery-marker-live";
+import { type Agent, AgentRunController, type AgentRunRequest, LiveClock } from "@oh-my-pi/pi-agent-core";
+import { Cause, Effect, Option } from "@oh-my-pi/pi-utils/effect";
 import type { SessionManager } from "./session-manager";
 
 /** Env var name + on-value for the gated runtime path. Single source of truth. */
 export const RECOVERY_POLICY_ENV_VAR = "OMP_RECOVERY_POLICY";
 export const RECOVERY_POLICY_ENABLED = "1";
+const RECOVERY_POLICY_DISABLED_VALUES = new Set(["0", "false", "off", "no"]);
 
-/** Returns true when `OMP_RECOVERY_POLICY` is set to `"1"` in the current process. */
+/** Returns false only when `OMP_RECOVERY_POLICY` explicitly opts out. */
 export function isRecoveryPolicyEnabled(): boolean {
-	return process.env[RECOVERY_POLICY_ENV_VAR] === RECOVERY_POLICY_ENABLED;
+	const value = process.env[RECOVERY_POLICY_ENV_VAR];
+	if (value === undefined || value.trim() === "") return true;
+	return !RECOVERY_POLICY_DISABLED_VALUES.has(value.trim().toLowerCase());
 }
 
 /**
- * Runtime options for the bridge. `enabled` is normally
+ * Runtime options for the bridge. `enabled` is normally `true` from
  * `isRecoveryPolicyEnabled()` but is taken as an explicit parameter so tests
  * can pin both branches deterministically.
  */
@@ -49,9 +44,9 @@ export interface RunAgentRequestOptions {
 
 /**
  * Dispatch an `AgentRunRequest` against `agent`. When `options.enabled` is
- * `true`, runs through `AgentRunController` with the Live `RecoveryMarker`
- * Layer (writes markers via `sessionManager`'s `appendRecoveryMarker`) and
- * `LiveClock`. When `false`, calls `agent.prompt` / `agent.continue`
+ * `true`, runs through `AgentRunController` with `LiveClock`. Recovery
+ * markers are written by `RecoveryLedger` from the AgentEvent stream, not by
+ * this run bridge. When `false`, calls `agent.prompt` / `agent.continue`
  * directly — same byte-for-byte path the codebase used pre-P3.
  *
  * Failure semantics (enabled branch):
@@ -63,7 +58,7 @@ export interface RunAgentRequestOptions {
  */
 export async function runAgentRequest(
 	agent: Agent,
-	sessionManager: SessionManager,
+	_sessionManager: SessionManager,
 	request: AgentRunRequest,
 	options: RunAgentRequestOptions,
 ): Promise<void> {
@@ -73,8 +68,7 @@ export async function runAgentRequest(
 	}
 
 	const controller = new AgentRunController(agent);
-	const liveLayer: Layer.Layer<RecoveryMarker> = makeRecoveryMarkerLayer(sessionManager);
-	const program = controller.run(request).pipe(Effect.provide(liveLayer), Effect.provide(LiveClock));
+	const program = controller.run(request).pipe(Effect.provide(LiveClock));
 	const exit = await Effect.runPromiseExit(program);
 
 	if (exit._tag === "Success") return;
@@ -97,6 +91,10 @@ async function runDirect(agent: Agent, request: AgentRunRequest): Promise<void> 
 	// the (input, options) overload covers all union variants of `input`.
 	if (typeof input === "string" && images !== undefined) {
 		await agent.prompt(input, images, options);
+		return;
+	}
+	if (typeof input === "string") {
+		await agent.prompt(input, options);
 		return;
 	}
 	await agent.prompt(input, options);

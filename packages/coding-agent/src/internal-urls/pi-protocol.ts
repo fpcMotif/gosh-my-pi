@@ -19,6 +19,8 @@ import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 export class PiProtocolHandler implements ProtocolHandler {
 	readonly scheme = "pi";
 
+	constructor() {}
+
 	async resolve(url: InternalUrl): Promise<InternalResource> {
 		// Extract filename from host + path
 		const host = url.rawHost || url.hostname;

@@ -635,6 +635,7 @@ export class MCPAddWizard extends Container {
 					void this.#launchOAuthFlow();
 				} else {
 					this.#currentStep = "oauth-auth-url";
+					this.#renderStep();
 				}
 				return;
 			case "auth-location": {
@@ -975,6 +976,7 @@ export class MCPAddWizard extends Container {
 				}
 
 				// OAuth metadata unavailable: fallback to manual API key.
+				this.#state.authMethod = "manual";
 				this.#contentContainer.clear();
 				this.#contentContainer.addChild(new Text(theme.fg("warning", "⚠ Authentication required"), 0, 0));
 				this.#contentContainer.addChild(new Spacer(1));
@@ -1191,6 +1193,7 @@ export class MCPAddWizard extends Container {
 			);
 		} catch (error) {
 			// Show error with options to retry or go back
+			this.#inputField = null;
 			const errorMsg = sanitize(error instanceof Error ? error.message : String(error));
 			this.#contentContainer.clear();
 			this.#contentContainer.addChild(new Text(theme.fg("error", "✗ OAuth authentication failed"), 0, 0));

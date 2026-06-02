@@ -27,6 +27,20 @@ of the lower-level `Agent` from pi-agent-core. Originally a 6,898-line
 god-object; candidate #1b is incrementally decomposing it into focused
 controller classes that AgentSession owns and delegates to.
 
+**AgentEventRouter**:
+Pilot extraction for candidate #1. Owns ordered, display-layer event routing
+responsibilities at the `AgentEvent` boundary: visible-queue removal on user
+`message_start`, assistant content deobfuscation for emitted display events,
+and forwarding through `emitSessionEvent`. `AgentSession` now constructs this
+router and delegates the pure routing concern so side-effect ordering around
+extension visibility can be tested in isolation.
+
+**PostPromptScheduler**:
+Owns continuation scheduling for post-turn recovery. It centralizes delayed
+continuation tasks, generation guards, cancellation, and wait-gating across retry
+TTSR resume and streaming states. It also owns safe `continue` scheduling so
+`maybeRestorePrimary()` runs before every automatic `agent.continue()`.
+
 **ActiveRetryFallback**:
 First extracted subsystem (#1b pilot). Owns the per-session
 "currently-active retry fallback" state plus the methods that mutate it
@@ -137,17 +151,72 @@ orchestrator's per-candidate retry loop. Runs an attempt with transient-error
 retry, exponential backoff, and respect for `Retry-After` headers parsed
 from the error string. Bails to "next candidate" when delay exceeds
 `maxAcceptableDelayMs` (default 30s) and another candidate is available.
-Lives in `packages/coding-agent/src/session/compaction-retry.ts`.
+Lives in `packages/coding-agent/src/session/compaction-retry.ts`. Documented
+non-adopter of **retryWithState** — the "bail to next candidate" escalation
+is not a {`retry` | `return` | `fail`} decision; it hands control back to a
+different outer loop (the compaction candidate orchestrator).
 
-The compaction orchestrator itself (`#runAutoCompaction`, `#checkCompaction`,
-`#tryContextPromotion`, `#getCompactionModelCandidates`, `#pruneToolOutputs`,
-`compact()` from `./compaction`) intentionally stays on AgentSession — it
+**retryWithState**:
+Generic Effect-native retry primitive in `packages/ai/src/utils/retry.ts`.
+Owns the loop, the sleep, and the decision routing; callers supply
+`attempt(state)`, `onSuccess(output, state)`, `onFailure(error, state)`, and
+an `initialState`. Outcomes are tagged: `{ _tag: "retry", delayMs, nextState,
+beforeRetry? }`, `{ _tag: "return", value }`, or `{ _tag: "fail", error }`.
+Adopters today: `codexFetchRetryEffect`, `openCodexWebSocketTransport` retry,
+`processCodexResponseStream` retry — all on the Codex provider stack, which
+already lives behind the Effect Layer surface.
+
+The seam is intentionally narrow. Documented non-adopters:
+
+- **RetryController** owns an awaitable Promise boundary (`waitFor()` /
+  `resolve()`) so consumers outside the loop can observe in-flight retries;
+  Effect's interrupt channel does not map onto that surface without surrendering
+  the visible boundary.
+- **runCompactionWithRetry** has the "bail to next candidate" escalation noted
+  above.
+- **Promise-based retry loops in coding-agent** (e.g. `commit/map-reduce/
+map-phase.ts::withRetry`, `config/file-lock.ts::acquireLock`,
+  `mcp/manager.ts::#doReconnect`, `commit/pipeline.ts::generateSummaryWithRetry`)
+  stay inline. Each is ≤30 LOC; an Effect boundary at the call site (Effect
+  imports, `Effect.tryPromise`, `Effect.runPromiseExit`, `Cause.squash`) would
+  add more surface than the loop itself carries. Two of them additionally have
+  structural mismatch — `acquireLock` is attempt-with-retry-on-falsy plus
+  interleaved stale-lock cleanup, and `#doReconnect`'s epoch guard fires both
+  before each attempt and mid-error.
+
+The rule going forward: reach for `retryWithState` when the call site is
+already Effect-native or about to become so; keep small Promise loops inline
+otherwise; revisit when a fifth Effect-side retry caller arrives or when an
+inline loop grows past ~50 LOC.
+
+**ContextPressurePolicy**:
+A pure decision Module for automatic context pressure. It classifies assistant
+messages into overflow, threshold, and skip decisions; applies pruning token
+savings to threshold checks; resolves configured promotion targets; and orders
+auto-compaction model candidates from role models plus the largest remaining
+fallback. Lives in
+`packages/coding-agent/src/session/context-pressure-policy.ts`.
+
+The mutating compaction orchestrator itself (`#runAutoCompaction`,
+`#checkCompaction`, `#tryContextPromotion`, `#pruneToolOutputs`, `compact()`
+from `./compaction`) intentionally stays on AgentSession - it
 has 12+ session-callback dependencies (handoff, schedulePostPromptTask,
 emitSessionEvent, scheduleAutoContinuePrompt, scheduleAgentContinue,
 syncTodoPhasesFromBranch, providerSessions.closeForCodexHistoryRewrite,
 buildDisplaySessionContext, modelRegistry, sessionManager, agent state
 mutation, extension hooks) and a feedback loop into agent.continue. Risk vs
 reward made full extraction unwise this turn.
+
+**ToolPresentation**:
+Neutral tool presentation data in `packages/coding-agent/src/tools/presentation.ts`.
+The first slice supports status and output-block presentations plus a legacy
+`pi-tui` Adapter. `ToolExecutionComponent` now prefers `presentCall` /
+`presentResult` data from built-in renderers when available and falls back to
+the older component renderers. Initial migration covers simple `bash`, non-URL
+`read`, and non-vim `edit`/`apply_patch` call summaries, plus non-URL `read`
+result code blocks. Richer shell output and edit diff result presentation remain
+on the legacy renderers until their width-sensitive behavior has a dedicated
+migration pass.
 
 **pi-tui (legacy frontend, scheduled for deletion — candidate #3)**:
 The in-process TUI library at `packages/tui/`. Originally hosted both the
@@ -474,17 +543,16 @@ touching the type surface the UI shares with Crush internals.
 **AgentRunController**:
 The Effect-side wrapper around `Agent.prompt` / `Agent.continue`
 introduced by the v4 migration P3. Owns no new state; it reframes the
-existing pi-agent-core run as an `Effect<void, AgentRunError, ...>`
-program so retries, recovery, and durability hooks become a Layer
-seam instead of inline `try/catch`. Public surface stays
-`Promise<void>` — `Effect.runPromise` lives at the seam. Lives in
+existing pi-agent-core run as an `Effect<void, AgentRunError, Clock>`
+program so retries and recovery keep a typed Promise→Effect error seam
+instead of inline `try/catch`. Public surface stays `Promise<void>` —
+`Effect.runPromiseExit` lives at the seam. Lives in
 `packages/agent/src/run/agent-run.ts`. Sits inside the existing
 `RetryController`/`ActiveRetryFallback` boundary; does **not**
-replace them. Production callers reach the controller through
-**runAgentRequest** (in coding-agent), which gates on
-`OMP_RECOVERY_POLICY` and provides the Live `RecoveryMarker` + `Clock`
-Layers. _Avoid_: turn pump, turn driver, AgentTurnRunner,
-durable workflow, Workflow.
+replace them. It intentionally does not write recovery markers;
+**RecoveryLedger** owns marker emission from the AgentEvent stream.
+_Avoid_: turn pump, turn driver, AgentTurnRunner, durable workflow,
+Workflow.
 
 **RecoveryMarker**:
 A typed JSONL line (`event: "recovery-marker"`) appended to the session
@@ -494,6 +562,17 @@ log at three well-defined safe points: after `message_end`, after each
 point the **RecoveryPolicy** reads on session reopen to classify the
 crash state. Cheap, append-only, ignored by readers that don't know
 about it. _Avoid_: turn-checkpoint, durable-checkpoint, snapshot.
+
+**RecoveryLedger**:
+Write-side owner for ADR-0003 recovery marker state in
+`packages/coding-agent/src/session/recovery-ledger.ts`. Owns the
+monotonic marker generation, observed event sequence, pending tool-call
+IDs, and the writer Adapter around `SessionManager.appendRecoveryMarker`.
+`AgentSession` routes ordered event facts to it at the safe points:
+event start, assistant persisted, tool completed, and turn completed.
+The ledger keeps marker timing in one Module while **RecoveryPolicy**
+remains the read/classify Module on session reopen. _Avoid_:
+checkpoint writer, marker manager, recovery tracker.
 
 **RecoveryPolicy**:
 Module that runs once on session reopen. Reads the session JSONL tail
@@ -572,21 +651,16 @@ The `OMP_RECOVERY_POLICY`-gated wrapper around `Agent.prompt` /
 `runAgentRequest(agent, sessionManager, request, { enabled })`. When
 `enabled: false`, dispatches directly to the agent's methods
 (byte-for-byte the path the codebase used pre-P3). When `enabled:
-true`, builds an **AgentRunController**, provides the Live
-**RecoveryMarker** Layer (via `makeRecoveryMarkerLayer(sessionManager)`)
-plus `LiveClock`, runs via `Effect.runPromiseExit`, and unwraps the
-Exit so callers see the same `Promise<void>` contract — typed
-`AgentRunError` instances re-throw verbatim through
-`Cause.findErrorOption`, so `instanceof AgentBusy` /
+true`, builds an **AgentRunController**, provides `LiveClock`, runs via
+`Effect.runPromiseExit`, and unwraps the Exit so callers see the same
+`Promise<void>` contract — typed `AgentRunError` instances re-throw
+verbatim through `Cause.findErrorOption`, so `instanceof AgentBusy` /
 `instanceof ContextOverflow` checks at every existing throw site keep
-working. Test seam: `enabled` is an explicit parameter (not
-`process.env`) so contract tests can pin both branches without
-mutating globals (per AGENTS.md "Testing Guidance"). **Wiring status
-(2026-05-08)**: the bridge function is shipped but **not yet wired**
-into the 5 `this.agent.prompt(...)` / `this.agent.continue()` call
-sites inside `packages/coding-agent/src/session/agent-session.ts`;
-production callers therefore continue to take the direct path until
-that wiring is added. _Avoid_: turn-runner, agent-driver, run-wrapper.
+working. Recovery markers are not written by this bridge; they are
+written by **RecoveryLedger** from the AgentEvent stream. Test seam:
+`enabled` is an explicit parameter (not `process.env`) so contract
+tests can pin both branches without mutating globals (per AGENTS.md
+"Testing Guidance"). _Avoid_: turn-runner, agent-driver, run-wrapper.
 
 ## Relationships
 

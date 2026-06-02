@@ -1,4 +1,5 @@
 import { EventStream, type AssistantMessage, type ToolResultMessage } from "@oh-my-pi/pi-ai";
+import { Effect } from "@oh-my-pi/pi-utils/effect";
 import { type AgentErrorKind, classifyAssistantError } from "./error-kind";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, StreamFn } from "./types";
 import { createAbortedToolResult, executeToolCalls, INTENT_FIELD } from "./agent-loop/execution";
@@ -18,8 +19,78 @@ function lastAssistantErrorKind(messages: AgentMessage[], contextWindow?: number
 	return undefined;
 }
 
+function errorMessageFromUnknown(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function createEmptyUsage(): AssistantMessage["usage"] {
+	return {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+}
+
+function createTerminalErrorMessage(error: unknown, config: AgentLoopConfig): AssistantMessage {
+	const errorMessage = errorMessageFromUnknown(error);
+
+	return {
+		role: "assistant",
+		content: [{ type: "text", text: `Error: ${errorMessage}` }],
+		api: config.model.api,
+		provider: config.model.provider,
+		model: config.model.id,
+		usage: createEmptyUsage(),
+		stopReason: "error",
+		errorMessage,
+		timestamp: Date.now(),
+	};
+}
+
+function pushTerminalError(
+	error: unknown,
+	config: AgentLoopConfig,
+	currentContext: AgentContext,
+	newMessages: AgentMessage[],
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+): void {
+	const message = createTerminalErrorMessage(error, config);
+
+	currentContext.messages.push(message);
+	newMessages.push(message);
+	stream.push({ type: "message_start", message });
+	stream.push({ type: "message_end", message });
+}
+
+function pushAgentEnd(
+	newMessages: AgentMessage[],
+	config: AgentLoopConfig,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+): void {
+	stream.push({
+		type: "agent_end",
+		messages: newMessages,
+		errorKind: lastAssistantErrorKind(newMessages, config.model?.contextWindow),
+	});
+	stream.end(newMessages);
+}
+
+interface RunLoopState {
+	readonly firstTurn: boolean;
+	readonly pendingMessages: AgentMessage[];
+	readonly done: boolean;
+}
+
 /**
  * Main loop logic shared by agentLoop and agentLoopContinue.
+ *
+ * The outer iteration is expressed as `Effect.whileLoop` so termination is
+ * driven by the state predicate rather than an unbounded-loop + early return;
+ * this keeps interrupt semantics consistent with the rest of the run surface
+ * (see `./run/agent-run`).
  */
 async function runLoop(
 	currentContext: AgentContext,
@@ -31,52 +102,68 @@ async function runLoop(
 	initialMessages: AgentMessage[] = [],
 ): Promise<void> {
 	stream.push({ type: "agent_start" });
-	let firstTurn = true;
-	// When the caller already supplied initialMessages (e.g. an explicit prompt or a single
-	// dequeued steering message in one-at-a-time mode), don't drain the steering queue here.
-	// the inner loop polls on subsequent iterations so each queued message gets its own turn.
-	const steeringMessages = initialMessages.length > 0 ? [] : ((await config.getSteeringMessages?.()) ?? []);
-	let pendingMessages: AgentMessage[] = [...initialMessages, ...steeringMessages];
 
-	while (true) {
-		const result = await processLoopTurn(
-			currentContext,
-			newMessages,
-			config,
-			signal,
-			stream,
-			streamFn,
-			firstTurn,
-			pendingMessages,
+	try {
+		// When the caller already supplied initialMessages (e.g. an explicit prompt or a single
+		// dequeued steering message in one-at-a-time mode), don't drain the steering queue here.
+		// the inner loop polls on subsequent iterations so each queued message gets its own turn.
+		const steeringMessages = initialMessages.length > 0 ? [] : ((await config.getSteeringMessages?.()) ?? []);
+		const stateRef: { current: RunLoopState } = {
+			current: {
+				firstTurn: true,
+				pendingMessages: [...initialMessages, ...steeringMessages],
+				done: false,
+			},
+		};
+
+		await Effect.runPromise(
+			Effect.whileLoop({
+				while: () => !stateRef.current.done,
+				body: () =>
+					Effect.promise(() =>
+						stepRunLoop(stateRef.current, currentContext, newMessages, config, signal, stream, streamFn),
+					),
+				step: (next: RunLoopState) => {
+					stateRef.current = next;
+				},
+			}),
 		);
-		if (result.terminated) {
-			stream.push({
-				type: "agent_end",
-				messages: newMessages,
-				errorKind: lastAssistantErrorKind(newMessages, config.model?.contextWindow),
-			});
-			stream.end(newMessages);
-			return;
-		}
-
-		firstTurn = false;
-		pendingMessages = result.nextPendingMessages;
-
-		const followUpMessages = (await config.getFollowUpMessages?.()) ?? [];
-		if (followUpMessages.length > 0) {
-			pendingMessages = followUpMessages;
-			continue;
-		}
-
-		break;
+	} catch (error) {
+		pushTerminalError(error, config, currentContext, newMessages, stream);
 	}
 
-	stream.push({
-		type: "agent_end",
-		messages: newMessages,
-		errorKind: lastAssistantErrorKind(newMessages, config.model?.contextWindow),
-	});
-	stream.end(newMessages);
+	pushAgentEnd(newMessages, config, stream);
+}
+
+async function stepRunLoop(
+	state: RunLoopState,
+	currentContext: AgentContext,
+	newMessages: AgentMessage[],
+	config: AgentLoopConfig,
+	signal: AbortSignal | undefined,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	streamFn: StreamFn | undefined,
+): Promise<RunLoopState> {
+	const result = await processLoopTurn(
+		currentContext,
+		newMessages,
+		config,
+		signal,
+		stream,
+		streamFn,
+		state.firstTurn,
+		state.pendingMessages,
+	);
+	if (result.terminated) {
+		return { firstTurn: false, pendingMessages: [], done: true };
+	}
+
+	const followUpMessages = (await config.getFollowUpMessages?.()) ?? [];
+	return {
+		firstTurn: false,
+		pendingMessages: followUpMessages.length > 0 ? followUpMessages : result.nextPendingMessages,
+		done: followUpMessages.length === 0,
+	};
 }
 
 async function processLoopTurn(

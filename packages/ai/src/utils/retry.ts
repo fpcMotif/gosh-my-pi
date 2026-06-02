@@ -1,5 +1,5 @@
-import { Effect } from "@oh-my-pi/pi-utils/effect";
-import { withCopilotRetry } from "../effect-utils";
+import { Cause, Duration, Effect, Exit, Schedule } from "@oh-my-pi/pi-utils/effect";
+import { copilotRetryPolicy, withCopilotRetry } from "../effect-utils";
 
 type ErrorLike = {
 	message?: string;
@@ -45,6 +45,66 @@ function isRetryableStatus(status: number): boolean {
 	if (status >= 500) return true;
 	if (status === 408 || status === 429) return true;
 	return false;
+}
+
+/**
+ * Retry outcome used by cross-provider retry helpers.
+ */
+export type RetryDecision<TOutput, TState, TError> =
+	| {
+			readonly _tag: "retry";
+			readonly delayMs: number;
+			readonly nextState: TState;
+			readonly beforeRetry?: Effect.Effect<void, TError>;
+	  }
+	| { readonly _tag: "return"; readonly value: TOutput }
+	| { readonly _tag: "fail"; readonly error: TError };
+
+export interface RetryWithStateOptions<TOutput, TState, TError> {
+	readonly attempt: (state: TState) => Effect.Effect<TOutput, TError>;
+	readonly onSuccess: (
+		output: TOutput,
+		state: TState,
+	) => Effect.Effect<RetryDecision<TOutput, TState, TError>, TError>;
+	readonly onFailure: (error: TError, state: TState) => Effect.Effect<RetryDecision<TOutput, TState, TError>, TError>;
+	readonly initialState: TState;
+}
+
+/**
+ * Shared Effect-native retry loop with explicit, testable retry state and retry
+ * decision boundaries.
+ *
+ * The attempt and decision functions are fully explicit:
+ * - `attempt` owns the operation being retried.
+ * - `onSuccess`/`onFailure` decide whether to return, retry (with delay), or fail.
+ */
+export function retryWithState<TOutput, TState, TError>(
+	options: RetryWithStateOptions<TOutput, TState, TError>,
+): Effect.Effect<TOutput, TError> {
+	const handleDecision = (decision: RetryDecision<TOutput, TState, TError>): Effect.Effect<TOutput, TError> => {
+		if (decision._tag === "retry") {
+			return Effect.sleep(Duration.millis(Math.max(0, decision.delayMs))).pipe(
+				Effect.flatMap(() => decision.beforeRetry ?? Effect.succeed(undefined)),
+				Effect.flatMap(() => loop(decision.nextState)),
+			);
+		}
+		if (decision._tag === "return") {
+			return Effect.succeed(decision.value);
+		}
+		return Effect.fail(decision.error);
+	};
+
+	const loop = (state: TState): Effect.Effect<TOutput, TError> =>
+		options.attempt(state).pipe(
+			Effect.matchEffect({
+				onFailure: error =>
+					options.onFailure(error, state).pipe(Effect.flatMap(decision => handleDecision(decision))),
+				onSuccess: output =>
+					options.onSuccess(output, state).pipe(Effect.flatMap(decision => handleDecision(decision))),
+			}),
+		);
+
+	return loop(options.initialState);
 }
 
 export function extractHttpStatusFromError(error: unknown): number | undefined {
@@ -155,6 +215,24 @@ function extractErrorCode(error: unknown): string | undefined {
 }
 
 /**
+ * Wrap a thunk-shaped Copilot call as an Effect, applying the Copilot retry
+ * Schedule when (and only when) the provider is "github-copilot". Surface for
+ * callers that already live inside an Effect pipeline and want to compose
+ * the retry policy with their own Schedule (e.g. via Schedule.intersect).
+ */
+export function copilotRetryEffect<T>(fn: () => Promise<T>, options: { provider: string }): Effect.Effect<T, unknown> {
+	return withCopilotRetry(Effect.tryPromise({ try: fn, catch: error => error }), options);
+}
+
+/**
+ * Effect-side Copilot retry Schedule + termination predicate, exposed so
+ * downstream pipelines can splice the policy into their own Effect.retry
+ * call site. Backed by `copilotRetryPolicy` (2 recurs, linear back-off).
+ */
+export const copilotRetrySchedule: Schedule.Schedule<unknown> = copilotRetryPolicy;
+export const shouldRetryCopilotError = (error: unknown): boolean => isCopilotRetryableError(error);
+
+/**
  * Wrap an initial Copilot request so transient `model_not_supported` 400s are
  * retried a small number of times. No-op for non-Copilot providers.
  */
@@ -162,6 +240,7 @@ export async function callWithCopilotModelRetry<T>(
 	fn: () => Promise<T>,
 	options: { provider: string; signal?: AbortSignal },
 ): Promise<T> {
-	const program = withCopilotRetry(Effect.promise(fn), options);
-	return Effect.runPromise(program, { signal: options.signal });
+	const exit = await Effect.runPromiseExit(copilotRetryEffect(fn, options), { signal: options.signal });
+	if (Exit.isSuccess(exit)) return exit.value;
+	throw Cause.squash(exit.cause);
 }

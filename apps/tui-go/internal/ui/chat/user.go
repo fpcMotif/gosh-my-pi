@@ -8,11 +8,13 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/attachments"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 )
 
 // UserMessageItem represents a user message in the chat UI.
 type UserMessageItem struct {
+	*list.Versioned
 	*highlightableMessageItem
 	*cachedMessageItem
 	*focusableMessageItem
@@ -24,14 +26,22 @@ type UserMessageItem struct {
 
 // NewUserMessageItem creates a new UserMessageItem.
 func NewUserMessageItem(sty *styles.Styles, message *message.Message, attachments *attachments.Renderer) MessageItem {
+	v := list.NewVersioned()
 	return &UserMessageItem{
-		highlightableMessageItem: defaultHighlighter(sty),
+		Versioned:                v,
+		highlightableMessageItem: defaultHighlighter(sty, v),
 		cachedMessageItem:        &cachedMessageItem{},
-		focusableMessageItem:     &focusableMessageItem{},
+		focusableMessageItem:     newFocusableMessageItem(v),
 		attachments:              attachments,
 		message:                  message,
 		sty:                      sty,
 	}
+}
+
+// Finished implements list.Item. User messages are static once created;
+// they never spin or stream, so they are always safe to freeze.
+func (m *UserMessageItem) Finished() bool {
+	return true
 }
 
 // RawRender implements [MessageItem].

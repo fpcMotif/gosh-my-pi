@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { setKeybindings } from "@oh-my-pi/pi-tui";
-import { KeybindingsManager } from "../src/config/keybindings";
+import { KeybindingsManager, migrateKeybindingsConfigFile } from "../src/config/keybindings";
 
 describe("KeybindingsManager.create", () => {
 	beforeEach(() => {
@@ -47,6 +47,20 @@ describe("KeybindingsManager.create", () => {
 				"tui.select.confirm": "enter",
 			});
 			expect(writtenConfig).not.toHaveProperty("selectModelTemporary");
+		} finally {
+			await fs.rm(agentDir, { recursive: true, force: true });
+		}
+	});
+
+	it("can migrate a config file without creating a manager", async () => {
+		const agentDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-keybindings-"));
+		const configPath = path.join(agentDir, "keybindings.json");
+		await Bun.write(configPath, `${JSON.stringify({ toggleSTT: "alt+s" }, null, 2)}\n`);
+
+		try {
+			migrateKeybindingsConfigFile(agentDir);
+			const writtenConfig = await Bun.file(configPath).json();
+			expect(writtenConfig).toEqual({ "app.stt.toggle": "alt+s" });
 		} finally {
 			await fs.rm(agentDir, { recursive: true, force: true });
 		}

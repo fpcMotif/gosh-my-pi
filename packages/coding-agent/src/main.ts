@@ -20,7 +20,7 @@ import { processFileArguments } from "./cli/file-processor";
 import { buildInitialMessage } from "./cli/initial-message";
 import { listModels } from "./cli/list-models";
 import { selectSession } from "./cli/session-picker";
-import { resolveTuiGoLaunch, shouldAttemptTuiGoLaunch } from "./cli/tui-go-launcher";
+import { resolveTuiGoLaunch, shouldAttemptTuiGoLaunch, spawnTuiGoOrBuildSession } from "./cli/tui-go-launcher";
 import { findConfigFile } from "./config";
 import { ModelRegistry, ModelsConfigFile } from "./config/model-registry";
 import { resolveCliModel, resolveModelRoleValue, resolveModelScope, type ScopedModel } from "./config/model-resolver";
@@ -132,8 +132,25 @@ export async function submitInteractiveInput(
 	}
 }
 
-// Returns the child process exit code when tui-go was spawned, or null
-// when the caller should fall through to the legacy interactive mode.
+/**
+ * When `omp` is launched in an interactive TTY, optionally spawn the
+ * Go-side TUI frontend (`gmp-tui-go`) instead of the in-process legacy
+ * TUI. Controlled by the `OMP_TUI` env var:
+ *
+ * - unset / `legacy` / `auto`: legacy in-process TUI (current default)
+ * - `go`: try to spawn `gmp-tui-go`; fall back to legacy if not found
+ * - `go-strict`: try to spawn `gmp-tui-go`; exit with code 2 if not found
+ *
+ * The user can override binary discovery via `OMP_TUI_BIN` (full path).
+ *
+ * Returns the child process exit code when tui-go was spawned, or `null`
+ * when the caller should fall through to the legacy interactive mode.
+ *
+ * Architectural note: this is candidate #3, phase T1. tui-go is the
+ * intended frontend; the legacy in-process TUI (`InteractiveMode`) is on
+ * the deletion path. Auto-spawn lets users opt in incrementally without
+ * forcing a flag-day migration. See `.claude/plans/delete-pi-tui-design.md`.
+ */
 async function tryAutoSpawnTuiGo(): Promise<number | null> {
 	const launch = resolveTuiGoLaunch();
 	if (launch.action === "legacy") {
@@ -775,11 +792,23 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		}
 	}
 
-	const { session, setToolUIContext, modelFallbackMessage, lspServers, mcpManager, eventBus } = await logger.time(
-		"createAgentSession",
-		createAgentSession,
-		sessionOptions,
-	);
+	// Resolve the Go TUI before building the agent session: when gmp-tui-go will
+	// be spawned it runs its own `omp --mode rpc` backend, so the in-process
+	// session bootstrap (MCP + LSP discovery) here would just be built and
+	// immediately disposed (gap G24). Only fall through to createAgentSession
+	// when the Go TUI is ineligible, disabled, or unavailable.
+	const sessionOutcome = await spawnTuiGoOrBuildSession({
+		mode,
+		isInteractive,
+		spawn: tryAutoSpawnTuiGo,
+		buildSession: () => logger.time("createAgentSession", createAgentSession, sessionOptions),
+	});
+	if (sessionOutcome.kind === "spawned") {
+		stopThemeWatcher();
+		await postmortem.quit(sessionOutcome.exitCode);
+		return;
+	}
+	const { session, setToolUIContext, modelFallbackMessage, lspServers, mcpManager, eventBus } = sessionOutcome.session;
 	logger.time("main:afterCreateSession");
 	if (
 		parsedArgs.apiKey !== null &&
@@ -864,14 +893,9 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	} else if (mode === "acp") {
 		await runAcpMode(session, createAcpSession);
 	} else if (shouldAttemptTuiGoLaunch(mode, isInteractive)) {
-		const tuiGoExitCode = await tryAutoSpawnTuiGo();
-		if (tuiGoExitCode !== null) {
-			await session.dispose();
-			stopThemeWatcher();
-			await postmortem.quit(tuiGoExitCode);
-			return;
-		}
-
+		// The Go TUI was already resolved before the session was built (gap G24);
+		// reaching here means it was unavailable or disabled, so run the legacy
+		// in-process interactive TUI against the session we built.
 		const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
 		logger.time("main:getChangelogForDisplay");
 		const changelogMarkdown = await getChangelogForDisplay(parsedArgs);

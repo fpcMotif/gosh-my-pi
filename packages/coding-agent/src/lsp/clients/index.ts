@@ -9,6 +9,7 @@ import { LspLinterClient } from "./lsp-linter-client";
  */
 
 export { BiomeClient } from "./biome-client";
+export { EffectLanguageServiceClient } from "./effect-language-service-client";
 export { LspLinterClient } from "./lsp-linter-client";
 export { SwiftLintClient } from "./swiftlint-client";
 

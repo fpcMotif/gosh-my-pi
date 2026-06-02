@@ -9,6 +9,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	xstrings "github.com/charmbracelet/x/exp/strings"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/notification"
 )
 
 // Capabilities define different terminal capabilities supported.
@@ -35,6 +36,9 @@ type Capabilities struct {
 	TerminalVersion string
 	// ReportFocusEvents indicates whether the terminal supports focus events.
 	ReportFocusEvents bool
+	// OSC99Notifications indicates whether the terminal supports OSC 99 desktop
+	// notifications. Detected from the OSC 99 capability query response.
+	OSC99Notifications bool
 }
 
 // Update updates the capabilities based on the given message.
@@ -63,6 +67,10 @@ func (c *Capabilities) Update(msg any) {
 		case ansi.ModeFocusEvent:
 			c.ReportFocusEvents = modeSupported(m.Value)
 		}
+	case uv.UnknownOscEvent:
+		if notification.DetectOSC99Support(string(m)) {
+			c.OSC99Notifications = true
+		}
 	}
 }
 
@@ -72,6 +80,7 @@ func QueryCmd(env uv.Environ) tea.Cmd {
 	var sb strings.Builder
 	sb.WriteString(ansi.RequestPrimaryDeviceAttributes)
 	sb.WriteString(ansi.QueryModifyOtherKeys)
+	sb.WriteString(notification.OSC99QuerySequence())
 
 	// Queries that should only be sent to "smart" normal terminals.
 	shouldQueryFor := shouldQueryCapabilities(env)

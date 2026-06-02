@@ -104,3 +104,30 @@ describe("/login slash command", () => {
 		expect(harness.getWarning()).toBe("No OAuth login is waiting for a manual callback.");
 	});
 });
+
+describe("OAuthManualInputManager", () => {
+	it("tracks pending provider, rejects superseded waits, and reports empty submits", async () => {
+		const manualInput = new OAuthManualInputManager();
+		const first = manualInput.waitForInput("openai-codex");
+		expect(manualInput.hasPending()).toBe(true);
+		expect(manualInput.pendingProviderId).toBe("openai-codex");
+
+		const second = manualInput.waitForInput("kagi");
+		await expect(first).rejects.toThrow("Manual OAuth input superseded by a new login");
+		expect(manualInput.pendingProviderId).toBe("kagi");
+		expect(manualInput.submit("callback-url")).toBe(true);
+		expect(await second).toBe("callback-url");
+		expect(manualInput.hasPending()).toBe(false);
+		expect(manualInput.submit("late")).toBe(false);
+	});
+
+	it("rejects a pending wait when cleared explicitly", async () => {
+		const manualInput = new OAuthManualInputManager();
+		const pending = manualInput.waitForInput("parallel");
+
+		manualInput.clear("manual cancel");
+
+		await expect(pending).rejects.toThrow("manual cancel");
+		expect(manualInput.pendingProviderId).toBeUndefined();
+	});
+});

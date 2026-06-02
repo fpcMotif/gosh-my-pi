@@ -28,6 +28,18 @@ target/
 *.tmp
 .DS_Store
 
+# Vendored upstream checkouts (read-only references, never staged).
+# Pulled in for source-of-truth navigation against the effect ecosystem;
+# kept out of git/lint/format because each has its own toolchain config
+# (oxlintrc, biome.json, package.json) that conflicts with workspace tools.
+effect-main/
+effect-smol-main/
+.repos/effect
+language-service-main/
+tsgo-main/
+skills-main/
+pi/
+
 # Logs & profiling
 *.log
 tui-debug.log

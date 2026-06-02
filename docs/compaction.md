@@ -58,6 +58,12 @@ Compaction/context maintenance can run in four ways:
 3. **Automatic threshold maintenance**: after a successful turn when context exceeds the resolved threshold.
 4. **Idle maintenance**: `runIdleCompaction()` can invoke the same auto-maintenance path with reason `"idle"`.
 
+`ContextPressurePolicy` owns the pure automatic decision rules for overflow,
+threshold, skip, promotion-target lookup, and auto-compaction model candidate
+ordering. `AgentSession` still owns the mutating orchestration: pruning session
+storage, switching model, emitting events, compacting, and scheduling
+continuations.
+
 ### Compaction shape (visual)
 
 ```text
@@ -129,7 +135,7 @@ Pruned tool results are replaced with:
 
 - `[Output truncated - N tokens]`
 
-If pruning changes entries, session storage is rewritten and agent message state is refreshed before compaction decisions.
+If pruning changes entries, session storage is rewritten and agent message state is refreshed before `ContextPressurePolicy` applies the token savings to threshold decisions.
 
 ### Boundary and cut-point logic
 
@@ -364,4 +370,4 @@ From `settings-schema.ts`:
 - `branchSummary.enabled` = `false`
 - `branchSummary.reserveTokens` = `16384`
 
-These values are consumed at runtime by `AgentSession` and compaction/branch summarization modules.
+These values are consumed at runtime by `AgentSession`, `ContextPressurePolicy`, and compaction/branch summarization modules.

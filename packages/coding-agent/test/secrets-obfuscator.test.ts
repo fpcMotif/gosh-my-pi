@@ -44,6 +44,12 @@ describe("compileSecretRegex", () => {
 		expect(regex.flags).toBe("g");
 	});
 
+	it("parses regex literal syntax and merges explicit flags", () => {
+		const regex = compileSecretRegex("/api[_-]?key\\s*=\\s*\\w+/i", "m");
+		expect(regex.source).toBe("api[_-]?key\\s*=\\s*\\w+");
+		expect(regex.flags).toBe("gim");
+	});
+
 	it("rejects invalid regex pattern", () => {
 		expect(() => compileSecretRegex("(")).toThrow();
 	});

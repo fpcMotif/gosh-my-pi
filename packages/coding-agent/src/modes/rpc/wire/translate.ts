@@ -26,6 +26,7 @@ import type {
 	Usage,
 	UserMessage,
 } from "@oh-my-pi/pi-ai";
+import { logger } from "@oh-my-pi/pi-utils";
 import type { AgentSessionEvent } from "../../../session/agent-session";
 import type {
 	BashExecutionMessage,
@@ -33,6 +34,9 @@ import type {
 	HookMessage,
 	PythonExecutionMessage,
 } from "../../../session/messages";
+import type { ToolPresentation, ToolPresentationCode, ToolPresentationStatus } from "../../../tools/presentation";
+import { toolPresenters } from "../../../tools/presenters";
+import type { RenderResultOptions } from "../../../extensibility/custom-tools/types";
 import type {
 	WireAssistantContentBlockV1,
 	WireAssistantMessageEventV1,
@@ -49,6 +53,7 @@ import type {
 	WireTextContentV1,
 	WireThinkingContentV1,
 	WireToolCallV1,
+	WireToolPresentationV1,
 	WireToolResultMessageV1,
 	WireToolResultV1,
 	WireUsageV1,
@@ -112,6 +117,7 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 				toolName: event.toolName,
 				args: event.args,
 				...(event.intent !== undefined && { intent: event.intent }),
+				...withWirePresentation(toWireCallPresentation(event.toolName, event.args)),
 			};
 
 		case "tool_execution_update":
@@ -120,7 +126,10 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 				toolCallId: event.toolCallId,
 				toolName: event.toolName,
 				args: event.args,
-				partialResult: toWireToolResult(event.partialResult),
+				partialResult: toWireToolExecutionResult(event.toolName, event.partialResult, event.args, {
+					expanded: false,
+					isPartial: true,
+				}),
 			};
 
 		case "tool_execution_end":
@@ -128,7 +137,10 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 				type: "tool_execution_end",
 				toolCallId: event.toolCallId,
 				toolName: event.toolName,
-				result: toWireToolResult(event.result),
+				result: toWireToolExecutionResult(event.toolName, event.result, undefined, {
+					expanded: false,
+					isPartial: false,
+				}),
 				...(event.isError !== undefined && { isError: event.isError }),
 			};
 
@@ -148,15 +160,14 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 		case "irc_message":
 			return null;
 
-		default: {
-			// Exhaustiveness check — every AgentSessionEvent variant must be handled.
-			// If a new internal event is added without a translator entry, this assertion
-			// fails at compile time.
-			const _exhaustive: never = event;
-			void _exhaustive;
-			return null;
-		}
+		default:
+			return dropUnknownWireEvent(event);
 	}
+}
+
+function dropUnknownWireEvent(event: never): null {
+	void event;
+	return null;
 }
 
 // ============================================================================
@@ -376,27 +387,122 @@ function toWireMessage(msg: AgentMessage): WireMessageV1 {
 			return toWireCustomMessage(msg);
 		case "hookMessage":
 			return toWireHookMessage(msg);
-		default: {
-			// Fallback for any custom AgentMessage role added via declaration merging
-			// that we haven't projected. Stringify the role as a best-effort to avoid
-			// losing the message entirely; this should be rare since CustomAgentMessages
-			// is currently bashExecution/pythonExecution/custom/hookMessage only.
-			const fallback: WireCustomMessageV1 = {
-				role: "custom",
-				customType: (msg as { role: string }).role,
-				content: JSON.stringify(msg),
-				display: false,
-				timestamp: (msg as { timestamp?: number }).timestamp ?? Date.now(),
-			};
-			return fallback;
-		}
+		default:
+			return toWireFallbackMessage(msg);
 	}
+}
+
+function toWireFallbackMessage(msg: AgentMessage & { role: string; timestamp?: number }): WireCustomMessageV1 {
+	return {
+		role: "custom",
+		customType: msg.role,
+		content: JSON.stringify(msg),
+		display: false,
+		timestamp: msg.timestamp ?? Date.now(),
+	};
 }
 
 function toWireToolResult(result: { content: (TextContent | ImageContent)[]; details?: unknown }): WireToolResultV1 {
 	return {
 		content: result.content.map(toWireUserContent),
 		...(result.details !== undefined && { details: result.details }),
+	};
+}
+
+function toWireToolExecutionResult(
+	toolName: string,
+	result: { content: (TextContent | ImageContent)[]; details?: unknown },
+	args: Record<string, unknown> | undefined,
+	options: RenderResultOptions,
+): WireToolResultV1 {
+	const wireResult = toWireToolResult(result);
+	return {
+		...wireResult,
+		...withWirePresentation(toWireResultPresentation(toolName, result, options, args)),
+	};
+}
+
+function withWirePresentation(
+	presentation: WireToolPresentationV1 | undefined,
+): { presentation: WireToolPresentationV1 } | Record<string, never> {
+	return presentation === undefined ? {} : { presentation };
+}
+
+function toWireCallPresentation(toolName: string, args: Record<string, unknown>): WireToolPresentationV1 | undefined {
+	const presenter = toolPresenters[toolName];
+	if (!presenter?.presentCall) return undefined;
+	try {
+		const presentation = presenter.presentCall(args, { expanded: false, isPartial: true });
+		return presentation === undefined ? undefined : toWireToolPresentation(presentation);
+	} catch (error) {
+		// Presenter contract: must not throw. Log so silent wire drift is at least
+		// observable, and drop the presentation field for this frame.
+		logger.warn("tool presenter threw on presentCall", { toolName, error: String(error) });
+		return undefined;
+	}
+}
+
+function toWireResultPresentation(
+	toolName: string,
+	result: { content: (TextContent | ImageContent)[]; details?: unknown },
+	options: RenderResultOptions,
+	args?: Record<string, unknown>,
+): WireToolPresentationV1 | undefined {
+	const presenter = toolPresenters[toolName];
+	if (!presenter?.presentResult) return undefined;
+	try {
+		const presentation = presenter.presentResult(result, options, args);
+		return presentation === undefined ? undefined : toWireToolPresentation(presentation);
+	} catch (error) {
+		// Presenter contract: must not throw. See toWireCallPresentation.
+		logger.warn("tool presenter threw on presentResult", { toolName, error: String(error) });
+		return undefined;
+	}
+}
+
+function toWireToolPresentationStatus(status: ToolPresentationStatus): WireToolPresentationV1["status"] {
+	return {
+		...(status.icon !== undefined && { icon: status.icon }),
+		...(status.spinnerFrame !== undefined && { spinnerFrame: status.spinnerFrame }),
+		title: status.title,
+		...(status.titleColor !== undefined && { titleColor: status.titleColor }),
+		...(status.description !== undefined && { description: status.description }),
+		...(status.meta !== undefined && { meta: status.meta }),
+	};
+}
+
+function toWireToolPresentationCode(
+	code: ToolPresentationCode,
+): Extract<WireToolPresentationV1, { type: "code" }>["code"] {
+	return {
+		code: code.code,
+		...(code.language !== undefined && { language: code.language }),
+		...(code.title !== undefined && { title: code.title }),
+		...(code.status !== undefined && { status: code.status }),
+		...(code.spinnerFrame !== undefined && { spinnerFrame: code.spinnerFrame }),
+		...(code.output !== undefined && { output: code.output }),
+		...(code.outputMaxLines !== undefined && { outputMaxLines: code.outputMaxLines }),
+		...(code.codeMaxLines !== undefined && { codeMaxLines: code.codeMaxLines }),
+		...(code.expanded !== undefined && { expanded: code.expanded }),
+	};
+}
+
+function toWireToolPresentation(presentation: ToolPresentation): WireToolPresentationV1 {
+	if (presentation.type === "status") {
+		return { type: "status", status: toWireToolPresentationStatus(presentation.status) };
+	}
+	if (presentation.type === "code") {
+		return { type: "code", code: toWireToolPresentationCode(presentation.code) };
+	}
+	return {
+		type: "block",
+		...(presentation.status !== undefined && { status: toWireToolPresentationStatus(presentation.status) }),
+		...(presentation.state !== undefined && { state: presentation.state }),
+		sections: presentation.sections.map(section => ({
+			...(section.label !== undefined && { label: section.label }),
+			lines: section.lines,
+		})),
+		...(presentation.applyBg !== undefined && { applyBg: presentation.applyBg }),
 	};
 }
 

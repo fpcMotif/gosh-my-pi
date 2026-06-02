@@ -93,4 +93,24 @@ describe("ReadToolGroupComponent", () => {
 
 		expect(matches).toHaveLength(1);
 	});
+
+	it("refreshes display through component API helpers and invalidates preview caches", () => {
+		const component = new ReadToolGroupComponent({ showContentPreview: true });
+		component.updateArgs({ path: "/tmp/example.ts" }, "read-4");
+		component.updateResult(
+			{
+				content: [{ type: "text", text: "line 1\nline 2\nline 3\nline 4" }],
+			},
+			false,
+			"read-4",
+		);
+
+		expect(component.getComponent()).toBe(component);
+		component.setArgsComplete("read-4");
+		component.setExpanded(true);
+		expect(Bun.stripANSI(component.render(120).join("\n"))).toContain("line 4");
+
+		component.invalidate();
+		expect(Bun.stripANSI(component.render(120).join("\n"))).toContain("line 4");
+	});
 });
