@@ -2,9 +2,13 @@ package workspace
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/png"
 	"os"
 	"sync"
 	"testing"
@@ -483,6 +487,51 @@ func TestParseToolResultContent(t *testing.T) {
 	}
 	if w.parseToolResultContent([]byte(`bad`)) != nil {
 		t.Fatalf("bad want nil")
+	}
+}
+
+// A tool result whose wire content carries an image block (e.g. reading an
+// image file, a screenshot tool) must surface the image to the renderer: the
+// base64 string and MIME type land on ToolResult.Data/MIMEType verbatim while
+// any text blocks still populate Content. Without this the image silently
+// vanishes (gap G14). The renderers consume Data as a base64 string, so it is
+// stored undecoded; the test proves it is nonetheless a real decodable image.
+func TestParseToolResultContentImage(t *testing.T) {
+	w := newTestGmpWorkspace()
+	// 1x1 PNG as the wire delivers it (base64).
+	const pngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	raw := fmt.Sprintf(`{"toolCallId":"t1","toolName":"read","content":[{"type":"text","text":"viewing"},{"type":"image","data":%q,"mimeType":"image/png"}],"isError":false}`, pngB64)
+	got := w.parseToolResultContent([]byte(raw))
+	if len(got) != 1 {
+		t.Fatalf("len=%d", len(got))
+	}
+	tr := got[0].(message.ToolResult)
+	if tr.Data != pngB64 {
+		t.Fatalf("Data not set to wire base64 string: %q", tr.Data)
+	}
+	if tr.MIMEType != "image/png" {
+		t.Fatalf("MIMEType=%q", tr.MIMEType)
+	}
+	if tr.Content != "viewing" {
+		t.Fatalf("text content lost: %q", tr.Content)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(tr.Data)
+	if err != nil {
+		t.Fatalf("Data is not valid base64: %v", err)
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(decoded))
+	if err != nil {
+		t.Fatalf("decoded image invalid: %v", err)
+	}
+	if format != "png" || cfg.Width == 0 || cfg.Height == 0 {
+		t.Fatalf("unexpected image: format=%s %dx%d", format, cfg.Width, cfg.Height)
+	}
+
+	// An image-only result (no text block) still surfaces Data/MIMEType.
+	rawNoText := fmt.Sprintf(`{"toolCallId":"t2","toolName":"read","content":[{"type":"image","data":%q,"mimeType":"image/png"}],"isError":false}`, pngB64)
+	trNoText := w.parseToolResultContent([]byte(rawNoText))[0].(message.ToolResult)
+	if trNoText.Data != pngB64 || trNoText.MIMEType != "image/png" {
+		t.Fatalf("image-only result lost image: %+v", trNoText)
 	}
 }
 

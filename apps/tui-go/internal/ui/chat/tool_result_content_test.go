@@ -2,8 +2,10 @@ package chat
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 )
 
@@ -48,6 +50,40 @@ func TestLooksLikeMarkdown(t *testing.T) {
 			t.Parallel()
 			if got := looksLikeMarkdown(tt.content); got != tt.want {
 				t.Fatalf("looksLikeMarkdown() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// An image tool result must actually render its image card (the "Loaded Image"
+// indicator with MIME type + size), not vanish — even when there is no text
+// content, which is the common case for reading an image file (gap G14). This
+// pins the renderer contract: every image-capable tool renderer consumes
+// Result.Data + Result.MIMEType. The Generic fallback previously dropped
+// image-only results because it returned early on empty Content.
+func TestToolRenderersShowImageResult(t *testing.T) {
+	t.Parallel()
+	sty := styles.CharmtonePantera()
+	const pngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+	renderers := map[string]ToolRenderer{
+		"generic": &GenericToolRenderContext{},
+		"view":    &ViewToolRenderContext{},
+	}
+	for name, rc := range renderers {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			opts := &ToolRenderOpts{
+				ToolCall: message.ToolCall{Name: "read", Input: `{"file_path":"/tmp/a.png"}`, Finished: true},
+				Result:   &message.ToolResult{Data: pngB64, MIMEType: "image/png", Content: ""},
+				Status:   ToolStatusSuccess,
+			}
+			out := rc.RenderTool(&sty, 80, opts)
+			if !strings.Contains(out, "Loaded Image") {
+				t.Fatalf("%s renderer dropped the image-only result, got: %q", name, out)
+			}
+			if !strings.Contains(out, "image/png") {
+				t.Fatalf("%s renderer omitted the MIME type, got: %q", name, out)
 			}
 		})
 	}

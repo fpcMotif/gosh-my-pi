@@ -1935,15 +1935,42 @@ func (w *GmpWorkspace) parseToolResultContent(raw []byte) []message.ContentPart 
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil
 	}
+	data, mimeType := extractImageContent(p.Content)
 	return []message.ContentPart{
 		message.ToolResult{
 			ToolCallID: p.ToolCallID,
 			Name:       mapWireToolName(p.ToolName),
 			Content:    extractTextString(p.Content),
+			Data:       data,
+			MIMEType:   mimeType,
 			Metadata:   toWireToolResultMetadata(p.ToolName, raw),
 			IsError:    p.IsError,
 		},
 	}
+}
+
+// extractImageContent returns the first image block's base64 data and MIME type
+// from an RPC content value ([]{type:"image",data,mimeType}). The renderers
+// (internal/ui/chat) consume Data as a base64 string and compute the size from
+// it, so it is passed through undecoded.
+func extractImageContent(content any) (data, mimeType string) {
+	blocks, ok := content.([]any)
+	if !ok {
+		return "", ""
+	}
+	for _, item := range blocks {
+		m, ok := item.(map[string]any)
+		if !ok || m["type"] != "image" {
+			continue
+		}
+		d, _ := m["data"].(string)
+		if d == "" {
+			continue
+		}
+		mt, _ := m["mimeType"].(string)
+		return d, mt
+	}
+	return "", ""
 }
 
 func (w *GmpWorkspace) parseExecutionContent(raw []byte) []message.ContentPart {
