@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -484,6 +486,11 @@ func containsAssistantMessageEvent(events []tea.Msg) bool {
 }
 
 func (w *GmpWorkspace) upsertMessageLocked(msg message.Message) {
+	// A resumed user message carries its correlation id verbatim (e.g.
+	// "user-3", adopted from the wire). Seed the counter past it so a later
+	// nextID can never mint an id that aliases — and silently clobbers in place
+	// — a surviving historical message.
+	w.bumpCounterPastID(msg.ID)
 	if w.messages == nil {
 		w.messages = make(map[string]message.Message)
 	}
@@ -494,6 +501,30 @@ func (w *GmpWorkspace) upsertMessageLocked(msg message.Message) {
 	if msg.SessionID == w.session.ID {
 		w.session.MessageCount = int64(len(w.msgOrder))
 		w.session.UpdatedAt = time.Now().Unix()
+	}
+}
+
+// bumpCounterPastID raises msgCounter to at least the trailing "-<n>" of a
+// "<prefix>-<n>" id, so freshly-minted ids stay disjoint from correlation ids
+// adopted from persisted state on resume. Ids without a numeric suffix (e.g.
+// host-supplied UUIDs) are ignored — they cannot collide with the counter.
+func (w *GmpWorkspace) bumpCounterPastID(id string) {
+	i := strings.LastIndexByte(id, '-')
+	if i < 0 {
+		return
+	}
+	n, err := strconv.ParseUint(id[i+1:], 10, 64)
+	if err != nil {
+		return
+	}
+	for {
+		cur := w.msgCounter.Load()
+		if cur >= n {
+			return
+		}
+		if w.msgCounter.CompareAndSwap(cur, n) {
+			return
+		}
 	}
 }
 

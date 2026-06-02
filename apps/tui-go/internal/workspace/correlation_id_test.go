@@ -57,6 +57,31 @@ func TestReconcileUserID_NoMatchReturnsFalse(t *testing.T) {
 	}
 }
 
+// TestUpsertSeedsCounterPastAdoptedID pins the resume-collision fix (CID-1):
+// after adopting a persisted user message whose correlation id is "user-1", the
+// next minted id must be disjoint from it. Otherwise nextID("user") re-mints
+// "user-1" and upsertMessageLocked overwrites the historical row in place,
+// silently losing transcript content. Both rows must survive.
+func TestUpsertSeedsCounterPastAdoptedID(t *testing.T) {
+	w := NewGmpWorkspace(nil, "/tmp/project")
+	// Resume: a persisted user message arrives carrying correlation id "user-1".
+	w.upsertMessageLocked(userMsg("user-1", "OLD HISTORICAL PROMPT"))
+
+	minted := w.nextID("user")
+	if minted == "user-1" {
+		t.Fatalf("nextID minted %q, colliding with the adopted resume id user-1", minted)
+	}
+	w.upsertMessageLocked(userMsg(minted, "BRAND NEW PROMPT"))
+
+	if len(w.msgOrder) != 2 {
+		t.Fatalf("msgOrder has %d rows, want 2; the new prompt clobbered the resumed one", len(w.msgOrder))
+	}
+	historical := w.messages["user-1"]
+	if got := historical.Content().Text; got != "OLD HISTORICAL PROMPT" {
+		t.Fatalf("resumed user-1 text = %q, want it preserved", got)
+	}
+}
+
 func parseUserWireMessage(t *testing.T, fields map[string]any) message.Message {
 	t.Helper()
 	w := NewGmpWorkspace(nil, "/tmp/project")

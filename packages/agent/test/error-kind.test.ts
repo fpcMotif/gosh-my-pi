@@ -102,4 +102,8 @@ describe("errorToKind ProviderHttpError", () => {
 	test("missing status (pre-response transport failure) is transient", () => {
 		expect(httpError(undefined).kind).toBe("transient");
 	});
+
+	test.each([0, 99])("sub-100 sentinel %i (no response reached) is transient, not fatal", status => {
+		expect(httpError(status).kind).toBe("transient");
+	});
 });

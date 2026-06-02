@@ -68,12 +68,13 @@ export function classifyAssistantError(message: AssistantMessage, contextWindow?
 
 /**
  * Whether an HTTP status should be retried (transient) rather than failed
- * fast (fatal). `undefined` (no response reached) is a pre-response transport
+ * fast (fatal). A missing status (`undefined`) or a sub-100 sentinel (e.g. `0`,
+ * which clients use for "no response reached") is a pre-response transport
  * failure and is retryable. Matches the retryable set in
  * packages/ai/src/utils/retry.ts: 5xx, 408 (timeout), 429 (rate limit).
  */
 function isRetryableHttpStatus(status: number | undefined): boolean {
-	if (status === undefined) return true;
+	if (status === undefined || status < 100) return true;
 	return status >= 500 || status === 408 || status === 429;
 }
 

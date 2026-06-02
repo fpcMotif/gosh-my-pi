@@ -400,7 +400,15 @@ func sendSideChannel[T any](ch chan T, frame T) {
 	case ch <- frame:
 	default:
 		go func() {
-			defer func() { _ = recover() }()
+			defer func() {
+				if r := recover(); r != nil {
+					// Lost a frame: the read loop closed the side-channels
+					// mid-spill. Recovering avoids a send-on-closed-channel
+					// crash; log so a frame dropped during shutdown (which
+					// strands its backend promise until deadline) is observable.
+					slog.Debug("ompclient: dropped spilled side-channel frame on shutdown", "recover", r)
+				}
+			}()
 			ch <- frame
 		}()
 	}
