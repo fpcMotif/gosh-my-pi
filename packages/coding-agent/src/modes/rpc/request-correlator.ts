@@ -58,6 +58,14 @@ export class RequestCorrelator {
 	 */
 	register<T>(opts: RegisterOptions<T> = {}): CorrelatedRequest<T> {
 		const id = opts.id ?? (Snowflake.next() as string);
+
+		// An explicit id colliding with a live entry would silently overwrite it,
+		// orphaning the prior promise (whose cleanup then deletes the slot the new
+		// entry owns). Settle the stale one first so it can never leak.
+		if (this.#pending.has(id)) {
+			this.cancel(id, `Request ${id} superseded by a new registration`);
+		}
+
 		const hasDefaultValue = Object.hasOwn(opts, "defaultValue");
 
 		// Pre-resolution short-circuit when signal is already aborted.

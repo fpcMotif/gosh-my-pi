@@ -15,7 +15,7 @@
  * - Events: WireEventV1 (10 variants), translated from internal AgentSessionEvent
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
-import { $env, logger, readJsonl, Snowflake } from "@oh-my-pi/pi-utils";
+import { $env, logger, readLines, Snowflake } from "@oh-my-pi/pi-utils";
 import type {
 	ExtensionUIContext,
 	ExtensionUIDialogOptions,
@@ -40,8 +40,6 @@ import type {
 	RpcCommand,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
-	RpcHostToolCallRequest,
-	RpcHostToolCancelRequest,
 	RpcHostToolDefinition,
 	RpcResponse,
 	RpcSessionState,
@@ -971,9 +969,20 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		process.exit(0);
 	}
 
-	// Listen for JSON input using Bun's stdin
-	for await (const parsed of readJsonl(Bun.stdin.stream())) {
+	// Listen for JSON input using Bun's stdin. Read raw lines and parse each
+	// frame individually: a single malformed line must surface a recoverable
+	// `parse` error response, not throw out of the loop and kill the server.
+	// `readJsonl` re-throws a JSONL syntax error as a generator throw that
+	// escapes the in-body try/catch, so any partial write / truncated frame /
+	// non-JSON noise on stdin would take the backend down and strand every
+	// in-flight request (wire spec: unknown input is soft-handled, not fatal).
+	const decoder = new TextDecoder();
+	for await (const lineBytes of readLines(Bun.stdin.stream())) {
 		try {
+			const raw = decoder.decode(lineBytes).trim();
+			if (raw.length === 0) continue;
+			const parsed: unknown = JSON.parse(raw);
+
 			// Handle extension UI responses — route via correlator. Stale ids are no-ops.
 			if ((parsed as RpcExtensionUIResponse).type === "extension_ui_response") {
 				const response = parsed as RpcExtensionUIResponse;

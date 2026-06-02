@@ -6,7 +6,7 @@
 import type { AgentEvent, AgentMessage, AgentToolResult, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model } from "@oh-my-pi/pi-ai";
 import type { FileSink } from "bun";
-import { isRecord, ptree, readJsonl } from "@oh-my-pi/pi-utils";
+import { isRecord, logger, ptree, readLines } from "@oh-my-pi/pi-utils";
 import type { BashResult } from "../../exec/bash-executor";
 import type { SessionStats } from "../../session/agent-session";
 import type { CompactionResult } from "../../session/compaction";
@@ -168,7 +168,7 @@ export class RpcClient {
 	#diagnosticListeners: RpcDiagnosticListener[] = [];
 	#pendingRequests: Map<string, { resolve: (response: RpcResponse) => void; reject: (error: Error) => void }> =
 		new Map();
-	#customTools: RpcClientCustomTool[] = [];
+	#customTools: RpcClientCustomTool[];
 	#pendingHostToolCalls = new Map<string, { controller: AbortController }>();
 	#requestId = 0;
 	#abortController = new AbortController();
@@ -188,13 +188,15 @@ export class RpcClient {
 		const cliPath = this.options.cliPath ?? "dist/cli.js";
 		const args = ["--mode", "rpc"];
 
-		if (this.options.provider !== null && this.options.provider !== undefined && this.options.provider !== "") {
+		// Fields are typed `string | undefined`, so a single truthiness check
+		// covers both undefined and empty-string.
+		if (this.options.provider) {
 			args.push("--provider", this.options.provider);
 		}
-		if (this.options.model !== null && this.options.model !== undefined && this.options.model !== "") {
+		if (this.options.model) {
 			args.push("--model", this.options.model);
 		}
-		if (this.options.sessionDir !== null && this.options.sessionDir !== undefined && this.options.sessionDir !== "") {
+		if (this.options.sessionDir) {
 			args.push("--session-dir", this.options.sessionDir);
 		}
 		if (this.options.args) {
@@ -211,10 +213,26 @@ export class RpcClient {
 		const { promise: readyPromise, resolve: readyResolve, reject: readyReject } = Promise.withResolvers<void>();
 		let readySettled = false;
 
-		// Process lines in background, intercepting the ready signal
-		const lines = readJsonl(this.#process.stdout, this.#abortController.signal);
+		// Process lines in background, intercepting the ready signal. Read raw
+		// lines and parse each individually so a single malformed frame from the
+		// agent is skipped (logged) instead of throwing out of the loop and
+		// permanently freezing the transport — a post-ready JSONL syntax error
+		// would otherwise stop event correlation and hang every later request.
+		const decoder = new TextDecoder();
+		const lines = readLines(this.#process.stdout, this.#abortController.signal);
 		void (async () => {
-			for await (const line of lines) {
+			for await (const lineBytes of lines) {
+				const raw = decoder.decode(lineBytes).trim();
+				if (raw.length === 0) continue;
+				let line: unknown;
+				try {
+					line = JSON.parse(raw);
+				} catch (error) {
+					logger.warn("RpcClient: skipping malformed frame from agent", {
+						error: error instanceof Error ? error.message : String(error),
+					});
+					continue;
+				}
 				if (!readySettled && isRecord(line) && line.type === "ready") {
 					readySettled = true;
 					readyResolve();
@@ -231,7 +249,13 @@ export class RpcClient {
 			if (!readySettled) {
 				readySettled = true;
 				readyReject(error);
+				return;
 			}
+			// Post-ready transport failure: the read loop has stopped, so no
+			// further responses will ever be correlated. Reject in-flight
+			// requests instead of leaving callers to hang until their timeout.
+			logger.error("RpcClient: read loop terminated after ready", { error: error.message });
+			this.#rejectAllPending(new Error(`RPC transport failed: ${error.message}`));
 		});
 
 		// Also race against process exit (in case stdout closes before we read it)
@@ -272,11 +296,21 @@ export class RpcClient {
 		this.#process.kill();
 		this.#abortController.abort();
 		this.#process = null;
-		this.#pendingRequests.clear();
+		// Reject — not just drop — in-flight requests so awaiting callers settle
+		// deterministically instead of hanging until their 30s (unref'd) timeout.
+		this.#rejectAllPending(new Error("RPC client stopped"));
 		for (const pendingCall of this.#pendingHostToolCalls.values()) {
 			pendingCall.controller.abort();
 		}
 		this.#pendingHostToolCalls.clear();
+	}
+
+	/** Reject every in-flight request and clear the pending map. */
+	#rejectAllPending(error: Error): void {
+		for (const pending of this.#pendingRequests.values()) {
+			pending.reject(error);
+		}
+		this.#pendingRequests.clear();
 	}
 
 	/**
@@ -401,7 +435,7 @@ export class RpcClient {
 	 * Cycle to next model.
 	 */
 	async cycleModel(): Promise<{
-		model: { provider: string; id: string };
+		model: Model;
 		thinkingLevel: ThinkingLevel | undefined;
 		isScoped: boolean;
 	} | null> {
@@ -410,11 +444,13 @@ export class RpcClient {
 	}
 
 	/**
-	 * Get list of available models.
+	 * Get list of available models. The wire carries full `Model` objects
+	 * (rpc-types.ts get_available_models response), so type them as such rather
+	 * than the lossy `ModelInfo` projection.
 	 */
-	async getAvailableModels(): Promise<ModelInfo[]> {
+	async getAvailableModels(): Promise<Model[]> {
 		const response = await this.#send({ type: "get_available_models" });
-		return this.#getData<{ models: ModelInfo[] }>(response).models;
+		return this.#getData<{ models: Model[] }>(response).models;
 	}
 
 	/**
@@ -640,7 +676,7 @@ export class RpcClient {
 		// Check if it's a response to a pending request
 		if (isRpcResponse(data)) {
 			const id = data.id;
-			if (id !== null && id !== undefined && id !== "" && this.#pendingRequests.has(id)) {
+			if (id && this.#pendingRequests.has(id)) {
 				const pending = this.#pendingRequests.get(id)!;
 				this.#pendingRequests.delete(id);
 				pending.resolve(data);
@@ -779,10 +815,23 @@ export class RpcClient {
 	}
 
 	#writeFrame(frame: RpcCommand | RpcHostToolResult | RpcHostToolUpdate, onError?: (error: Error) => void): void {
-		if (!this.#process?.stdin) {
-			throw new Error("Client not started");
+		const stdin = this.#process?.stdin as FileSink | undefined;
+		if (!stdin) {
+			// Transport is gone (process stopped between a host_tool_call arriving
+			// and this detached handler running). Surface to onError when the
+			// caller can recover (#send rejects the pending request); otherwise
+			// drop quietly — a `void`-ed host-tool reply must not become an
+			// unhandled rejection.
+			const error = new Error("Client not started");
+			if (onError) {
+				onError(error);
+			} else {
+				logger.debug("RpcClient: dropping frame, transport is gone", {
+					type: (frame as { type?: string }).type,
+				});
+			}
+			return;
 		}
-		const stdin = this.#process.stdin as FileSink;
 		void stdin.write(`${JSON.stringify(frame)}\n`);
 		const flushResult = stdin.flush();
 		if (flushResult instanceof Promise) {

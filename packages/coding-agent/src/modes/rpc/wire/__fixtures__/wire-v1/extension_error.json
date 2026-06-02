@@ -1,0 +1,6 @@
+{
+	"type": "extension_error",
+	"extensionPath": "/home/user/.omp/extensions/notify.ts",
+	"event": "session_start",
+	"error": "notify.ts: handler threw TypeError: cannot read properties of undefined"
+}

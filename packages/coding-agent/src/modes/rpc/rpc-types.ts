@@ -272,11 +272,6 @@ export const AuthMethod = {
 	PickProvider: "auth.pick_provider",
 } as const;
 
-export const AuthCommand = {
-	Login: "auth.login",
-	Logout: "auth.logout",
-} as const;
-
 // ============================================================================
 // Tool-approval method discriminator (ADR 0007)
 // ============================================================================

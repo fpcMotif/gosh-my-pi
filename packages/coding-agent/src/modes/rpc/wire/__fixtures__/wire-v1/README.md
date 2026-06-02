@@ -35,21 +35,22 @@ test and a `go test` resolve deterministically.
 
 ## Variant list
 
-| File                                 | Variant                                                  |
-| ------------------------------------ | -------------------------------------------------------- |
-| `ready.json`                         | `ready` handshake frame                                  |
-| `agent_start.json`                   | `agent_start`                                            |
-| `agent_end.json`                     | `agent_end` (no `errorKind`)                             |
-| `agent_end.error_kind.json`          | `agent_end` with `errorKind` (`usage_limit`)             |
-| `turn_end.json`                      | `turn_end` with message + toolResults                    |
-| `message_start.json`                 | `message_start`                                          |
-| `message_update.text_delta.json`     | `message_update` carrying a `text_delta` sub-event       |
-| `message_update.toolcall_end.json`   | `message_update` carrying a `toolcall_end` sub-event     |
-| `message_end.error_kind.json`        | `message_end` with `errorKind` (`context_overflow`)      |
-| `tool_execution_start.json`          | `tool_execution_start` (bash, with `presentation`)       |
-| `tool_execution_update.json`         | `tool_execution_update` (read, with code `presentation`) |
-| `tool_execution_end.edit_diff.json`  | `tool_execution_end` for an edit diff (`details.diff`)   |
-| `ordering.sequence.jsonl`            | one full ordered prompt cycle (JSONL, one frame/line)    |
+| File                                | Variant                                                  |
+| ----------------------------------- | -------------------------------------------------------- |
+| `ready.json`                        | `ready` handshake frame                                  |
+| `agent_start.json`                  | `agent_start`                                            |
+| `agent_end.json`                    | `agent_end` (no `errorKind`)                             |
+| `agent_end.error_kind.json`         | `agent_end` with `errorKind` (`usage_limit`)             |
+| `turn_end.json`                     | `turn_end` with message + toolResults                    |
+| `message_start.json`                | `message_start`                                          |
+| `message_update.text_delta.json`    | `message_update` carrying a `text_delta` sub-event       |
+| `message_update.toolcall_end.json`  | `message_update` carrying a `toolcall_end` sub-event     |
+| `message_end.error_kind.json`       | `message_end` with `errorKind` (`context_overflow`)      |
+| `tool_execution_start.json`         | `tool_execution_start` (bash, with `presentation`)       |
+| `tool_execution_update.json`        | `tool_execution_update` (read, with code `presentation`) |
+| `tool_execution_end.edit_diff.json` | `tool_execution_end` for an edit diff (`details.diff`)   |
+| `extension_error.json`              | `extension_error` diagnostic frame (G22)                 |
+| `ordering.sequence.jsonl`           | one full ordered prompt cycle (JSONL, one frame/line)    |
 
 ## Maintenance rule (mandatory)
 

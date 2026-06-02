@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import * as path from "node:path";
 import type { AgentSessionEvent } from "../../../session/agent-session";
 import { toWireEvent } from "./translate";
-import type { WireEventV1 } from "./v1";
+import type { WireEventV1, WireExtensionErrorFrameV1 } from "./v1";
 
 // ============================================================================
 // Cross-language golden wire fixtures (gap G23).
@@ -200,6 +200,25 @@ describe("OMP-RPC v1 golden fixtures — TS encode parity", () => {
 		// by rpc-mode at startup). Pin its bytes so the Go ReadyFrame decode and
 		// ExpectedSchema constant stay in lockstep.
 		expect(await loadFixture("ready.json")).toEqual({ type: "ready", schema: "omp-rpc/v1" });
+	});
+
+	test("extension_error.json pins the diagnostic frame fields (wire-02)", async () => {
+		// Emitted directly by rpc-mode (extensionRunner.onError), not via
+		// toWireEvent. The typed projection makes a field rename in v1.ts a
+		// compile error here; the Go side decodes the same fixture in
+		// wire_golden_test.go's TestWireGoldenExtensionErrorFrame.
+		const fixture = (await loadFixture("extension_error.json")) as WireExtensionErrorFrameV1;
+		const projected: WireExtensionErrorFrameV1 = {
+			type: "extension_error",
+			extensionPath: fixture.extensionPath,
+			event: fixture.event,
+			error: fixture.error,
+		};
+		expect(fixture).toEqual(projected);
+		expect(fixture.type).toBe("extension_error");
+		expect(typeof fixture.extensionPath).toBe("string");
+		expect(typeof fixture.event).toBe("string");
+		expect(typeof fixture.error).toBe("string");
 	});
 });
 
