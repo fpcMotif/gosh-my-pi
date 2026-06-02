@@ -303,18 +303,24 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 	const items: SlashCommand[] = [];
 	const warnings: string[] = [];
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const commandsDir = path.join(dir, "commands");
-		const result = await loadFilesFromDir<SlashCommand>(ctx, commandsDir, PROVIDER_ID, level, {
-			extensions: ["md"],
-			transform: (name, content, path, source) => ({
-				name: name.replace(/\.md$/, ""),
-				path,
-				content,
-				level,
-				_source: source,
-			}),
-		});
+	const configDirs = await getConfigDirs(ctx);
+	const results = await Promise.all(
+		configDirs.map(({ dir, level }) => {
+			const commandsDir = path.join(dir, "commands");
+			return loadFilesFromDir<SlashCommand>(ctx, commandsDir, PROVIDER_ID, level, {
+				extensions: ["md"],
+				transform: (name, content, path, source) => ({
+					name: name.replace(/\.md$/, ""),
+					path,
+					content,
+					level,
+					_source: source,
+				}),
+			});
+		}),
+	);
+
+	for (const result of results) {
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
 	}
@@ -335,13 +341,19 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 	const items: Rule[] = [];
 	const warnings: string[] = [];
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const rulesDir = path.join(dir, "rules");
-		const result = await loadFilesFromDir<Rule>(ctx, rulesDir, PROVIDER_ID, level, {
-			extensions: ["md", "mdc"],
-			transform: (name, content, path, source) =>
-				buildRuleFromMarkdown(name, content, path, source, { stripNamePattern: /\.(md|mdc)$/ }),
-		});
+	const configDirs = await getConfigDirs(ctx);
+	const results = await Promise.all(
+		configDirs.map(({ dir, level }) => {
+			const rulesDir = path.join(dir, "rules");
+			return loadFilesFromDir<Rule>(ctx, rulesDir, PROVIDER_ID, level, {
+				extensions: ["md", "mdc"],
+				transform: (name, content, path, source) =>
+					buildRuleFromMarkdown(name, content, path, source, { stripNamePattern: /\.(md|mdc)$/ }),
+			});
+		}),
+	);
+
+	for (const result of results) {
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
 	}
@@ -362,17 +374,23 @@ async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
 	const items: Prompt[] = [];
 	const warnings: string[] = [];
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const promptsDir = path.join(dir, "prompts");
-		const result = await loadFilesFromDir<Prompt>(ctx, promptsDir, PROVIDER_ID, level, {
-			extensions: ["md"],
-			transform: (name, content, path, source) => ({
-				name: name.replace(/\.md$/, ""),
-				path,
-				content,
-				_source: source,
-			}),
-		});
+	const configDirs = await getConfigDirs(ctx);
+	const results = await Promise.all(
+		configDirs.map(({ dir, level }) => {
+			const promptsDir = path.join(dir, "prompts");
+			return loadFilesFromDir<Prompt>(ctx, promptsDir, PROVIDER_ID, level, {
+				extensions: ["md"],
+				transform: (name, content, path, source) => ({
+					name: name.replace(/\.md$/, ""),
+					path,
+					content,
+					_source: source,
+				}),
+			});
+		}),
+	);
+
+	for (const result of results) {
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
 	}
@@ -569,21 +587,27 @@ async function loadInstructions(ctx: LoadContext): Promise<LoadResult<Instructio
 	const items: Instruction[] = [];
 	const warnings: string[] = [];
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const instructionsDir = path.join(dir, "instructions");
-		const result = await loadFilesFromDir<Instruction>(ctx, instructionsDir, PROVIDER_ID, level, {
-			extensions: ["md"],
-			transform: (name, content, path, source) => {
-				const { frontmatter, body } = parseFrontmatter(content, { source: path });
-				return {
-					name: name.replace(/\.instructions\.md$/, "").replace(/\.md$/, ""),
-					path,
-					content: body,
-					applyTo: frontmatter.applyTo as string | undefined,
-					_source: source,
-				};
-			},
-		});
+	const configDirs = await getConfigDirs(ctx);
+	const results = await Promise.all(
+		configDirs.map(({ dir, level }) => {
+			const instructionsDir = path.join(dir, "instructions");
+			return loadFilesFromDir<Instruction>(ctx, instructionsDir, PROVIDER_ID, level, {
+				extensions: ["md"],
+				transform: (name, content, path, source) => {
+					const { frontmatter, body } = parseFrontmatter(content, { source: path });
+					return {
+						name: name.replace(/\.instructions\.md$/, "").replace(/\.md$/, ""),
+						path,
+						content: body,
+						applyTo: frontmatter.applyTo as string | undefined,
+						_source: source,
+					};
+				},
+			});
+		}),
+	);
+
+	for (const result of results) {
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
 	}
@@ -779,9 +803,16 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	const items: Settings[] = [];
 	const warnings: string[] = [];
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const settingsPath = path.join(dir, "settings.json");
-		const content = await readFile(settingsPath);
+	const configDirs = await getConfigDirs(ctx);
+	const results = await Promise.all(
+		configDirs.map(async ({ dir, level }) => {
+			const settingsPath = path.join(dir, "settings.json");
+			const content = await readFile(settingsPath);
+			return { settingsPath, content, level };
+		}),
+	);
+
+	for (const { settingsPath, content, level } of results) {
 		if (content === null || content === undefined || content === "") continue;
 
 		const data = tryParseJson<Record<string, unknown>>(content);
