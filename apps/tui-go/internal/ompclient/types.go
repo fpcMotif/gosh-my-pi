@@ -50,6 +50,11 @@ type Command struct {
 	// Streaming behavior for prompt: "steer" | "followUp".
 	StreamingBehavior string `json:"streamingBehavior,omitempty"`
 
+	// ClientMessageID is a correlation id for prompt: the backend stamps it
+	// onto the resulting user message (echoed as WireUserMessageV1.id) so the
+	// frontend can reconcile the echo by id instead of by content.
+	ClientMessageID string `json:"clientMessageId,omitempty"`
+
 	// new_session
 	ParentSession string `json:"parentSession,omitempty"`
 

@@ -285,6 +285,13 @@ export type ProviderPayload = OpenAIResponsesHistoryPayload;
 export interface UserMessage {
 	role: "user";
 	content: string | (TextContent | ImageContent)[];
+	/**
+	 * Optional host-supplied correlation id. Opaque to the runtime; an embedder
+	 * (e.g. the RPC bridge) sets it from a client message id so a frontend can
+	 * reconcile an echoed message with the one it created optimistically rather
+	 * than matching by content. Inert everywhere it is not explicitly read.
+	 */
+	id?: string;
 	/** True if the message was injected by the system (e.g., auto-continue). */
 	synthetic?: boolean;
 	/** Who initiated this message for billing/attribution semantics. */
@@ -297,6 +304,8 @@ export interface UserMessage {
 export interface DeveloperMessage {
 	role: "developer";
 	content: string | (TextContent | ImageContent)[];
+	/** Optional host-supplied correlation id. See {@link UserMessage.id}. */
+	id?: string;
 	/** Who initiated this message for billing/attribution semantics. */
 	attribution?: MessageAttribution;
 	/** Provider-specific opaque payload used to reconstruct transport-native history. */

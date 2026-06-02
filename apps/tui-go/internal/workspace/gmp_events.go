@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -11,6 +12,21 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
 )
+
+// maxDiagnosticLogBytes caps how much of a diagnostic frame payload is logged.
+// Diagnostic frames (_raw / extension_error) can embed arbitrarily large tool
+// output, so the full body must never reach the log verbatim.
+const maxDiagnosticLogBytes = 512
+
+// truncateForLog renders a frame payload for a log line, capping its length so
+// a runaway frame can't flood the log. Truncation is annotated with the
+// original byte length so the elision is visible.
+func truncateForLog(payload []byte) string {
+	if len(payload) <= maxDiagnosticLogBytes {
+		return string(payload)
+	}
+	return string(payload[:maxDiagnosticLogBytes]) + fmt.Sprintf("…(+%d bytes truncated)", len(payload)-maxDiagnosticLogBytes)
+}
 
 func (w *GmpWorkspace) handleAgentEvent(ev *ompclient.AgentEvent) {
 	if ev == nil {
@@ -72,8 +88,10 @@ func (w *GmpWorkspace) translateEvent(ev *ompclient.AgentEvent) tea.Msg {
 		// (_raw) and extension-hook errors surfaced by the backend
 		// (extension_error, G22). They are not part of the agent event stream,
 		// but dropping them silently leaves a frozen-looking transcript with no
-		// observable cause — log so the failure is diagnosable.
-		slog.Warn("gmp workspace: diagnostic frame", "kind", ev.Kind, "payload", string(ev.Payload))
+		// observable cause — log so the failure is diagnosable. Truncate the
+		// payload: a runaway frame (e.g. a multi-MB scraped page surfaced in a
+		// tool error) would otherwise flood the log file.
+		slog.Warn("gmp workspace: diagnostic frame", "kind", ev.Kind, "payload", truncateForLog(ev.Payload))
 		return nil
 	default:
 		return nil
@@ -88,7 +106,7 @@ func (w *GmpWorkspace) handleMessageStart(raw []byte) tea.Msg {
 	eventType := pubsub.CreatedEvent
 	w.mu.Lock()
 	if msg.Role == message.User {
-		if id, ok := w.matchingUserIDLocked(msg.Content().Text); ok {
+		if id, ok := w.reconcileUserIDLocked(msg); ok {
 			msg.ID = id
 			eventType = pubsub.UpdatedEvent
 		}
@@ -180,7 +198,7 @@ func (w *GmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 	}
 	w.mu.Lock()
 	if msg.Role == message.User {
-		if id, ok := w.matchingUserIDLocked(msg.Content().Text); ok {
+		if id, ok := w.reconcileUserIDLocked(msg); ok {
 			msg.ID = id
 		}
 	}
@@ -204,7 +222,7 @@ func (w *GmpWorkspace) handleMessageEnd(raw []byte) tea.Msg {
 	}
 	w.mu.Lock()
 	if msg.Role == message.User {
-		if id, ok := w.matchingUserIDLocked(msg.Content().Text); ok {
+		if id, ok := w.reconcileUserIDLocked(msg); ok {
 			msg.ID = id
 		}
 	}
@@ -285,7 +303,7 @@ func (w *GmpWorkspace) handleAgentEnd(raw []byte) []tea.Msg {
 	for _, msg := range msgs {
 		eventType := pubsub.CreatedEvent
 		if msg.Role == message.User {
-			if id, ok := w.matchingUserIDLocked(msg.Content().Text); ok {
+			if id, ok := w.reconcileUserIDLocked(msg); ok {
 				msg.ID = id
 			}
 		}
@@ -421,6 +439,18 @@ func (w *GmpWorkspace) handleToolExecutionEnd(raw []byte) tea.Msg {
 	w.toolResultMessages[p.ToolCallID] = result.ID
 	w.mu.Unlock()
 	return pubsub.Event[message.Message]{Type: pubsub.CreatedEvent, Payload: result.Clone()}
+}
+
+// reconcileUserIDLocked resolves the local id for an inbound user message.
+// When the backend echoed our correlation id (msg.ID is already a known local
+// message), that id is authoritative and no content matching is performed —
+// this is robust even when two user messages share identical text. Older
+// backends that do not echo the id fall back to content matching.
+func (w *GmpWorkspace) reconcileUserIDLocked(msg message.Message) (string, bool) {
+	if _, known := w.messages[msg.ID]; known {
+		return msg.ID, true
+	}
+	return w.matchingUserIDLocked(msg.Content().Text)
 }
 
 func (w *GmpWorkspace) matchingUserIDLocked(text string) (string, bool) {

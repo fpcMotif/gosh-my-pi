@@ -30,6 +30,7 @@
    - Go TUI: streamed UI events are delivered to the program in submission order through a single drain goroutine, fixing the per-message `go program.Send` race that could leave an assistant message rendering a stale snapshot.
    - Go TUI: the stub `host_tool_result` reply is now a well-formed `AgentToolResult`, so the backend's host-tool call no longer deadlocks on a reply the TS guard silently dropped; `redactedThinking` assistant blocks render a placeholder instead of vanishing; and transport diagnostic frames (`_raw` / `extension_error`) are logged instead of dropped.
    - ompclient: malformed-frame, duplicate-response, and full-buffer dispatch are non-blocking so a misbehaving or slow consumer can no longer wedge command-response delivery.
+   - Message reconciliation now uses a host correlation id: the `prompt` command carries an optional `clientMessageId` that the backend echoes on the user/developer wire message (`WireUserMessageV1.id`, v1-additive), so the Go TUI reconciles an echoed message by id instead of by content — robust when two messages share identical text. Older backends fall back to content matching.
 
 ## [14.5.11] - 2026-04-30
 

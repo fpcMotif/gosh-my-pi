@@ -66,6 +66,17 @@ const cases: Array<{ fixture: string; event: AgentSessionEvent }> = [
 		},
 	},
 	{
+		// Correlation id (v1-additive): a user message carrying a host-supplied
+		// `id` must round-trip onto the wire so the Go frontend can reconcile by
+		// id instead of by content. The Go decoder consumes the same fixture in
+		// wire_golden_test.go (TestWireGoldenUserCorrelationID).
+		fixture: "message_start.user_correlation_id.json",
+		event: {
+			type: "message_start",
+			message: { role: "user", content: "hi", id: "client-msg-7", timestamp: 1_717_200_000_000 } as AgentMessage,
+		},
+	},
+	{
 		fixture: "agent_end.error_kind.json",
 		event: {
 			type: "agent_end",

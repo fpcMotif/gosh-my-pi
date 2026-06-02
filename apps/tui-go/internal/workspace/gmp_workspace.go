@@ -274,6 +274,9 @@ func (w *GmpWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, a
 	_, err := w.client.Call(ctx, ompclient.Command{
 		Type:    "prompt",
 		Message: message.PromptWithTextAttachments(prompt, attachments),
+		// Correlate the echoed user message back to the optimistic one created
+		// above so reconciliation is by id, not fragile content matching.
+		ClientMessageID: user.ID,
 	})
 	if err != nil {
 		if msg := w.finishAssistant(message.FinishReasonError, err.Error(), ""); msg != nil {

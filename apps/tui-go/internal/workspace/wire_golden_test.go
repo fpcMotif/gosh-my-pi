@@ -143,6 +143,27 @@ func TestWireGoldenMessageStart(t *testing.T) {
 	}
 }
 
+// TestWireGoldenUserCorrelationID: a user message carrying a host-supplied
+// correlation id (WireUserMessageV1.id) decodes with that id adopted as the
+// message id, so reconciliation is an exact id hit rather than content matching.
+// Pins the same fixture the TS encoder emits in golden-fixtures.test.ts.
+func TestWireGoldenUserCorrelationID(t *testing.T) {
+	raw := loadWireFixture(t, "message_start.user_correlation_id.json")
+	w := newTestGmpWorkspace()
+
+	msg := w.handleMessageStart(raw)
+	ev, ok := msg.(pubsub.Event[message.Message])
+	if !ok {
+		t.Fatalf("handleMessageStart returned %T, want pubsub.Event[message.Message]", msg)
+	}
+	if ev.Payload.Role != message.User {
+		t.Errorf("role = %q, want user", ev.Payload.Role)
+	}
+	if ev.Payload.ID != "client-msg-7" {
+		t.Errorf("ID = %q, want the echoed correlation id client-msg-7", ev.Payload.ID)
+	}
+}
+
 // TestWireGoldenMessageUpdateTextDelta: the text_delta fixture appends its delta
 // to the streaming assistant message.
 func TestWireGoldenMessageUpdateTextDelta(t *testing.T) {

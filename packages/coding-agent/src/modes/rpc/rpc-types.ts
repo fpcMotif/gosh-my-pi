@@ -17,11 +17,19 @@ import type { TodoPhase } from "../../tools/todo-write";
 
 export type RpcCommand =
 	// Prompting
-	| { id?: string; type: "prompt"; message: string; images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" }
+	| {
+			id?: string;
+			type: "prompt";
+			message: string;
+			images?: ImageContent[];
+			streamingBehavior?: "steer" | "followUp";
+			/** Host correlation id stamped onto the resulting user message (echoed on the wire as WireUserMessageV1.id). */
+			clientMessageId?: string;
+	  }
 	| { id?: string; type: "steer"; message: string; images?: ImageContent[] }
 	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
 	| { id?: string; type: "abort" }
-	| { id?: string; type: "abort_and_prompt"; message: string; images?: ImageContent[] }
+	| { id?: string; type: "abort_and_prompt"; message: string; images?: ImageContent[]; clientMessageId?: string }
 	| { id?: string; type: "new_session"; parentSession?: string }
 
 	// State

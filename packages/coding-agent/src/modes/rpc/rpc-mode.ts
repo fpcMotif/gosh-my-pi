@@ -672,6 +672,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 					.prompt(command.message, {
 						images: command.images,
 						streamingBehavior: command.streamingBehavior,
+						clientMessageId: command.clientMessageId,
 					})
 					.catch((error: Error) => emitDetachedPromptFailure(output, error));
 				return success(id, "prompt");
@@ -695,7 +696,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			case "abort_and_prompt": {
 				await session.abort();
 				session
-					.prompt(command.message, { images: command.images })
+					.prompt(command.message, { images: command.images, clientMessageId: command.clientMessageId })
 					.catch((error: Error) => emitDetachedPromptFailure(output, error));
 				return success(id, "abort_and_prompt");
 			}

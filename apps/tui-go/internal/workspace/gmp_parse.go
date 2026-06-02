@@ -80,6 +80,11 @@ func (w *GmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 	var probe struct {
 		Role      string `json:"role"`
 		Timestamp int64  `json:"timestamp"`
+		// ID is the host correlation id the backend echoes for user/developer
+		// messages (WireUserMessageV1.id). When present it is the very id this
+		// frontend assigned and sent as clientMessageId, so reconciliation is a
+		// direct id hit rather than content matching.
+		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(body, &probe); err != nil {
 		return message.Message{}, false
@@ -95,7 +100,7 @@ func (w *GmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 	switch probe.Role {
 	case "user":
 		msg.Parts = w.parseTextWrappedContent(body)
-		msg.ID = w.nextID("user")
+		msg.ID = correlatedID(probe.ID, w.nextID("user"))
 	case "assistant":
 		msg.Parts = w.parseAssistantContent(body)
 		msg.ID = w.nextID("assistant")
@@ -108,13 +113,24 @@ func (w *GmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 		msg.ID = w.nextID("exec")
 	case "custom", "hookMessage", "developer":
 		msg.Parts = w.parseTextWrappedContent(body)
-		msg.ID = w.nextID("custom")
+		msg.ID = correlatedID(probe.ID, w.nextID("custom"))
 	default:
 		msg.Parts = []message.ContentPart{message.TextContent{Text: fmt.Sprintf("[%s message]", probe.Role)}}
 		msg.ID = w.nextID("unknown")
 	}
 
 	return msg, true
+}
+
+// correlatedID returns the backend-echoed correlation id when present,
+// otherwise the freshly-generated fallback. A non-empty wire id is the id this
+// frontend originally assigned and sent as clientMessageId, so using it
+// directly turns reconciliation into a map hit instead of content matching.
+func correlatedID(wireID, fallback string) string {
+	if wireID != "" {
+		return wireID
+	}
+	return fallback
 }
 
 func (w *GmpWorkspace) parseTextWrappedContent(raw []byte) []message.ContentPart {
