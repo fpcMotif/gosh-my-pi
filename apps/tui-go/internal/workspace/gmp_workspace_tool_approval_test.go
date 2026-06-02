@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -169,55 +168,9 @@ func TestHandleToolApprovalReply_NoOpOnEmptyID(t *testing.T) {
 	w.HandleToolApprovalReply(permRequestWithID(""), true)
 }
 
-// TestToolApprovalDecoderParity is the runtime half of the wire contract,
-// pair-locked with the ToolApprovalRequestPayload type in
-// packages/coding-agent/src/modes/rpc/rpc-types.ts: every method constant
-// has a matching decoder, and no orphan decoder exists without a constant.
-func TestToolApprovalDecoderParity(t *testing.T) {
-	t.Parallel()
-	if missing := missingToolApprovalDecoders(toolApprovalMethods, toolApprovalDecoders); len(missing) > 0 {
-		t.Fatalf("toolApprovalDecoders missing entries for: %v", missing)
-	}
-	known := make(map[string]struct{}, len(toolApprovalMethods))
-	for _, m := range toolApprovalMethods {
-		known[m] = struct{}{}
-	}
-	for k := range toolApprovalDecoders {
-		if _, ok := known[k]; !ok {
-			t.Errorf("toolApprovalDecoders entry %q has no matching method in toolApprovalMethods", k)
-		}
-	}
-}
-
-func TestEnsureToolApprovalDecoderParity_PanicsOnMissing(t *testing.T) {
-	t.Parallel()
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatalf("expected ensureToolApprovalDecoderParity to panic on missing decoder")
-		}
-		msg, ok := r.(string)
-		if !ok || !strings.Contains(msg, "tool.synthetic_missing") {
-			t.Fatalf("panic did not mention the missing method: %v", r)
-		}
-	}()
-	ensureToolApprovalDecoderParity(
-		[]string{toolapproval.MethodRequestApproval, "tool.synthetic_missing"},
-		map[string]toolApprovalDecoder{
-			toolapproval.MethodRequestApproval: toolApprovalDecoders[toolapproval.MethodRequestApproval],
-		},
-	)
-}
-
-func TestEnsureToolApprovalDecoderParity_NoPanicOnComplete(t *testing.T) {
-	t.Parallel()
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("ensureToolApprovalDecoderParity panicked unexpectedly: %v", r)
-		}
-	}()
-	ensureToolApprovalDecoderParity(toolApprovalMethods, toolApprovalDecoders)
-}
+// The tool-approval decoder parity tests (TestDecoderParity / TestEnsureParity_*)
+// moved into package toolapproval alongside the decode layer they exercise —
+// see internal/toolapproval/decode_test.go.
 
 func permRequestWithID(id string) permission.PermissionRequest {
 	return ToolApprovalPermissionRequest(toolapproval.Request{ID: id, ToolName: tools.BashToolName})

@@ -2,9 +2,7 @@ package workspace
 
 import (
 	"cmp"
-	"encoding/json"
 	"log/slog"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/agent/tools"
@@ -17,81 +15,17 @@ import (
 // Tool-approval gate (ADR 0007)
 // ============================================================================
 
-// toolApprovalRequestPayload is the wire payload for a tool.request_approval
-// extension_ui_request. Pair-locked with ToolApprovalRequestPayload in
-// packages/coding-agent/src/modes/rpc/rpc-types.ts and asserted at startup
-// by the init() parity check below.
-type toolApprovalRequestPayload struct {
-	ToolCallID string              `json:"toolCallId"`
-	ToolName   string              `json:"toolName"`
-	Params     toolapproval.Params `json:"params"`
-}
-
-// toolApprovalDecoder mirrors authDecoder for the tool-approval flow: it
-// consumes the inbound id + raw JSON for the method and produces a typed
-// tea.Msg or a decode error.
-type toolApprovalDecoder func(id string, raw json.RawMessage) (tea.Msg, error)
-
-// toolApprovalMethods is the canonical list of tool-approval method
-// constants this dispatcher must support. Sourced once so the init()
-// parity check and TestToolApprovalDecoderParity drive off the same set —
-// adding a new method requires appending here AND adding a decoder, or the
-// init() check turns the omission into a startup panic.
-var toolApprovalMethods = []string{
-	toolapproval.MethodRequestApproval,
-}
-
-// toolApprovalDecoders maps each tool-approval method to its decoder.
-// Pair-locked with the TS-side ToolApprovalRequestPayload union; the init()
-// block below ensures every toolApprovalMethods entry has a decoder.
-var toolApprovalDecoders = map[string]toolApprovalDecoder{
-	toolapproval.MethodRequestApproval: func(id string, raw json.RawMessage) (tea.Msg, error) {
-		var p toolApprovalRequestPayload
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return nil, err
-		}
-		return toolapproval.Request{ID: id, ToolCallID: p.ToolCallID, ToolName: p.ToolName, Params: p.Params}, nil
-	},
-}
-
-// init enforces every entry in toolApprovalMethods has a decoder, mirroring
-// the auth parity check. A method added to the const list but forgotten in
-// toolApprovalDecoders becomes a startup panic instead of a silent
-// auto-cancel at runtime.
-func init() {
-	ensureToolApprovalDecoderParity(toolApprovalMethods, toolApprovalDecoders)
-}
-
-// ensureToolApprovalDecoderParity panics if any entry in `methods` lacks an
-// entry in `decoders`. Extracted for testability.
-func ensureToolApprovalDecoderParity(methods []string, decoders map[string]toolApprovalDecoder) {
-	if missing := missingToolApprovalDecoders(methods, decoders); len(missing) > 0 {
-		panic("gmp workspace: tool-approval decoder missing for: " + strings.Join(missing, ", "))
-	}
-}
-
-// missingToolApprovalDecoders returns the entries in `methods` with no entry
-// in `decoders`. Pure for testability.
-func missingToolApprovalDecoders(methods []string, decoders map[string]toolApprovalDecoder) []string {
-	var missing []string
-	for _, m := range methods {
-		if _, ok := decoders[m]; !ok {
-			missing = append(missing, m)
-		}
-	}
-	return missing
-}
-
 // translateToolApprovalRequest returns a Bubble Tea message for an inbound
 // tool.request_approval extension_ui_request, or nil if the method is not a
 // known tool-approval method (drainExtensionUI then falls back to its
-// default-cancel response, which denies the tool — the safe default).
+// default-cancel response, which denies the tool — the safe default). The pure
+// decode layer (payload, decoder table, startup parity check) lives in the
+// `toolapproval` package alongside the method constant and Request type.
 func (w *GmpWorkspace) translateToolApprovalRequest(req *ompclient.ExtensionUIReq) tea.Msg {
-	decode, ok := toolApprovalDecoders[req.Method]
+	msg, ok, err := toolapproval.Decode(req.Method, req.ID, req.Raw)
 	if !ok {
 		return nil
 	}
-	msg, err := decode(req.ID, req.Raw)
 	if err != nil {
 		slog.Warn("gmp workspace: failed to parse tool-approval payload", "method", req.Method, "id", req.ID, "error", err)
 		return nil
