@@ -384,6 +384,28 @@ func (c *Client) emitEvent(ev *AgentEvent) {
 	}
 }
 
+// sendSideChannel delivers a side-channel frame (extension UI request, host
+// tool call/cancel) without ever blocking the read loop. A blocked send in
+// dispatch would also stall response and agent-event delivery — they all run in
+// this single goroutine — so a stuck side-channel consumer would otherwise
+// wedge the whole stream once the 16-slot buffer fills. Unlike agent events,
+// these frames cannot be dropped: each one carries a backend promise that
+// strands (until its multi-minute deadline) without a reply. So on a full
+// buffer we spill to a short-lived goroutine that completes the blocking send.
+// The goroutine recovers because the read loop closes these channels on exit;
+// a spill still in flight at that moment would otherwise panic on
+// send-to-closed-channel and crash the process.
+func sendSideChannel[T any](ch chan T, frame T) {
+	select {
+	case ch <- frame:
+	default:
+		go func() {
+			defer func() { _ = recover() }()
+			ch <- frame
+		}()
+	}
+}
+
 // dispatch routes a single decoded frame to the right channel.
 func (c *Client) dispatch(line []byte) {
 	var probe struct {
@@ -423,17 +445,17 @@ func (c *Client) dispatch(line []byte) {
 		var r ExtensionUIReq
 		if err := json.Unmarshal(line, &r); err == nil {
 			r.Raw = bytes.Clone(line)
-			c.extensionUI <- &r
+			sendSideChannel(c.extensionUI, &r)
 		}
 	case "host_tool_call":
 		var r HostToolCallReq
 		if err := json.Unmarshal(line, &r); err == nil {
-			c.hostToolCall <- &r
+			sendSideChannel(c.hostToolCall, &r)
 		}
 	case "host_tool_cancel":
 		var r HostToolCancelReq
 		if err := json.Unmarshal(line, &r); err == nil {
-			c.hostToolCancel <- &r
+			sendSideChannel(c.hostToolCancel, &r)
 		}
 	case "ready":
 		c.recordReadySchema(line)

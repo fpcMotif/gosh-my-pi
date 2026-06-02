@@ -1,6 +1,7 @@
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { describe, expect, test } from "bun:test";
-import { classifyAssistantError } from "../src/error-kind";
+import { classifyAssistantError, errorToKind } from "../src/error-kind";
+import { ProviderHttpError } from "../src/errors";
 import { createAssistantMessage, createUsage } from "./helpers";
 
 function errorMessage(error: string, usage?: Partial<AssistantMessage["usage"]>): AssistantMessage {
@@ -83,5 +84,22 @@ describe("classifyAssistantError", () => {
 	test("context_overflow takes precedence over usage_limit", () => {
 		const msg = errorMessage("usage limit reached: prompt is too long: 1 tokens > 0 maximum");
 		expect(classifyAssistantError(msg, 0)?.kind).toBe("context_overflow");
+	});
+});
+
+describe("errorToKind ProviderHttpError", () => {
+	const httpError = (status?: number) =>
+		errorToKind(new ProviderHttpError({ provider: "openai", status, message: "boom" }));
+
+	test.each([500, 502, 503, 504, 408, 429])("retryable status %i is transient", status => {
+		expect(httpError(status).kind).toBe("transient");
+	});
+
+	test.each([400, 401, 403, 404, 422])("permanent status %i is fatal, not transient", status => {
+		expect(httpError(status).kind).toBe("fatal");
+	});
+
+	test("missing status (pre-response transport failure) is transient", () => {
+		expect(httpError(undefined).kind).toBe("transient");
 	});
 });

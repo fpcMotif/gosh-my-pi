@@ -67,6 +67,17 @@ export function classifyAssistantError(message: AssistantMessage, contextWindow?
 }
 
 /**
+ * Whether an HTTP status should be retried (transient) rather than failed
+ * fast (fatal). `undefined` (no response reached) is a pre-response transport
+ * failure and is retryable. Matches the retryable set in
+ * packages/ai/src/utils/retry.ts: 5xx, 408 (timeout), 429 (rate limit).
+ */
+function isRetryableHttpStatus(status: number | undefined): boolean {
+	if (status === undefined) return true;
+	return status >= 500 || status === 408 || status === 429;
+}
+
+/**
  * One-way bridge from a typed Effect failure (`AgentTaggedError`) to the
  * event-stream taxonomy (`AgentErrorKind`). Used at the boundary where an
  * Effect program's failure becomes an emitted assistant-message error.
@@ -81,7 +92,13 @@ export function errorToKind(error: AgentTaggedError): AgentErrorKind {
 				? { kind: "context_overflow", usedTokens: error.usedTokens }
 				: { kind: "context_overflow" };
 		case "ProviderHttpError":
-			return { kind: "transient" };
+			// Classify by HTTP status, not unconditionally transient: a permanent
+			// client error (401/403/400/404/422 ...) will never succeed on retry,
+			// so surfacing it as "transient, retrying" misleads the UI and any
+			// retry hint. Retryable statuses (5xx, 408, 429) stay transient; a
+			// missing status means a pre-response transport failure, which is
+			// retryable. Mirrors isRetryableStatus in packages/ai/src/utils/retry.ts.
+			return isRetryableHttpStatus(error.status) ? { kind: "transient" } : { kind: "fatal" };
 		case "UsageLimitError":
 			return { kind: "usage_limit", retryAfterMs: error.retryAfterMs };
 		case "LocalAbort":

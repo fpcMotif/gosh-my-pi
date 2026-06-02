@@ -236,6 +236,50 @@ func TestSideChannelFanOut(t *testing.T) {
 	}
 }
 
+// TestReadLoop_SideChannelOverflowDoesNotWedgeResponses is the core
+// anti-deadlock guard for the side-channel path. extension_ui_request,
+// host_tool_call and host_tool_cancel frames share the single read-loop
+// goroutine with response dispatch, so a *blocking* side-channel send with no
+// consumer would stall every in-flight Call once the 16-slot buffer filled.
+// Here we flood the extension-UI side channel well past its buffer WITHOUT
+// draining it, then prove a pending Call's response still lands behind the
+// flood. The read loop must never block on a side-channel send.
+func TestReadLoop_SideChannelOverflowDoesNotWedgeResponses(t *testing.T) {
+	fp := newFakePeer(t)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := fp.client.Call(context.Background(), Command{ID: "c1", Type: "prompt"})
+		errCh <- err
+	}()
+	fp.readCommand(t) // c1 is now registered as pending
+
+	// Flood the extension-UI channel far past its buffer with no consumer,
+	// then the response. Written from a goroutine because under the pre-fix
+	// blocking send the read loop wedges and these pipe writes would block
+	// forever — the test must not depend on them completing. Avoid t.Fatalf
+	// off the test goroutine; ignore write errors on teardown instead.
+	go func() {
+		uiFrame := []byte(`{"type":"extension_ui_request","id":"u","method":"auth.showProgress"}` + "\n")
+		for range sideChannelBufferSize * 3 {
+			if _, err := fp.peerWrite.Write(uiFrame); err != nil {
+				return
+			}
+		}
+		respFrame := []byte(`{"id":"c1","type":"response","command":"prompt","success":true}` + "\n")
+		_, _ = fp.peerWrite.Write(respFrame)
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Call failed: %v", err)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("response wedged behind unconsumed side-channel frames — read loop blocked on a full side-channel buffer")
+	}
+}
+
 // TestClose_ReturnsWithoutSubprocess asserts Close on a NewWithIO client
 // (no os/exec process) returns promptly once the peer's stdout has
 // closed, rather than panicking on the nil cmd or blocking forever.

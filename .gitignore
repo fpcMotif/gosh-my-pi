@@ -47,7 +47,11 @@ tui-debug.log
 
 # Test & coverage
 coverage/
+coverage-*/
+packages/*/coverage-*/
 .nyc_output/
+*.lcov
+lcov.info
 packages/ai/test/.temp-images/
 
 # Project specific

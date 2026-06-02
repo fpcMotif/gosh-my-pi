@@ -1,17 +1,32 @@
-# Crush Development Guide
+# gmp-tui-go Development Guide
 
-## Project Overview
+## Fork status (gmp-only) — read first
 
-Crush is a terminal-based AI coding assistant built in Go by
-[Charm](https://charm.land). It connects to LLMs and gives them tools to read,
-write, and execute code. It supports multiple providers (Anthropic, OpenAI,
-Gemini, Bedrock, Copilot, Hyper, MiniMax, Vercel, and more), integrates with
-LSPs for code intelligence, and supports extensibility via MCP servers and
-agent skills.
+`apps/tui-go` is the **Go TUI frontend** of the `gosh-my-pi` repo, forked from
+[Charm Crush](https://charm.land). It is **gmp-only**: it does not run an
+in-process agent. It spawns the `gmp` coding-agent backend in RPC mode
+(`gmp --mode rpc`) and drives the full agentic loop over OMP-RPC (JSONL frames
+on stdio). Providers, the agent loop, tools, LSP, MCP, and session storage all
+live in the backend (`packages/coding-agent` and friends), **not** here.
 
-The module path is `github.com/charmbracelet/crush`.
+- Module path: `github.com/fpcMotif/gosh-my-pi/apps/tui-go`.
+- Authoritative architecture: `docs/adr/0002-apps-tui-go-gmp-only.md` (the
+  gmp-only carve-out) and the repo-root `CONTEXT.md`. The long-term north star
+  is `apps/tui-go/docs/carve-out-plan.md`.
+- The transport client is `internal/ompclient`; the RPC↔UI bridge is
+  `internal/workspace` (`GmpWorkspace`); the Bubble Tea model is `internal/ui`.
+- The upstream dual-mode workspaces (`*AppWorkspace`, `*ClientWorkspace`) and
+  the standalone Crush subcommands have been removed. `Workspace.IsGmpMode()`
+  is effectively constant `true`.
 
-## Architecture
+> The "Architecture" and "Key Patterns" sections below are inherited from
+> upstream Crush and describe subsystems (in-process providers, LSP, SQLite
+> sessions, hooks, `crush.json`) that are carved out or backend-owned in
+> gmp-only mode. Treat them as historical context, not current truth — defer to
+> ADR 0002 and `CONTEXT.md` when they conflict. The Go style/build/test
+> guidance further down still applies.
+
+## Architecture (inherited from upstream Crush — see caveat above)
 
 ```
 main.go                            CLI entry point (cobra via internal/cmd)

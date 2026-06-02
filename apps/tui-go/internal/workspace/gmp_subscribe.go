@@ -168,14 +168,26 @@ func (w *GmpWorkspace) Subscribe(program *tea.Program) {
 // the legacy "auto-cancel" behavior — gmp's RpcExtensionUIContext
 // already treats cancellation as the safe default.
 func (w *GmpWorkspace) drainExtensionUI() {
+	for req := range w.client.ExtensionUIRequests() {
+		drainStep("drainExtensionUI", func() { w.dispatchExtensionUIRequest(req) })
+	}
+}
+
+// drainStep runs one drain-loop iteration with a panic recover scoped to that
+// single frame. The recover MUST be per-iteration, not per-goroutine: a
+// goroutine-level recover (deferred in the drain func) unwinds the whole `for
+// range` loop on the first panic, killing the drainer permanently. With no
+// consumer the side-channel buffer then fills after 16 frames and the
+// ompclient read loop wedges — stalling response and agent-event dispatch too,
+// until each stranded request hits its multi-minute deadline. Scoping recover
+// here keeps the drainer alive across a bad frame.
+func drainStep(label string, fn func()) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("GmpWorkspace.drainExtensionUI panic", "recover", r)
+			slog.Error("gmp workspace: drain step panic recovered", "drainer", label, "recover", r)
 		}
 	}()
-	for req := range w.client.ExtensionUIRequests() {
-		w.dispatchExtensionUIRequest(req)
-	}
+	fn()
 }
 
 // dispatchExtensionUIRequest handles one inbound extension_ui_request frame.
@@ -224,33 +236,34 @@ func buildCancelledExtensionUIResponse(id string) ompclient.ExtensionUIResp {
 // explicitly rather than letting the backend hang on a missing response — so
 // the read loop can never deadlock on an unregistered host tool.
 func (w *GmpWorkspace) drainHostToolCalls() {
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("GmpWorkspace.drainHostToolCalls panic", "recover", r)
-		}
-	}()
 	for req := range w.client.HostToolCalls() {
-		if req == nil || req.ID == "" {
-			continue
-		}
-		// Result MUST serialize to an AgentToolResult ({content:[...]}) — the TS
-		// guard (isAgentToolResult) requires result.content to be an array and
-		// silently drops a bare string, which would strand the backend's
-		// pending host-tool promise and deadlock the call. Send a content block.
-		resp := ompclient.HostToolResult{
-			Type: "host_tool_result",
-			ID:   req.ID,
-			Result: map[string]any{
-				"content": []map[string]any{
-					{"type": "text", "text": "host tools are not supported by gmp-tui-go (the Go frontend registers none)"},
-				},
+		drainStep("drainHostToolCalls", func() { w.rejectHostToolCall(req) })
+	}
+}
+
+// rejectHostToolCall replies to one inbound host_tool_call with an error
+// result. Extracted so drainStep can scope panic recovery to a single frame.
+func (w *GmpWorkspace) rejectHostToolCall(req *ompclient.HostToolCallReq) {
+	if req == nil || req.ID == "" {
+		return
+	}
+	// Result MUST serialize to an AgentToolResult ({content:[...]}) — the TS
+	// guard (isAgentToolResult) requires result.content to be an array and
+	// silently drops a bare string, which would strand the backend's
+	// pending host-tool promise and deadlock the call. Send a content block.
+	resp := ompclient.HostToolResult{
+		Type: "host_tool_result",
+		ID:   req.ID,
+		Result: map[string]any{
+			"content": []map[string]any{
+				{"type": "text", "text": "host tools are not supported by gmp-tui-go (the Go frontend registers none)"},
 			},
-			IsError: true,
-		}
-		if err := w.client.Send(resp); err != nil {
-			slog.Debug("gmp workspace: host_tool_result send failed",
-				"id", req.ID, "tool", req.ToolName, "error", err)
-		}
+		},
+		IsError: true,
+	}
+	if err := w.client.Send(resp); err != nil {
+		slog.Debug("gmp workspace: host_tool_result send failed",
+			"id", req.ID, "tool", req.ToolName, "error", err)
 	}
 }
 
@@ -259,17 +272,14 @@ func (w *GmpWorkspace) drainHostToolCalls() {
 // cancellation is structurally a no-op — but we must still consume it
 // to prevent the read-loop deadlock.
 func (w *GmpWorkspace) drainHostToolCancels() {
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("GmpWorkspace.drainHostToolCancels panic", "recover", r)
-		}
-	}()
 	for req := range w.client.HostToolCancels() {
-		if req == nil {
-			continue
-		}
-		slog.Debug("gmp workspace: host tool cancellation ignored",
-			"id", req.ID, "targetId", req.TargetID)
+		drainStep("drainHostToolCancels", func() {
+			if req == nil {
+				return
+			}
+			slog.Debug("gmp workspace: host tool cancellation ignored",
+				"id", req.ID, "targetId", req.TargetID)
+		})
 	}
 }
 

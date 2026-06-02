@@ -298,6 +298,15 @@ type UI struct {
 
 	pendingGmpModelSelection *dialog.ActionSelectModel
 
+	// pendingToolApproval holds the gmp tool-approval request whose permission
+	// dialog is currently open and unanswered. In gmp bridge mode every
+	// permission dialog maps to an extension_ui_request awaiting a reply on the
+	// wire; if a newer request supersedes it (openPermissionsDialog closes the
+	// old dialog to show the new one) we must deny the superseded request here,
+	// otherwise its backend tool sits pending until the multi-minute approval
+	// deadline. Cleared once the user answers. Nil outside gmp mode.
+	pendingToolApproval *permission.PermissionRequest
+
 	// backendExited is set when the gmp RPC subprocess has exited
 	// unexpectedly (see workspace.BackendExitedMsg). While true, View
 	// renders a legible "backend connection lost" banner instead of the
@@ -756,6 +765,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.openPermissionsDialog(workspace.ToolApprovalPermissionRequest(msg)); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		// The card was created by an earlier tool_execution_start and defaults
+		// to "running"; park it in awaiting-permission while the gate is open so
+		// the transcript doesn't show a tool running before it was approved.
+		m.setToolItemStatus(msg.ToolCallID, chat.ToolStatusAwaitingPermission)
 
 	// The gmp RPC subprocess exited unexpectedly (peer EOF / crash). Enter
 	// the backend-exited render state so View draws a legible banner instead
@@ -1604,7 +1617,12 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		// instead of to the no-op PermissionGrant/Deny. allow_session maps
 		// to a single approve for now (ADR 0007 out-of-scope note).
 		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
+			m.pendingToolApproval = nil
 			gw.HandleToolApprovalReply(msg.Permission, msg.Action != dialog.PermissionDeny)
+			// The tool card was parked in awaiting-permission while gated; the
+			// user has now answered, so drop it back to running. A landed result
+			// (success/error/denied) still overrides this via computeStatus.
+			m.setToolItemStatus(msg.Permission.ToolCallID, chat.ToolStatusRunning)
 			break
 		}
 		switch msg.Action {
@@ -3702,6 +3720,23 @@ func (m *UI) openOrUpdateGmpAuthDialog(msg tea.Msg) tea.Cmd {
 
 // openPermissionsDialog opens the permissions dialog for a permission request.
 func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
+	// In gmp bridge mode a still-open permission dialog corresponds to an
+	// unanswered extension_ui_request on the wire. Opening a newer dialog
+	// supersedes it, so deny the superseded request first — otherwise no
+	// extension_ui_response is ever sent for it and the backend tool sits
+	// pending until its multi-minute approval deadline.
+	if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
+		if prev := m.pendingToolApproval; prev != nil && prev.ID != "" && prev.ID != perm.ID {
+			gw.HandleToolApprovalReply(*prev, false)
+		}
+		if perm.ID != "" {
+			superseded := perm
+			m.pendingToolApproval = &superseded
+		} else {
+			m.pendingToolApproval = nil
+		}
+	}
+
 	// Close any existing permissions dialog first.
 	m.dialog.CloseDialog(dialog.PermissionsID)
 
@@ -3718,17 +3753,28 @@ func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
 
 // handlePermissionNotification updates tool items when permission state changes.
 func (m *UI) handlePermissionNotification(notification permission.PermissionNotification) {
-	toolItem := m.chat.MessageItem(notification.ToolCallID)
+	if notification.Granted {
+		m.setToolItemStatus(notification.ToolCallID, chat.ToolStatusRunning)
+	} else {
+		m.setToolItemStatus(notification.ToolCallID, chat.ToolStatusAwaitingPermission)
+	}
+}
+
+// setToolItemStatus updates the rendered status of the tool card identified by
+// toolCallID, if it exists and is a tool item. Used to park a card in
+// awaiting-permission while its gmp tool-approval gate is open and to release
+// it once the user answers, so the transcript doesn't show a gated tool as
+// "running". A no-op when the card is absent or not a tool item.
+func (m *UI) setToolItemStatus(toolCallID string, status chat.ToolStatus) {
+	if toolCallID == "" {
+		return
+	}
+	toolItem := m.chat.MessageItem(toolCallID)
 	if toolItem == nil {
 		return
 	}
-
 	if permItem, ok := toolItem.(chat.ToolMessageItem); ok {
-		if notification.Granted {
-			permItem.SetStatus(chat.ToolStatusRunning)
-		} else {
-			permItem.SetStatus(chat.ToolStatusAwaitingPermission)
-		}
+		permItem.SetStatus(status)
 	}
 }
 
