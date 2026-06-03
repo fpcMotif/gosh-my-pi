@@ -1,0 +1,3 @@
+## 2024-05-18 - Parallelized tool and command loading logic
+**Learning:** Sequential module loading during initialization creates a significant I/O-bound bottleneck when multiple tools/commands are present. Replacing `for...await` loops with `Promise.all` can resolve this. However, subsequent logic (like conflict detection or handling overrides) might implicitly depend on the order of resolution.
+**Action:** Always maintain the original iteration order over the resolved values (`Promise.all` maintains the mapped array's order) when parallelizing plugin/module loading that involves priority queues, conflict detection, or overrides.
