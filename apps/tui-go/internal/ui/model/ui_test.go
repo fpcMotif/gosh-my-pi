@@ -8,6 +8,7 @@ import (
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/csync"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/dialog"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
@@ -166,4 +167,40 @@ func TestOpenAuthenticationDialog_DispatchesGmpAuth(t *testing.T) {
 	// GmpAuth dialog opens later, when the backend's first
 	// extension_ui_request frame arrives — not synchronously here.
 	require.False(t, ui.dialog.ContainsDialog(dialog.GmpAuthID), "GmpAuth dialog should be opened by the inbound frame, not the dispatch")
+}
+
+func TestOpenPermissionsDialog_DeniesSupersededToolApproval(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Models:    map[config.SelectedModelType]config.SelectedModel{},
+		Providers: csync.NewMap[string, config.ProviderConfig](),
+		Options:   &config.Options{TUI: &config.TUIOptions{}},
+	}
+	ws := &toolApprovalReplyWorkspace{testWorkspace: testWorkspace{cfg: cfg, gmp: true}}
+	ui := New(common.DefaultCommon(ws), "", false)
+
+	require.Nil(t, ui.openPermissionsDialog(permission.PermissionRequest{ID: "approval-1", ToolName: "bash"}))
+	require.Empty(t, ws.replies)
+
+	require.Nil(t, ui.openPermissionsDialog(permission.PermissionRequest{ID: "approval-2", ToolName: "write"}))
+	require.Len(t, ws.replies, 1)
+	require.Equal(t, "approval-1", ws.replies[0].id)
+	require.False(t, ws.replies[0].approved)
+	require.NotNil(t, ui.pendingToolApproval)
+	require.Equal(t, "approval-2", ui.pendingToolApproval.ID)
+}
+
+type toolApprovalReply struct {
+	id       string
+	approved bool
+}
+
+type toolApprovalReplyWorkspace struct {
+	testWorkspace
+	replies []toolApprovalReply
+}
+
+func (w *toolApprovalReplyWorkspace) HandleToolApprovalReply(perm permission.PermissionRequest, approved bool) {
+	w.replies = append(w.replies, toolApprovalReply{id: perm.ID, approved: approved})
 }

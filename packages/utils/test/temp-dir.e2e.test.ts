@@ -7,9 +7,28 @@
  *  - Symbol.dispose / Symbol.asyncDispose hooks behave the same as remove().
  *  - Many rapid create/remove cycles complete without throwing.
  */
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import { TempDir } from "@oh-my-pi/pi-utils";
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
+type SpawnSyncForTest = (
+	cmd: string[],
+	options?: Bun.SpawnOptions.SpawnSyncOptions<"ignore", "ignore", "ignore">,
+) => Bun.SyncSubprocess<"ignore", "ignore">;
+
+function replaceProcessPlatform(platform: NodeJS.Platform): () => void {
+	const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
+	Object.defineProperty(process, "platform", { configurable: true, value: platform });
+	return () => {
+		if (descriptor) {
+			Object.defineProperty(process, "platform", descriptor);
+		}
+	};
+}
 
 describe("TempDir lifecycle", () => {
 	it("creates a real directory and removes it", async () => {
@@ -33,6 +52,64 @@ describe("TempDir lifecycle", () => {
 		dir.removeSync();
 		expect(() => dir.removeSync()).not.toThrow();
 		expect(fs.existsSync(dir.path())).toBe(false);
+	});
+
+	it("removeSync() rethrows the original Windows cleanup error", async () => {
+		const dir = TempDir.createSync("@pi-temp-e2e-");
+		const restorePlatform = replaceProcessPlatform("win32");
+		try {
+			const rmError = Object.assign(new Error("access denied"), { code: "EACCES" });
+			vi.spyOn(fs, "rmSync").mockImplementation(() => {
+				throw rmError;
+			});
+
+			let thrown: unknown;
+			try {
+				dir.removeSync();
+			} catch (error) {
+				thrown = error;
+			}
+			expect(thrown).toBe(rmError);
+		} finally {
+			restorePlatform();
+			vi.restoreAllMocks();
+			fs.rmSync(dir.path(), { recursive: true, force: true });
+		}
+	});
+
+	it("removeSync() uses an argv fallback after retryable Windows cleanup errors", async () => {
+		const dir = TempDir.createSync("@pi-temp-e2e-");
+		const restorePlatform = replaceProcessPlatform("win32");
+		try {
+			let now = 0;
+			vi.spyOn(Date, "now").mockImplementation(() => {
+				now += 300;
+				return now;
+			});
+			let rmCalls = 0;
+			const rmError = Object.assign(new Error("busy"), { code: "EBUSY" });
+			vi.spyOn(fs, "rmSync").mockImplementation(() => {
+				rmCalls += 1;
+				throw rmError;
+			});
+
+			const spawnCalls: string[][] = [];
+			const originalSpawnSync: SpawnSyncForTest = (cmd, options) => Bun.spawnSync(cmd, options);
+			const bunForTest = Bun as { spawnSync: SpawnSyncForTest };
+			vi.spyOn(bunForTest, "spawnSync").mockImplementation((cmd, options) => {
+				spawnCalls.push([...cmd]);
+				return originalSpawnSync(["true"], options);
+			});
+
+			dir.removeSync();
+
+			expect(rmCalls).toBe(6);
+			expect(spawnCalls).toEqual([["cmd.exe", "/c", "rd", "/s", "/q", dir.path()]]);
+		} finally {
+			restorePlatform();
+			vi.restoreAllMocks();
+			fs.rmSync(dir.path(), { recursive: true, force: true });
+		}
 	});
 
 	it("Symbol.asyncDispose tears down the directory", async () => {

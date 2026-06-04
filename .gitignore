@@ -59,6 +59,7 @@ packages/ai/test/.temp-images/
 .omp/plugins/
 .pi_config/
 .opencode/
+.omx/
 .worktrees/
 compaction-results/
 changes/
