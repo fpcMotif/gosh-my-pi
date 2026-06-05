@@ -1,0 +1,3 @@
+## 2024-06-05 - Dynamic Import Parallelism for Tool and Extension Loading
+**Learning:** Sequential `for...of` loops performing dynamic `import()` for loaders (e.g. `CustomToolLoader`, `loadHooks`, `loadCustomCommands`, `loadExtensions`) represented an I/O bottleneck during initialization. The order of conflict resolution and array population matters for correct state.
+**Action:** Always batch dynamic imports with `Promise.all(items.map(async ...))` to execute them concurrently while capturing the original input. Then iterate over the resolved objects sequentially in a standard loop to apply side effects, array pushes, and conflict checks. This achieves concurrent I/O performance without violating chronological dependency assumptions.
