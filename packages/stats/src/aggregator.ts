@@ -54,11 +54,12 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
+let activeSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+
 /**
- * Sync all session files to the database.
- * Returns the number of new entries processed.
+ * Internal function to perform the actual sync of all session files.
  */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+async function _syncAllSessions(): Promise<{ processed: number; files: number }> {
 	await initDb();
 
 	const files = await listAllSessionFiles();
@@ -76,9 +77,28 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 }
 
 /**
- * Get all dashboard stats.
+ * Sync all session files to the database.
+ * Returns the number of new entries processed.
+ * Uses promise coalescing to prevent redundant syncs.
  */
-export async function getDashboardStats(): Promise<DashboardStats> {
+export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+	if (activeSyncPromise) {
+		return activeSyncPromise;
+	}
+
+	activeSyncPromise = _syncAllSessions().finally(() => {
+		activeSyncPromise = null;
+	});
+
+	return activeSyncPromise;
+}
+
+let activeDashboardStatsPromise: Promise<DashboardStats> | null = null;
+
+/**
+ * Internal function to fetch all dashboard stats.
+ */
+async function _getDashboardStats(): Promise<DashboardStats> {
 	await initDb();
 
 	return {
@@ -90,6 +110,22 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 		modelPerformanceSeries: getModelPerformanceSeries(14),
 		costSeries: getCostTimeSeries(90),
 	};
+}
+
+/**
+ * Get all dashboard stats.
+ * Uses promise coalescing to prevent redundant queries.
+ */
+export async function getDashboardStats(): Promise<DashboardStats> {
+	if (activeDashboardStatsPromise) {
+		return activeDashboardStatsPromise;
+	}
+
+	activeDashboardStatsPromise = _getDashboardStats().finally(() => {
+		activeDashboardStatsPromise = null;
+	});
+
+	return activeDashboardStatsPromise;
 }
 export async function getRecentRequests(limit?: number): Promise<MessageStats[]> {
 	await initDb();

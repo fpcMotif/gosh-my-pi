@@ -1,0 +1,3 @@
+## 2025-06-05 - Promise Coalescing for Redundant Read-Only Operations
+**Learning:** In applications where a frontend client might trigger multiple concurrent requests for the same read-only or synchronizing backend operation (like `syncAllSessions` or `getDashboardStats` on page load), lack of request deduplication leads to redundant file I/O and SQLite database queries.
+**Action:** Implement "promise coalescing". Store the active promise of the ongoing expensive operation in a local variable. If an incoming request hits while the promise is active, return the ongoing promise instead of starting a new operation. Ensure the active promise is cleared in a `finally` block when the operation completes.
