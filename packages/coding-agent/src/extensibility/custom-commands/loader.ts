@@ -193,9 +193,16 @@ export async function loadCustomCommands(options: LoadCustomCommandsOptions = {}
 	}
 
 	// 2. Load user/project commands (can override bundled)
-	for (const { path: commandPath, source } of paths) {
-		const { commands: loadedCommands, error } = await loadCommandModule(commandPath, cwd, sharedApi);
+	// Load all modules concurrently
+	const loadResults = await Promise.all(
+		paths.map(async ({ path: commandPath, source }) => {
+			const result = await loadCommandModule(commandPath, cwd, sharedApi);
+			return { commandPath, source, ...result };
+		}),
+	);
 
+	// Process results sequentially to preserve conflict logic and override behavior
+	for (const { commandPath, source, commands: loadedCommands, error } of loadResults) {
 		if (error !== null && error !== undefined && error !== "") {
 			errors.push({ path: commandPath, error });
 			continue;

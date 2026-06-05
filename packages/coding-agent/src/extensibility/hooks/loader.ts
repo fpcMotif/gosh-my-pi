@@ -204,9 +204,16 @@ export async function loadHooks(paths: string[], cwd: string): Promise<LoadHooks
 	const hooks: LoadedHook[] = [];
 	const errors: Array<{ path: string; error: string }> = [];
 
-	for (const hookPath of paths) {
-		const { hook, error } = await loadHook(hookPath, cwd);
+	// Load all hooks concurrently
+	const loadResults = await Promise.all(
+		paths.map(async hookPath => {
+			const result = await loadHook(hookPath, cwd);
+			return { hookPath, ...result };
+		}),
+	);
 
+	// Process results sequentially to maintain the expected array order
+	for (const { hookPath, hook, error } of loadResults) {
 		if (error !== null && error !== undefined && error !== "") {
 			errors.push({ path: hookPath, error });
 			continue;
