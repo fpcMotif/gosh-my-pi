@@ -1,0 +1,3 @@
+## 2024-05-18 - Promise Coalescing to reduce IO and Database locks
+**Learning:** The React frontend makes 3 concurrent API requests against `/api/stats`, `/api/stats/recent`, and `/api/stats/errors`. Since all three call `syncAllSessions` unconditionally before returning, the backend concurrently executes 3 directory listings and potentially attempts 3 concurrent SQLite database writes, creating a bottleneck.
+**Action:** Implemented Promise Coalescing in `syncAllSessions` by tracking an active `syncPromise`. Concurrent incoming requests will await the exact same promise instance instead of starting redundant file IO and db syncing operations.
