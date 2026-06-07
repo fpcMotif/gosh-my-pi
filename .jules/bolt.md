@@ -1,0 +1,3 @@
+## 2025-02-12 - Avoid full file reads for partial data extraction in Bun
+**Learning:** In `packages/stats/src/parser.ts`, the `parseSessionFile` function previously loaded the entire session `.jsonl` file into memory with `await Bun.file(sessionPath).bytes()` before creating a subarray from the `fromOffset`. For large session files, this causes massive memory allocations and high I/O overhead.
+**Action:** Use the Web API `Blob.slice()` method exposed by `Bun.file(path)` (i.e., `await Bun.file(sessionPath).slice(start).bytes()`) to lazily load only the required bytes from the trailing section of the file. This simple change avoids loading the full file into memory and drastically speeds up the read operation for appended session logs.
