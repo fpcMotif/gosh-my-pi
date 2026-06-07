@@ -1,0 +1,3 @@
+## 2025-06-07 - Accessibility for custom table rows
+**Learning:** Custom interactive elements, like `<tr onClick>` in the RequestList, lack native keyboard accessibility, making them unusable for users relying on keyboard navigation.
+**Action:** Always implement manual keyboard accessibility for custom interactive elements by adding `tabIndex={0}`, an `onKeyDown` handler for 'Enter'/'Space' keys (calling `e.preventDefault()` on Space to prevent page scrolling), and `focus-visible` utility classes (`focus-visible:outline-none focus-visible:bg-[var(--bg-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-cyan)]`) to ensure clear visual focus states. Do not use `role="button"` on `<tr>` elements to avoid overriding native table semantics.
