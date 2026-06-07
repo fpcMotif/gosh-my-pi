@@ -655,22 +655,29 @@ async function syncPhase2Artifacts(memoryRoot: string, outputs: Stage1OutputRow[
 	await fs.mkdir(summariesDir, { recursive: true });
 
 	const keepFiles = new Set<string>();
-	for (const row of outputs) {
-		const stem = formatRolloutFilename(row.threadId, row.rolloutSlug);
-		const filename = `${stem}.md`;
-		keepFiles.add(filename);
-		const body = [`thread_id: ${row.threadId}`, `updated_at: ${row.sourceUpdatedAt}`, "", row.rolloutSummary].join(
-			"\n",
-		);
-		await Bun.write(path.join(summariesDir, filename), `${body.trim()}\n`);
-	}
+	await Promise.all(
+		outputs.map(async row => {
+			const stem = formatRolloutFilename(row.threadId, row.rolloutSlug);
+			const filename = `${stem}.md`;
+			keepFiles.add(filename);
+			const body = [
+				`thread_id: ${row.threadId}`,
+				`updated_at: ${row.sourceUpdatedAt}`,
+				"",
+				row.rolloutSummary,
+			].join("\n");
+			await Bun.write(path.join(summariesDir, filename), `${body.trim()}\n`);
+		}),
+	);
 
 	const currentFiles = await fs.readdir(summariesDir).catch(() => [] as string[]);
-	for (const file of currentFiles) {
-		if (!file.endsWith(".md")) continue;
-		if (keepFiles.has(file)) continue;
-		await fs.rm(path.join(summariesDir, file), { force: true });
-	}
+	await Promise.all(
+		currentFiles.map(async file => {
+			if (!file.endsWith(".md")) return;
+			if (keepFiles.has(file)) return;
+			await fs.rm(path.join(summariesDir, file), { force: true });
+		}),
+	);
 
 	const rawBody = buildRawMemoriesMarkdown(outputs);
 	await Bun.write(path.join(memoryRoot, "raw_memories.md"), rawBody);
@@ -801,67 +808,80 @@ async function applyConsolidation(
 	const skillsDir = path.join(memoryRoot, "skills");
 	await fs.mkdir(skillsDir, { recursive: true });
 	const keep = new Set<string>();
-	for (const skill of consolidated.skills) {
-		const dir = path.join(skillsDir, skill.name);
-		keep.add(skill.name);
-		await fs.mkdir(dir, { recursive: true });
-		const files = new Map<string, string>();
-		files.set("SKILL.md", `${skill.content.trim()}\n`);
-		for (const item of skill.scripts) {
-			files.set(path.posix.join("scripts", item.path), `${item.content.trim()}\n`);
-		}
-		for (const item of skill.templates) {
-			files.set(path.posix.join("templates", item.path), `${item.content.trim()}\n`);
-		}
-		for (const item of skill.examples) {
-			files.set(path.posix.join("examples", item.path), `${item.content.trim()}\n`);
-		}
+	await Promise.all(
+		consolidated.skills.map(async skill => {
+			const dir = path.join(skillsDir, skill.name);
+			keep.add(skill.name);
+			await fs.mkdir(dir, { recursive: true });
+			const files = new Map<string, string>();
+			files.set("SKILL.md", `${skill.content.trim()}\n`);
+			for (const item of skill.scripts) {
+				files.set(path.posix.join("scripts", item.path), `${item.content.trim()}\n`);
+			}
+			for (const item of skill.templates) {
+				files.set(path.posix.join("templates", item.path), `${item.content.trim()}\n`);
+			}
+			for (const item of skill.examples) {
+				files.set(path.posix.join("examples", item.path), `${item.content.trim()}\n`);
+			}
 
-		for (const [relativePath, content] of [...files.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-			await Bun.write(path.join(dir, ...relativePath.split("/")), content);
-		}
+			await Promise.all(
+				[...files.entries()]
+					.sort(([a], [b]) => a.localeCompare(b))
+					.map(async ([relativePath, content]) => {
+						await Bun.write(path.join(dir, ...relativePath.split("/")), content);
+					}),
+			);
 
-		const keepFiles = new Set(files.keys());
-		const existingFiles = await listRelativeFiles(dir);
-		for (const relativePath of existingFiles) {
-			if (keepFiles.has(relativePath)) continue;
-			await fs.rm(path.join(dir, ...relativePath.split("/")), { force: true });
-		}
-		await pruneEmptyDirectories(dir);
-	}
+			const keepFiles = new Set(files.keys());
+			const existingFiles = await listRelativeFiles(dir);
+			await Promise.all(
+				existingFiles.map(async relativePath => {
+					if (keepFiles.has(relativePath)) return;
+					await fs.rm(path.join(dir, ...relativePath.split("/")), { force: true });
+				}),
+			);
+			await pruneEmptyDirectories(dir);
+		}),
+	);
 	const dirs = await fs.readdir(skillsDir, { withFileTypes: true }).catch(() => []);
-	for (const dirent of dirs) {
-		if (!dirent.isDirectory()) continue;
-		if (keep.has(dirent.name)) continue;
-		await fs.rm(path.join(skillsDir, dirent.name), { recursive: true, force: true });
-	}
+	await Promise.all(
+		dirs.map(async dirent => {
+			if (!dirent.isDirectory()) return;
+			if (keep.has(dirent.name)) return;
+			await fs.rm(path.join(skillsDir, dirent.name), { recursive: true, force: true });
+		}),
+	);
 }
 
 async function listRelativeFiles(rootDir: string, prefix = ""): Promise<string[]> {
 	const entries = await fs.readdir(rootDir, { withFileTypes: true }).catch(() => []);
-	const files: string[] = [];
-	for (const entry of entries) {
-		const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-		if (entry.isDirectory()) {
-			files.push(...(await listRelativeFiles(path.join(rootDir, entry.name), relative)));
-			continue;
-		}
-		if (entry.isFile()) files.push(relative);
-	}
-	return files;
+	const nestedArrays = await Promise.all(
+		entries.map(async entry => {
+			const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+			if (entry.isDirectory()) {
+				return await listRelativeFiles(path.join(rootDir, entry.name), relative);
+			}
+			if (entry.isFile()) return [relative];
+			return [];
+		}),
+	);
+	return nestedArrays.flat();
 }
 
 async function pruneEmptyDirectories(rootDir: string): Promise<void> {
 	const entries = await fs.readdir(rootDir, { withFileTypes: true }).catch(() => []);
-	for (const entry of entries) {
-		if (!entry.isDirectory()) continue;
-		const child = path.join(rootDir, entry.name);
-		await pruneEmptyDirectories(child);
-		const childEntries = await fs.readdir(child).catch(() => []);
-		if (childEntries.length === 0) {
-			await fs.rm(child, { recursive: true, force: true });
-		}
-	}
+	await Promise.all(
+		entries.map(async entry => {
+			if (!entry.isDirectory()) return;
+			const child = path.join(rootDir, entry.name);
+			await pruneEmptyDirectories(child);
+			const childEntries = await fs.readdir(child).catch(() => []);
+			if (childEntries.length === 0) {
+				await fs.rm(child, { recursive: true, force: true });
+			}
+		}),
+	);
 }
 
 function computeCompletionWatermark(claimedInputWatermark: number, outputs: Stage1OutputRow[]): number {
