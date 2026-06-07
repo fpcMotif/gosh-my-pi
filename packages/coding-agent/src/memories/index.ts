@@ -660,12 +660,9 @@ async function syncPhase2Artifacts(memoryRoot: string, outputs: Stage1OutputRow[
 			const stem = formatRolloutFilename(row.threadId, row.rolloutSlug);
 			const filename = `${stem}.md`;
 			keepFiles.add(filename);
-			const body = [
-				`thread_id: ${row.threadId}`,
-				`updated_at: ${row.sourceUpdatedAt}`,
-				"",
-				row.rolloutSummary,
-			].join("\n");
+			const body = [`thread_id: ${row.threadId}`, `updated_at: ${row.sourceUpdatedAt}`, "", row.rolloutSummary].join(
+				"\n",
+			);
 			await Bun.write(path.join(summariesDir, filename), `${body.trim()}\n`);
 		}),
 	);
