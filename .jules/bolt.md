@@ -1,0 +1,3 @@
+## 2024-06-08 - React useMemo Invalidation by Date.now()
+**Learning:** Calling `Date.now()` outside of a `useMemo` block and passing the result as a dependency to the `useMemo` block breaks the memoization entirely. Since `Date.now()` is evaluated on every render, the resulting dependency value changes constantly, causing the memoized value to be recomputed on every render.
+**Action:** When filtering time series data based on "now" (e.g., past 30 days), place the `Date.now()` call *inside* the `useMemo` block instead, and omit it from the dependency array. This allows the data to only be recomputed when the underlying dataset or filter options actually change, rather than constantly invalidating.

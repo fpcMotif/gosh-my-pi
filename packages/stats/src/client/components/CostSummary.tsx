@@ -12,36 +12,40 @@ function formatCost(value: number): string {
 }
 
 export function CostSummary({ costSeries }: CostSummaryProps) {
-	const cutoff = Date.now() - SUMMARY_DAYS * 86400000;
-	const prevCutoff = cutoff - SUMMARY_DAYS * 86400000;
+	// ⚡ Bolt: Wrapped expensive array filtering, reducing, and Date.now() calculations
+	// into a single useMemo to prevent them from executing on every render.
+	// Impact: Prevents O(n) operations on every component update.
+	const { current, previous, totalCost, prevTotalCost, avgDaily, topModel, topModelCost, trend } = useMemo(() => {
+		const cutoff = Date.now() - SUMMARY_DAYS * 86400000;
+		const prevCutoff = cutoff - SUMMARY_DAYS * 86400000;
 
-	const current = useMemo(() => costSeries.filter(p => p.timestamp >= cutoff), [costSeries, cutoff]);
-	const previous = useMemo(
-		() => costSeries.filter(p => p.timestamp >= prevCutoff && p.timestamp < cutoff),
-		[costSeries, prevCutoff, cutoff],
-	);
+		const current = costSeries.filter(p => p.timestamp >= cutoff);
+		const previous = costSeries.filter(p => p.timestamp >= prevCutoff && p.timestamp < cutoff);
 
-	const totalCost = current.reduce((sum, p) => sum + p.cost, 0);
-	const prevTotalCost = previous.reduce((sum, p) => sum + p.cost, 0);
+		const totalCost = current.reduce((sum, p) => sum + p.cost, 0);
+		const prevTotalCost = previous.reduce((sum, p) => sum + p.cost, 0);
 
-	const dayBuckets = new Set(current.map(p => p.timestamp)).size;
-	const avgDaily = dayBuckets > 0 ? totalCost / dayBuckets : 0;
+		const dayBuckets = new Set(current.map(p => p.timestamp)).size;
+		const avgDaily = dayBuckets > 0 ? totalCost / dayBuckets : 0;
 
-	// Most expensive model over current period
-	const modelTotals = new Map<string, number>();
-	for (const point of current) {
-		modelTotals.set(point.model, (modelTotals.get(point.model) ?? 0) + point.cost);
-	}
-	let topModel = "";
-	let topModelCost = 0;
-	for (const [model, cost] of modelTotals) {
-		if (cost > topModelCost) {
-			topModel = model;
-			topModelCost = cost;
+		// Most expensive model over current period
+		const modelTotals = new Map<string, number>();
+		for (const point of current) {
+			modelTotals.set(point.model, (modelTotals.get(point.model) ?? 0) + point.cost);
 		}
-	}
+		let topModel = "";
+		let topModelCost = 0;
+		for (const [model, cost] of modelTotals) {
+			if (cost > topModelCost) {
+				topModel = model;
+				topModelCost = cost;
+			}
+		}
 
-	const trend = prevTotalCost > 0 ? ((totalCost - prevTotalCost) / prevTotalCost) * 100 : null;
+		const trend = prevTotalCost > 0 ? ((totalCost - prevTotalCost) / prevTotalCost) * 100 : null;
+
+		return { current, previous, totalCost, prevTotalCost, avgDaily, topModel, topModelCost, trend };
+	}, [costSeries]);
 
 	const cards = [
 		{

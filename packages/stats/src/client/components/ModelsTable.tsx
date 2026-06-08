@@ -70,8 +70,14 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 	const performanceSeriesByKey = useMemo(() => buildModelPerformanceLookup(performanceSeries), [performanceSeries]);
 	const theme = useSystemTheme();
 	const chartTheme = CHART_THEMES[theme];
-	const sortedModels = [...models].sort(
-		(a, b) => b.totalInputTokens + b.totalOutputTokens - (a.totalInputTokens + a.totalOutputTokens),
+	// ⚡ Bolt: Memoized array sorting to prevent re-sorting on every render
+	// (e.g., when expandedKey state changes).
+	const sortedModels = useMemo(
+		() =>
+			[...models].sort(
+				(a, b) => b.totalInputTokens + b.totalOutputTokens - (a.totalInputTokens + a.totalOutputTokens),
+			),
+		[models],
 	);
 
 	return (
