@@ -31,8 +31,8 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 							<tr
 								key={`${req.sessionFile}-${req.entryId}`}
 								onClick={() => onSelect(req)}
-								onKeyDown={(e) => {
-									if (e.key === 'Enter' || e.key === ' ') {
+								onKeyDown={e => {
+									if (e.key === "Enter" || e.key === " ") {
 										e.preventDefault();
 										onSelect(req);
 									}
