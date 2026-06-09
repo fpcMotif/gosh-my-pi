@@ -1,0 +1,3 @@
+## 2024-06-09 - Accessible Interactive Table Rows
+**Learning:** When making `<tr>` elements interactive (e.g., clickable rows), adding `role="button"` overrides the native table semantics, breaking the table structure for screen readers.
+**Action:** Instead of `role="button"`, implement manual keyboard accessibility by adding `tabIndex={0}`, an `onKeyDown` handler for 'Enter' and 'Space' (calling `e.preventDefault()` on Space to prevent page scrolling), and `focus-visible` utility classes for clear visual focus states, preserving the native table semantics.
