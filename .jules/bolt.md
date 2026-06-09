@@ -1,0 +1,3 @@
+## 2024-06-09 - File I/O Optimization in Bun
+**Learning:** When partially reading or fetching trailing chunks of large files (like `.jsonl` session files), using `await Bun.file(path).bytes()` to load the entire file into memory before slicing via `.subarray(start)` causes significant memory allocation and execution bottlenecks.
+**Action:** Use `await Bun.file(path).slice(start).bytes()` directly to leverage native stream/slice logic, taking care to compute size and bounds manually `const size = Bun.file(path).size` to avoid reading beyond file bounds or mishandling ENOENT errors since `slice` will return an empty array if slicing beyond bounds but `file.size` will be 0 if the file doesn't exist.
