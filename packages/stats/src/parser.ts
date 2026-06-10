@@ -84,18 +84,30 @@ export async function parseSessionFile(
 	sessionPath: string,
 	fromOffset = 0,
 ): Promise<{ stats: MessageStats[]; newOffset: number }> {
-	let bytes: Uint8Array;
-	try {
-		bytes = await Bun.file(sessionPath).bytes();
-	} catch (error) {
-		if (isEnoent(error)) return { stats: [], newOffset: fromOffset };
-		throw error;
+	const file = Bun.file(sessionPath);
+	// OPTIMIZATION: Check size first. If it's zero, the file either doesn't exist or is empty.
+	// This avoids throwing and catching ENOENT exceptions during routine stats tailing.
+	const size = file.size;
+
+	if (size === 0) {
+		if (!(await file.exists())) return { stats: [], newOffset: fromOffset };
 	}
 
 	const folder = extractFolderFromPath(sessionPath);
 	const stats: MessageStats[] = [];
-	const start = Math.max(0, Math.min(fromOffset, bytes.length));
-	const unprocessed = bytes.subarray(start);
+	const start = Math.max(0, Math.min(fromOffset, size));
+
+	// OPTIMIZATION: Only read the new/appended bytes.
+	// This prevents allocating a full file buffer when only trailing bytes are needed.
+	let unprocessed: Uint8Array;
+	try {
+		unprocessed = await file.slice(start).bytes();
+	} catch (error) {
+		// Handle race condition where file is deleted between stat and read
+		if (isEnoent(error)) return { stats: [], newOffset: fromOffset };
+		throw error;
+	}
+
 	const { entries, read } = parseSessionEntriesLenient(unprocessed);
 	for (const entry of entries) {
 		if (isAssistantMessage(entry)) {
@@ -151,9 +163,17 @@ export async function listAllSessionFiles(): Promise<string[]> {
  * Find a specific entry in a session file.
  */
 export async function getSessionEntry(sessionPath: string, entryId: string): Promise<SessionEntry | null> {
+	const file = Bun.file(sessionPath);
+	const size = file.size;
+
+	if (size === 0) {
+		if (!(await file.exists())) return null;
+	}
+
+	// For finding an entry by ID, we still read the full file, but we can avoid ENOENT catch block.
 	let bytes: Uint8Array;
 	try {
-		bytes = await Bun.file(sessionPath).bytes();
+		bytes = await file.bytes();
 	} catch (error) {
 		if (isEnoent(error)) return null;
 		throw error;

@@ -1,0 +1,3 @@
+## 2024-06-10 - Avoid Reading Entire Files in Bun when Extracting Trailing Bytes
+**Learning:** Reading a large file directly into memory using `await Bun.file(path).bytes()` and then using `.subarray(start)` is highly inefficient because it requires loading and allocating memory for the entire file buffer, even if you only need the trailing bytes.
+**Action:** Use `await Bun.file(path).slice(start).bytes()` instead. This approach avoids full buffer allocation by only reading the specified segment of the file. To handle `ENOENT` cleanly when checking if a file exists, we can first check `Bun.file(path).size === 0` and verify with `await file.exists()`.
