@@ -1,0 +1,3 @@
+## 2024-05-18 - Interactive Table Row Accessibility
+**Learning:** Custom interactive elements like `<tr onClick>` used for navigation or selection lack native keyboard accessibility and focus states by default. Adding `role="button"` can inappropriately override native table semantics.
+**Action:** When creating interactive table rows (`<tr onClick>`), manually implement keyboard accessibility by adding `tabIndex={0}` to make it focusable, an `onKeyDown` handler to trigger the action on 'Enter' or 'Space' keys (using `e.preventDefault()` on Space to prevent page scrolling), and `focus-visible` utility classes to provide clear visual focus states without altering the element's inherent semantic role.
