@@ -1,0 +1,3 @@
+## 2024-06-12 - Deduplicate Concurrent File Syncing
+**Learning:** Naive Promise coalescing (returning an existing promise to deduplicate requests) causes data loss when used for state-synchronization functions like `syncAllSessions`. If a sync is already running and new data arrives, a concurrent caller will just wait for the first sync and incorrectly assume the new data was synced.
+**Action:** When deduplicating state-syncing operations, use a chained `currentSyncPromise` and `nextSyncPromise` pattern. The concurrent caller should join a `nextSyncPromise` that waits for the first sync to finish, then executes one final catch-up sync, ensuring correctness (no data left behind) while drastically reducing the number of concurrent directory reads and file stat calls.

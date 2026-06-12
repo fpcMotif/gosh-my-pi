@@ -54,25 +54,64 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
+type SyncResult = { processed: number; files: number };
+let currentSyncPromise: Promise<SyncResult> | null = null;
+let nextSyncPromise: Promise<SyncResult> | null = null;
+
 /**
  * Sync all session files to the database.
  * Returns the number of new entries processed.
+ *
+ * Performance Optimization: Promise Coalescing / Request Deduplication
+ * Expected Impact: Reduces I/O and DB contention when multiple requests trigger `syncAllSessions` concurrently.
+ * We use a `currentSyncPromise` and `nextSyncPromise` pattern:
+ * - If a sync is ongoing (`currentSyncPromise` exists), a concurrent caller won't start a new immediate sync.
+ * - Instead, it creates or joins `nextSyncPromise` which waits for the current sync to finish, and then does ONE final catch-up sync for any data that arrived while the first sync was running.
+ * This guarantees correctness (no data left behind) while drastically reducing the number of concurrent directory reads and file stat calls.
  */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
-	await initDb();
-
-	const files = await listAllSessionFiles();
-	const counts = await Promise.all(files.map(file => syncSessionFile(file)));
-	let totalProcessed = 0;
-	let filesProcessed = 0;
-	for (const count of counts) {
-		if (count > 0) {
-			totalProcessed += count;
-			filesProcessed++;
+export async function syncAllSessions(): Promise<SyncResult> {
+	if (currentSyncPromise) {
+		if (!nextSyncPromise) {
+			// Chain the next sync to start after the current one finishes.
+			// We catch the error to ensure the next sync still runs even if the current one fails.
+			nextSyncPromise = currentSyncPromise
+				.catch(() => {})
+				.then(() => {
+					const promise = doSync();
+					currentSyncPromise = promise;
+					nextSyncPromise = null;
+					return promise;
+				});
 		}
+		return nextSyncPromise;
 	}
 
-	return { processed: totalProcessed, files: filesProcessed };
+	currentSyncPromise = doSync();
+	return currentSyncPromise;
+}
+
+async function doSync(): Promise<SyncResult> {
+	try {
+		await initDb();
+
+		const files = await listAllSessionFiles();
+		const counts = await Promise.all(files.map(file => syncSessionFile(file)));
+		let totalProcessed = 0;
+		let filesProcessed = 0;
+		for (const count of counts) {
+			if (count > 0) {
+				totalProcessed += count;
+				filesProcessed++;
+			}
+		}
+
+		return { processed: totalProcessed, files: filesProcessed };
+	} finally {
+		if (currentSyncPromise === nextSyncPromise || nextSyncPromise === null) {
+			// If there's no pending next sync, clear the current promise so the next call starts fresh.
+			currentSyncPromise = null;
+		}
+	}
 }
 
 /**
