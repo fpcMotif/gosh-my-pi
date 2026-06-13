@@ -1,0 +1,3 @@
+## 2023-10-27 - Bun file slice for large append logs
+**Learning:** In Bun, calling `Bun.file(path).bytes()` loads the entire file into memory before subarray extraction is possible. For session logs that are frequently appended to and parsed incrementally (like `parseSessionFile`), this creates significant memory and I/O bloat as the file grows.
+**Action:** Use `await Bun.file(path).slice(offset).bytes()` with a bounds check (`size === 0` and `Math.min(offset, size)`) to only read the necessary chunk of data and dramatically lower peak memory usage. Always explicitly handle `try/catch` and empty sizes as `Bun.file().slice()` will throw `ENOENT` on non-existent files instead of returning an empty array.
