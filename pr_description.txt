@@ -1,0 +1,8 @@
+💡 **What**: Added keyboard accessibility support to interactive rows in the request list table.
+🎯 **Why**: Previously, the rows were only clickable via mouse (`onClick`). Users navigating via keyboard could not trigger the selection.
+📸 **Before/After**: Visually unchanged on mouse interactions, but now correctly displays a focus ring on tab.
+♿ **Accessibility**:
+- Added `tabIndex={0}` to make the element focusable.
+- Added an `onKeyDown` handler that safely listens to 'Enter' and 'Space'.
+- Prevented default behavior for the 'Space' key to prevent unwanted page scrolling.
+- Added visual focus indicators (`focus-visible` ring styles).
