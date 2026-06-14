@@ -1,0 +1,8 @@
+💡 What: Added manual keyboard accessibility (tabIndex, onKeyDown, and focus-visible classes) to the interactive `<tr>` elements in the `RequestList` component.
+🎯 Why: Previously, the table rows in the `RequestList` component were only actionable via mouse clicks. Adding keyboard accessibility allows users navigating via keyboard (using Tab, Enter, and Space) to select requests and view their details, improving the overall usability of the dashboard. Space key propagation was prevented to stop page scrolling.
+📸 Before/After: Visual focus rings now appear around the selected table row when focused via keyboard navigation.
+♿ Accessibility:
+- Added `tabIndex={0}` to include the interactive rows in the sequential focus navigation order.
+- Added an `onKeyDown` event handler to activate the row action using 'Enter' or 'Space' keys.
+- Prevented default behavior for the 'Space' key to prevent unwanted page scrolling.
+- Added `focus-visible:outline-none`, `focus-visible:ring-2`, `focus-visible:ring-[var(--accent-cyan)]`, and `focus-visible:bg-[var(--bg-hover)]` to provide clear, accessible visual indicators for keyboard focus state.
