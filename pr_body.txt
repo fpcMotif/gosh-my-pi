@@ -1,0 +1,10 @@
+💡 What: Added `tabIndex={0}`, an `onKeyDown` handler (Enter/Space), and `focus-visible` Tailwind classes to the `<tr onClick>` element in the RequestList component.
+
+🎯 Why: Custom interactive elements like a table row with an `onClick` handler lack native keyboard focus and event triggers. This prevents users navigating via keyboard or screen readers from interacting with the row to view request details.
+
+📸 Before/After: Visual changes apply only when the row is focused via keyboard navigation, displaying a 2px accent outline ring with a subtle background hover effect.
+
+♿ Accessibility:
+- Enables full keyboard navigation to and activation of individual request rows.
+- Uses `focus-visible` to provide clear visual feedback without altering default mouse click behavior.
+- Explicitly catches the "Space" key and prevents its default behavior (scrolling the page) when used to activate the row.
