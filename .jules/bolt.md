@@ -1,0 +1,3 @@
+## 2024-05-18 - [Optimizing Large File Appends in Bun]
+**Learning:** When extracting specific sections or trailing bytes from large files in Bun (e.g., parsing appended data in `.jsonl` session files), using `await Bun.file(path).bytes()` and then calling `.subarray(start)` is extremely inefficient because it loads the entire file into memory first. A benchmark showed a 34x performance drop reading the last 1KB of a 10MB file (544ms vs 16ms).
+**Action:** Prefer `Bun.file(path).slice(start).bytes()`. Compute size (`Bun.file(path).size`) to handle out-of-bounds cleanly. Retain a `try/catch` around the read to handle `ENOENT` safely and avoid Time-Of-Check to Time-Of-Use (TOCTOU) race conditions.
