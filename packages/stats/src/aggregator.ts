@@ -55,10 +55,9 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 }
 
 /**
- * Sync all session files to the database.
- * Returns the number of new entries processed.
+ * Internal implementation of syncAllSessions.
  */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+async function doSyncAllSessions(): Promise<{ processed: number; files: number }> {
 	await initDb();
 
 	const files = await listAllSessionFiles();
@@ -75,10 +74,50 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 	return { processed: totalProcessed, files: filesProcessed };
 }
 
+let currentSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+let nextSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+
 /**
- * Get all dashboard stats.
+ * Sync all session files to the database.
+ * Returns the number of new entries processed.
+ * Uses promise coalescing to deduplicate concurrent calls.
  */
-export async function getDashboardStats(): Promise<DashboardStats> {
+export function syncAllSessions(): Promise<{ processed: number; files: number }> {
+	if (nextSyncPromise) {
+		return nextSyncPromise;
+	}
+
+	if (currentSyncPromise) {
+		nextSyncPromise = currentSyncPromise
+			.catch(() => {})
+			.then(() => {
+				const promise = doSyncAllSessions();
+				currentSyncPromise = promise;
+				nextSyncPromise = null;
+				promise.finally(() => {
+					if (currentSyncPromise === promise) {
+						currentSyncPromise = null;
+					}
+				});
+				return promise;
+			});
+		return nextSyncPromise;
+	}
+
+	const promise = doSyncAllSessions();
+	currentSyncPromise = promise;
+	promise.finally(() => {
+		if (currentSyncPromise === promise) {
+			currentSyncPromise = null;
+		}
+	});
+	return promise;
+}
+
+/**
+ * Internal implementation of getDashboardStats.
+ */
+async function doGetDashboardStats(): Promise<DashboardStats> {
 	await initDb();
 
 	return {
@@ -90,6 +129,27 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 		modelPerformanceSeries: getModelPerformanceSeries(14),
 		costSeries: getCostTimeSeries(90),
 	};
+}
+
+let currentStatsPromise: Promise<DashboardStats> | null = null;
+
+/**
+ * Get all dashboard stats.
+ * Uses promise coalescing to deduplicate concurrent calls.
+ */
+export function getDashboardStats(): Promise<DashboardStats> {
+	if (currentStatsPromise) {
+		return currentStatsPromise;
+	}
+
+	const promise = doGetDashboardStats();
+	currentStatsPromise = promise;
+	promise.finally(() => {
+		if (currentStatsPromise === promise) {
+			currentStatsPromise = null;
+		}
+	});
+	return promise;
 }
 export async function getRecentRequests(limit?: number): Promise<MessageStats[]> {
 	await initDb();
