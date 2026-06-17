@@ -92,8 +92,11 @@ export function CostChart({ costSeries }: CostChartProps) {
 	const theme = useSystemTheme();
 	const chartTheme = CHART_THEMES[theme];
 
-	const cutoff = Date.now() - days * 86400000;
-	const filtered = useMemo(() => costSeries.filter(p => p.timestamp >= cutoff), [costSeries, cutoff]);
+	const filtered = useMemo(() => {
+		// Prevent Date.now() from breaking memoization on every render
+		const cutoff = Date.now() - days * 86400000;
+		return costSeries.filter(p => p.timestamp >= cutoff);
+	}, [costSeries, days]);
 
 	const chartData = useMemo(
 		() => (byModel ? buildByModelSeries(filtered) : buildAggregateSeries(filtered)),
