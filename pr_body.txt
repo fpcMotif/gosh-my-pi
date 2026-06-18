@@ -1,0 +1,12 @@
+💡 **What:** Added keyboard accessibility (tabIndex, onKeyDown handlers, and focus-visible styles) to the custom interactive table rows (`<tr onClick>`) in the RequestList component.
+
+🎯 **Why:** Previously, these rows were completely inaccessible to keyboard-only and screen reader users, preventing them from selecting a request to view its details. Using semantic elements like buttons or anchors natively provides these features, but applying `role="button"` to a `<tr>` incorrectly overrides its native table semantics, breaking screen reader table navigation.
+
+📸 **Before/After:**
+*(See verification step for screenshots of the new focus ring indicator)*
+
+♿ **Accessibility:**
+- Added `tabIndex={0}` to make the rows focusable.
+- Added `onKeyDown` to trigger the `onSelect` action when the 'Enter' or 'Space' keys are pressed.
+- Included `e.preventDefault()` for the 'Space' key to prevent unwanted page scrolling.
+- Applied `focus-visible:ring-2` (and related styling) so users navigating via keyboard can clearly see which row is currently focused.
