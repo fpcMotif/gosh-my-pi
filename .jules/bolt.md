@@ -1,0 +1,3 @@
+## 2024-06-19 - [Performance: Memory efficient file slicing in Bun]
+**Learning:** Using `await Bun.file(path).bytes()` to load a large file and then slicing it via `subarray()` can be a major performance and memory bottleneck. It forces the whole file into memory before filtering out unwanted parts. A more performant pattern is to compute bounds manually with `Bun.file(path).size` and directly slice the file input stream using `await Bun.file(path).slice(start).bytes()`. `Bun.file(path).size` gracefully returns 0 instead of throwing when files don't exist.
+**Action:** When extracting segments or trailing data from potentially large files, compute size explicitly and use `file.slice(start).bytes()`. Always wrap it in a `try/catch` to handle `ENOENT` races cleanly.
