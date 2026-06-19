@@ -9,33 +9,26 @@ You **MUST** use this format (sections can be omitted if not applicable):
 [User goals; list multiple if session covers different tasks.]
 
 ## Constraints & Preferences
-
 - [Constraints or requirements mentioned]
 
 ## Progress
 
 ### Done
-
 - [x] [Completed tasks/changes]
 
 ### In Progress
-
 - [ ] [Current work]
 
 ### Blocked
-
 - [Issues preventing progress]
 
 ## Key Decisions
-
 - **[Decision]**: [Brief rationale]
 
 ## Next Steps
-
 1. [Ordered list of next actions]
 
 ## Critical Context
-
 - [Important data, pending questions, references]
 
 ## Additional Notes

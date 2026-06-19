@@ -1,5 +1,4 @@
 Vim-style `edit` mode. The tool name stays `edit`; every call requires `file`, and the buffer loads automatically on first use.
-
 - `{"file": "path"}` - view file
 - `{"file": "path", "steps": [{"kbd": ["…"], "insert": "…"}]}` - edit file
 
@@ -13,7 +12,6 @@ Vim-style `edit` mode. The tool name stays `edit`; every call requires `file`, a
 `o`/`O` already create a new line — do not start `insert` with `\n`. A trailing `\n` in `insert` adds an extra blank line.
 
 Never put text content in `kbd`. Only Vim keystrokes go there.
-
 - BAD: `{"steps": [{"kbd": ["1Gohello world<Esc>"]}]}`
 - BAD: `{"steps": [{"kbd": ["1Go", "hello world"]}]}`
 - BAD: `{"steps": [{"kbd": ["1Ao"], "insert": "text"}]}`
@@ -92,7 +90,6 @@ Delete line range:
 Ex commands always start with `:` and end with `<CR>`. `3,5d` without `:` is NOT an ex command — it is interpreted as normal-mode keystrokes and will fail.
 
 ## Undo mistakes
-
 - `{"file": "f.py", "steps": [{"kbd": ["u"]}]}` - undo last change
 - `{"file": "f.py", "steps": [{"kbd": ["3u"]}]}` - undo last 3 changes
 

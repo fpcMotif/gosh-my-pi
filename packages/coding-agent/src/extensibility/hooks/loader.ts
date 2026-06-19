@@ -210,7 +210,7 @@ export async function loadHooks(paths: string[], cwd: string): Promise<LoadHooks
 		paths.map(async hookPath => {
 			const result = await loadHook(hookPath, cwd);
 			return { hookPath, ...result };
-		})
+		}),
 	);
 
 	for (const { hookPath, hook, error } of results) {

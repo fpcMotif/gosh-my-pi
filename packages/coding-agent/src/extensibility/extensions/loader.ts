@@ -328,7 +328,7 @@ export async function loadExtensions(paths: string[], cwd: string, eventBus?: Ev
 		paths.map(async extPath => {
 			const result = await loadExtension(extPath, cwd, resolvedEventBus, runtime);
 			return { extPath, ...result };
-		})
+		}),
 	);
 
 	for (const { extPath, extension, error } of results) {

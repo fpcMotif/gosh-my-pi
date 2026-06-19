@@ -4,14 +4,12 @@ Given map-phase observations, produce unified commit classification with changel
 </context>
 <instructions>
 Determine:
-
 1. TYPE: Single classification
 2. SCOPE: Primary component
 3. DETAILS: 3–4 summary points (max 6)
 4. CHANGELOG: Metadata for user-visible changes
    </instructions>
    <scope-rules>
-
 - Component name if ≥60% changes target it
 - null if spread across multiple components
 - scope_candidates as primary source

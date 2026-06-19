@@ -199,7 +199,7 @@ export async function loadCustomCommands(options: LoadCustomCommandsOptions = {}
 		paths.map(async ({ path: commandPath, source }) => {
 			const result = await loadCommandModule(commandPath, cwd, sharedApi);
 			return { commandPath, source, ...result };
-		})
+		}),
 	);
 
 	for (const { commandPath, source, commands: loadedCommands, error } of results) {

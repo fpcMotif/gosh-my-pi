@@ -8,7 +8,6 @@
 {{#ifAny contextFiles.length git.isRepo}}
 <project>
 {{#if contextFiles.length}}
-
 ## Context
 
 <instructions>

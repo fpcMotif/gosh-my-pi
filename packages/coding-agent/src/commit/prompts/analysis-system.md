@@ -7,7 +7,6 @@ Classify git diff into conventional commit format.
 ## 1. Determine Scope
 
 Apply scope when 60%+ line changes target single component:
-
 - 150 lines in src/api/, 30 in src/lib.rs → "api"
 - 50 lines in src/api/, 50 in src/types/ → null (50/50 split)
 
@@ -20,14 +19,12 @@ Prefer scopes from <common-scopes> over inventing new.
 ## 2. Generate Details (0-6 items)
 
 Each detail:
-
 1. Past-tense verb, ends with period
 2. Explains impact/rationale (skip trivial what-changed)
 3. Uses precise names (modules, APIs, files)
 4. Under 120 characters
 
 Abstraction preference:
-
 - BEST: "Replaced polling with event-driven model for 10x throughput."
 - GOOD: "Consolidated three HTTP builders into unified API."
 - SKIP: "Renamed workspacePath to locate."
@@ -44,14 +41,14 @@ State only visible rationale. If unclear, use neutral: "Updated logic for correc
 
 ## 3. Assign Changelog Metadata
 
-| Condition                           | changelog_category |
-| ----------------------------------- | ------------------ |
-| New public API, feature, capability | "Added"            |
-| Modified existing behavior          | "Changed"          |
-| Bug fix, correction                 | "Fixed"            |
-| Feature marked for removal          | "Deprecated"       |
-| Feature/API removed                 | "Removed"          |
-| Security fix or improvement         | "Security"         |
+|Condition|changelog_category|
+|---|---|
+|New public API, feature, capability|"Added"|
+|Modified existing behavior|"Changed"|
+|Bug fix, correction|"Fixed"|
+|Feature marked for removal|"Deprecated"|
+|Feature/API removed|"Removed"|
+|Security fix or improvement|"Security"|
 
 user_visible: true for: new features, APIs, breaking changes, user-affecting bug fixes, user-facing docs, security fixes.
 

@@ -127,7 +127,7 @@ export class CustomToolLoader {
 			pathsWithSources.map(async ({ path: toolPath, source }) => {
 				const result = await loadTool(toolPath, this.#sharedApi.cwd, this.#sharedApi, source);
 				return { toolPath, source, ...result };
-			})
+			}),
 		);
 
 		for (const { toolPath, source, tools: loadedTools, error } of results) {

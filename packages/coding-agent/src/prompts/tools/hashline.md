@@ -8,12 +8,10 @@ Read the file first. Copy the full anchors exactly as shown by `read`.
 - `path` (required) — file path for all edits in this request
 
 **Edit entry**: `{ loc, content }`
-
 - `loc` — where to apply the edit (see below)
 - `content` — replacement/inserted lines (`string[]`, one element per line; `null` to delete)
 
 **`loc` values**
-
 - `"append"` / `"prepend"` — insert at end/start of file
 - `{ append: "123th" }` / `{ prepend: "123th" }` — insert after/before anchored line
 - `{ range: { pos: "123th", end: "123th" } }` — replace inclusive range `pos..end` with new content (set `pos == end` for single-line replace)
