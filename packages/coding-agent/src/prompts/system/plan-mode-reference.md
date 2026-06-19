@@ -6,7 +6,6 @@ Plan file from previous session: `{{planFilePath}}`
 <summary>Plan contents</summary>
 
 {{planContent}}
-
 </details>
 
 <instruction>

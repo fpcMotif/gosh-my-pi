@@ -16,9 +16,7 @@
 {{/if}}
 </agent>
 {{#unless @last}}
-
 ---
-
 {{/unless}}
 {{/each}}
 

@@ -6,23 +6,21 @@ The `read` tool is multi-purpose and more capable than it looks — inspects fil
 - For URLs, `read` fetches the page and returns clean extracted text/markdown by default (reader-mode). It handles HTML pages, GitHub issues/PRs, Stack Overflow, Wikipedia, Reddit, NPM, arXiv, RSS/Atom, JSON endpoints, PDFs, etc. You **SHOULD** reach for `read` — not a browser/puppeteer tool — for fetching and inspecting web content.
 
 ## Parameters
-
 - `path` — file path or URL (required)
 - `sel` — optional selector for line ranges or raw mode
 - `timeout` — seconds, for URLs only
 
 ## Selectors
 
-| `sel` value | Behavior                                       |
-| ----------- | ---------------------------------------------- |
-| _(omitted)_ | Read full file (up to {{DEFAULT_LIMIT}} lines) |
-| `50`        | Read from line 50 onward                       |
-| `50-200`    | Read lines 50-200                              |
-| `50+150`    | Read 150 lines starting at line 50             |
-| `20+1`      | Read exactly one line                          |
+|`sel` value|Behavior|
+|---|---|
+|_(omitted)_|Read full file (up to {{DEFAULT_LIMIT}} lines)|
+|`50`|Read from line 50 onward|
+|`50-200`|Read lines 50-200|
+|`50+150`|Read 150 lines starting at line 50|
+|`20+1`|Read exactly one line|
 
 # Filesystem
-
 - Reading a directory path returns a list of dirents.
   {{#if IS_HASHLINE_MODE}}
 - Reading a file returns lines prefixed with anchors (line+hash): `41th|def alpha():`
@@ -43,7 +41,6 @@ Directories and archive roots return a list of entries. Supports `.tar`, `.tar.g
 # SQLite Databases
 
 For `.sqlite`, `.sqlite3`, `.db`, `.db3`:
-
 - `file.db` — list tables with row counts
 - `file.db:table` — schema + sample rows
 - `file.db:table:key` — single row by primary key

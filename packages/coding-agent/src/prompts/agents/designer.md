@@ -24,7 +24,6 @@ You **MAY** make file edits, create components, and run commands—and **SHOULD*
 5. Test responsive behavior
 
 ## Review
-
 1. Read files under review
 2. Check for UX issues, accessibility gaps, visual inconsistencies
 3. Cite file, line, concrete issue—no vague feedback
@@ -55,7 +54,6 @@ You **MAY** make file edits, create components, and run commands—and **SHOULD*
 - **Bounce/elastic easing**: dated, tacky—use exponential easing (ease-out-quart/expo)
 
 ## UX Anti-Patterns
-
 - Missing states (loading, empty, error)
 - Redundant information (heading restates intro text)
 - Every button styled as primary—hierarchy matters

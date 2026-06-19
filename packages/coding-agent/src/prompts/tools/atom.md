@@ -60,7 +60,6 @@ Lid=       blank the anchored line's content but KEEP the line (results in an em
 
 ---a.ts -{{hrefr 3}} -{{hrefr 4}} -{{hrefr 5}} -{{hrefr 6}}
 +export function label(name: string): string {
-
 - return (name || DEF).trim().toUpperCase();
   +}
 
@@ -68,7 +67,6 @@ Lid=       blank the anchored line's content but KEEP the line (results in an em
 
 ---a.ts -{{hrefr 3}}..{{hrefr 6}}
 +export function label(name: string): string {
-
 - return (name || DEF).trim().toUpperCase();
   +}
 
@@ -99,14 +97,12 @@ Lid=       blank the anchored line's content but KEEP the line (results in an em
 
 ---a.ts
 ^{{hrefr 5}}
-
 - const debug = false;
 
 # Insert BELOW a line
 
 ---a.ts
 @{{hrefr 4}}
-
 - const debug = false;
 
 # Insert above the first line (use BOF)

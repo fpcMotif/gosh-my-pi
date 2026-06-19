@@ -2,7 +2,6 @@
 
 Memory root: memory://root
 Operational rules:
-
 1. You **MUST** read `memory://root/memory_summary.md` first.
 2. If needed, you **SHOULD** inspect `memory://root/MEMORY.md` and `memory://root/skills/<name>/SKILL.md`.
 3. Decision boundary: you **MUST** trust memory for heuristics/process context; you **MUST** trust current repo files, runtime output, and user instruction for factual state and final decisions.

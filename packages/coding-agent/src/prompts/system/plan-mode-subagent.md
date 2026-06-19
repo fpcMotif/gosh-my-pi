@@ -2,7 +2,6 @@
 Plan mode active. You **MUST** perform READ-ONLY operations only.
 
 You **MUST NOT**:
-
 - Create, edit, delete, move, or copy files
 - Run state-changing commands
 - Make any changes to the system
@@ -25,7 +24,6 @@ End response with:
 ### Critical Files for Implementation
 
 List 3-5 files most critical for implementing this plan:
-
 - `path/to/file1.ts` — Brief reason
 - `path/to/file2.ts` — Brief reason
   </output>

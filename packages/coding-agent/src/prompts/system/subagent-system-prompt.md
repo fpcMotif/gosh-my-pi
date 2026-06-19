@@ -35,7 +35,6 @@ Your result **MUST** match this TypeScript interface:
 ```ts
 {{jtdToTypeScript outputSchema}}
 ```
-
 {{/if}}
 
 {{SECTION_SEPARATOR "Giving Up"}}

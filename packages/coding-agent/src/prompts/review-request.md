@@ -14,7 +14,6 @@
 _No files to review._
 {{/if}}
 {{#if excluded.length}}
-
 ### Excluded Files ({{len excluded}})
 
 {{#list excluded prefix="- " join="\n"}}
@@ -27,7 +26,6 @@ _No files to review._
 {{#when agentCount "==" 1}}Use **1 reviewer agent**.{{else}}Spawn **{{agentCount}} reviewer agents** in parallel.{{/when}}
 {{#if multiAgent}}
 Group files by locality, e.g.:
-
 - Same directory/module → same agent
 - Related functionality → same agent
 - Tests with their implementation files → same agent
@@ -38,7 +36,6 @@ You **MUST** use Task tool with `agent: "reviewer"` and `tasks` array.
 ### Reviewer Instructions
 
 Reviewer **MUST**:
-
 1. Focus ONLY on assigned files
 2. {{#if skipDiff}}**MUST** run `git diff`/`git show` for assigned files{{else}}**MUST** use diff hunks below (**MUST NOT** re-run git diff){{/if}}
 3. **MAY** read full file context as needed via `read`
@@ -46,13 +43,11 @@ Reviewer **MUST**:
 5. Call `yield` with verdict when done
 
 {{#if skipDiff}}
-
 ### Diff Previews
 
 _Full diff too large ({{len files}} files). Showing first ~{{linesPerFile}} lines per file._
 
 {{#list files join="\n\n"}}
-
 #### {{path}}
 
 {{#codeblock lang="diff"}}
@@ -69,7 +64,6 @@ _Full diff too large ({{len files}} files). Showing first ~{{linesPerFile}} line
 {{/if}}
 
 {{#if additionalInstructions}}
-
 ### Additional Instructions
 
 {{additionalInstructions}}
