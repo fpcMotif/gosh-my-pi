@@ -1,0 +1,17 @@
+**💡 What:**
+Added keyboard accessibility (`tabIndex={0}` and `onKeyDown` handler) and clear visual focus states (`focus-visible` Tailwind classes) to the interactive rows (`<tr>`) in the `RequestList` table.
+
+**🎯 Why:**
+Previously, the rows were only clickable via mouse (`onClick`), preventing users relying on keyboard navigation or assistive technologies from selecting and viewing request details. This ensures all interactive elements are reachable and usable.
+
+**📸 Before/After:**
+*(See attached video and screenshots in the verification step)*
+Before: Tabbing bypassed the rows completely.
+After: Rows can be focused, have a clear cyan ring and subtle background on focus, and can be activated with Enter or Space (Space prevents default scroll).
+
+**♿ Accessibility:**
+- Added `tabIndex={0}` to make rows sequentially focusable.
+- Added `onKeyDown` to trigger the selection action on Enter/Space.
+- Handled `e.preventDefault()` on Space to prevent unwanted page scrolling.
+- Applied existing design system variables via `focus-visible:ring-2 focus-visible:ring-[var(--accent-cyan)]` for clear focus indicators.
+- Kept native `<tr>` semantics (avoiding `role="button"` as per app guidelines) while adding interaction.
