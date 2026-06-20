@@ -1,0 +1,3 @@
+## 2024-05-14 - [Optimize Large File Reading]
+**Learning:** In Bun, using `await Bun.file(path).slice(start).bytes()` is significantly faster than reading the entire file into memory using `await Bun.file(path).bytes()` and then using `.subarray(start)`. This is especially true for reading small appended subsets at the end of large files (like JSONL session files), avoiding large memory allocations.
+**Action:** Prefer `.slice(start).bytes()` over `.bytes().subarray(start)` when reading subsets of large files. Check `file.size` before reading, as `.bytes()` correctly handles empty files, but `.slice()` with bounds might throw or be inefficient. Use try/catch over ENOENT to safely handle race conditions.

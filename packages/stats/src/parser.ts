@@ -84,9 +84,16 @@ export async function parseSessionFile(
 	sessionPath: string,
 	fromOffset = 0,
 ): Promise<{ stats: MessageStats[]; newOffset: number }> {
-	let bytes: Uint8Array;
+	let unprocessed: Uint8Array;
+	let start = 0;
 	try {
-		bytes = await Bun.file(sessionPath).bytes();
+		const file = Bun.file(sessionPath);
+		const size = file.size;
+		if (size === 0) return { stats: [], newOffset: fromOffset };
+		start = Math.max(0, Math.min(fromOffset, size));
+		// Optimization: Use .slice().bytes() instead of loading the full file then slicing.
+		// This avoids reading the whole file into memory just to parse appended entries.
+		unprocessed = await file.slice(start).bytes();
 	} catch (error) {
 		if (isEnoent(error)) return { stats: [], newOffset: fromOffset };
 		throw error;
@@ -94,8 +101,6 @@ export async function parseSessionFile(
 
 	const folder = extractFolderFromPath(sessionPath);
 	const stats: MessageStats[] = [];
-	const start = Math.max(0, Math.min(fromOffset, bytes.length));
-	const unprocessed = bytes.subarray(start);
 	const { entries, read } = parseSessionEntriesLenient(unprocessed);
 	for (const entry of entries) {
 		if (isAssistantMessage(entry)) {
@@ -153,7 +158,9 @@ export async function listAllSessionFiles(): Promise<string[]> {
 export async function getSessionEntry(sessionPath: string, entryId: string): Promise<SessionEntry | null> {
 	let bytes: Uint8Array;
 	try {
-		bytes = await Bun.file(sessionPath).bytes();
+		const file = Bun.file(sessionPath);
+		if (file.size === 0) return null;
+		bytes = await file.bytes();
 	} catch (error) {
 		if (isEnoent(error)) return null;
 		throw error;
