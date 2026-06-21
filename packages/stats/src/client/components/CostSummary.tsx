@@ -12,14 +12,20 @@ function formatCost(value: number): string {
 }
 
 export function CostSummary({ costSeries }: CostSummaryProps) {
-	const cutoff = Date.now() - SUMMARY_DAYS * 86400000;
-	const prevCutoff = cutoff - SUMMARY_DAYS * 86400000;
+	const current = useMemo(() => {
+		// Calculate Date.now() inside useMemo to prevent it from constantly
+		// updating on every render and breaking this memoized array.
+		const cutoff = Date.now() - SUMMARY_DAYS * 86400000;
+		return costSeries.filter(p => p.timestamp >= cutoff);
+	}, [costSeries]);
 
-	const current = useMemo(() => costSeries.filter(p => p.timestamp >= cutoff), [costSeries, cutoff]);
-	const previous = useMemo(
-		() => costSeries.filter(p => p.timestamp >= prevCutoff && p.timestamp < cutoff),
-		[costSeries, prevCutoff, cutoff],
-	);
+	const previous = useMemo(() => {
+		// Calculate Date.now() inside useMemo to prevent it from constantly
+		// updating on every render and breaking this memoized array.
+		const cutoff = Date.now() - SUMMARY_DAYS * 86400000;
+		const prevCutoff = cutoff - SUMMARY_DAYS * 86400000;
+		return costSeries.filter(p => p.timestamp >= prevCutoff && p.timestamp < cutoff);
+	}, [costSeries]);
 
 	const totalCost = current.reduce((sum, p) => sum + p.cost, 0);
 	const prevTotalCost = previous.reduce((sum, p) => sum + p.cost, 0);
