@@ -1,0 +1,3 @@
+## 2025-06-21 - [Fast Append Parsing in Bun]
+**Learning:** Extracting trailing bytes from appended session `.jsonl` files by reading the entire file and then calling `subarray` is significantly slower (e.g. ~880ms for 10MB file, 100 iterations) than using `Bun.file(path).slice(start).bytes()` (e.g. ~95ms).
+**Action:** When extracting unparsed chunks from large appending files in Bun, manually compute bounds using `Bun.file(path).size` to safely determine `start`, and extract the bytes directly with `Bun.file(path).slice(start).bytes()`. Always wrap in a try-catch for `ENOENT` to prevent Time-Of-Check to Time-Of-Use errors.
