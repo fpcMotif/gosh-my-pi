@@ -1,0 +1,3 @@
+## 2024-06-22 - Parallelize Custom Plugin/Tool Loading
+**Learning:** Sequential module loading (using `for...of` with `await`) in discovery/extensibility loaders represents a significant I/O bottleneck when many plugins, tools, or extensions are enabled.
+**Action:** When iterating to load modules or run file system discovery in this codebase (like in `packages/coding-agent/src/extensibility`), prefer decoupling the asynchronous resolution from sequential aggregation using `Promise.all`. This enables parallel I/O and evaluation while still allowing for sequential iteration over the settled array to maintain required conflict detection (e.g., checking `#seenNames`).
