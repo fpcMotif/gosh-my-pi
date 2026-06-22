@@ -1,0 +1,4 @@
+💡 What: Added keyboard accessibility to the `RequestList` component.
+🎯 Why: The `<tr>` elements were clickable with a mouse but could not be focused via `Tab` or activated with `Enter`/`Space`.
+📸 Before/After: Rows now have a visual focus ring (`var(--accent-cyan)`) when navigated via keyboard.
+♿ Accessibility: Added `tabIndex={0}`, an `onKeyDown` handler (with scroll prevention for Space), and `focus-visible` styling without breaking native table semantics.
