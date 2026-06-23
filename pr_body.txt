@@ -1,0 +1,14 @@
+### 💡 What
+Added manual keyboard accessibility (`tabIndex={0}`, `onKeyDown` handlers for Enter/Space, and explicit `focus-visible` CSS states) to the interactive `<tr onClick>` elements in `RequestList.tsx`.
+
+### 🎯 Why
+Interactive elements like `<tr onClick>` lack native focus and keyboard activation properties. This makes the crucial Request List data inaccessible to users who rely on keyboards or assistive tech, preventing them from opening the request detail pane.
+
+### 📸 Before/After
+**Before:** Tabbing past the tabs and refresh button would skip the table rows entirely. Clicking required a mouse.
+**After:** Users can tab directly through individual request rows (with a clear visual focus ring indicating selection) and press 'Enter' or 'Space' to view request details, matching expected native button/link behavior without violating semantic HTML conventions.
+
+### ♿ Accessibility
+- Added `tabIndex={0}` to allow rows to receive sequential focus.
+- Added `onKeyDown` to replicate activation behavior for Space/Enter keys, including `e.preventDefault()` on Space to prevent unintentional scroll jumps.
+- Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-cyan)]` using existing design tokens for unambiguous visual focus cues.
