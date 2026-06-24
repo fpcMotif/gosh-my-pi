@@ -1,0 +1,4 @@
+
+## 2024-05-18 - Bun File Slice Memory Optimization
+**Learning:** `Bun.file(path).bytes()` reads the entire file into memory, which creates significant memory overhead and I/O pressure for large log or session files when only the appended tail is needed. In Bun, `Bun.file(path).slice(start).bytes()` successfully defers the disk read to just the necessary byte range without eagerly loading the whole file. `Bun.file(path).size` on a non-existent file returns 0 instead of throwing an ENOENT error, which makes bounds calculation clean before the read.
+**Action:** Always prefer `slice(start).bytes()` over `await bytes()` followed by `subarray()` for partial reads of large files. Use `.size` to safely compute boundaries prior to the slice, and keep the final read operation in a `try/catch` to gracefully handle Time-Of-Check to Time-Of-Use (TOCTOU) `ENOENT` races.

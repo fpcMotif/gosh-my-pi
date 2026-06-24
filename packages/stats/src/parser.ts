@@ -84,9 +84,15 @@ export async function parseSessionFile(
 	sessionPath: string,
 	fromOffset = 0,
 ): Promise<{ stats: MessageStats[]; newOffset: number }> {
-	let bytes: Uint8Array;
+	let unprocessed: Uint8Array;
+	let start: number;
 	try {
-		bytes = await Bun.file(sessionPath).bytes();
+		// Performance optimization: Avoid reading the entire file into memory just to discard
+		// the previously processed portion. Read only the new bytes starting from fromOffset.
+		const file = Bun.file(sessionPath);
+		const size = file.size; // Returns 0 if file doesn't exist, which is handled gracefully
+		start = Math.max(0, Math.min(fromOffset, size));
+		unprocessed = await file.slice(start).bytes();
 	} catch (error) {
 		if (isEnoent(error)) return { stats: [], newOffset: fromOffset };
 		throw error;
@@ -94,8 +100,6 @@ export async function parseSessionFile(
 
 	const folder = extractFolderFromPath(sessionPath);
 	const stats: MessageStats[] = [];
-	const start = Math.max(0, Math.min(fromOffset, bytes.length));
-	const unprocessed = bytes.subarray(start);
 	const { entries, read } = parseSessionEntriesLenient(unprocessed);
 	for (const entry of entries) {
 		if (isAssistantMessage(entry)) {
