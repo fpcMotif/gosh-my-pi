@@ -54,11 +54,10 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
-/**
- * Sync all session files to the database.
- * Returns the number of new entries processed.
- */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+let currentSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+let nextSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+
+async function doSyncAllSessions(): Promise<{ processed: number; files: number }> {
 	await initDb();
 
 	const files = await listAllSessionFiles();
@@ -73,6 +72,45 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 	}
 
 	return { processed: totalProcessed, files: filesProcessed };
+}
+
+/**
+ * Sync all session files to the database.
+ * Returns the number of new entries processed.
+ *
+ * ⚡ Bolt: Promise coalescing avoids redundant concurrent file syncs
+ * while guaranteeing that any concurrent request arriving during
+ * an ongoing sync will trigger one subsequent execution to capture
+ * updates that occurred mid-sync.
+ */
+export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+	if (currentSyncPromise) {
+		if (!nextSyncPromise) {
+			nextSyncPromise = currentSyncPromise
+				.catch(() => {}) // Ignore errors from current sync to ensure next one executes
+				.then(() => {
+					// Promote next to current so future requests queue behind this execution
+					currentSyncPromise = nextSyncPromise;
+					nextSyncPromise = null;
+					return doSyncAllSessions();
+				})
+				.finally(() => {
+					// If no new nextSyncPromise was queued during our execution, clear current
+					if (!nextSyncPromise) {
+						currentSyncPromise = null;
+					}
+				});
+		}
+		return nextSyncPromise;
+	}
+
+	currentSyncPromise = doSyncAllSessions().finally(() => {
+		if (!nextSyncPromise) {
+			currentSyncPromise = null;
+		}
+	});
+
+	return currentSyncPromise;
 }
 
 /**

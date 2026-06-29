@@ -1,0 +1,3 @@
+## 2024-06-29 - Sync Promise Coalescing Pattern
+**Learning:** In `packages/stats/src/aggregator.ts`, `syncAllSessions` performs expensive file stats and I/O. When multiple frontend API requests hit the server concurrently, they each trigger `syncAllSessions()`, leading to redundant file scans. Because it is a state-syncing operation, a simple single promise coalescence might drop file updates that occur *during* the sync.
+**Action:** Implemented the `currentSyncPromise` and `nextSyncPromise` chaining pattern. This deduplicates identical concurrent syncs while ensuring that any request arriving during an ongoing sync will reliably trigger exactly one subsequent sync.
