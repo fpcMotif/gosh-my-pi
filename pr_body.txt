@@ -1,0 +1,4 @@
+💡 What: Added `tabIndex={0}`, an `onKeyDown` handler, and visible focus states to the clickable table rows in the `RequestList` component.
+🎯 Why: Previously, users relying on keyboards to navigate the application could not select and view the details of individual requests in the stats dashboard, because the custom `<tr onClick>` element wasn't focusable or actionable without a mouse.
+📸 Before/After: Visual focus states now appear as a cyan outline with a subtle background hover color.
+♿ Accessibility: Non-mouse users can now 'Tab' to a row and press 'Enter' or 'Space' to view the request details without page scrolling.
