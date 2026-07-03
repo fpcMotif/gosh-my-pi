@@ -1,0 +1,3 @@
+## 2025-05-18 - Keyboard Accessibility for Custom Interactive Elements
+**Learning:** Custom interactive elements, such as `<tr onClick>` used for list items, inherently lack the keyboard accessibility of native interactive elements like buttons or links.
+**Action:** Always implement manual keyboard accessibility for custom interactive elements by adding `tabIndex={0}`, an `onKeyDown` handler for 'Enter'/'Space' keys (calling `e.preventDefault()` on Space to prevent page scrolling), and `focus-visible` utility classes for clear visual focus states. Do not use `role="button"` on `<tr>` elements to avoid overriding native table semantics.
