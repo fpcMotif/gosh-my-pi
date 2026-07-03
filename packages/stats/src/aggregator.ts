@@ -54,11 +54,7 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
-/**
- * Sync all session files to the database.
- * Returns the number of new entries processed.
- */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+async function doSyncAllSessions(): Promise<{ processed: number; files: number }> {
 	await initDb();
 
 	const files = await listAllSessionFiles();
@@ -75,10 +71,42 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 	return { processed: totalProcessed, files: filesProcessed };
 }
 
+let currentSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+let nextSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+
 /**
- * Get all dashboard stats.
+ * Sync all session files to the database.
+ * Returns the number of new entries processed.
  */
-export async function getDashboardStats(): Promise<DashboardStats> {
+export function syncAllSessions(): Promise<{ processed: number; files: number }> {
+	if (currentSyncPromise) {
+		if (!nextSyncPromise) {
+			nextSyncPromise = currentSyncPromise
+				.catch(() => {})
+				.then(() => {
+					currentSyncPromise = nextSyncPromise;
+					nextSyncPromise = null;
+					return doSyncAllSessions();
+				})
+				.finally(() => {
+					if (!nextSyncPromise) {
+						currentSyncPromise = null;
+					}
+				});
+		}
+		return nextSyncPromise;
+	}
+
+	currentSyncPromise = doSyncAllSessions().finally(() => {
+		if (!nextSyncPromise) {
+			currentSyncPromise = null;
+		}
+	});
+
+	return currentSyncPromise;
+}
+
+async function doGetDashboardStats(): Promise<DashboardStats> {
 	await initDb();
 
 	return {
@@ -90,6 +118,20 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 		modelPerformanceSeries: getModelPerformanceSeries(14),
 		costSeries: getCostTimeSeries(90),
 	};
+}
+
+let dashboardStatsPromise: Promise<DashboardStats> | null = null;
+
+/**
+ * Get all dashboard stats.
+ */
+export function getDashboardStats(): Promise<DashboardStats> {
+	if (!dashboardStatsPromise) {
+		dashboardStatsPromise = doGetDashboardStats().finally(() => {
+			dashboardStatsPromise = null;
+		});
+	}
+	return dashboardStatsPromise;
 }
 export async function getRecentRequests(limit?: number): Promise<MessageStats[]> {
 	await initDb();
