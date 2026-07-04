@@ -1,0 +1,3 @@
+## 2024-07-04 - [Accessibility Pattern for Interactive Tables]
+**Learning:** Adding custom interactivity to `<tr>` elements in React tables requires a specific approach to maintain native semantics. Using `role="button"` overrides the native table semantics, breaking screen reader experience.
+**Action:** When adding interactivity to `<tr>` elements, instead of `role="button"`, add `tabIndex={0}`, an `onKeyDown` handler (triggering on 'Enter' or 'Space' and calling `e.preventDefault()` for Space to prevent scrolling), and `focus-visible` utility classes (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-cyan)] focus-visible:bg-[var(--bg-hover)]`) for clear visual focus states.
