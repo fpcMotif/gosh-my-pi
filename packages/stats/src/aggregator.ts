@@ -54,11 +54,10 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
-/**
- * Sync all session files to the database.
- * Returns the number of new entries processed.
- */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+let currentSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+let nextSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+
+async function doSyncAllSessions(): Promise<{ processed: number; files: number }> {
 	await initDb();
 
 	const files = await listAllSessionFiles();
@@ -73,6 +72,41 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 	}
 
 	return { processed: totalProcessed, files: filesProcessed };
+}
+
+/**
+ * Sync all session files to the database.
+ * Returns the number of new entries processed.
+ * Uses request coalescing to prevent redundant execution and dropping updates.
+ */
+export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+	// ⚡ Bolt: Apply promise coalescing for heavy backend synchronization.
+	// If a sync is already running, we either queue a new one or return the already queued one.
+	if (currentSyncPromise) {
+		if (!nextSyncPromise) {
+			nextSyncPromise = currentSyncPromise
+				.catch(() => {})
+				.then(() => {
+					currentSyncPromise = nextSyncPromise;
+					nextSyncPromise = null;
+					return doSyncAllSessions();
+				})
+				.finally(() => {
+					if (!nextSyncPromise) {
+						currentSyncPromise = null;
+					}
+				});
+		}
+		return nextSyncPromise;
+	}
+
+	currentSyncPromise = doSyncAllSessions().finally(() => {
+		if (!nextSyncPromise) {
+			currentSyncPromise = null;
+		}
+	});
+
+	return currentSyncPromise;
 }
 
 /**
