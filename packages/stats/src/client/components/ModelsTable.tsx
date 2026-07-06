@@ -115,6 +115,7 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 									type="button"
 									onClick={() => setExpandedKey(isExpanded ? null : key)}
 									aria-expanded={isExpanded}
+									aria-controls={`model-details-${key}`}
 									className="w-full bg-transparent border-none text-left px-5 py-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
 								>
 									<div
@@ -154,7 +155,10 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 								</button>
 
 								{isExpanded && (
-									<div className="px-5 py-4 bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)]">
+									<div
+										id={`model-details-${key}`}
+										className="px-5 py-4 bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)]"
+									>
 										<div className="grid gap-4" style={{ gridTemplateColumns: "200px 1fr" }}>
 											<div className="space-y-4 text-sm">
 												<div>
