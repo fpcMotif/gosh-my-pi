@@ -6,6 +6,7 @@
 
 - Run the full agentic loop through the `gmp-tui-go` Go (Bubble Tea) frontend over the OMP-RPC bridge: ship and auto-launch the binary from the release pipeline, render tool diffs and file views in the Go TUI, gate destructive built-in tools (bash/edit/apply_patch/write) behind a host approval round-trip ([ADR 0007](../../docs/adr/0007-tool-approval-trust-boundary.md)), surface recoverable failures (usage-limit / context-overflow / detached-prompt rejections) and a dead-backend banner, and add ompclient transport + wire-schema test coverage.
 - Streaming-render performance for the Go TUI: stable-prefix streaming-markdown cache, decoded draw-buffer cache, per-item list freeze-memo, per-section assistant caches, a deterministic spinner, and a three-state thinking view with a tail window for long reasoning blocks.
+- OMP-RPC v1: an optional `clientMessageId` on the `prompt` command, preserved as the user/developer message's `correlationId` and echoed on every wire frame that carries the message (additive v1 field). Hosts use it to reconcile echoed messages with their optimistically-rendered local copies by id.
 
 ### Changed
 
@@ -23,6 +24,7 @@
 - Kept vivid sidebar and minimized welcome chrome in sync after session, cwd, model, and thinking-level changes.
 - Fixed RPC extension editor requests so aborts and timeouts resolve when `defaultValue` is explicitly `undefined`.
 - Removed stale Claude/marketplace discovery imports that could break extension, CLI help, and session replay startup paths.
+- `gmp-tui-go`: reconcile backend-echoed user messages with the optimistic local copy by correlation id instead of exact text equality, which mis-merged two prompts that shared identical text (and was brittle to whitespace/normalization drift).
 
 ## [14.5.11] - 2026-04-30
 

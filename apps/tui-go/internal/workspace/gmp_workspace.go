@@ -30,6 +30,7 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/toolapproval"
+	"github.com/google/uuid"
 )
 
 const (
@@ -510,8 +511,15 @@ func (w *GmpWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, a
 			UpdatedAt: now,
 		}
 	}
+	// Correlate the optimistic local user message with the backend echo by a
+	// stable client-supplied id (sent as the prompt's clientMessageId and echoed
+	// back as the wire message's correlationId). A UUID is used so it can never
+	// collide with ids loaded from persisted history on session restore. This
+	// replaces the previous text-equality match, which mis-reconciled two
+	// messages that happened to share identical text.
+	clientMessageID := uuid.NewString()
 	user := message.Message{
-		ID:        w.nextID("user"),
+		ID:        clientMessageID,
 		SessionID: sessionID,
 		Role:      message.User,
 		CreatedAt: now,
@@ -547,8 +555,9 @@ func (w *GmpWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, a
 		return nil
 	}
 	_, err := w.client.Call(ctx, ompclient.Command{
-		Type:    "prompt",
-		Message: message.PromptWithTextAttachments(prompt, attachments),
+		Type:            "prompt",
+		Message:         message.PromptWithTextAttachments(prompt, attachments),
+		ClientMessageID: clientMessageID,
 	})
 	if err != nil {
 		if msg := w.finishAssistant(message.FinishReasonError, err.Error(), ""); msg != nil {
@@ -1366,12 +1375,9 @@ func (w *GmpWorkspace) handleMessageStart(raw []byte) tea.Msg {
 	}
 	eventType := pubsub.CreatedEvent
 	w.mu.Lock()
-	if msg.Role == message.User {
-		if id, ok := w.matchingUserIDLocked(msg.Content().Text); ok {
-			msg.ID = id
-			eventType = pubsub.UpdatedEvent
-		}
-	}
+	// User/developer messages reconcile by correlation id, which parseAgentMessage
+	// has already applied to msg.ID; the `exists` check below upgrades the event
+	// to Updated when it matches the optimistic local row.
 	if msg.Role == message.Assistant && w.currentAssistantID != "" {
 		msg.ID = w.currentAssistantID
 		eventType = pubsub.UpdatedEvent
@@ -1459,11 +1465,6 @@ func (w *GmpWorkspace) handleMessageUpdate(raw []byte) tea.Msg {
 		return nil
 	}
 	w.mu.Lock()
-	if msg.Role == message.User {
-		if id, ok := w.matchingUserIDLocked(msg.Content().Text); ok {
-			msg.ID = id
-		}
-	}
 	if msg.Role == message.Assistant && w.currentAssistantID != "" {
 		msg.ID = w.currentAssistantID
 	}
@@ -1532,11 +1533,6 @@ func (w *GmpWorkspace) handleMessageEnd(raw []byte) tea.Msg {
 		return nil
 	}
 	w.mu.Lock()
-	if msg.Role == message.User {
-		if id, ok := w.matchingUserIDLocked(msg.Content().Text); ok {
-			msg.ID = id
-		}
-	}
 	if msg.Role == message.Assistant && w.currentAssistantID != "" {
 		msg.ID = w.currentAssistantID
 	}
@@ -1613,11 +1609,10 @@ func (w *GmpWorkspace) handleAgentEnd(raw []byte) []tea.Msg {
 	events := make([]tea.Msg, 0, len(msgs))
 	for _, msg := range msgs {
 		eventType := pubsub.CreatedEvent
-		if msg.Role == message.User {
-			if id, ok := w.matchingUserIDLocked(msg.Content().Text); ok {
-				msg.ID = id
-			}
-		}
+		// User/developer messages reconcile by correlation id (already applied to
+		// msg.ID in parseAgentMessage); the `exists` check below upgrades them to
+		// Updated. Assistant messages have no wire correlation id, so they fall back
+		// to the in-flight currentAssistantID or a text match against prior rows.
 		if msg.Role == message.Assistant {
 			if w.currentAssistantID != "" {
 				msg.ID = w.currentAssistantID
@@ -1772,8 +1767,9 @@ func (w *GmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 	}
 
 	var probe struct {
-		Role      string `json:"role"`
-		Timestamp int64  `json:"timestamp"`
+		Role          string `json:"role"`
+		Timestamp     int64  `json:"timestamp"`
+		CorrelationID string `json:"correlationId"`
 	}
 	if err := json.Unmarshal(body, &probe); err != nil {
 		return message.Message{}, false
@@ -1806,6 +1802,14 @@ func (w *GmpWorkspace) parseAgentMessage(raw []byte, fieldName string) (message.
 	default:
 		msg.Parts = []message.ContentPart{message.TextContent{Text: fmt.Sprintf("[%s message]", probe.Role)}}
 		msg.ID = w.nextID("unknown")
+	}
+
+	// When the backend echoes a client-supplied correlation id (user/developer
+	// prompts created via AgentRun), use it as the message id so the echoed
+	// message reconciles with the optimistically-rendered local copy. Wire frames
+	// without a correlationId keep the locally-generated id.
+	if probe.CorrelationID != "" {
+		msg.ID = probe.CorrelationID
 	}
 
 	return msg, true
@@ -2079,16 +2083,11 @@ func (w *GmpWorkspace) upsertMessageLocked(msg message.Message) {
 	}
 }
 
-func (w *GmpWorkspace) matchingUserIDLocked(text string) (string, bool) {
-	for i := len(w.msgOrder) - 1; i >= 0; i-- {
-		msg, ok := w.messages[w.msgOrder[i]]
-		if ok && msg.Role == message.User && msg.Content().Text == text {
-			return msg.ID, true
-		}
-	}
-	return "", false
-}
-
+// matchingAssistantIDLocked finds the most recent assistant row whose rendered
+// text equals the given text. Assistant messages carry no client correlation id
+// on the wire (only user/developer prompts do — see AgentRun), so agent_end's
+// re-emitted assistant messages fall back to this text match when the in-flight
+// currentAssistantID has already been cleared by message_end.
 func (w *GmpWorkspace) matchingAssistantIDLocked(text string) (string, bool) {
 	for i := len(w.msgOrder) - 1; i >= 0; i-- {
 		msg, ok := w.messages[w.msgOrder[i]]

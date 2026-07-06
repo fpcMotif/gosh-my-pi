@@ -114,8 +114,8 @@ func TestGmpWorkspaceSendsPromptToRpcBackend(t *testing.T) {
 	if err := w.AgentRun(ctx, sess.ID, "bridge hello"); err != nil {
 		t.Fatalf("AgentRun returned error: %v", err)
 	}
-	nextMessageEvent(t, w) // local optimistic user
-	nextMessageEvent(t, w) // local optimistic assistant
+	userOpt := nextMessageEvent(t, w) // local optimistic user
+	nextMessageEvent(t, w)            // local optimistic assistant
 
 	updated := nextMessageEvent(t, w)
 	if updated.Type != pubsub.UpdatedEvent || updated.Payload.Role != message.Assistant {
@@ -123,6 +123,15 @@ func TestGmpWorkspaceSendsPromptToRpcBackend(t *testing.T) {
 	}
 	if updated.Payload.Content().Text != "backend saw: bridge hello" {
 		t.Fatalf("assistant text=%q", updated.Payload.Content().Text)
+	}
+
+	// End-to-end correlation round-trip: AgentRun sent the optimistic user id as
+	// the prompt's clientMessageId; the fake backend echoes it as the user
+	// message's correlationId in agent_end, so it must reconcile to the same row.
+	finalUser := nextMessageEvent(t, w)
+	if finalUser.Payload.Role != message.User || finalUser.Payload.ID != userOpt.Payload.ID {
+		t.Fatalf("agent_end user = {role:%v id:%q}, want reconciled optimistic id %q",
+			finalUser.Payload.Role, finalUser.Payload.ID, userOpt.Payload.ID)
 	}
 }
 
@@ -139,9 +148,10 @@ func runFakeGmpRPCBackend() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		var command struct {
-			ID      string `json:"id"`
-			Type    string `json:"type"`
-			Message string `json:"message"`
+			ID              string `json:"id"`
+			Type            string `json:"type"`
+			Message         string `json:"message"`
+			ClientMessageID string `json:"clientMessageId"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &command); err != nil {
 			continue
@@ -197,6 +207,12 @@ func runFakeGmpRPCBackend() {
 			writeRPCFrame(map[string]any{
 				"type": "agent_end",
 				"messages": []any{
+					map[string]any{
+						"role":          "user",
+						"content":       command.Message,
+						"correlationId": command.ClientMessageID,
+						"timestamp":     1700000000000,
+					},
 					map[string]any{
 						"role":       "assistant",
 						"content":    []any{map[string]any{"type": "text", "text": reply}},
@@ -403,25 +419,76 @@ func TestTrivialMethods(t *testing.T) {
 	}
 }
 
-func TestMatchingUserIDLocked(t *testing.T) {
+// TestUserCorrelation_IdenticalTextDistinctIDs pins the architecturally-meaty
+// fix: two prompts with identical text get distinct client correlation ids, and
+// each backend echo reconciles with its OWN optimistic row by id. The previous
+// text-equality match collapsed both echoes onto the most recent row.
+func TestUserCorrelation_IdenticalTextDistinctIDs(t *testing.T) {
 	w := newTestGmpWorkspace()
 	w.CreateSession(context.Background(), "s")
+	nextUIEvent(t, w) // session created
+
 	w.AgentRun(context.Background(), "", "hello")
-	nextUIEvent(t, w)
-	nextUIEvent(t, w)
-	nextUIEvent(t, w)
+	firstUser := nextMessageEvent(t, w) // optimistic user 1
+	nextMessageEvent(t, w)              // optimistic assistant 1
+	w.AgentRun(context.Background(), "", "hello")
+	secondUser := nextMessageEvent(t, w) // optimistic user 2
+	nextMessageEvent(t, w)               // optimistic assistant 2
 
-	id, ok := w.matchingUserIDLocked("hello")
-	if !ok {
-		t.Fatalf("matchingUserIDLocked want match")
+	if firstUser.Payload.ID == "" || secondUser.Payload.ID == "" {
+		t.Fatal("optimistic user id empty")
 	}
-	if id == "" {
-		t.Fatalf("matchingUserIDLocked id empty")
+	if firstUser.Payload.ID == secondUser.Payload.ID {
+		t.Fatalf("identical-text prompts share id %q; want distinct correlation ids", firstUser.Payload.ID)
 	}
 
-	_, ok = w.matchingUserIDLocked("nope")
-	if ok {
-		t.Fatalf("matchingUserIDLocked want no match")
+	echo := func(correlationID string) pubsub.Event[message.Message] {
+		payload := fmt.Sprintf(
+			`{"type":"message_start","message":{"role":"user","content":"hello","correlationId":%q,"timestamp":1700000000000}}`,
+			correlationID,
+		)
+		w.handleAgentEvent(&ompclient.AgentEvent{Kind: "message_start", Payload: []byte(payload)})
+		return nextMessageEvent(t, w)
+	}
+
+	// Echo the SECOND prompt first: text match would have matched the most recent
+	// row for both; id match must pin each echo to its own row regardless of order.
+	if got := echo(secondUser.Payload.ID); got.Type != pubsub.UpdatedEvent || got.Payload.ID != secondUser.Payload.ID {
+		t.Fatalf("second echo = {type:%v id:%q}, want UpdatedEvent reusing %q", got.Type, got.Payload.ID, secondUser.Payload.ID)
+	}
+	if got := echo(firstUser.Payload.ID); got.Type != pubsub.UpdatedEvent || got.Payload.ID != firstUser.Payload.ID {
+		t.Fatalf("first echo = {type:%v id:%q}, want UpdatedEvent reusing %q", got.Type, got.Payload.ID, firstUser.Payload.ID)
+	}
+
+	users := 0
+	for _, m := range w.messages {
+		if m.Role == message.User {
+			users++
+		}
+	}
+	if users != 2 {
+		t.Fatalf("user row count = %d, want 2 (each echo reconciled, no duplicates)", users)
+	}
+}
+
+// TestUserCorrelation_UnknownIDCreatesRow pins the fallback: a user message
+// whose correlationId matches no optimistic row (e.g. a server-originated or
+// restored-history message) is created fresh rather than dropped.
+func TestUserCorrelation_UnknownIDCreatesRow(t *testing.T) {
+	w := newTestGmpWorkspace()
+	w.CreateSession(context.Background(), "s")
+	nextUIEvent(t, w) // session created
+
+	w.handleAgentEvent(&ompclient.AgentEvent{
+		Kind:    "message_start",
+		Payload: []byte(`{"type":"message_start","message":{"role":"user","content":"orphan","correlationId":"never-sent","timestamp":1700000000000}}`),
+	})
+	ev := nextMessageEvent(t, w)
+	if ev.Type != pubsub.CreatedEvent || ev.Payload.Role != message.User {
+		t.Fatalf("unknown-correlation user = %v, want CreatedEvent user", ev)
+	}
+	if ev.Payload.ID != "never-sent" {
+		t.Fatalf("user id = %q, want adopted correlationId %q", ev.Payload.ID, "never-sent")
 	}
 }
 
@@ -775,18 +842,22 @@ func TestEventHandlers(t *testing.T) {
 	w := newTestGmpWorkspace()
 	w.CreateSession(context.Background(), "s")
 	w.AgentRun(context.Background(), "", "hello")
-	nextUIEvent(t, w) // session
-	nextUIEvent(t, w) // user
-	nextUIEvent(t, w) // assistant
+	nextUIEvent(t, w)                 // session
+	userOpt := nextMessageEvent(t, w) // optimistic user
+	nextUIEvent(t, w)                 // assistant
 
-	// message_start user with matching text -> UpdatedEvent
+	// message_start user echoed with the correlationId -> reconciles to the
+	// optimistic row (UpdatedEvent reusing its id).
 	w.handleAgentEvent(&ompclient.AgentEvent{
-		Kind:    "message_start",
-		Payload: []byte(`{"type":"message_start","message":{"role":"user","content":"hello","timestamp":1700000000000}}`),
+		Kind: "message_start",
+		Payload: []byte(fmt.Sprintf(
+			`{"type":"message_start","message":{"role":"user","content":"hello","correlationId":%q,"timestamp":1700000000000}}`,
+			userOpt.Payload.ID,
+		)),
 	})
 	ev := nextMessageEvent(t, w)
-	if ev.Type != pubsub.UpdatedEvent || ev.Payload.Role != message.User {
-		t.Fatalf("message_start user=%v", ev)
+	if ev.Type != pubsub.UpdatedEvent || ev.Payload.Role != message.User || ev.Payload.ID != userOpt.Payload.ID {
+		t.Fatalf("message_start user=%v, want UpdatedEvent reusing %q", ev, userOpt.Payload.ID)
 	}
 
 	// message_start assistant -> UpdatedEvent (uses currentAssistantID)
@@ -841,16 +912,24 @@ func TestAgentEndPublishesFinalMessages(t *testing.T) {
 	w := newTestGmpWorkspace()
 	w.CreateSession(context.Background(), "s")
 	w.AgentRun(context.Background(), "", "hello")
-	nextUIEvent(t, w) // session
-	nextUIEvent(t, w) // user
-	nextUIEvent(t, w) // assistant
+	nextUIEvent(t, w)                 // session
+	userOpt := nextMessageEvent(t, w) // optimistic user
+	nextUIEvent(t, w)                 // assistant
 
+	// agent_end echoes the user message tagged with the correlationId AgentRun
+	// sent, so it reconciles with the optimistic row instead of creating a new one.
 	w.handleAgentEvent(&ompclient.AgentEvent{
-		Kind:    "agent_end",
-		Payload: []byte(`{"type":"agent_end","messages":[{"role":"user","content":"hello","timestamp":1700000000000},{"role":"assistant","content":[{"type":"text","text":"final answer"}],"stopReason":"stop","timestamp":1700000000000}]}`),
+		Kind: "agent_end",
+		Payload: []byte(fmt.Sprintf(
+			`{"type":"agent_end","messages":[{"role":"user","content":"hello","correlationId":%q,"timestamp":1700000000000},{"role":"assistant","content":[{"type":"text","text":"final answer"}],"stopReason":"stop","timestamp":1700000000000}]}`,
+			userOpt.Payload.ID,
+		)),
 	})
 
 	userEvent := nextMessageEvent(t, w)
+	if userEvent.Payload.ID != userOpt.Payload.ID {
+		t.Fatalf("agent_end user id=%q, want reuse of optimistic %q", userEvent.Payload.ID, userOpt.Payload.ID)
+	}
 	if userEvent.Type != pubsub.UpdatedEvent || userEvent.Payload.Role != message.User {
 		t.Fatalf("agent_end user event=%v", userEvent)
 	}

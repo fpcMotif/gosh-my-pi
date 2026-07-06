@@ -112,6 +112,13 @@ export interface WireUserMessageV1 {
 	content: string | WireUserContentBlockV1[];
 	synthetic?: boolean;
 	attribution?: WireMessageAttributionV1;
+	/**
+	 * Client-supplied correlation id echoed back from a `prompt` command's
+	 * `clientMessageId`. Hosts use it to reconcile this echoed message with the
+	 * message they optimistically rendered, instead of matching on message text
+	 * (which collides when two messages share identical text). Additive v1 field.
+	 */
+	correlationId?: string;
 	timestamp: number;
 }
 
@@ -119,6 +126,8 @@ export interface WireDeveloperMessageV1 {
 	role: "developer";
 	content: string | WireUserContentBlockV1[];
 	attribution?: WireMessageAttributionV1;
+	/** See {@link WireUserMessageV1.correlationId}. Additive v1 field. */
+	correlationId?: string;
 	timestamp: number;
 }
 

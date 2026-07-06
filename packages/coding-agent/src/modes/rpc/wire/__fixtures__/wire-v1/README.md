@@ -43,6 +43,7 @@ test and a `go test` resolve deterministically.
 | `agent_end.error_kind.json`          | `agent_end` with `errorKind` (`usage_limit`)             |
 | `turn_end.json`                      | `turn_end` with message + toolResults                    |
 | `message_start.json`                 | `message_start`                                          |
+| `message_start.user_correlation.json` | `message_start` for a user message carrying `correlationId` |
 | `message_update.text_delta.json`     | `message_update` carrying a `text_delta` sub-event       |
 | `message_update.toolcall_end.json`   | `message_update` carrying a `toolcall_end` sub-event     |
 | `message_end.error_kind.json`        | `message_end` with `errorKind` (`context_overflow`)      |

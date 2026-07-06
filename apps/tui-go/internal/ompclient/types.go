@@ -50,6 +50,12 @@ type Command struct {
 	// Streaming behavior for prompt: "steer" | "followUp".
 	StreamingBehavior string `json:"streamingBehavior,omitempty"`
 
+	// Client-supplied id for the user message a `prompt` creates. The server
+	// echoes it back as the message's `correlationId` on every wire frame that
+	// carries the message, letting the host reconcile the echoed message with the
+	// one it optimistically rendered (instead of matching on message text).
+	ClientMessageID string `json:"clientMessageId,omitempty"`
+
 	// new_session
 	ParentSession string `json:"parentSession,omitempty"`
 

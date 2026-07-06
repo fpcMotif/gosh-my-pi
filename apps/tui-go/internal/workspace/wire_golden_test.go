@@ -143,6 +143,27 @@ func TestWireGoldenMessageStart(t *testing.T) {
 	}
 }
 
+// TestWireGoldenMessageStartUserCorrelation: the user message_start fixture
+// carries a client correlationId. The Go bridge must adopt it as the message id
+// (not a freshly generated one) so the echoed message reconciles with the
+// optimistically-rendered local copy by id rather than by text.
+func TestWireGoldenMessageStartUserCorrelation(t *testing.T) {
+	raw := loadWireFixture(t, "message_start.user_correlation.json")
+	w := newTestGmpWorkspace()
+
+	msg := w.handleMessageStart(raw)
+	ev, ok := msg.(pubsub.Event[message.Message])
+	if !ok {
+		t.Fatalf("handleMessageStart returned %T, want pubsub.Event[message.Message]", msg)
+	}
+	if ev.Payload.Role != message.User {
+		t.Errorf("message_start role = %q, want user", ev.Payload.Role)
+	}
+	if ev.Payload.ID != "client-msg-7f3a2b1c" {
+		t.Errorf("message id = %q, want the wire correlationId %q", ev.Payload.ID, "client-msg-7f3a2b1c")
+	}
+}
+
 // TestWireGoldenMessageUpdateTextDelta: the text_delta fixture appends its delta
 // to the streaming assistant message.
 func TestWireGoldenMessageUpdateTextDelta(t *testing.T) {

@@ -279,6 +279,7 @@ function toWireUserMessage(msg: UserMessage): WireUserMessageV1 {
 		content: toWireUserContentList(msg.content),
 		...(msg.synthetic !== undefined && { synthetic: msg.synthetic }),
 		...(msg.attribution !== undefined && { attribution: msg.attribution }),
+		...(msg.correlationId !== undefined && { correlationId: msg.correlationId }),
 		timestamp: msg.timestamp,
 	};
 }
@@ -373,6 +374,7 @@ function toWireMessage(msg: AgentMessage): WireMessageV1 {
 				role: "developer",
 				content: toWireUserContentList(msg.content),
 				...(msg.attribution !== undefined && { attribution: msg.attribution }),
+				...(msg.correlationId !== undefined && { correlationId: msg.correlationId }),
 				timestamp: msg.timestamp,
 			};
 		case "assistant":

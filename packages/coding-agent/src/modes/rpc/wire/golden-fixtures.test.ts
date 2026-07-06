@@ -107,6 +107,22 @@ const cases: Array<{ fixture: string; event: AgentSessionEvent }> = [
 		},
 	},
 	{
+		// A user message_start carrying the client correlationId. Pins that
+		// toWireUserMessage emits correlationId so the Go bridge can reconcile the
+		// echoed message with its optimistic local copy by id (gmp correlation).
+		fixture: "message_start.user_correlation.json",
+		event: {
+			type: "message_start",
+			message: {
+				role: "user",
+				content: "hello",
+				attribution: "user",
+				correlationId: "client-msg-7f3a2b1c",
+				timestamp: 1_717_200_000_000,
+			} as AgentMessage,
+		},
+	},
+	{
 		fixture: "message_update.text_delta.json",
 		event: (() => {
 			const partial = assistantMessage();

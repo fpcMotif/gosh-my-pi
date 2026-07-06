@@ -281,6 +281,12 @@ export interface PromptOptions {
 	attribution?: MessageAttribution;
 	/** Skip pre-send compaction checks for this prompt (internal use for maintenance flows). */
 	skipCompactionCheck?: boolean;
+	/**
+	 * Optional client-supplied correlation id. Attached to the resulting user (or
+	 * developer) message as its `correlationId` so hosts can reconcile echoed wire
+	 * frames with their optimistic local copy by id rather than by message text.
+	 */
+	clientMessageId?: string;
 }
 
 /** Result from cycleModel() */
@@ -1975,15 +1981,26 @@ export class AgentSession {
 		}
 
 		const promptAttribution = options?.attribution ?? (options?.synthetic === true ? "agent" : "user");
+		const correlationFields =
+			options?.clientMessageId !== undefined && options.clientMessageId !== ""
+				? { correlationId: options.clientMessageId }
+				: {};
 		const message =
 			options?.synthetic === true
 				? {
 						role: "developer" as const,
 						content: userContent,
 						attribution: promptAttribution,
+						...correlationFields,
 						timestamp: Date.now(),
 					}
-				: { role: "user" as const, content: userContent, attribution: promptAttribution, timestamp: Date.now() };
+				: {
+						role: "user" as const,
+						content: userContent,
+						attribution: promptAttribution,
+						...correlationFields,
+						timestamp: Date.now(),
+					};
 
 		if (eagerTodoPrelude) {
 			this.#toolChoiceQueue.pushOnce(eagerTodoPrelude.toolChoice, {
