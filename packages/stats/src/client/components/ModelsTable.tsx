@@ -70,8 +70,13 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 	const performanceSeriesByKey = useMemo(() => buildModelPerformanceLookup(performanceSeries), [performanceSeries]);
 	const theme = useSystemTheme();
 	const chartTheme = CHART_THEMES[theme];
-	const sortedModels = models.toSorted(
-		(a, b) => b.totalInputTokens + b.totalOutputTokens - (a.totalInputTokens + a.totalOutputTokens),
+	// Memoized to prevent re-sorting on every render (e.g., when expandedKey state changes).
+	const sortedModels = useMemo(
+		() =>
+			models.toSorted(
+				(a, b) => b.totalInputTokens + b.totalOutputTokens - (a.totalInputTokens + a.totalOutputTokens),
+			),
+		[models],
 	);
 
 	return (
@@ -109,6 +114,7 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 								<button
 									type="button"
 									onClick={() => setExpandedKey(isExpanded ? null : key)}
+									aria-expanded={isExpanded}
 									className="w-full bg-transparent border-none text-left px-5 py-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
 								>
 									<div
