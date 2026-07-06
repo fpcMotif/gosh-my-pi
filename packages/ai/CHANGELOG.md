@@ -9,6 +9,13 @@
 ### Fixed
 
 - Restored `AuthStorage.hasOAuth()` and `AuthStorage.peekApiKey()` so downstream model discovery and status rendering can probe credentials without refreshing OAuth tokens.
+- Canonicalized the Kimi OAuth provider id to `kimi-code`: logins are stored under the id the model catalog and registry look up, legacy `kimi` rows are migrated on reload, and token refresh accepts both ids. Previously a completed Kimi login was invisible to the model catalog and inference path.
+- Sanitized Kimi OAuth device headers (`X-Msh-Device-Name`/`-Model`/`-Os-Version`/`-Device-Id`) to ASCII so non-ASCII hostnames no longer trip Cloudflare 520 errors at login (port of upstream a99ff4cae).
+- Omit the `thinking` field entirely instead of sending `thinking: {type: "disabled"}` for native Kimi K2.7 Code family models, which reject disabled thinking with a 400 (port of upstream 1db1e9e20/7cab14d96).
+
+### Added
+
+- `supportsForcedToolChoice` compat flag for OpenAI-completions providers: when false, forced `tool_choice` downgrades to `"auto"` instead of only stripping reasoning effort (port of upstream f5d54e4ac).
 
 ## [14.5.10] - 2026-04-30
 

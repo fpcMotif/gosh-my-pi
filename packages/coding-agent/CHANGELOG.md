@@ -20,6 +20,8 @@
 
 ### Fixed
 
+- Fixed the RPC auth picker registering Kimi under the id `kimi` while the model catalog keys on `kimi-code`: a completed Kimi login now authenticates the catalog's Kimi models instead of being stored under an id nothing looks up.
+- Kimi-family models now default to the `replace` edit variant (hashline support is unreliable for them); `PI_STRICT_EDIT_MODE=1` restores the strict default (port of upstream ac904fc70).
 - Fixed vivid `RowSplit` layouts so an explicit empty separator omits the default vertical rule.
 - Kept vivid sidebar and minimized welcome chrome in sync after session, cwd, model, and thinking-level changes.
 - Fixed RPC extension editor requests so aborts and timeouts resolve when `defaultValue` is explicitly `undefined`.
