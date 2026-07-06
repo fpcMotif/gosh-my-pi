@@ -1405,6 +1405,14 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	action := m.dialog.Update(msg)
 	if action == nil {
+		// Dialogs can emit Actions as messages from their own commands (e.g.
+		// GmpAuth's closeCmd). The front dialog ignores those, so treat the
+		// message itself as the action or a self-close could never land.
+		if a, ok := msg.(dialog.Action); ok {
+			action = a
+		}
+	}
+	if action == nil {
 		return tea.Batch(cmds...)
 	}
 
