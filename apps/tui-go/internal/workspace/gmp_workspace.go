@@ -382,7 +382,9 @@ func (w *GmpWorkspace) UpdatePreferredModel(scope config.Scope, modelType config
 	if w.client == nil {
 		return nil
 	}
-	_, err := w.client.Call(context.Background(), ompclient.Command{
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := w.client.Call(ctx, ompclient.Command{
 		Type:     "set_model",
 		Provider: model.Provider,
 		ModelID:  model.Model,

@@ -974,6 +974,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleSelectModel(msg.action); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case gmpModelSelectionResultMsg:
+		if cmd := m.handleGmpModelSelectionResult(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case creditsUpdatedMsg:
 		m.hyperCredits = &msg.credits
 	case util.InfoMsg:

@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -19,58 +20,100 @@ type toolApprovalReplyHandler interface {
 	HandleToolApprovalReply(permission.PermissionRequest, bool)
 }
 
+// gmpModelSelectionResultMsg carries the outcome of the off-loop model
+// selection round-trips back into Update.
+type gmpModelSelectionResultMsg struct {
+	action        dialog.ActionSelectModel
+	loginProvider string // non-empty: provider needs auth before the selection can apply
+	applied       bool
+	err           error
+}
+
+// handleGmpSelectModel dispatches the catalog lookup / refresh / set_model
+// round-trips to a tea.Cmd goroutine: they block on the backend, and running
+// them inside Update freezes every keystroke (including Esc) whenever the
+// backend is slow or wedged.
 func (m *UI) handleGmpSelectModel(gw *workspace.GmpWorkspace, msg dialog.ActionSelectModel) tea.Cmd {
-	entry, ok := gw.ModelCatalogEntry(msg.Model.Provider, msg.Model.Model)
-	if !ok {
+	m.dialog.CloseDialog(dialog.ModelsID)
+	return func() tea.Msg { return resolveGmpModelSelection(gw, msg, false) }
+}
+
+// resolveGmpModelSelection performs the blocking catalog / set_model work.
+// Runs off the update loop; must not touch UI state.
+func resolveGmpModelSelection(
+	gw *workspace.GmpWorkspace,
+	msg dialog.ActionSelectModel,
+	forceRefresh bool,
+) gmpModelSelectionResultMsg {
+	refresh := func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := gw.RefreshModelCatalog(ctx); err != nil {
-			return util.ReportError(err)
+		return gw.RefreshModelCatalog(ctx)
+	}
+	if forceRefresh {
+		if err := refresh(); err != nil {
+			return gmpModelSelectionResultMsg{action: msg, err: err}
+		}
+	}
+	entry, ok := gw.ModelCatalogEntry(msg.Model.Provider, msg.Model.Model)
+	if !ok && !forceRefresh {
+		if err := refresh(); err != nil {
+			return gmpModelSelectionResultMsg{action: msg, err: err}
 		}
 		entry, ok = gw.ModelCatalogEntry(msg.Model.Provider, msg.Model.Model)
 	}
 	if ok && (!entry.Available || msg.ReAuthenticate) {
 		if !entry.LoginAvailable {
-			return util.ReportError(fmt.Errorf("model unavailable: %s/%s", msg.Model.Provider, msg.Model.Model))
+			return gmpModelSelectionResultMsg{
+				action: msg,
+				err:    fmt.Errorf("model unavailable: %s/%s", msg.Model.Provider, msg.Model.Model),
+			}
 		}
-		pending := msg
-		m.pendingGmpModelSelection = &pending
-		m.dialog.CloseDialog(dialog.ModelsID)
-		return m.runGmpAuthCommand(auth.CommandLogin, entry.Provider)
+		return gmpModelSelectionResultMsg{action: msg, loginProvider: entry.Provider}
 	}
-	return m.applyGmpModelSelection(gw, msg)
+	if err := gw.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
+		return gmpModelSelectionResultMsg{action: msg, err: err}
+	}
+	if err := refresh(); err != nil {
+		slog.Warn("gmp: catalog refresh after model select failed", "error", err)
+	}
+	return gmpModelSelectionResultMsg{action: msg, applied: true}
 }
 
-func (m *UI) applyGmpModelSelection(gw *workspace.GmpWorkspace, msg dialog.ActionSelectModel) tea.Cmd {
+// handleGmpModelSelectionResult applies the UI-side effects of a finished
+// model selection: theme, dialogs, onboarding transition, status message.
+func (m *UI) handleGmpModelSelectionResult(msg gmpModelSelectionResultMsg) tea.Cmd {
+	if msg.err != nil {
+		return util.ReportError(msg.err)
+	}
+	if msg.loginProvider != "" {
+		pending := msg.action
+		m.pendingGmpModelSelection = &pending
+		return m.runGmpAuthCommand(auth.CommandLogin, msg.loginProvider)
+	}
+	if !msg.applied {
+		return nil
+	}
 	var cmds []tea.Cmd
 	isOnboarding := m.state == uiOnboarding
-	providerID := msg.Model.Provider
-
-	if err := gw.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
-		return util.ReportError(err)
+	if msg.action.ModelType == config.SelectedModelTypeLarge {
+		m.applyProviderTheme(msg.action.Model.Provider)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := gw.RefreshModelCatalog(ctx); err != nil {
-		cmds = append(cmds, util.ReportError(err))
-	}
-	cancel()
-
-	if msg.ModelType == config.SelectedModelTypeLarge {
-		m.applyProviderTheme(providerID)
-	}
-
 	m.dialog.CloseDialog(dialog.GmpAuthID)
 	m.dialog.CloseDialog(dialog.ModelsID)
-
 	if isOnboarding {
 		m.setState(uiLanding, uiFocusEditor)
 		m.com.Config().SetupAgents()
-		if err := gw.InitCoderAgent(context.TODO()); err != nil {
-			cmds = append(cmds, util.ReportError(err))
+		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
+			cmds = append(cmds, func() tea.Msg {
+				if err := gw.InitCoderAgent(context.TODO()); err != nil {
+					return util.InfoMsg{Type: util.InfoTypeError, Msg: err.Error()}
+				}
+				return nil
+			})
 		}
 	}
-
-	modelMsg := fmt.Sprintf("%s model changed to %s", msg.ModelType, msg.Model.Model)
+	modelMsg := fmt.Sprintf("%s model changed to %s", msg.action.ModelType, msg.action.Model.Model)
 	cmds = append(cmds, util.ReportInfo(modelMsg))
 	return tea.Batch(cmds...)
 }
@@ -86,12 +129,9 @@ func (m *UI) retryPendingGmpModelSelection() tea.Cmd {
 	}
 	pending := *m.pendingGmpModelSelection
 	m.pendingGmpModelSelection = nil
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := gw.RefreshModelCatalog(ctx); err != nil {
-		return util.ReportError(err)
-	}
-	return m.handleGmpSelectModel(gw, pending)
+	// Post-login the catalog still has the entry as unauthenticated; force a
+	// refresh off-loop before re-resolving.
+	return func() tea.Msg { return resolveGmpModelSelection(gw, pending, true) }
 }
 
 func (m *UI) openAuthenticationDialog(provider catwalk.Provider, _ config.SelectedModel, _ config.SelectedModelType) tea.Cmd {
