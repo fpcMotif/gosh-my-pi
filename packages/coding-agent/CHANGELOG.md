@@ -20,6 +20,8 @@
 
 ### Fixed
 
+- Fixed `auth.login` deadlocking the RPC backend: the stdin loop awaited the login command inline while the login flow awaited a correlated `extension_ui_response` that could only arrive on that same loop. Interactive login (provider picker, code prompts) now runs detached like `prompt`, emitting its response when the flow completes.
+- Fixed the Go TUI auth dialog never closing itself: `Action` messages emitted by dialog commands (e.g. the auth dialog's self-close) are now consumed by the dialog router instead of being silently dropped.
 - Fixed the RPC auth picker registering Kimi under the id `kimi` while the model catalog keys on `kimi-code`: a completed Kimi login now authenticates the catalog's Kimi models instead of being stored under an id nothing looks up.
 - Kimi-family models now default to the `replace` edit variant (hashline support is unreliable for them); `PI_STRICT_EDIT_MODE=1` restores the strict default (port of upstream ac904fc70).
 - Fixed vivid `RowSplit` layouts so an explicit empty separator omits the default vertical rule.
