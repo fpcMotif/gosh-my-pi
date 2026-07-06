@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -59,7 +58,7 @@ export class TempDir {
 				lastError = error;
 				const code = (error as NodeJS.ErrnoException).code;
 				if (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") {
-					throw err;
+					throw error;
 				}
 				const deadline = Date.now() + 250;
 				while (Date.now() < deadline) {
@@ -72,9 +71,14 @@ export class TempDir {
 			// `cmd.exe /c rd /s /q` uses WIN32 RemoveDirectoryW / DeleteFileW
 			// directly; it has different (more forgiving) lock semantics than
 			// the libuv path that fs.rmSync rides on under Bun on Windows.
-			execSync(`cmd.exe /c rd /s /q "${this.#path}"`, { stdio: "ignore" });
-			this.#removePromise = Promise.resolve();
-			return;
+			const result = Bun.spawnSync(["cmd.exe", "/c", "rd", "/s", "/q", this.#path], {
+				stdout: "ignore",
+				stderr: "ignore",
+			});
+			if (result.success) {
+				this.#removePromise = Promise.resolve();
+				return;
+			}
 		} catch {
 			// Fall through to throw the last fs error.
 		}

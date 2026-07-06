@@ -545,7 +545,7 @@ function rowToMessageStats(row: Record<string, unknown>): MessageStats {
 		timestamp: row.timestamp,
 		duration: row.duration,
 		ttft: row.ttft,
-		stopReason: row.stop_reason as any,
+		stopReason: row.stop_reason as MessageStats["stopReason"],
 		errorMessage: row.error_message,
 		usage: {
 			input: row.input_tokens,

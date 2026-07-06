@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { AuthCredentialStore } from "../src/auth-credential-store";
 import { AuthStorage } from "../src/auth-storage";
 import type { Provider } from "../src/types";
 import type { UsageCredential, UsageFetchContext, UsageFetchParams, UsageProvider, UsageReport } from "../src/usage";
+import * as kimiOAuth from "../src/utils/oauth/kimi";
 import { registerOAuthProvider, unregisterOAuthProviders } from "../src/utils/oauth";
 
 describe("AuthStorage credential probes", () => {
@@ -77,6 +79,72 @@ describe("AuthStorage credential probes", () => {
 		});
 
 		expect(await authStorage.peekApiKey("custom-oauth")).toBe("projected:oauth-access");
+	});
+});
+
+describe("AuthStorage kimi -> kimi-code canonicalization", () => {
+	let tempDir: string;
+	let authStorage: AuthStorage;
+
+	beforeEach(async () => {
+		unregisterOAuthProviders();
+		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-ai-auth-storage-kimi-"));
+		authStorage = await AuthStorage.create(path.join(tempDir, "agent.db"));
+	});
+
+	afterEach(async () => {
+		unregisterOAuthProviders();
+		vi.restoreAllMocks();
+		authStorage.close();
+		await fs.rm(tempDir, { recursive: true, force: true });
+	});
+
+	test("login('kimi') stores the credential under the canonical 'kimi-code' provider id", async () => {
+		vi.spyOn(kimiOAuth, "loginKimi").mockResolvedValue({
+			access: "kimi-access",
+			refresh: "kimi-refresh",
+			expires: Date.now() + 600_000,
+		});
+
+		await authStorage.login("kimi", {
+			onAuth: () => {},
+			onPrompt: async () => "",
+		});
+
+		const providers = authStorage.list();
+		expect(providers).toContain("kimi-code");
+		expect(providers).not.toContain("kimi");
+		expect(authStorage.has("kimi-code")).toBe(true);
+		expect(authStorage.has("kimi")).toBe(false);
+	});
+
+	test("reload() migrates legacy 'kimi' rows in the underlying store to 'kimi-code'", async () => {
+		const store = await AuthCredentialStore.open(path.join(tempDir, "legacy.db"));
+		try {
+			store.saveAuthCredential("kimi", {
+				type: "oauth",
+				access: "legacy-access",
+				refresh: "legacy-refresh",
+				expires: Date.now() + 600_000,
+			});
+
+			const migratable = await AuthStorage.create(path.join(tempDir, "legacy.db"));
+			try {
+				await migratable.reload();
+
+				const providers = migratable.list();
+				expect(providers).toContain("kimi-code");
+				expect(providers).not.toContain("kimi");
+
+				const rows = store.listAuthCredentials();
+				expect(rows.some(r => r.provider === "kimi")).toBe(false);
+				expect(rows.some(r => r.provider === "kimi-code")).toBe(true);
+			} finally {
+				migratable.close();
+			}
+		} finally {
+			store.close();
+		}
 	});
 });
 

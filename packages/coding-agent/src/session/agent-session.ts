@@ -281,6 +281,12 @@ export interface PromptOptions {
 	attribution?: MessageAttribution;
 	/** Skip pre-send compaction checks for this prompt (internal use for maintenance flows). */
 	skipCompactionCheck?: boolean;
+	/**
+	 * Optional host correlation id stamped onto the resulting user/developer
+	 * message's `id`. Lets an embedder (the RPC bridge) reconcile the echoed
+	 * message by id instead of by content. Opaque to the runtime.
+	 */
+	clientMessageId?: string;
 }
 
 /** Result from cycleModel() */
@@ -1975,6 +1981,7 @@ export class AgentSession {
 		}
 
 		const promptAttribution = options?.attribution ?? (options?.synthetic === true ? "agent" : "user");
+		const correlationId = options?.clientMessageId;
 		const message =
 			options?.synthetic === true
 				? {
@@ -1982,8 +1989,15 @@ export class AgentSession {
 						content: userContent,
 						attribution: promptAttribution,
 						timestamp: Date.now(),
+						...(correlationId !== undefined && { id: correlationId }),
 					}
-				: { role: "user" as const, content: userContent, attribution: promptAttribution, timestamp: Date.now() };
+				: {
+						role: "user" as const,
+						content: userContent,
+						attribution: promptAttribution,
+						timestamp: Date.now(),
+						...(correlationId !== undefined && { id: correlationId }),
+					};
 
 		if (eagerTodoPrelude) {
 			this.#toolChoiceQueue.pushOnce(eagerTodoPrelude.toolChoice, {

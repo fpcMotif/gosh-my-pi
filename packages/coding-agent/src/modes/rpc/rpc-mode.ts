@@ -15,7 +15,7 @@
  * - Events: WireEventV1 (10 variants), translated from internal AgentSessionEvent
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
-import { $env, logger, readJsonl, Snowflake } from "@oh-my-pi/pi-utils";
+import { $env, logger, readLines, Snowflake } from "@oh-my-pi/pi-utils";
 import type {
 	ExtensionUIContext,
 	ExtensionUIDialogOptions,
@@ -40,8 +40,6 @@ import type {
 	RpcCommand,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
-	RpcHostToolCallRequest,
-	RpcHostToolCancelRequest,
 	RpcHostToolDefinition,
 	RpcResponse,
 	RpcSessionState,
@@ -76,7 +74,7 @@ type AuthProviderMetadata = {
 
 const BUILTIN_AUTH_PROVIDERS: readonly AuthProviderMetadata[] = [
 	{ id: "openai-codex", name: "OpenAI Codex", available: true },
-	{ id: "kimi", name: "Kimi", available: true },
+	{ id: "kimi-code", name: "Kimi", available: true },
 	{ id: "moonshot", name: "Moonshot", available: true },
 	{ id: "zai", name: "zAI", available: true },
 	{ id: "kagi", name: "Kagi", available: true },
@@ -661,8 +659,9 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	// never set the hook; here we set it for the lifetime of the RPC session.
 	session.agent.setToolApprovalHook(createToolApprovalHook({ correlator: extensionUIRequests, output }));
 
-	// Handle a single command
-	const handleCommand = async (command: RpcCommand): Promise<RpcResponse> => {
+	// Handle a single command. Returns null when the command runs detached
+	// and emits its own response later (it must not block the stdin loop).
+	const handleCommand = async (command: RpcCommand): Promise<RpcResponse | null> => {
 		const id = command.id;
 
 		switch (command.type) {
@@ -674,6 +673,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 					.prompt(command.message, {
 						images: command.images,
 						streamingBehavior: command.streamingBehavior,
+						clientMessageId: command.clientMessageId,
 					})
 					.catch((error: Error) => emitDetachedPromptFailure(output, error));
 				return success(id, "prompt");
@@ -697,7 +697,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			case "abort_and_prompt": {
 				await session.abort();
 				session
-					.prompt(command.message, { images: command.images })
+					.prompt(command.message, { images: command.images, clientMessageId: command.clientMessageId })
 					.catch((error: Error) => emitDetachedPromptFailure(output, error));
 				return success(id, "abort_and_prompt");
 			}
@@ -888,41 +888,53 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				// Empty / missing provider triggers backend-driven picker via
 				// correlated auth.pick_provider extension_ui_request. The Go
 				// side (Bubble Tea dialog.GmpAuth and CLI authCLIDriver) both
-				// already route this method; only the backend emit was missing.
-				// See ADR 0002.
-				const resolved = await resolveAuthLoginProvider(command.provider, extensionUIRequests, output, () =>
-					getAuthProviderMetadata()
-						.filter(p => p.available)
-						.map(p => p.id),
-				);
-				if (!resolved.ok) {
-					return errorResp(id, "auth.login", resolved.error);
-				}
-				const provider = resolved.provider;
-				const controller = new RpcOAuthController({
-					provider,
-					correlator: extensionUIRequests,
-					output,
+				// already route this method. See ADR 0002.
+				//
+				// Detached like `prompt`: the login flow awaits correlated
+				// extension_ui_responses (picker, code prompts) that arrive on
+				// this same stdin loop, so awaiting it inside handleCommand
+				// deadlocks the reader on its own reply. The final response for
+				// this command id is emitted when the flow completes.
+				const login = async (): Promise<RpcResponse> => {
+					const resolved = await resolveAuthLoginProvider(command.provider, extensionUIRequests, output, () =>
+						getAuthProviderMetadata()
+							.filter(p => p.available)
+							.map(p => p.id),
+					);
+					if (!resolved.ok) {
+						return errorResp(id, "auth.login", resolved.error);
+					}
+					const provider = resolved.provider;
+					const controller = new RpcOAuthController({
+						provider,
+						correlator: extensionUIRequests,
+						output,
+					});
+					return runAuthCommand(
+						id,
+						"auth.login",
+						async () => {
+							await session.modelRegistry.authStorage.login(provider as OAuthProviderId, {
+								onAuth: info => controller.onAuth(info),
+								onProgress: msg => controller.onProgress(msg),
+								onPrompt: prompt => controller.onPrompt(prompt),
+								onManualCodeInput: () => controller.onManualCodeInput(),
+							});
+							// Snapshot the post-login authenticated provider list so
+							// the Go-side workspace refreshes its catalog without an
+							// extra round-trip. AuthStorage.list() is the source of
+							// truth for "who has stored credentials".
+							controller.emitResult(true, undefined, session.modelRegistry.authStorage.list());
+							return { provider, ok: true };
+						},
+						message => controller.emitResult(false, message),
+					);
+				};
+				login().then(output, (error: Error) => {
+					logger.warn("detached auth.login rejected", { error: error.message });
+					output(errorResp(id, "auth.login", error.message));
 				});
-				return runAuthCommand(
-					id,
-					"auth.login",
-					async () => {
-						await session.modelRegistry.authStorage.login(provider as OAuthProviderId, {
-							onAuth: info => controller.onAuth(info),
-							onProgress: msg => controller.onProgress(msg),
-							onPrompt: prompt => controller.onPrompt(prompt),
-							onManualCodeInput: () => controller.onManualCodeInput(),
-						});
-						// Snapshot the post-login authenticated provider list so
-						// the Go-side workspace refreshes its catalog without an
-						// extra round-trip. AuthStorage.list() is the source of
-						// truth for "who has stored credentials".
-						controller.emitResult(true, undefined, session.modelRegistry.authStorage.list());
-						return { provider, ok: true };
-					},
-					message => controller.emitResult(false, message),
-				);
+				return null;
 			}
 
 			case "auth.logout": {
@@ -971,9 +983,20 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		process.exit(0);
 	}
 
-	// Listen for JSON input using Bun's stdin
-	for await (const parsed of readJsonl(Bun.stdin.stream())) {
+	// Listen for JSON input using Bun's stdin. Read raw lines and parse each
+	// frame individually: a single malformed line must surface a recoverable
+	// `parse` error response, not throw out of the loop and kill the server.
+	// `readJsonl` re-throws a JSONL syntax error as a generator throw that
+	// escapes the in-body try/catch, so any partial write / truncated frame /
+	// non-JSON noise on stdin would take the backend down and strand every
+	// in-flight request (wire spec: unknown input is soft-handled, not fatal).
+	const decoder = new TextDecoder();
+	for await (const lineBytes of readLines(Bun.stdin.stream())) {
 		try {
+			const raw = decoder.decode(lineBytes).trim();
+			if (raw.length === 0) continue;
+			const parsed: unknown = JSON.parse(raw);
+
 			// Handle extension UI responses — route via correlator. Stale ids are no-ops.
 			if ((parsed as RpcExtensionUIResponse).type === "extension_ui_response") {
 				const response = parsed as RpcExtensionUIResponse;
@@ -994,7 +1017,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			// Handle regular commands
 			const command = parsed as RpcCommand;
 			const response = await handleCommand(command);
-			output(response);
+			if (response !== null) output(response);
 
 			// Check for deferred shutdown request (idle between commands)
 			await checkShutdownRequested();

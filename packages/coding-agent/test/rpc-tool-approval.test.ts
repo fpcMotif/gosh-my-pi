@@ -111,6 +111,24 @@ describe("createToolApprovalHook", () => {
 		expect(await hook(makeToolCall("bash", { command: "ls" }))).toEqual({ approved: true });
 		expect(frames).toHaveLength(1);
 	});
+
+	it("fails closed: a gated tool is DENIED when the host never replies and the dialog times out (ADR 0007)", async () => {
+		const correlator = new RequestCorrelator();
+		const frames: CapturedFrame[] = [];
+		const hook = createToolApprovalHook({
+			correlator,
+			output: f => frames.push(f as CapturedFrame),
+			timeoutMs: 25,
+		});
+		// No correlator.resolve(...) — the host never answers. The hook must
+		// drive the real timeout path (register → defaultValue undefined →
+		// mapApprovalResponse) and deny, never silently approve a destructive tool.
+		const decision = await hook(makeToolCall("bash", { command: "rm -rf /" }));
+		expect(decision.approved).toBe(false);
+		// The request was emitted, then settled by timeout and cleaned up.
+		expect(frames).toHaveLength(1);
+		expect(correlator.pendingCount).toBe(0);
+	});
 });
 
 describe("buildToolApprovalParams", () => {

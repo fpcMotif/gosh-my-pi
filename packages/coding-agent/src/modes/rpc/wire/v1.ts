@@ -110,6 +110,13 @@ export type WireErrorKindV1 =
 export interface WireUserMessageV1 {
 	role: "user";
 	content: string | WireUserContentBlockV1[];
+	/**
+	 * Optional host correlation id (v1-additive). When the host sends a
+	 * `clientMessageId` on a prompt, the backend echoes it here so the frontend
+	 * can reconcile this message with the one it created optimistically by id
+	 * rather than by content. Absent for backends/messages that don't set it.
+	 */
+	id?: string;
 	synthetic?: boolean;
 	attribution?: WireMessageAttributionV1;
 	timestamp: number;
@@ -118,6 +125,8 @@ export interface WireUserMessageV1 {
 export interface WireDeveloperMessageV1 {
 	role: "developer";
 	content: string | WireUserContentBlockV1[];
+	/** Optional host correlation id (v1-additive). See {@link WireUserMessageV1.id}. */
+	id?: string;
 	attribution?: WireMessageAttributionV1;
 	timestamp: number;
 }

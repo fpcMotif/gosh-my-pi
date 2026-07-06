@@ -2,7 +2,12 @@ import { Snowflake } from "@oh-my-pi/pi-utils";
 import type { ToolApprovalDecision } from "@oh-my-pi/pi-agent-core";
 import type { ToolCall } from "@oh-my-pi/pi-ai";
 import type { RequestCorrelator } from "./request-correlator";
-import { type RpcExtensionUIResponse, ToolApprovalMethod, type ToolApprovalParams } from "./rpc-types";
+import {
+	type RpcExtensionUIResponse,
+	ToolApprovalMethod,
+	type ToolApprovalParams,
+	type ToolApprovalRequestPayload,
+} from "./rpc-types";
 import type { WireFrame } from "./wire/v1";
 
 /**
@@ -101,14 +106,16 @@ export function createToolApprovalHook(
 			timeoutMs,
 			defaultValue: undefined,
 		});
-		opts.output({
-			type: "extension_ui_request",
-			id,
+		// Type-lock the emit against the wire variant (DC7 / ADR 0007): a field
+		// drift in RpcExtensionUIRequest's tool.request_approval shape now fails
+		// to compile here instead of leaking a malformed frame onto the wire.
+		const payload: ToolApprovalRequestPayload = {
 			method: ToolApprovalMethod.RequestApproval,
 			toolCallId: toolCall.id,
 			toolName: toolCall.name,
 			params: buildToolApprovalParams(toolCall),
-		});
+		};
+		opts.output({ type: "extension_ui_request", id, ...payload });
 		return mapApprovalResponse(await promise);
 	};
 }

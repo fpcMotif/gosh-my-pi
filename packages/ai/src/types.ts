@@ -285,6 +285,13 @@ export type ProviderPayload = OpenAIResponsesHistoryPayload;
 export interface UserMessage {
 	role: "user";
 	content: string | (TextContent | ImageContent)[];
+	/**
+	 * Optional host-supplied correlation id. Opaque to the runtime; an embedder
+	 * (e.g. the RPC bridge) sets it from a client message id so a frontend can
+	 * reconcile an echoed message with the one it created optimistically rather
+	 * than matching by content. Inert everywhere it is not explicitly read.
+	 */
+	id?: string;
 	/** True if the message was injected by the system (e.g., auto-continue). */
 	synthetic?: boolean;
 	/** Who initiated this message for billing/attribution semantics. */
@@ -297,6 +304,8 @@ export interface UserMessage {
 export interface DeveloperMessage {
 	role: "developer";
 	content: string | (TextContent | ImageContent)[];
+	/** Optional host-supplied correlation id. See {@link UserMessage.id}. */
+	id?: string;
 	/** Who initiated this message for billing/attribution semantics. */
 	attribution?: MessageAttribution;
 	/** Provider-specific opaque payload used to reconstruct transport-native history. */
@@ -435,6 +444,19 @@ export interface OpenAICompat {
 	 * enabled` whenever both are present. Default: auto-detected (Kimi).
 	 */
 	disableReasoningOnForcedToolChoice?: boolean;
+	/**
+	 * Whether forced `tool_choice` values (`"required"` or named tools) are accepted.
+	 * When false, request builders keep tools available but downgrade forced choices
+	 * to provider-default auto selection. Default: true.
+	 */
+	supportsForcedToolChoice?: boolean;
+	/**
+	 * How to represent a caller-disabled thinking request when `thinkingFormat: "zai"`.
+	 * "disabled" sends `thinking: { type: "disabled" }` (default). "omit" drops the
+	 * `thinking` field entirely instead, for thinking-required models (e.g. native
+	 * Kimi K2.7 Code) that 400 on an explicit disabled value. Default: "disabled".
+	 */
+	reasoningDisableMode?: "disabled" | "omit";
 	/** OpenRouter-specific routing preferences. Only used when baseUrl points to OpenRouter. */
 	openRouterRouting?: OpenRouterRouting;
 	/** Vercel AI Gateway routing preferences. Only used when baseUrl points to Vercel AI Gateway. */

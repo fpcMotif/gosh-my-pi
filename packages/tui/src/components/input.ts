@@ -27,6 +27,7 @@ interface InputState {
 export class Input implements Component, Focusable {
 	#value: string = "";
 	#cursor: number = 0; // Cursor position in the value
+	placeholder?: string;
 	onSubmit?: (value: string) => void;
 	onEscape?: () => void;
 
@@ -380,7 +381,12 @@ export class Input implements Component, Focusable {
 
 		const cursorIndex = this.#cursor;
 		// Ensure we always have a grapheme to invert at the cursor (space at end).
-		const displayValue = cursorIndex >= this.#value.length ? `${this.#value} ` : this.#value;
+		let displayValue = cursorIndex >= this.#value.length ? `${this.#value} ` : this.#value;
+		let isPlaceholder = false;
+		if (this.#value === "" && this.placeholder) {
+			displayValue = `${this.placeholder} `;
+			isPlaceholder = true;
+		}
 
 		const totalCols = visibleWidth(displayValue);
 		const cursorCols = visibleWidth(displayValue.slice(0, cursorIndex));
@@ -429,7 +435,10 @@ export class Input implements Component, Focusable {
 		const remainingAfterWidth = Math.max(0, availableWidth - beforeWidth - cursorWidth);
 		const clampedAfterCursor = sliceWithWidth(afterCursor, 0, remainingAfterWidth, true).text;
 		const renderedNoMarker = beforeCursor + cursorChar + clampedAfterCursor;
-		const textWithCursor = beforeCursor + marker + cursorChar + clampedAfterCursor;
+		let textWithCursor = beforeCursor + marker + cursorChar + clampedAfterCursor;
+		if (isPlaceholder) {
+			textWithCursor = `\x1b[90m${beforeCursor}\x1b[39m${marker}${cursorChar}\x1b[90m${clampedAfterCursor}\x1b[39m`;
+		}
 
 		const visualLength = visibleWidth(renderedNoMarker);
 		const pad = padding(Math.max(0, availableWidth - visualLength));

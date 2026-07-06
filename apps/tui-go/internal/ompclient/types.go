@@ -50,6 +50,11 @@ type Command struct {
 	// Streaming behavior for prompt: "steer" | "followUp".
 	StreamingBehavior string `json:"streamingBehavior,omitempty"`
 
+	// ClientMessageID is a correlation id for prompt: the backend stamps it
+	// onto the resulting user message (echoed as WireUserMessageV1.id) so the
+	// frontend can reconcile the echo by id instead of by content.
+	ClientMessageID string `json:"clientMessageId,omitempty"`
+
 	// new_session
 	ParentSession string `json:"parentSession,omitempty"`
 
@@ -193,13 +198,6 @@ type HostToolResult struct {
 	ID      string `json:"id"`
 	Result  any    `json:"result"`
 	IsError bool   `json:"isError,omitempty"`
-}
-
-// HostToolUpdate mirrors RpcHostToolUpdate.
-type HostToolUpdate struct {
-	Type          string `json:"type"` // "host_tool_update"
-	ID            string `json:"id"`
-	PartialResult any    `json:"partialResult"`
 }
 
 // ExtensionUIResp mirrors RpcExtensionUIResponse. Exactly one of

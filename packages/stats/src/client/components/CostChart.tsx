@@ -92,8 +92,12 @@ export function CostChart({ costSeries }: CostChartProps) {
 	const theme = useSystemTheme();
 	const chartTheme = CHART_THEMES[theme];
 
-	const cutoff = Date.now() - days * 86400000;
-	const filtered = useMemo(() => costSeries.filter(p => p.timestamp >= cutoff), [costSeries, cutoff]);
+	// Date.now() is read inside the memo (not as a dependency) so filtering only
+	// reruns when costSeries or days actually changes, not on every render.
+	const filtered = useMemo(() => {
+		const cutoff = Date.now() - days * 86400000;
+		return costSeries.filter(p => p.timestamp >= cutoff);
+	}, [costSeries, days]);
 
 	const chartData = useMemo(
 		() => (byModel ? buildByModelSeries(filtered) : buildAggregateSeries(filtered)),
@@ -248,7 +252,7 @@ function ChartWrapper({ byModel, days, onByModelChange, onDaysChange, empty, chi
 						<button
 							type="button"
 							onClick={() => onByModelChange(false)}
-							className={`tab-btn text-xs ${!byModel ? "active" : ""}`}
+							className={`tab-btn text-xs ${byModel ? "" : "active"}`}
 						>
 							All Models
 						</button>
@@ -300,7 +304,7 @@ function buildAggregateSeries(points: CostTimeSeriesPoint[]): ChartSeries {
 		byDay.set(point.timestamp, (byDay.get(point.timestamp) ?? 0) + point.cost);
 	}
 
-	const sorted = [...byDay.entries()].sort((a, b) => a[0] - b[0]);
+	const sorted = [...byDay.entries()].toSorted((a, b) => a[0] - b[0]);
 	return {
 		labels: sorted.map(([ts]) => format(new Date(ts), "MMM d")),
 		datasets: [{ label: "Cost", data: sorted.map(([, cost]) => cost) }],
@@ -322,7 +326,7 @@ function buildByModelSeries(points: CostTimeSeriesPoint[], topN = 5): ChartSerie
 		}
 	}
 
-	const sorted = [...totals.entries()].sort((a, b) => b[1].total - a[1].total);
+	const sorted = [...totals.entries()].toSorted((a, b) => b[1].total - a[1].total);
 	const topEntries = sorted.slice(0, topN);
 	const topKeys = new Set(topEntries.map(([key]) => key));
 
@@ -337,7 +341,7 @@ function buildByModelSeries(points: CostTimeSeriesPoint[], topN = 5): ChartSerie
 	}
 
 	// Collect all day buckets
-	const allDays = [...new Set(points.map(p => p.timestamp))].sort((a, b) => a - b);
+	const allDays = [...new Set(points.map(p => p.timestamp))].toSorted((a, b) => a - b);
 
 	// Build per-day, per-series totals
 	const seriesNames = topEntries.map(([key]) => labelByKey.get(key) ?? key);
@@ -351,7 +355,8 @@ function buildByModelSeries(points: CostTimeSeriesPoint[], topN = 5): ChartSerie
 	for (const point of points) {
 		const key = `${point.model}::${point.provider}`;
 		const label = topKeys.has(key) ? (labelByKey.get(key) ?? point.model) : "Other";
-		const row = dayMap.get(point.timestamp)!;
+		const row = dayMap.get(point.timestamp);
+		if (!row) continue;
 		row[label] = (row[label] ?? 0) + point.cost;
 	}
 

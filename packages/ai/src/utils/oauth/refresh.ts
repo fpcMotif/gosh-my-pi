@@ -20,6 +20,7 @@ export async function refreshOAuthToken(
 			newCredentials = await refreshOpenAICodexToken(credentials.refresh);
 			break;
 		case "kimi":
+		case "kimi-code":
 			newCredentials = await refreshKimiToken(credentials.refresh);
 			break;
 		case "minimax-code":

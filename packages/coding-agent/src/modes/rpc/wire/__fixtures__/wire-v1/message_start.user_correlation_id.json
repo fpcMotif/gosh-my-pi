@@ -1,0 +1,9 @@
+{
+	"type": "message_start",
+	"message": {
+		"role": "user",
+		"content": "hi",
+		"id": "client-msg-7",
+		"timestamp": 1717200000000
+	}
+}

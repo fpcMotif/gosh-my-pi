@@ -60,4 +60,19 @@ describe("resolveEditMode", () => {
 			resolveEditMode(createSession({ activeModel: "openai-codex/gpt-5.3-codex-spark", settingsMode: "hashline" })),
 		).toBe("hashline");
 	});
+
+	test("defaults Kimi models to replace mode, and strict edit mode disables the fallback", () => {
+		delete Bun.env.PI_EDIT_VARIANT;
+		delete Bun.env.PI_STRICT_EDIT_MODE;
+
+		expect(resolveEditMode(createSession({ activeModel: "openrouter/moonshotai/Kimi-K2-Instruct" }))).toBe("replace");
+
+		Bun.env.PI_STRICT_EDIT_MODE = "1";
+
+		expect(
+			resolveEditMode(
+				createSession({ activeModel: "openrouter/moonshotai/Kimi-K2-Instruct", settingsMode: "hashline" }),
+			),
+		).toBe("hashline");
+	});
 });

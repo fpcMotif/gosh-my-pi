@@ -44,6 +44,7 @@ export function resolveEditMode(session: EditModeSessionLike): EditMode {
 		if (activeModel?.includes("mini") === true) return "replace";
 		if (activeModel?.includes("haiku") === true) return "replace";
 		if (activeModel?.includes("flash") === true) return "replace";
+		if (activeModel?.toLowerCase().includes("kimi") === true) return "replace";
 	}
 
 	const settingsMode = normalizeEditMode(String(session.settings.get("edit.mode") ?? ""));

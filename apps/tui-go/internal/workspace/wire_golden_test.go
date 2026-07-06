@@ -143,6 +143,27 @@ func TestWireGoldenMessageStart(t *testing.T) {
 	}
 }
 
+// TestWireGoldenUserCorrelationID: a user message carrying a host-supplied
+// correlation id (WireUserMessageV1.id) decodes with that id adopted as the
+// message id, so reconciliation is an exact id hit rather than content matching.
+// Pins the same fixture the TS encoder emits in golden-fixtures.test.ts.
+func TestWireGoldenUserCorrelationID(t *testing.T) {
+	raw := loadWireFixture(t, "message_start.user_correlation_id.json")
+	w := newTestGmpWorkspace()
+
+	msg := w.handleMessageStart(raw)
+	ev, ok := msg.(pubsub.Event[message.Message])
+	if !ok {
+		t.Fatalf("handleMessageStart returned %T, want pubsub.Event[message.Message]", msg)
+	}
+	if ev.Payload.Role != message.User {
+		t.Errorf("role = %q, want user", ev.Payload.Role)
+	}
+	if ev.Payload.ID != "client-msg-7" {
+		t.Errorf("ID = %q, want the echoed correlation id client-msg-7", ev.Payload.ID)
+	}
+}
+
 // TestWireGoldenMessageUpdateTextDelta: the text_delta fixture appends its delta
 // to the streaming assistant message.
 func TestWireGoldenMessageUpdateTextDelta(t *testing.T) {
@@ -311,5 +332,38 @@ func TestWireGoldenOrderingSequence(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("ordering[%d] = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+// TestWireGoldenExtensionErrorFrame pins the extension_error diagnostic frame
+// (wire-02 / G22). The TS server emits {type, extensionPath, event, error}
+// (rpc-mode.ts extensionRunner.onError). Decoding into the three-field struct
+// catches a TS-side field rename, and the second half asserts that the gmp
+// bridge actually consumes the frame in translateEvent rather than dropping it
+// on the unknown-kind default — a frozen-looking transcript with no log line
+// was the bug GMP-CORR-3 fixed.
+func TestWireGoldenExtensionErrorFrame(t *testing.T) {
+	raw := loadWireFixture(t, "extension_error.json")
+	var frame struct {
+		Type          string `json:"type"`
+		ExtensionPath string `json:"extensionPath"`
+		Event         string `json:"event"`
+		Error         string `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		t.Fatalf("decode extension_error frame: %v", err)
+	}
+	if frame.Type != "extension_error" {
+		t.Errorf("Type = %q, want extension_error", frame.Type)
+	}
+	if frame.ExtensionPath == "" || frame.Event == "" || frame.Error == "" {
+		t.Errorf("extension_error fields must all decode non-empty, got %+v", frame)
+	}
+
+	// The diagnostic frame must be consumed (logged, returns nil) by
+	// translateEvent, not routed to the unknown-kind default and silently lost.
+	w := NewGmpWorkspace(nil, t.TempDir())
+	if msg := w.translateEvent(&ompclient.AgentEvent{Kind: "extension_error", Payload: raw}); msg != nil {
+		t.Errorf("translateEvent(extension_error) = %T, want nil (diagnostic logged, not surfaced)", msg)
 	}
 }

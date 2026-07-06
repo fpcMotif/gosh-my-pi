@@ -54,11 +54,10 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
 	return stats.length;
 }
 
-/**
- * Sync all session files to the database.
- * Returns the number of new entries processed.
- */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+let currentSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+let nextSyncPromise: Promise<{ processed: number; files: number }> | null = null;
+
+async function doSyncAllSessions(): Promise<{ processed: number; files: number }> {
 	await initDb();
 
 	const files = await listAllSessionFiles();
@@ -73,6 +72,38 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 	}
 
 	return { processed: totalProcessed, files: filesProcessed };
+}
+
+async function executeSync(): Promise<{ processed: number; files: number }> {
+	try {
+		return await doSyncAllSessions();
+	} finally {
+		if (nextSyncPromise) {
+			currentSyncPromise = nextSyncPromise;
+			nextSyncPromise = null;
+		} else {
+			currentSyncPromise = null;
+		}
+	}
+}
+
+/**
+ * Sync all session files to the database.
+ * Returns the number of new entries processed.
+ *
+ * Performance: Uses promise coalescing to deduplicate concurrent sync requests.
+ * If a sync is ongoing, new requests are batched into a single next sync to
+ * avoid redundant file I/O operations.
+ */
+export function syncAllSessions(): Promise<{ processed: number; files: number }> {
+	if (currentSyncPromise) {
+		if (!nextSyncPromise) {
+			nextSyncPromise = currentSyncPromise.catch(() => {}).then(() => executeSync());
+		}
+		return nextSyncPromise;
+	}
+	currentSyncPromise = executeSync();
+	return currentSyncPromise;
 }
 
 /**

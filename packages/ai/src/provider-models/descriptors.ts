@@ -82,7 +82,7 @@ export const PROVIDER_DESCRIPTORS: readonly ProviderDescriptor[] = [
 		"kimi-code",
 		"kimi-k2.5",
 		config => kimiCodeModelManagerOptions(config),
-		catalog("Kimi Code", ["KIMI_API_KEY"], { oauthProvider: "kimi" }),
+		catalog("Kimi Code", ["KIMI_API_KEY"], { oauthProvider: "kimi-code" }),
 	),
 	catalogDescriptor(
 		"zai",
