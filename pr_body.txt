@@ -1,0 +1,4 @@
+💡 What: Moved `Date.now()` inside `useMemo` blocks in `CostSummary.tsx` and `CostChart.tsx`.
+🎯 Why: `Date.now()` constantly changes, which was breaking the memoization cache on every re-render. This forced expensive array filtering and chart data recalculations even when the actual underlying data hadn't changed.
+📊 Impact: Prevents unnecessary data filtering and map/reduce operations, ensuring the heavy charting components only recalculate when `costSeries` or the time range actually updates. This significantly improves rendering performance when other state changes happen in these components.
+🔬 Measurement: Verify by rendering the components and checking React DevTools Profiler to see that `filtered`, `current`, and `previous` calculations are now skipped on re-renders unless the dependency arrays (`costSeries`, `days`) change.
