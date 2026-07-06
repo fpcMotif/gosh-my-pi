@@ -77,9 +77,77 @@ describe("RpcHostToolBridge", () => {
 			},
 		});
 
-		expect(execution).resolves.toEqual({
+		await expect(execution).resolves.toEqual({
 			content: [{ type: "text", text: "5" }],
 		});
+	});
+
+	it("rejects the pending execution with the joined text content of an error result (TC2)", async () => {
+		const frames: Array<RpcHostToolCallRequest | RpcHostToolCancelRequest> = [];
+		const bridge = new RpcHostToolBridge(frame => {
+			if (frame.type === "host_tool_call" || frame.type === "host_tool_cancel") {
+				frames.push(frame as unknown as RpcHostToolCallRequest | RpcHostToolCancelRequest);
+			}
+		});
+		const [tool] = bridge.setTools([
+			{
+				name: "host_fail",
+				description: "Fails in the host process",
+				parameters: { type: "object", properties: {}, additionalProperties: false },
+			},
+		]);
+
+		const execution = tool.execute("toolu_err", {});
+		const request = frames[0];
+		if (!request || request.type !== "host_tool_call") {
+			throw new Error("Expected host_tool_call frame");
+		}
+
+		// isError:true must reject with the text blocks joined by "\n".
+		bridge.handleResult({
+			type: "host_tool_result",
+			id: request.id,
+			isError: true,
+			result: {
+				content: [
+					{ type: "text", text: "line1" },
+					{ type: "text", text: "line2" },
+				],
+			},
+		});
+
+		await expect(execution).rejects.toThrow("line1\nline2");
+	});
+
+	it("rejects with the fallback message when an error result has no text content (TC2)", async () => {
+		const frames: Array<RpcHostToolCallRequest | RpcHostToolCancelRequest> = [];
+		const bridge = new RpcHostToolBridge(frame => {
+			if (frame.type === "host_tool_call" || frame.type === "host_tool_cancel") {
+				frames.push(frame as unknown as RpcHostToolCallRequest | RpcHostToolCancelRequest);
+			}
+		});
+		const [tool] = bridge.setTools([
+			{
+				name: "host_fail_empty",
+				description: "Fails with no text",
+				parameters: { type: "object", properties: {}, additionalProperties: false },
+			},
+		]);
+
+		const execution = tool.execute("toolu_err2", {});
+		const request = frames[0];
+		if (!request || request.type !== "host_tool_call") {
+			throw new Error("Expected host_tool_call frame");
+		}
+
+		bridge.handleResult({
+			type: "host_tool_result",
+			id: request.id,
+			isError: true,
+			result: { content: [] },
+		});
+
+		await expect(execution).rejects.toThrow("Host tool execution failed");
 	});
 
 	it("emits a cancel frame when the host tool execution is aborted", async () => {
@@ -236,5 +304,32 @@ function handle(frame) {
 		} finally {
 			client.stop();
 		}
+	});
+});
+
+describe("RpcClient shutdown", () => {
+	it("stop() rejects in-flight command promises instead of leaving them to hang (RPC-2)", async () => {
+		const scriptPath = path.join(os.tmpdir(), `omp-rpc-stop-${Date.now()}.js`);
+		tempPaths.push(scriptPath);
+		// A backend that becomes ready but never answers any command, so the
+		// command we fire stays pending until stop() settles it.
+		await Bun.write(
+			scriptPath,
+			`
+function write(frame) {
+	process.stdout.write(JSON.stringify(frame) + "\\n");
+}
+write({ type: "ready" });
+process.stdin.on("data", () => {});
+`,
+		);
+
+		const client = new RpcClient({ cliPath: scriptPath });
+		await client.start();
+		// get_state is never answered by the fake backend → in-flight.
+		const inflight = client.getState();
+		await Bun.sleep(25); // let the frame flush and register as pending
+		client.stop();
+		await expect(inflight).rejects.toThrow(/stopped/i);
 	});
 });

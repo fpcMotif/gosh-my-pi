@@ -8,11 +8,13 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/chat"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 )
 
 // testMessageItem is a minimal chat item used to populate the chat list
 // without pulling in full message rendering machinery.
 type testMessageItem struct {
+	*list.Versioned
 	id   string
 	text string
 }
@@ -20,8 +22,13 @@ type testMessageItem struct {
 func (m testMessageItem) ID() string           { return m.id }
 func (m testMessageItem) Render(int) string    { return m.text }
 func (m testMessageItem) RawRender(int) string { return m.text }
+func (m testMessageItem) Finished() bool       { return true }
 
 var _ chat.MessageItem = testMessageItem{}
+
+func newTestMessageItem(id, text string) testMessageItem {
+	return testMessageItem{Versioned: list.NewVersioned(), id: id, text: text}
+}
 
 // newTestUI builds a focused uiChat model with dynamic textarea sizing enabled.
 // It intentionally keeps dependencies minimal so layout behavior can be tested
@@ -88,10 +95,10 @@ func TestHandleTextareaHeightChange_FollowModeStaysAtBottom(t *testing.T) {
 
 	msgs := make([]chat.MessageItem, 0, 60)
 	for i := range 60 {
-		msgs = append(msgs, testMessageItem{
-			id:   "m-" + strconv.Itoa(i),
-			text: "message " + strconv.Itoa(i),
-		})
+		msgs = append(msgs, newTestMessageItem(
+			"m-"+strconv.Itoa(i),
+			"message "+strconv.Itoa(i),
+		))
 	}
 	u.chat.SetMessages(msgs...)
 	u.updateLayoutAndSize()

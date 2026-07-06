@@ -49,8 +49,6 @@ function extractStats(sessionFile: string, folder: string, entry: SessionMessage
 	};
 }
 
-const LF = 0x0a;
-
 function parseSessionEntriesLenient(bytes: Uint8Array): { entries: SessionEntry[]; read: number } {
 	const entries: SessionEntry[] = [];
 	let cursor = 0;
@@ -62,7 +60,7 @@ function parseSessionEntriesLenient(bytes: Uint8Array): { entries: SessionEntry[
 		}
 
 		if (error) {
-			const nextNewline = bytes.indexOf(LF, Math.max(read, cursor));
+			const nextNewline = Bun.indexOfLine(bytes, Math.max(read, cursor));
 			if (nextNewline === -1) break;
 			cursor = nextNewline + 1;
 			continue;
@@ -84,9 +82,14 @@ export async function parseSessionFile(
 	sessionPath: string,
 	fromOffset = 0,
 ): Promise<{ stats: MessageStats[]; newOffset: number }> {
-	let bytes: Uint8Array;
+	let unprocessed: Uint8Array;
+	const file = Bun.file(sessionPath);
+	const size = file.size;
+	const start = Math.max(0, Math.min(fromOffset, size));
+
 	try {
-		bytes = await Bun.file(sessionPath).bytes();
+		// Optimization: Use slice to only load the unread portion of the file into memory
+		unprocessed = await file.slice(start).bytes();
 	} catch (error) {
 		if (isEnoent(error)) return { stats: [], newOffset: fromOffset };
 		throw error;
@@ -94,8 +97,6 @@ export async function parseSessionFile(
 
 	const folder = extractFolderFromPath(sessionPath);
 	const stats: MessageStats[] = [];
-	const start = Math.max(0, Math.min(fromOffset, bytes.length));
-	const unprocessed = bytes.subarray(start);
 	const { entries, read } = parseSessionEntriesLenient(unprocessed);
 	for (const entry of entries) {
 		if (isAssistantMessage(entry)) {
@@ -114,7 +115,11 @@ export async function listSessionFolders(): Promise<string[]> {
 	try {
 		const sessionsDir = getSessionsDir();
 		const entries = await fs.readdir(sessionsDir, { withFileTypes: true });
-		return entries.filter(e => e.isDirectory()).map(e => path.join(sessionsDir, e.name));
+		const folders: string[] = [];
+		for (const e of entries) {
+			if (e.isDirectory()) folders.push(path.join(sessionsDir, e.name));
+		}
+		return folders;
 	} catch {
 		return [];
 	}
@@ -126,7 +131,11 @@ export async function listSessionFolders(): Promise<string[]> {
 export async function listSessionFiles(folderPath: string): Promise<string[]> {
 	try {
 		const entries = await fs.readdir(folderPath, { recursive: true, withFileTypes: true });
-		return entries.filter(e => e.isFile() && e.name.endsWith(".jsonl")).map(e => path.join(e.parentPath, e.name));
+		const files: string[] = [];
+		for (const e of entries) {
+			if (e.isFile() && e.name.endsWith(".jsonl")) files.push(path.join(e.parentPath, e.name));
+		}
+		return files;
 	} catch {
 		return [];
 	}
@@ -137,14 +146,8 @@ export async function listSessionFiles(folderPath: string): Promise<string[]> {
  */
 export async function listAllSessionFiles(): Promise<string[]> {
 	const folders = await listSessionFolders();
-	const allFiles: string[] = [];
-
-	for (const folder of folders) {
-		const files = await listSessionFiles(folder);
-		allFiles.push(...files);
-	}
-
-	return allFiles;
+	const filesByFolder = await Promise.all(folders.map(folder => listSessionFiles(folder)));
+	return filesByFolder.flat();
 }
 
 /**

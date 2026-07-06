@@ -1,0 +1,10 @@
+{
+	"type": "tool_execution_end",
+	"toolCallId": "call-edit-1",
+	"toolName": "apply_patch",
+	"result": {
+		"content": [{ "type": "text", "text": "Updated src/x.ts" }],
+		"details": { "diff": " 1|first line\n-2|old line\n+2|new line\n 3|third line", "op": "update" }
+	},
+	"isError": false
+}

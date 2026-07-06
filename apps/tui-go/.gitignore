@@ -45,6 +45,7 @@ Thumbs.db
 **/.crush/**
 
 /crush
+/gmp-tui-go
 /tmp/
 
 manpages/

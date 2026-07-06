@@ -1,0 +1,30 @@
+{
+	"type": "turn_end",
+	"message": {
+		"role": "assistant",
+		"content": [{ "type": "text", "text": "done" }],
+		"api": "openai-responses",
+		"provider": "openai",
+		"model": "gpt-5",
+		"usage": {
+			"input": 10,
+			"output": 20,
+			"cacheRead": 0,
+			"cacheWrite": 0,
+			"totalTokens": 30,
+			"cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0 }
+		},
+		"stopReason": "stop",
+		"timestamp": 1717200000001
+	},
+	"toolResults": [
+		{
+			"role": "toolResult",
+			"toolCallId": "call-bash-1",
+			"toolName": "bash",
+			"content": [{ "type": "text", "text": "/tmp/project" }],
+			"isError": false,
+			"timestamp": 1717200000002
+		}
+	]
+}

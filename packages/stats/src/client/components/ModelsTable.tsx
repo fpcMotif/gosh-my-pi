@@ -70,8 +70,13 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 	const performanceSeriesByKey = useMemo(() => buildModelPerformanceLookup(performanceSeries), [performanceSeries]);
 	const theme = useSystemTheme();
 	const chartTheme = CHART_THEMES[theme];
-	const sortedModels = [...models].sort(
-		(a, b) => b.totalInputTokens + b.totalOutputTokens - (a.totalInputTokens + a.totalOutputTokens),
+	// Memoized to prevent re-sorting on every render (e.g., when expandedKey state changes).
+	const sortedModels = useMemo(
+		() =>
+			models.toSorted(
+				(a, b) => b.totalInputTokens + b.totalOutputTokens - (a.totalInputTokens + a.totalOutputTokens),
+			),
+		[models],
 	);
 
 	return (
@@ -109,6 +114,8 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 								<button
 									type="button"
 									onClick={() => setExpandedKey(isExpanded ? null : key)}
+									aria-expanded={isExpanded}
+									aria-controls={`model-details-${key}`}
 									className="w-full bg-transparent border-none text-left px-5 py-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
 								>
 									<div
@@ -148,7 +155,10 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 								</button>
 
 								{isExpanded && (
-									<div className="px-5 py-4 bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)]">
+									<div
+										id={`model-details-${key}`}
+										className="px-5 py-4 bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)]"
+									>
 										<div className="grid gap-4" style={{ gridTemplateColumns: "200px 1fr" }}>
 											<div className="space-y-4 text-sm">
 												<div>
@@ -213,6 +223,16 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 	);
 }
 
+const TREND_CHART_OPTIONS = {
+	responsive: true,
+	maintainAspectRatio: false,
+	plugins: { legend: { display: false }, tooltip: { enabled: false } },
+	scales: {
+		x: { display: false },
+		y: { display: false, min: 0 },
+	},
+};
+
 function TrendChart({
 	data,
 	color,
@@ -234,17 +254,7 @@ function TrendChart({
 		],
 	};
 
-	const options = {
-		responsive: true,
-		maintainAspectRatio: false,
-		plugins: { legend: { display: false }, tooltip: { enabled: false } },
-		scales: {
-			x: { display: false },
-			y: { display: false, min: 0 },
-		},
-	};
-
-	return <Line data={chartData} options={options} />;
+	return <Line data={chartData} options={TREND_CHART_OPTIONS} />;
 }
 
 function PerformanceChart({
@@ -360,7 +370,7 @@ function buildModelPerformanceLookup(points: ModelPerformancePoint[], days = 14)
 
 		series.data[index] = {
 			timestamp: point.timestamp,
-			avgTtftSeconds: point.avgTtft !== null ? point.avgTtft / 1000 : null,
+			avgTtftSeconds: point.avgTtft === null ? null : point.avgTtft / 1000,
 			avgTokensPerSecond: point.avgTokensPerSecond,
 			requests: point.requests,
 		};

@@ -3,15 +3,17 @@ package dialog
 import (
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 )
 
 // ModelGroup represents a group of model items.
 type ModelGroup struct {
+	*list.Versioned
 	Title      string
 	Items      []*ModelItem
 	configured bool
@@ -21,11 +23,18 @@ type ModelGroup struct {
 // NewModelGroup creates a new ModelGroup.
 func NewModelGroup(t *styles.Styles, title string, configured bool, items ...*ModelItem) ModelGroup {
 	return ModelGroup{
+		Versioned:  list.NewVersioned(),
 		Title:      title,
 		Items:      items,
 		configured: configured,
 		t:          t,
 	}
+}
+
+// Finished implements [list.Item]. Model group headers are static, so
+// they are always safe to freeze.
+func (m *ModelGroup) Finished() bool {
+	return true
 }
 
 // AppendItems appends [ModelItem]s to the group.
@@ -50,6 +59,7 @@ func (m *ModelGroup) Render(width int) string {
 
 // ModelItem represents a list item for a model type.
 type ModelItem struct {
+	*list.Versioned
 	prov      catwalk.Provider
 	model     catwalk.Model
 	modelType ModelType
@@ -81,6 +91,7 @@ var _ ListItem = &ModelItem{}
 // NewModelItem creates a new ModelItem.
 func NewModelItem(t *styles.Styles, prov catwalk.Provider, model catwalk.Model, typ ModelType, showProvider bool) *ModelItem {
 	return &ModelItem{
+		Versioned:    list.NewVersioned(),
 		prov:         prov,
 		model:        model,
 		modelType:    typ,
@@ -88,6 +99,12 @@ func NewModelItem(t *styles.Styles, prov catwalk.Provider, model catwalk.Model, 
 		cache:        make(map[int]string),
 		showProvider: showProvider,
 	}
+}
+
+// Finished implements [list.Item]. Model items are static; focus and
+// match changes bump the version, so freezing them is safe.
+func (m *ModelItem) Finished() bool {
+	return true
 }
 
 // Filter implements ListItem.
@@ -119,6 +136,7 @@ func (m *ModelItem) Render(width int) string {
 func (m *ModelItem) SetFocused(focused bool) {
 	if m.focused != focused {
 		m.cache = nil
+		m.Bump()
 	}
 	m.focused = focused
 }
@@ -127,4 +145,5 @@ func (m *ModelItem) SetFocused(focused bool) {
 func (m *ModelItem) SetMatch(fm fuzzy.Match) {
 	m.cache = nil
 	m.m = fm
+	m.Bump()
 }

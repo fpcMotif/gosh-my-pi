@@ -4,9 +4,9 @@ import (
 	"image"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/ultraviolet/layout"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
-	"github.com/charmbracelet/ultraviolet/layout"
 )
 
 // selectedLargeModel returns the currently selected large language model from
@@ -39,13 +39,12 @@ func (m *UI) landingView() string {
 		layout.Fill(1),
 	).Split(m.layout.main).Assign(new(image.Rectangle), &remainingHeightArea)
 
-	mcpLspSectionWidth := min(30, (width-2)/3)
+	mcpSectionWidth := min(30, (width-1)/2)
 
-	lspSection := m.lspInfo(mcpLspSectionWidth, max(1, remainingHeightArea.Dy()), false)
-	mcpSection := m.mcpInfo(mcpLspSectionWidth, max(1, remainingHeightArea.Dy()), false)
-	skillsSection := m.skillsInfo(mcpLspSectionWidth, max(1, remainingHeightArea.Dy()), false)
+	mcpSection := m.mcpInfo(mcpSectionWidth, max(1, remainingHeightArea.Dy()), false)
+	skillsSection := m.skillsInfo(mcpSectionWidth, max(1, remainingHeightArea.Dy()), false)
 
-	content := lipgloss.JoinHorizontal(lipgloss.Left, lspSection, " ", mcpSection, " ", skillsSection)
+	content := lipgloss.JoinHorizontal(lipgloss.Left, mcpSection, " ", skillsSection)
 
 	return lipgloss.NewStyle().
 		Width(width).

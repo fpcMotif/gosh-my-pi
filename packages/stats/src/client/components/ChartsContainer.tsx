@@ -206,7 +206,7 @@ function buildModelPreferenceSeries(
 	}
 
 	const data = [...dataMap.values()]
-		.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0))
+		.toSorted((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0))
 		.map(row => {
 			const total = row.total ?? 0;
 			for (const key of series) {

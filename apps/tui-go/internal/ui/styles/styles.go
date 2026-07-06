@@ -289,6 +289,7 @@ type Styles struct {
 		// Error styles
 		ErrorTag     lipgloss.Style // ERROR tag
 		ErrorMessage lipgloss.Style // Error message text
+		WarnTag      lipgloss.Style // WARN tag (amber; user-denied tools, not failures)
 
 		// Diff styles
 		DiffTruncation lipgloss.Style // Diff truncation message with padding

@@ -57,17 +57,22 @@ func (g *GenericToolRenderContext) RenderTool(sty *styles.Styles, width int, opt
 		return joinToolParts(header, earlyState)
 	}
 
-	if !opts.HasResult() || opts.Result.Content == "" {
+	if !opts.HasResult() {
 		return header
 	}
 
-	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-
+	// Image results may carry no text content (e.g. reading an image file), so
+	// the image card must be checked before the empty-content early return.
 	if opts.Result.Data != "" && strings.HasPrefix(opts.Result.MIMEType, "image/") {
 		body := sty.Tool.Body.Render(toolOutputImageContent(sty, opts.Result.Data, opts.Result.MIMEType))
 		return joinToolParts(header, body)
 	}
 
+	if opts.Result.Content == "" {
+		return header
+	}
+
+	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
 	body := renderToolResultTextContent(sty, opts.Result.Content, toolResultContentWidths{Body: bodyWidth, Diff: cappedWidth}, opts.ExpandedContent)
 	return joinToolParts(header, body)
 }

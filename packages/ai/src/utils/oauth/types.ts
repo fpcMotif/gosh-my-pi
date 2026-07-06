@@ -22,6 +22,14 @@ export type OAuthProvider =
 
 export type OAuthProviderId = OAuthProvider | (string & {});
 
+// "kimi" was a legacy alias for the Kimi Code plan; models.json and the model
+// registry key credentials on "kimi-code", so storage must use the canonical id.
+const LEGACY_OAUTH_PROVIDER_ALIASES: Record<string, OAuthProvider> = { kimi: "kimi-code" };
+
+export function canonicalOAuthProviderId(p: string): string {
+	return LEGACY_OAUTH_PROVIDER_ALIASES[p] ?? p;
+}
+
 export type OAuthPrompt = {
 	message: string;
 	placeholder?: string;

@@ -6,10 +6,10 @@ import (
 	"image"
 
 	"charm.land/lipgloss/v2"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/logo"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/layout"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/logo"
 )
 
 // modelInfo renders the current model information including reasoning
@@ -58,32 +58,30 @@ func (m *UI) modelInfo(width int) string {
 
 // getDynamicHeightLimits will give us the num of items to show in each section based on the height
 // some items are more important than others.
-func getDynamicHeightLimits(availableHeight, fileCount, lspCount, mcpCount, skillCount int) (maxFiles, maxLSPs, maxMCPs, maxSkills int) {
+func getDynamicHeightLimits(availableHeight, fileCount, mcpCount, skillCount int) (maxFiles, maxMCPs, maxSkills int) {
 	const (
 		minItemsPerSection = 2
 		// Keep these high so dynamic layout uses available sidebar space
 		// instead of hitting small hard limits.
 		defaultMaxFilesShown    = 1000
-		defaultMaxLSPsShown     = 1000
 		defaultMaxMCPsShown     = 1000
 		defaultMaxSkillsShown   = 1000
 		minAvailableHeightLimit = 10
 	)
 
 	if availableHeight < minAvailableHeightLimit {
-		return minItemsPerSection, minItemsPerSection, minItemsPerSection, minItemsPerSection
+		return minItemsPerSection, minItemsPerSection, minItemsPerSection
 	}
 
 	maxFiles = minItemsPerSection
-	maxLSPs = minItemsPerSection
 	maxMCPs = minItemsPerSection
 	maxSkills = minItemsPerSection
 
-	remainingHeight := max(0, availableHeight-(minItemsPerSection*4))
+	remainingHeight := max(0, availableHeight-(minItemsPerSection*3))
 
-	sectionValues := []*int{&maxFiles, &maxLSPs, &maxMCPs, &maxSkills}
-	sectionCaps := []int{defaultMaxFilesShown, defaultMaxLSPsShown, defaultMaxMCPsShown, defaultMaxSkillsShown}
-	sectionNeeds := []int{max(0, fileCount-maxFiles), max(0, lspCount-maxLSPs), max(0, mcpCount-maxMCPs), max(0, skillCount-maxSkills)}
+	sectionValues := []*int{&maxFiles, &maxMCPs, &maxSkills}
+	sectionCaps := []int{defaultMaxFilesShown, defaultMaxMCPsShown, defaultMaxSkillsShown}
+	sectionNeeds := []int{max(0, fileCount-maxFiles), max(0, mcpCount-maxMCPs), max(0, skillCount-maxSkills)}
 
 	for remainingHeight > 0 {
 		allocated := false
@@ -122,11 +120,11 @@ func getDynamicHeightLimits(availableHeight, fileCount, lspCount, mcpCount, skil
 		}
 	}
 
-	return maxFiles, maxLSPs, maxMCPs, maxSkills
+	return maxFiles, maxMCPs, maxSkills
 }
 
 // sidebar renders the chat sidebar containing session title, working
-// directory, model info, file list, LSP status, and MCP status.
+// directory, model info, file list, MCP status, and skills.
 func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 	if m.session == nil {
 		return
@@ -175,8 +173,6 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 		filesCount++
 	}
 
-	lspsCount := len(m.lspStates)
-
 	mcpsCount := 0
 	for _, mcpCfg := range m.com.Config().MCP.Sorted() {
 		if _, ok := m.mcpStates[mcpCfg.Name]; ok {
@@ -186,9 +182,8 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 
 	skillsCount := len(m.skillStatusItems())
 
-	maxFiles, maxLSPs, maxMCPs, maxSkills := getDynamicHeightLimits(remainingHeight, filesCount, lspsCount, mcpsCount, skillsCount)
+	maxFiles, maxMCPs, maxSkills := getDynamicHeightLimits(remainingHeight, filesCount, mcpsCount, skillsCount)
 
-	lspSection := m.lspInfo(width, maxLSPs, true)
 	mcpSection := m.mcpInfo(width, maxMCPs, true)
 	skillsSection := m.skillsInfo(width, maxSkills, true)
 	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), width, maxFiles, true)
@@ -202,8 +197,6 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 					lipgloss.Left,
 					sidebarHeader,
 					filesSection,
-					"",
-					lspSection,
 					"",
 					mcpSection,
 					"",

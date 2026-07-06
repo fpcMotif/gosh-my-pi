@@ -121,9 +121,16 @@ export class CustomToolLoader {
 	}
 
 	async load(pathsWithSources: ToolPathWithSource[]): Promise<void> {
-		for (const { path: toolPath, source } of pathsWithSources) {
-			const { tools: loadedTools, error } = await loadTool(toolPath, this.#sharedApi.cwd, this.#sharedApi, source);
+		// Parallelize tool module loading to reduce initialization time,
+		// evaluating them concurrently before resolving sequentially for conflict checks.
+		const results = await Promise.all(
+			pathsWithSources.map(async ({ path: toolPath, source }) => {
+				const result = await loadTool(toolPath, this.#sharedApi.cwd, this.#sharedApi, source);
+				return { toolPath, source, ...result };
+			}),
+		);
 
+		for (const { toolPath, source, tools: loadedTools, error } of results) {
 			if (error) {
 				this.errors.push(error);
 				continue;

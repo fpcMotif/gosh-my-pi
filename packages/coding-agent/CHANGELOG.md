@@ -2,11 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Run the full agentic loop through the `gmp-tui-go` Go (Bubble Tea) frontend over the OMP-RPC bridge: ship and auto-launch the binary from the release pipeline, render tool diffs and file views in the Go TUI, gate destructive built-in tools (bash/edit/apply_patch/write) behind a host approval round-trip ([ADR 0007](../../docs/adr/0007-tool-approval-trust-boundary.md)), surface recoverable failures (usage-limit / context-overflow / detached-prompt rejections) and a dead-backend banner, and add ompclient transport + wire-schema test coverage.
+- Streaming-render performance for the Go TUI: stable-prefix streaming-markdown cache, decoded draw-buffer cache, per-item list freeze-memo, per-section assistant caches, a deterministic spinner, and a three-state thinking view with a tail window for long reasoning blocks.
+
 ### Changed
 
 - Refreshed the default coding-agent TUI with the pi-vivid theme, compact status/tool chrome, conversation rails, and a lower-noise welcome surface.
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt and updated TypeScript project diagnostics to use tsgo.
 - Renamed the installed CLI command and prebuilt binary artifacts from `omp` to `gmp` to avoid collisions with an existing `omp` command.
+- Decomposed the 2,200-line `gmp_workspace.go` god-file into eight focused `package workspace` files (catalog, auth, tool-approval, subscribe, events, parse, stubs) with no behavior change; removed dead wire/auth/catalog types across the seam; and tightened the `RpcClient` model-command return types and the tool-approval emit type-lock.
 
 ### Removed
 
@@ -14,10 +20,21 @@
 
 ### Fixed
 
+- Fixed `auth.login` deadlocking the RPC backend: the stdin loop awaited the login command inline while the login flow awaited a correlated `extension_ui_response` that could only arrive on that same loop. Interactive login (provider picker, code prompts) now runs detached like `prompt`, emitting its response when the flow completes.
+- Fixed the Go TUI auth dialog never closing itself: `Action` messages emitted by dialog commands (e.g. the auth dialog's self-close) are now consumed by the dialog router instead of being silently dropped.
+- Fixed the RPC auth picker registering Kimi under the id `kimi` while the model catalog keys on `kimi-code`: a completed Kimi login now authenticates the catalog's Kimi models instead of being stored under an id nothing looks up.
+- Kimi-family models now default to the `replace` edit variant (hashline support is unreliable for them); `PI_STRICT_EDIT_MODE=1` restores the strict default (port of upstream ac904fc70).
 - Fixed vivid `RowSplit` layouts so an explicit empty separator omits the default vertical rule.
 - Kept vivid sidebar and minimized welcome chrome in sync after session, cwd, model, and thinking-level changes.
 - Fixed RPC extension editor requests so aborts and timeouts resolve when `defaultValue` is explicitly `undefined`.
 - Removed stale Claude/marketplace discovery imports that could break extension, CLI help, and session replay startup paths.
+- Hardened the OMP-RPC seam after an adversarial audit of the `gmp-tui-go` bridge:
+   - `omp --mode rpc` no longer crashes on a single malformed stdin line — a bad frame now surfaces a recoverable `parse` error response instead of throwing out of the read loop and stranding every in-flight request.
+   - `RpcClient.stop()` now rejects in-flight command promises (instead of dropping them to hang until timeout); the client read loop tolerates a malformed mid-stream frame; and a host-tool reply written after the transport is gone no longer becomes an unhandled rejection.
+   - Go TUI: streamed UI events are delivered to the program in submission order through a single drain goroutine, fixing the per-message `go program.Send` race that could leave an assistant message rendering a stale snapshot.
+   - Go TUI: the stub `host_tool_result` reply is now a well-formed `AgentToolResult`, so the backend's host-tool call no longer deadlocks on a reply the TS guard silently dropped; `redactedThinking` assistant blocks render a placeholder instead of vanishing; and transport diagnostic frames (`_raw` / `extension_error`) are logged instead of dropped.
+   - ompclient: malformed-frame, duplicate-response, and full-buffer dispatch are non-blocking so a misbehaving or slow consumer can no longer wedge command-response delivery.
+   - Message reconciliation now uses a host correlation id: the `prompt` command carries an optional `clientMessageId` that the backend echoes on the user/developer wire message (`WireUserMessageV1.id`, v1-additive), so the Go TUI reconciles an echoed message by id instead of by content — robust when two messages share identical text. Older backends fall back to content matching.
 
 ## [14.5.11] - 2026-04-30
 

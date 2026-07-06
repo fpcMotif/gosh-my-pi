@@ -16,6 +16,7 @@ import { loginMoonshot } from "./utils/oauth/moonshot";
 import { loginOpenAICodex } from "./utils/oauth/openai-codex";
 import { loginParallel } from "./utils/oauth/parallel";
 import { loginTavily } from "./utils/oauth/tavily";
+import { canonicalOAuthProviderId } from "./utils/oauth/types";
 import type { OAuthController, OAuthCredentials, OAuthProviderId } from "./utils/oauth/types";
 import { loginZai } from "./utils/oauth/zai";
 
@@ -104,9 +105,15 @@ export class AuthStorage {
 		const recs = this.#store.listAuthCredentials();
 		const grouped = new Map<string, Array<{ id: number; credential: AuthCredential }>>();
 		for (const r of recs) {
-			const l = grouped.get(r.provider) ?? [];
-			l.push({ id: r.id, credential: r.credential });
-			grouped.set(r.provider, l);
+			let rec = r;
+			const canonical = canonicalOAuthProviderId(r.provider);
+			if (canonical !== r.provider) {
+				rec = this.#store.saveAuthCredential(canonical, r.credential);
+				this.#store.deleteAuthCredential(r.id, `migrated to canonical provider id ${canonical}`);
+			}
+			const l = grouped.get(rec.provider) ?? [];
+			l.push({ id: rec.id, credential: rec.credential });
+			grouped.set(rec.provider, l);
 		}
 		this.#data = grouped;
 	}
@@ -219,35 +226,36 @@ export class AuthStorage {
 			onManualCodeInput !== undefined && onManualCodeInput !== null
 				? (m: string) => onManualCodeInput.call(ctrl, m)
 				: manual;
+		const provider = canonicalOAuthProviderId(p);
 		let creds: OAuthCredentials;
-		switch (p) {
+		switch (provider) {
 			case "openai-codex":
 				creds = await loginOpenAICodex({ ...ctrl, onManualCodeInput: onManual });
 				break;
-			case "kimi":
+			case "kimi-code":
 				creds = await loginKimi(ctrl);
 				break;
 			case "moonshot":
 				creds = await loginMoonshot(ctrl);
 				break;
 			case "zai":
-				await this.set(p, { type: "api_key", key: await loginZai(ctrl) });
+				await this.set(provider, { type: "api_key", key: await loginZai(ctrl) });
 				return;
 			case "kagi":
-				await this.set(p, { type: "api_key", key: await loginKagi(ctrl) });
+				await this.set(provider, { type: "api_key", key: await loginKagi(ctrl) });
 				return;
 			case "parallel":
-				await this.set(p, { type: "api_key", key: await loginParallel(ctrl) });
+				await this.set(provider, { type: "api_key", key: await loginParallel(ctrl) });
 				return;
 			case "tavily":
-				await this.set(p, { type: "api_key", key: await loginTavily(ctrl) });
+				await this.set(provider, { type: "api_key", key: await loginTavily(ctrl) });
 				return;
 			case "minimax-code":
-				await this.set(p, { type: "api_key", key: await loginMiniMaxCode(ctrl) });
+				await this.set(provider, { type: "api_key", key: await loginMiniMaxCode(ctrl) });
 				return;
 			default:
-				const cp = getOAuthProvider(p);
-				if (!cp) throw new Error(`Unknown: ${p}`);
+				const cp = getOAuthProvider(provider);
+				if (!cp) throw new Error(`Unknown: ${provider}`);
 				const r = await cp.login({
 					onAuth: i => ctrl.onAuth(i),
 					onProgress: m => ctrl.onProgress?.(m),
@@ -256,12 +264,12 @@ export class AuthStorage {
 					signal: ctrl.signal,
 				});
 				if (typeof r === "string") {
-					await this.set(p, { type: "api_key", key: r });
+					await this.set(provider, { type: "api_key", key: r });
 					return;
 				}
 				creds = r;
 		}
-		await this.#upsertOAuthCredential(p, { type: "oauth", ...creds });
+		await this.#upsertOAuthCredential(provider, { type: "oauth", ...creds });
 	}
 
 	async logout(p: string): Promise<void> {

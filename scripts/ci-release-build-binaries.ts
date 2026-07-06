@@ -2,6 +2,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { goTuiArtifactBasename, goTuiReleaseTargets } from "../packages/coding-agent/src/cli/tui-go-binary";
 
 interface BinaryTarget {
 	id: string;
@@ -142,6 +143,42 @@ async function buildBinary(target: BinaryTarget): Promise<void> {
 	}
 }
 
+const goTuiTargetsById = new Map(goTuiReleaseTargets.map(target => [target.id, target]));
+const tuiGoModulePath = "github.com/fpcMotif/gosh-my-pi/apps/tui-go";
+
+async function buildGoTui(id: string): Promise<void> {
+	const goTarget = goTuiTargetsById.get(id);
+	if (!goTarget) {
+		throw new Error(`No Go TUI cross-compile target for release id: ${id}`);
+	}
+	const outfile = path.join(binariesDir, goTuiArtifactBasename(goTarget));
+	const tuiGoDir = path.join(repoRoot, "apps", "tui-go");
+	const command = ["go", "build", "-trimpath"];
+	const version = Bun.env.RELEASE_VERSION;
+	if (version) {
+		command.push(`-ldflags=-X ${tuiGoModulePath}/internal/version.Version=${version}`);
+	}
+	command.push("-o", outfile, ".");
+
+	if (isDryRun) {
+		console.log(`DRY RUN CGO_ENABLED=0 GOOS=${goTarget.goos} GOARCH=${goTarget.goarch} ${command.join(" ")}`);
+		return;
+	}
+
+	console.log(`Building ${path.relative(repoRoot, outfile)} (Go TUI)...`);
+	await runCommand(command, tuiGoDir, {
+		...Bun.env,
+		CGO_ENABLED: "0",
+		GOOS: goTarget.goos,
+		GOARCH: goTarget.goarch,
+	});
+}
+
+async function buildTargetArtifacts(target: BinaryTarget): Promise<void> {
+	await buildBinary(target);
+	await buildGoTui(target.id);
+}
+
 async function generateBundle(): Promise<void> {
 	if (isDryRun) {
 		console.log("DRY RUN bun --cwd=packages/stats scripts/generate-client-bundle.ts --generate");
@@ -181,7 +218,8 @@ async function main(): Promise<void> {
 	await generateBundle();
 	try {
 		for (const target of selectedTargets) {
-			await buildBinary(target);
+			// oxlint-disable-next-line no-await-in-loop -- release builds run one target at a time on purpose: embedNative mutates the shared native addon per target, so concurrent targets would race
+			await buildTargetArtifacts(target);
 		}
 	} finally {
 		await resetArtifacts();

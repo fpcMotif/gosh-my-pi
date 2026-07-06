@@ -2,8 +2,8 @@ package completions
 
 import (
 	"charm.land/lipgloss/v2"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/rivo/uniseg"
 	"github.com/sahilm/fuzzy"
 )
@@ -23,6 +23,7 @@ type ResourceCompletionValue struct {
 
 // CompletionItem represents an item in the completions list.
 type CompletionItem struct {
+	*list.Versioned
 	text    string
 	value   any
 	match   fuzzy.Match
@@ -38,12 +39,20 @@ type CompletionItem struct {
 // NewCompletionItem creates a new completion item.
 func NewCompletionItem(text string, value any, normalStyle, focusedStyle, matchStyle lipgloss.Style) *CompletionItem {
 	return &CompletionItem{
+		Versioned:    list.NewVersioned(),
 		text:         text,
 		value:        value,
 		normalStyle:  normalStyle,
 		focusedStyle: focusedStyle,
 		matchStyle:   matchStyle,
 	}
+}
+
+// Finished implements [list.Item]. Completion items are static once
+// built; any focus/match change bumps the version, so freezing them is
+// safe.
+func (c *CompletionItem) Finished() bool {
+	return true
 }
 
 // Text returns the display text of the item.
@@ -65,12 +74,14 @@ func (c *CompletionItem) Filter() string {
 func (c *CompletionItem) SetMatch(m fuzzy.Match) {
 	c.cache = nil
 	c.match = m
+	c.Bump()
 }
 
 // SetFocused implements [list.Focusable].
 func (c *CompletionItem) SetFocused(focused bool) {
 	if c.focused != focused {
 		c.cache = nil
+		c.Bump()
 	}
 	c.focused = focused
 }

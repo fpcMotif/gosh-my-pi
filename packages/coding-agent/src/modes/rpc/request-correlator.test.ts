@@ -21,6 +21,24 @@ describe("RequestCorrelator", () => {
 		expect(await promise).toBe(42);
 	});
 
+	test("register with a colliding explicit id supersedes the prior pending entry (RPC-6)", async () => {
+		const c = new RequestCorrelator();
+		const first = c.register<string>({ id: "dup" });
+		expect(c.pendingCount).toBe(1);
+
+		// Re-registering the same explicit id must settle the prior promise
+		// (reject as superseded) rather than orphan it, and hand the id to the
+		// new registration — without this, the old promise leaks forever and
+		// its cleanup would delete the slot the new entry owns.
+		const second = c.register<string>({ id: "dup" });
+		await expect(first.promise).rejects.toThrow(/superseded/);
+		expect(c.pendingCount).toBe(1);
+
+		expect(c.resolve("dup", "value-2")).toBe(true);
+		expect(await second.promise).toBe("value-2");
+		expect(c.pendingCount).toBe(0);
+	});
+
 	test("resolve on unknown id is a no-op returning false", () => {
 		const c = new RequestCorrelator();
 		expect(c.resolve("never-registered", "value")).toBe(false);
@@ -31,7 +49,7 @@ describe("RequestCorrelator", () => {
 		const { id, promise } = c.register<string>();
 		const reason = new Error("boom");
 		expect(c.reject(id, reason)).toBe(true);
-		expect(promise).rejects.toThrow("boom");
+		await expect(promise).rejects.toThrow("boom");
 		expect(c.has(id)).toBe(false);
 	});
 
@@ -39,7 +57,7 @@ describe("RequestCorrelator", () => {
 		const c = new RequestCorrelator();
 		const { id, promise } = c.register<string>();
 		c.cancel(id);
-		expect(promise).rejects.toThrow(/cancelled/);
+		await expect(promise).rejects.toThrow(/cancelled/);
 		expect(c.has(id)).toBe(false);
 	});
 
@@ -47,7 +65,7 @@ describe("RequestCorrelator", () => {
 		const c = new RequestCorrelator();
 		const { id, promise } = c.register<string>();
 		c.cancel(id, "shutdown");
-		expect(promise).rejects.toThrow(/shutdown/);
+		await expect(promise).rejects.toThrow(/shutdown/);
 	});
 
 	test("cancelAll cancels every pending request", async () => {
@@ -94,7 +112,7 @@ describe("RequestCorrelator", () => {
 	test("timeout without defaultValue rejects", async () => {
 		const c = new RequestCorrelator();
 		const { promise } = c.register<string>({ timeoutMs: 10 });
-		expect(promise).rejects.toThrow(/timed out/);
+		await expect(promise).rejects.toThrow(/timed out/);
 	});
 
 	test("abort signal fires and resolves with defaultValue", async () => {

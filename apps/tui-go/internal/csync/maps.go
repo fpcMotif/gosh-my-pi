@@ -9,8 +9,19 @@ import (
 
 // Map is a concurrent map implementation that provides thread-safe access.
 type Map[K comparable, V any] struct {
+	schemaAlias[K, V]
 	inner map[K]V
 	mu    sync.RWMutex
+}
+
+// schemaAlias carries JSONSchemaAlias in Map's value method set: the schema
+// reflector only resolves the alias on the value type, and a value receiver
+// directly on Map would copy its RWMutex (go vet copylocks).
+type schemaAlias[K comparable, V any] struct{}
+
+// JSONSchemaAlias returns the underlying map type for JSON schema generation.
+func (schemaAlias[K, V]) JSONSchemaAlias() any {
+	return map[K]V{}
 }
 
 // NewMap creates a new thread-safe map with the specified key and value types.
@@ -130,14 +141,6 @@ var (
 	_ json.Unmarshaler = &Map[string, any]{}
 	_ json.Marshaler   = &Map[string, any]{}
 )
-
-// JSONSchemaAlias returns the underlying map type for JSON schema generation.
-// Value receiver is required because github.com/invopop/jsonschema checks
-// interface satisfaction on the non-pointer type after stripping pointers.
-func (Map[K, V]) JSONSchemaAlias() any { //nolint
-	m := map[K]V{}
-	return m
-}
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (m *Map[K, V]) UnmarshalJSON(data []byte) error {

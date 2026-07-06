@@ -7,12 +7,17 @@ import { compile } from "@tailwindcss/node";
  */
 async function listSourceFiles(dir: string): Promise<string[]> {
 	const entries = await fs.readdir(dir, { withFileTypes: true });
-	const subDirResults = await Promise.all(
-		entries.filter(entry => entry.isDirectory()).map(entry => listSourceFiles(path.join(dir, entry.name))),
-	);
-	const files = entries
-		.filter(entry => entry.isFile() && /\.(tsx|ts|jsx|js)$/.test(entry.name))
-		.map(entry => path.join(dir, entry.name));
+	const files: string[] = [];
+	const subDirPromises: Promise<string[]>[] = [];
+	for (const entry of entries) {
+		const fullPath = path.join(dir, entry.name);
+		if (entry.isDirectory()) {
+			subDirPromises.push(listSourceFiles(fullPath));
+		} else if (entry.isFile() && /\.(tsx|ts|jsx|js)$/.test(entry.name)) {
+			files.push(fullPath);
+		}
+	}
+	const subDirResults = await Promise.all(subDirPromises);
 	return [...files, ...subDirResults.flat()];
 }
 

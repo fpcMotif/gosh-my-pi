@@ -9,9 +9,28 @@
 //
 // Higher layers (internal/workspace) translate this into the
 // crush.workspace.Workspace interface that the TUI consumes.
+//
+// Wire schema: the backend declares "omp-rpc/v1" on the one-shot `ready`
+// frame at startup (see ExpectedSchema). Per the OMP-RPC v1 contract,
+// hosts SHOULD verify the schema but must soft-buffer on mismatch:
+// preserve unknown frames as raw agent events and keep the read loop
+// running rather than crashing. dispatch captures the negotiated schema
+// and surfaces a slog warning when it diverges from ExpectedSchema.
 package ompclient
 
 import "encoding/json"
+
+// ExpectedSchema is the OMP-RPC wire vocabulary this client targets. It
+// is declared by the backend on the `ready` handshake frame. Mirrors
+// OMP_RPC_SCHEMA_V1 in packages/coding-agent/src/modes/rpc/wire/v1.ts.
+const ExpectedSchema = "omp-rpc/v1"
+
+// ReadyFrame is the one-shot server→host handshake frame emitted once on
+// startup. Carries the negotiated wire schema. Mirrors WireReadyFrameV1.
+type ReadyFrame struct {
+	Type   string `json:"type"`
+	Schema string `json:"schema"`
+}
 
 // Command is the discriminated union of messages the host (TUI) can
 // send to the omp RPC server. Mirrors RpcCommand in rpc-types.ts.
@@ -30,6 +49,11 @@ type Command struct {
 
 	// Streaming behavior for prompt: "steer" | "followUp".
 	StreamingBehavior string `json:"streamingBehavior,omitempty"`
+
+	// ClientMessageID is a correlation id for prompt: the backend stamps it
+	// onto the resulting user message (echoed as WireUserMessageV1.id) so the
+	// frontend can reconcile the echo by id instead of by content.
+	ClientMessageID string `json:"clientMessageId,omitempty"`
 
 	// new_session
 	ParentSession string `json:"parentSession,omitempty"`
@@ -174,13 +198,6 @@ type HostToolResult struct {
 	ID      string `json:"id"`
 	Result  any    `json:"result"`
 	IsError bool   `json:"isError,omitempty"`
-}
-
-// HostToolUpdate mirrors RpcHostToolUpdate.
-type HostToolUpdate struct {
-	Type          string `json:"type"` // "host_tool_update"
-	ID            string `json:"id"`
-	PartialResult any    `json:"partialResult"`
 }
 
 // ExtensionUIResp mirrors RpcExtensionUIResponse. Exactly one of

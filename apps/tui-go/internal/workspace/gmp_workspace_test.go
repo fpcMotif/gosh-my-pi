@@ -2,9 +2,13 @@ package workspace
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/png"
 	"os"
 	"sync"
 	"testing"
@@ -486,6 +490,51 @@ func TestParseToolResultContent(t *testing.T) {
 	}
 }
 
+// A tool result whose wire content carries an image block (e.g. reading an
+// image file, a screenshot tool) must surface the image to the renderer: the
+// base64 string and MIME type land on ToolResult.Data/MIMEType verbatim while
+// any text blocks still populate Content. Without this the image silently
+// vanishes (gap G14). The renderers consume Data as a base64 string, so it is
+// stored undecoded; the test proves it is nonetheless a real decodable image.
+func TestParseToolResultContentImage(t *testing.T) {
+	w := newTestGmpWorkspace()
+	// 1x1 PNG as the wire delivers it (base64).
+	const pngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	raw := fmt.Sprintf(`{"toolCallId":"t1","toolName":"read","content":[{"type":"text","text":"viewing"},{"type":"image","data":%q,"mimeType":"image/png"}],"isError":false}`, pngB64)
+	got := w.parseToolResultContent([]byte(raw))
+	if len(got) != 1 {
+		t.Fatalf("len=%d", len(got))
+	}
+	tr := got[0].(message.ToolResult)
+	if tr.Data != pngB64 {
+		t.Fatalf("Data not set to wire base64 string: %q", tr.Data)
+	}
+	if tr.MIMEType != "image/png" {
+		t.Fatalf("MIMEType=%q", tr.MIMEType)
+	}
+	if tr.Content != "viewing" {
+		t.Fatalf("text content lost: %q", tr.Content)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(tr.Data)
+	if err != nil {
+		t.Fatalf("Data is not valid base64: %v", err)
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(decoded))
+	if err != nil {
+		t.Fatalf("decoded image invalid: %v", err)
+	}
+	if format != "png" || cfg.Width == 0 || cfg.Height == 0 {
+		t.Fatalf("unexpected image: format=%s %dx%d", format, cfg.Width, cfg.Height)
+	}
+
+	// An image-only result (no text block) still surfaces Data/MIMEType.
+	rawNoText := fmt.Sprintf(`{"toolCallId":"t2","toolName":"read","content":[{"type":"image","data":%q,"mimeType":"image/png"}],"isError":false}`, pngB64)
+	trNoText := w.parseToolResultContent([]byte(rawNoText))[0].(message.ToolResult)
+	if trNoText.Data != pngB64 || trNoText.MIMEType != "image/png" {
+		t.Fatalf("image-only result lost image: %+v", trNoText)
+	}
+}
+
 func TestParseExecutionContent(t *testing.T) {
 	w := newTestGmpWorkspace()
 	got := w.parseExecutionContent([]byte(`{"command":"pwd","output":"/tmp","exitCode":0}`))
@@ -933,20 +982,33 @@ func (r *recordingSender) count() int {
 	return len(r.msgs)
 }
 
-// TestSendUI_DoesNotBlockCallerWhenProgramSendBlocks pins Bug A
-// (the synchronous program.Send deadlock fixed in b83fca9). Pre-fix,
-// program.Send was called synchronously, so a blocked Send would freeze
-// the caller. The fix dispatches via `go program.Send(msg)`. This test
-// blocks the sender and asserts the caller still returns within the
-// timeout. Without `go`, this test deadlocks until t.Fatal.
-func TestSendUI_DoesNotBlockCallerWhenProgramSendBlocks(t *testing.T) {
+// TestSendUI_DoesNotBlockCallerAndPreservesOrder pins the two invariants of
+// the program-bound UI path:
+//
+//   - Non-blocking: sendUI must not block its caller even when program.Send is
+//     blocked. sendUI may run on the Bubble Tea Update goroutine, which also
+//     drains program.Send, so a synchronous Send there deadlocks (the b83fca9
+//     fix). It enqueues to uiQueue instead.
+//   - FIFO order: a single drain goroutine calls program.Send in submission
+//     order. The previous per-message `go program.Send` raced one goroutine
+//     per message, so an earlier streamed snapshot could overwrite a later
+//     one. Here we submit N distinguishable messages while Send is held, then
+//     release and assert they arrive strictly in order.
+func TestSendUI_DoesNotBlockCallerAndPreservesOrder(t *testing.T) {
 	w := NewGmpWorkspace(nil, "/tmp/project")
 	sender := &recordingSender{hold: make(chan struct{})}
 	w.program = sender
+	go w.drainUI()
 
+	const n = 8
 	done := make(chan struct{})
 	go func() {
-		w.sendUI(pubsub.Event[session.Session]{Type: pubsub.CreatedEvent})
+		for i := range n {
+			w.sendUI(pubsub.Event[session.Session]{
+				Type:    pubsub.CreatedEvent,
+				Payload: session.Session{ID: fmt.Sprintf("%d", i)},
+			})
+		}
 		close(done)
 	}()
 
@@ -958,11 +1020,23 @@ func TestSendUI_DoesNotBlockCallerWhenProgramSendBlocks(t *testing.T) {
 
 	close(sender.hold)
 	deadline := time.Now().Add(testEventTimeout)
-	for sender.count() == 0 && time.Now().Before(deadline) {
+	for sender.count() < n && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
-	if sender.count() != 1 {
-		t.Fatalf("sender saw %d messages after release, want 1", sender.count())
+	if sender.count() != n {
+		t.Fatalf("sender saw %d messages after release, want %d", sender.count(), n)
+	}
+
+	sender.mu.Lock()
+	defer sender.mu.Unlock()
+	for i, msg := range sender.msgs {
+		ev, ok := msg.(pubsub.Event[session.Session])
+		if !ok {
+			t.Fatalf("message %d has unexpected type %T", i, msg)
+		}
+		if want := fmt.Sprintf("%d", i); ev.Payload.ID != want {
+			t.Fatalf("message %d out of FIFO order: got ID %q, want %q", i, ev.Payload.ID, want)
+		}
 	}
 }
 

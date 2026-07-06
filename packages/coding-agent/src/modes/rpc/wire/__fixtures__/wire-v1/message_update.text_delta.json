@@ -1,0 +1,42 @@
+{
+	"type": "message_update",
+	"message": {
+		"role": "assistant",
+		"content": [{ "type": "text", "text": "Hello" }],
+		"api": "openai-responses",
+		"provider": "openai",
+		"model": "gpt-5",
+		"usage": {
+			"input": 10,
+			"output": 20,
+			"cacheRead": 0,
+			"cacheWrite": 0,
+			"totalTokens": 30,
+			"cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0 }
+		},
+		"stopReason": "stop",
+		"timestamp": 1717200000001
+	},
+	"assistantMessageEvent": {
+		"type": "text_delta",
+		"contentIndex": 0,
+		"delta": "Hello",
+		"partial": {
+			"role": "assistant",
+			"content": [{ "type": "text", "text": "Hello" }],
+			"api": "openai-responses",
+			"provider": "openai",
+			"model": "gpt-5",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0 }
+			},
+			"stopReason": "stop",
+			"timestamp": 1717200000001
+		}
+	}
+}

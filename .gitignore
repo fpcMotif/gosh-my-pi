@@ -47,7 +47,11 @@ tui-debug.log
 
 # Test & coverage
 coverage/
+coverage-*/
+packages/*/coverage-*/
 .nyc_output/
+*.lcov
+lcov.info
 packages/ai/test/.temp-images/
 
 # Project specific
@@ -55,6 +59,7 @@ packages/ai/test/.temp-images/
 .omp/plugins/
 .pi_config/
 .opencode/
+.omx/
 .worktrees/
 compaction-results/
 changes/

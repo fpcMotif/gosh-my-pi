@@ -1,0 +1,23 @@
+{
+	"type": "agent_end",
+	"messages": [
+		{ "role": "user", "content": "hello", "timestamp": 1717200000000 },
+		{
+			"role": "assistant",
+			"content": [{ "type": "text", "text": "Hello back" }],
+			"api": "openai-responses",
+			"provider": "openai",
+			"model": "gpt-5",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0 }
+			},
+			"stopReason": "stop",
+			"timestamp": 1717200000001
+		}
+	]
+}

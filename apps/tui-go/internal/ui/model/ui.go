@@ -46,6 +46,7 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/skills"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/toolapproval"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/anim"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/attachments"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/chat"
@@ -77,6 +78,11 @@ const (
 	minViewportWidth  = 60
 	minViewportHeight = 10
 )
+
+// backendExitedHeading is the heading shown when the gmp RPC subprocess
+// exits unexpectedly. Exported as a constant so the render state can be
+// asserted by tests without matching on incidental layout.
+const backendExitedHeading = "Backend connection lost"
 
 // If pasted text has more than 10 newlines, treat it as a file attachment.
 const pasteLinesThreshold = 10
@@ -236,9 +242,6 @@ type UI struct {
 		yesInitializeSelected bool
 	}
 
-	// lsp
-	lspStates map[string]app.LSPClientInfo
-
 	// mcp
 	mcpStates map[string]mcp.ClientInfo
 
@@ -247,6 +250,11 @@ type UI struct {
 
 	// sidebarLogo keeps a cached version of the sidebar sidebarLogo.
 	sidebarLogo string
+
+	// themeName is the name of the currently active theme, tracked so the
+	// theme picker can mark the current entry. Updated by applyThemeByName and
+	// by provider-driven theme swaps.
+	themeName string
 
 	// Notification state
 	notifyBackend       notification.Backend
@@ -289,6 +297,22 @@ type UI struct {
 	}
 
 	pendingGmpModelSelection *dialog.ActionSelectModel
+
+	// pendingToolApproval holds the gmp tool-approval request whose permission
+	// dialog is currently open and unanswered. In gmp bridge mode every
+	// permission dialog maps to an extension_ui_request awaiting a reply on the
+	// wire; if a newer request supersedes it (openPermissionsDialog closes the
+	// old dialog to show the new one) we must deny the superseded request here,
+	// otherwise its backend tool sits pending until the multi-minute approval
+	// deadline. Cleared once the user answers. Nil outside gmp mode.
+	pendingToolApproval *permission.PermissionRequest
+
+	// backendExited is set when the gmp RPC subprocess has exited
+	// unexpectedly (see workspace.BackendExitedMsg). While true, View
+	// renders a legible "backend connection lost" banner instead of the
+	// frozen transcript. There is no auto-respawn/reconnect — this is only
+	// the render state.
+	backendExited bool
 }
 
 // New creates a new instance of the [UI] model.
@@ -347,7 +371,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		completions:         comp,
 		attachments:         attachments,
 		todoSpinner:         todoSpinner,
-		lspStates:           make(map[string]app.LSPClientInfo),
 		mcpStates:           make(map[string]mcp.ClientInfo),
 		notifyBackend:       notification.NoopBackend{},
 		notifyWindowFocused: true,
@@ -437,14 +460,50 @@ func (m *UI) sendNotification(n notification.Notification) tea.Cmd {
 	if !m.shouldSendNotification() {
 		return nil
 	}
+	return m.notifyBackend.Send(n)
+}
 
-	backend := m.notifyBackend
-	return func() tea.Msg {
-		if err := backend.Send(n); err != nil {
-			slog.Error("Failed to send notification", "error", err)
-		}
-		return nil
+// selectNotificationBackend chooses the appropriate notification backend based
+// on terminal capabilities and environment. Remote/SSH sessions can't reach a
+// local OS notification daemon, so they fall back to terminal escape sequences
+// (OSC 99 -> OSC 777 -> bell). Local sessions use native OS notifications when
+// focus events are supported; otherwise nothing is selected.
+func selectNotificationBackend(caps common.Capabilities) notification.Backend {
+	_, isSSH := caps.Env.LookupEnv("SSH_TTY")
+	if !isSSH {
+		_, isSSH = caps.Env.LookupEnv("SSH_CONNECTION")
 	}
+
+	// Remote/SSH sessions use terminal-based notifications: OSC 99 if the
+	// terminal advertised support, otherwise OSC 777 (urxvt extension). Both
+	// degrade to the bell automatically via the OSC backend's protocol choice.
+	if isSSH {
+		slog.Debug("Selected OSCBackend for remote session", "osc99_supported", caps.OSC99Notifications)
+		return notification.NewOSCBackend(notification.Icon, caps.OSC99Notifications)
+	}
+
+	// Local sessions with focus reporting use native OS notifications.
+	if caps.ReportFocusEvents {
+		slog.Debug("Selected NativeBackend for local session")
+		return notification.NewNativeBackend(notification.Icon)
+	}
+
+	// Local, headless terminal with no focus reporting and no OS daemon path.
+	// Prefer OSC if the terminal advertised OSC 99; otherwise ring the bell so
+	// the user still gets a turn-complete alert instead of silence.
+	if caps.OSC99Notifications {
+		slog.Debug("Selected OSCBackend for headless local session")
+		return notification.NewOSCBackend(notification.Icon, true)
+	}
+
+	slog.Debug("Selected BellBackend (no native or OSC support)")
+	return notification.NewBellBackend()
+}
+
+// updateNotificationBackend re-selects the notification backend from the
+// current terminal capabilities. Called whenever capabilities change.
+func (m *UI) updateNotificationBackend() {
+	m.notifyBackend = selectNotificationBackend(m.caps)
 }
 
 // shouldSendNotification returns true if notifications should be sent based on
@@ -514,9 +573,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, common.QueryCmd(uv.Environ(msg)))
 	case tea.ModeReportMsg:
-		if m.caps.ReportFocusEvents {
-			m.notifyBackend = notification.NewNativeBackend(notification.Icon)
-		}
+		m.updateNotificationBackend()
+	case uv.UnknownOscEvent:
+		m.updateNotificationBackend()
 	case tea.FocusMsg:
 		m.notifyWindowFocused = true
 	case tea.BlurMsg:
@@ -650,8 +709,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renderPills()
 	case pubsub.Event[history.File]:
 		cmds = append(cmds, m.handleFileEvent(msg.Payload))
-	case pubsub.Event[app.LSPEvent]:
-		m.lspStates = app.GetLSPStates()
 	case pubsub.Event[skills.Event]:
 		m.skillStates = msg.Payload.States
 	case pubsub.Event[mcp.Event]:
@@ -699,6 +756,27 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
 			gw.HandleAuthReply(msg)
 		}
+
+	// Tool-approval gate (ADR 0007): gmp emits tool.request_approval before
+	// a gated built-in tool runs. Open the existing permissions dialog built
+	// from the wire payload; the dialog's ActionPermissionResponse is routed
+	// back to the gmp side (in gmp mode) below.
+	case toolapproval.Request:
+		if cmd := m.openPermissionsDialog(workspace.ToolApprovalPermissionRequest(msg)); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		// The card was created by an earlier tool_execution_start and defaults
+		// to "running"; park it in awaiting-permission while the gate is open so
+		// the transcript doesn't show a tool running before it was approved.
+		m.setToolItemStatus(msg.ToolCallID, chat.ToolStatusAwaitingPermission)
+
+	// The gmp RPC subprocess exited unexpectedly (peer EOF / crash). Enter
+	// the backend-exited render state so View draws a legible banner instead
+	// of a frozen transcript. No auto-respawn — render state only.
+	case workspace.BackendExitedMsg:
+		m.backendExited = true
+		m.todoIsSpinning = false
+		return m, nil
 
 	case cancelTimerExpiredMsg:
 		m.isCanceling = false
@@ -894,6 +972,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.updateTextareaWithPrevHeight(msg, prevHeight))
 	case hyperRefreshDoneMsg:
 		if cmd := m.handleSelectModel(msg.action); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case gmpModelSelectionResultMsg:
+		if cmd := m.handleGmpModelSelectionResult(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case creditsUpdatedMsg:
@@ -1327,6 +1409,14 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	action := m.dialog.Update(msg)
 	if action == nil {
+		// Dialogs can emit Actions as messages from their own commands (e.g.
+		// GmpAuth's closeCmd). The front dialog ignores those, so treat the
+		// message itself as the action or a self-close could never land.
+		if a, ok := msg.(dialog.Action); ok {
+			action = a
+		}
+	}
+	if action == nil {
 		return tea.Batch(cmds...)
 	}
 
@@ -1358,11 +1448,6 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		if msg.Cmd != nil {
 			cmds = append(cmds, msg.Cmd)
 		}
-
-	// Session dialog messages.
-	case dialog.ActionSelectSession:
-		m.dialog.CloseDialog(dialog.SessionsID)
-		cmds = append(cmds, m.loadSession(msg.Session.ID))
 
 	// Open dialog message.
 	case dialog.ActionOpenDialog:
@@ -1529,8 +1614,29 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
 		})
 		m.dialog.CloseDialog(dialog.ReasoningID)
+	case dialog.ActionSelectTheme:
+		m.dialog.CloseDialog(dialog.ThemeID)
+		if m.applyThemeByName(msg.Name) {
+			cmds = append(cmds, util.ReportInfo("Theme changed to "+msg.Name))
+		} else {
+			cmds = append(cmds, util.ReportError(fmt.Errorf("unknown theme: %s", msg.Name)))
+		}
 	case dialog.ActionPermissionResponse:
 		m.dialog.CloseDialog(dialog.PermissionsID)
+		// In gmp bridge mode the only permission dialogs come from the
+		// tool-approval gate (the in-process Crush permission service is
+		// inert — ADR 0001/0002), so route the decision back over the wire
+		// instead of to the no-op PermissionGrant/Deny. allow_session maps
+		// to a single approve for now (ADR 0007 out-of-scope note).
+		if gw, ok := m.com.Workspace.(toolApprovalReplyHandler); ok {
+			m.pendingToolApproval = nil
+			gw.HandleToolApprovalReply(msg.Permission, msg.Action != dialog.PermissionDeny)
+			// The tool card was parked in awaiting-permission while gated; the
+			// user has now answered, so drop it back to running. A landed result
+			// (success/error/denied) still overrides this via computeStatus.
+			m.setToolItemStatus(msg.Permission.ToolCallID, chat.ToolStatusRunning)
+			break
+		}
 		switch msg.Action {
 		case dialog.PermissionAllow:
 			m.com.Workspace.PermissionGrant(msg.Permission)
@@ -1700,7 +1806,7 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 		if msg.ModelType == config.SelectedModelTypeLarge {
 			// Swap the theme live based on the newly selected large
 			// model's provider.
-			m.applyTheme(styles.ThemeForProvider(providerID))
+			m.applyProviderTheme(providerID)
 		}
 		if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
 			// Ensure small model is set is unset.
@@ -1737,92 +1843,6 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *UI) handleGmpSelectModel(gw *workspace.GmpWorkspace, msg dialog.ActionSelectModel) tea.Cmd {
-	entry, ok := gw.ModelCatalogEntry(msg.Model.Provider, msg.Model.Model)
-	if !ok {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := gw.RefreshModelCatalog(ctx); err != nil {
-			return util.ReportError(err)
-		}
-		entry, ok = gw.ModelCatalogEntry(msg.Model.Provider, msg.Model.Model)
-	}
-	if ok && (!entry.Available || msg.ReAuthenticate) {
-		if !entry.LoginAvailable {
-			return util.ReportError(fmt.Errorf("model unavailable: %s/%s", msg.Model.Provider, msg.Model.Model))
-		}
-		pending := msg
-		m.pendingGmpModelSelection = &pending
-		m.dialog.CloseDialog(dialog.ModelsID)
-		return m.runGmpAuthCommand(auth.CommandLogin, entry.Provider)
-	}
-	return m.applyGmpModelSelection(gw, msg)
-}
-
-func (m *UI) applyGmpModelSelection(gw *workspace.GmpWorkspace, msg dialog.ActionSelectModel) tea.Cmd {
-	var cmds []tea.Cmd
-	isOnboarding := m.state == uiOnboarding
-	providerID := msg.Model.Provider
-
-	if err := gw.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
-		return util.ReportError(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := gw.RefreshModelCatalog(ctx); err != nil {
-		cmds = append(cmds, util.ReportError(err))
-	}
-	cancel()
-
-	if msg.ModelType == config.SelectedModelTypeLarge {
-		m.applyTheme(styles.ThemeForProvider(providerID))
-	}
-
-	m.dialog.CloseDialog(dialog.GmpAuthID)
-	m.dialog.CloseDialog(dialog.ModelsID)
-
-	if isOnboarding {
-		m.setState(uiLanding, uiFocusEditor)
-		m.com.Config().SetupAgents()
-		if err := gw.InitCoderAgent(context.TODO()); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		}
-	}
-
-	modelMsg := fmt.Sprintf("%s model changed to %s", msg.ModelType, msg.Model.Model)
-	cmds = append(cmds, util.ReportInfo(modelMsg))
-	return tea.Batch(cmds...)
-}
-
-func (m *UI) retryPendingGmpModelSelection() tea.Cmd {
-	if m.pendingGmpModelSelection == nil {
-		return nil
-	}
-	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
-	if !ok {
-		m.pendingGmpModelSelection = nil
-		return nil
-	}
-	pending := *m.pendingGmpModelSelection
-	m.pendingGmpModelSelection = nil
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := gw.RefreshModelCatalog(ctx); err != nil {
-		return util.ReportError(err)
-	}
-	return m.handleGmpSelectModel(gw, pending)
-}
-
-func (m *UI) openAuthenticationDialog(provider catwalk.Provider, _ config.SelectedModel, _ config.SelectedModelType) tea.Cmd {
-	// apps/tui-go is gmp-only (ADR 0002). Auth always flows through
-	// the RPC bridge: dispatch auth.login, the gmp backend drives the
-	// flow back via extension_ui_request frames into the GmpAuth
-	// dialog. The legacy Crush dialogs (NewAPIKeyInput / NewOAuthHyper
-	// / NewOAuthCopilot) and the IsGmpMode == false branch were
-	// removed in carve-out Phase 1 lite — they wrote to local
-	// crush.json which is the wrong store for this fork.
-	return m.runGmpAuthCommand(auth.CommandLogin, string(provider.ID))
-}
-
 func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -1839,11 +1859,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			return true
 		case key.Matches(msg, m.keyMap.Models):
 			if cmd := m.openModelsDialog(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			return true
-		case key.Matches(msg, m.keyMap.Sessions):
-			if cmd := m.openSessionsDialog(); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 			return true
@@ -2344,6 +2359,11 @@ func (m *UI) View() tea.View {
 		return v
 	}
 
+	if m.backendExited {
+		v.Content = renderBackendExitedBanner(m.width, m.height)
+		return v
+	}
+
 	canvas := uv.NewScreenBuffer(m.width, m.height)
 	v.Cursor = m.Draw(canvas, canvas.Bounds())
 
@@ -2378,13 +2398,16 @@ func (m *UI) trapLocalSlash(content string) (tea.Cmd, bool) {
 	case "/quit", "/exit":
 		return tea.Quit, true
 	case "/help":
-		help := "Local commands: /quit /exit /help /clear /debug /login /logout. Press / or Ctrl+P for the full palette. Anything else starting with / is sent to the omp agent."
+		help := "Local commands: /quit /exit /help /clear /debug /theme /login /logout. Press / or Ctrl+P for the full palette. Anything else starting with / is sent to the omp agent."
 		return util.ReportInfo(help), true
 	case "/clear":
 		m.textarea.Reset()
 		return nil, true
 	case "/debug":
 		return util.ReportInfo("debug overlay deferred — tail ~/.gmp/tui.log or run with --debug to mirror to stderr"), true
+	case "/theme":
+		m.textarea.Reset()
+		return m.openDialog(dialog.ThemeID), true
 	case "/login":
 		m.textarea.Reset()
 		return m.runGmpAuthCommand(auth.CommandLogin, strings.TrimSpace(rest)), true
@@ -2393,31 +2416,6 @@ func (m *UI) trapLocalSlash(content string) (tea.Cmd, bool) {
 		return m.runGmpAuthCommand(auth.CommandLogout, strings.TrimSpace(rest)), true
 	}
 	return nil, false
-}
-
-// runGmpAuthCommand sends an auth.login / auth.logout RPC command to the
-// gmp backend if the active workspace is a GmpWorkspace; otherwise reports
-// the limitation. The actual UI flow (dialogs) is driven by inbound
-// extension_ui_request frames, not this command.
-//
-// Provider may be empty for auth.login — the backend emits a correlated
-// auth.pick_provider extension_ui_request and the GmpAuth dialog drives
-// the picker. See ADR 0002. auth.logout still requires an explicit
-// provider id.
-func (m *UI) runGmpAuthCommand(method string, provider string) tea.Cmd {
-	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
-	if !ok {
-		return util.ReportInfo(method + " requires the gmp backend (apps/tui-go in gmp mode)")
-	}
-	if provider == "" && method != auth.CommandLogin {
-		return util.ReportInfo("usage: " + method + " <provider> (e.g. /logout openai-codex)")
-	}
-	return func() tea.Msg {
-		if err := gw.SendAuthCommand(method, provider); err != nil {
-			return util.InfoMsg{Type: util.InfoTypeError, Msg: method + " failed: " + err.Error()}
-		}
-		return nil
-	}
 }
 
 // renderTooSmallBanner produces a centred "terminal too small" message that
@@ -2442,6 +2440,34 @@ func renderTooSmallBanner(width, height int) string {
 		if width > 0 {
 			line = lipgloss.PlaceHorizontal(width, lipgloss.Center, line)
 		}
+		b.WriteString(line)
+		if i < len(lines)-1 {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+// renderBackendExitedBanner produces a centred, styled notice shown when the
+// gmp RPC subprocess exits unexpectedly. It reuses renderTooSmallBanner's
+// centring approach but colours the heading so the lost-connection state is
+// legible and distinct from a frozen transcript. There is no reconnect hint
+// — the MVP does not auto-respawn; the user restarts gmp-tui-go.
+func renderBackendExitedBanner(width, height int) string {
+	if width <= 0 || height <= 0 {
+		return ""
+	}
+	heading := lipgloss.NewStyle().Foreground(lipgloss.Red).Bold(true).Render(backendExitedHeading)
+	detail := "The gmp backend process exited unexpectedly."
+	hint := "Restart gmp-tui-go to reconnect."
+	lines := []string{heading, "", detail, "", hint}
+	var b strings.Builder
+	verticalPad := (height - len(lines)) / 2
+	for range verticalPad {
+		b.WriteByte('\n')
+	}
+	for i, line := range lines {
+		line = lipgloss.PlaceHorizontal(width, lipgloss.Center, line)
 		b.WriteString(line)
 		if i < len(lines)-1 {
 			b.WriteByte('\n')
@@ -2566,7 +2592,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 			tab,
 			commands,
 			k.Models,
-			k.Sessions,
 		)
 		if hasSession {
 			mainBinds = append(mainBinds, k.Chat.NewSession)
@@ -2624,7 +2649,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 				[]key.Binding{
 					commands,
 					k.Models,
-					k.Sessions,
 				},
 			)
 			editorBinds := []key.Binding{
@@ -3282,6 +3306,38 @@ func (m *UI) applyTheme(s styles.Styles) {
 	m.refreshStyles()
 }
 
+// applyProviderTheme swaps to the theme associated with the given provider and
+// records its name so the theme picker stays in sync with provider-driven swaps.
+func (m *UI) applyProviderTheme(providerID string) {
+	m.themeName = styles.ThemeNameForProvider(providerID)
+	m.applyTheme(styles.ThemeForProvider(providerID))
+}
+
+// applyThemeByName looks up a named theme and applies it, recording the name
+// so the theme picker can mark the active entry. Returns false if the name is
+// not a known theme.
+func (m *UI) applyThemeByName(name string) bool {
+	s, ok := styles.ThemeByName(name)
+	if !ok {
+		return false
+	}
+	m.themeName = name
+	m.applyTheme(s)
+	return true
+}
+
+// currentThemeName returns the name of the active theme, defaulting to the
+// first available theme when none has been explicitly selected.
+func (m *UI) currentThemeName() string {
+	if m.themeName != "" {
+		return m.themeName
+	}
+	if options := styles.AvailableThemes(); len(options) > 0 {
+		return options[0].Name
+	}
+	return ""
+}
+
 // refreshStyles pushes the current *m.com.Styles into every subcomponent
 // that copies or pre-renders style-dependent values at construction time.
 func (m *UI) refreshStyles() {
@@ -3402,10 +3458,6 @@ func (m *UI) cancelAgent() tea.Cmd {
 func (m *UI) openDialog(id string) tea.Cmd {
 	var cmds []tea.Cmd
 	switch id {
-	case dialog.SessionsID:
-		if cmd := m.openSessionsDialog(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 	case dialog.ModelsID:
 		if cmd := m.openModelsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -3416,6 +3468,10 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		}
 	case dialog.ReasoningID:
 		if cmd := m.openReasoningDialog(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case dialog.ThemeID:
+		if cmd := m.openThemeDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case dialog.FilePickerID:
@@ -3515,27 +3571,19 @@ func (m *UI) openReasoningDialog() tea.Cmd {
 	return nil
 }
 
-// openSessionsDialog opens the sessions dialog. If the dialog is already open,
-// it brings it to the front. Otherwise, it will list all the sessions and open
-// the dialog.
-func (m *UI) openSessionsDialog() tea.Cmd {
-	if m.dialog.ContainsDialog(dialog.SessionsID) {
-		// Bring to front
-		m.dialog.BringToFront(dialog.SessionsID)
+// openThemeDialog opens the theme picker dialog.
+func (m *UI) openThemeDialog() tea.Cmd {
+	if m.dialog.ContainsDialog(dialog.ThemeID) {
+		m.dialog.BringToFront(dialog.ThemeID)
 		return nil
 	}
 
-	selectedSessionID := ""
-	if m.session != nil {
-		selectedSessionID = m.session.ID
-	}
-
-	dialog, err := dialog.NewSessions(m.com, selectedSessionID)
+	themeDialog, err := dialog.NewTheme(m.com, m.currentThemeName())
 	if err != nil {
 		return util.ReportError(err)
 	}
 
-	m.dialog.OpenDialog(dialog)
+	m.dialog.OpenDialog(themeDialog)
 	return nil
 }
 
@@ -3554,52 +3602,30 @@ func (m *UI) openFilesDialog() tea.Cmd {
 	return cmd
 }
 
-// openOrUpdateGmpAuthDialog ensures a GmpAuth dialog is open and forwards
-// the inbound auth.* message to it. Reused for every auth.* frame so the
-// same dialog instance walks through ShowURL → PromptCode →
-// ShowResult during a single login.
-func (m *UI) openOrUpdateGmpAuthDialog(msg tea.Msg) tea.Cmd {
-	dlg := m.dialog.Dialog(dialog.GmpAuthID)
-	if dlg == nil {
-		dlg = dialog.NewGmpAuth(m.com)
-		m.dialog.OpenDialog(dlg)
-	}
-	action := dlg.HandleMsg(msg)
-	if cmdAction, ok := action.(dialog.ActionCmd); ok {
-		return cmdAction.Cmd
-	}
-	return nil
-}
-
-// openPermissionsDialog opens the permissions dialog for a permission request.
-func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
-	// Close any existing permissions dialog first.
-	m.dialog.CloseDialog(dialog.PermissionsID)
-
-	// Get diff mode from config.
-	var opts []dialog.PermissionsOption
-	if diffMode := m.com.Config().Options.TUI.DiffMode; diffMode != "" {
-		opts = append(opts, dialog.WithDiffMode(diffMode == "split"))
-	}
-
-	permDialog := dialog.NewPermissions(m.com, perm, opts...)
-	m.dialog.OpenDialog(permDialog)
-	return nil
-}
-
 // handlePermissionNotification updates tool items when permission state changes.
 func (m *UI) handlePermissionNotification(notification permission.PermissionNotification) {
-	toolItem := m.chat.MessageItem(notification.ToolCallID)
+	if notification.Granted {
+		m.setToolItemStatus(notification.ToolCallID, chat.ToolStatusRunning)
+	} else {
+		m.setToolItemStatus(notification.ToolCallID, chat.ToolStatusAwaitingPermission)
+	}
+}
+
+// setToolItemStatus updates the rendered status of the tool card identified by
+// toolCallID, if it exists and is a tool item. Used to park a card in
+// awaiting-permission while its gmp tool-approval gate is open and to release
+// it once the user answers, so the transcript doesn't show a gated tool as
+// "running". A no-op when the card is absent or not a tool item.
+func (m *UI) setToolItemStatus(toolCallID string, status chat.ToolStatus) {
+	if toolCallID == "" {
+		return
+	}
+	toolItem := m.chat.MessageItem(toolCallID)
 	if toolItem == nil {
 		return
 	}
-
 	if permItem, ok := toolItem.(chat.ToolMessageItem); ok {
-		if notification.Granted {
-			permItem.SetStatus(chat.ToolStatusRunning)
-		} else {
-			permItem.SetStatus(chat.ToolStatusAwaitingPermission)
-		}
+		permItem.SetStatus(status)
 	}
 }
 
@@ -3906,11 +3932,10 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	sectionWidth := max(1, min(maxSectionWidth, width/4-2)) // account for spacing between sections
 	maxItemsPerSection := remainingHeight - 3               // Account for section title and spacing
 
-	lspSection := m.lspInfo(sectionWidth, maxItemsPerSection, false)
 	mcpSection := m.mcpInfo(sectionWidth, maxItemsPerSection, false)
 	skillsSection := m.skillsInfo(sectionWidth, maxItemsPerSection, false)
 	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), sectionWidth, maxItemsPerSection, false)
-	sections := lipgloss.JoinHorizontal(lipgloss.Top, filesSection, " ", lspSection, " ", mcpSection, " ", skillsSection)
+	sections := lipgloss.JoinHorizontal(lipgloss.Top, filesSection, " ", mcpSection, " ", skillsSection)
 	uv.NewStyledString(
 		s.CompactDetails.View.
 			Width(area.Dx()).

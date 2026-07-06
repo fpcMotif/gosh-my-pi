@@ -1,0 +1,22 @@
+{
+	"type": "message_end",
+	"message": {
+		"role": "assistant",
+		"content": [{ "type": "text", "text": "partial" }],
+		"api": "openai-responses",
+		"provider": "openai",
+		"model": "gpt-5",
+		"usage": {
+			"input": 10,
+			"output": 20,
+			"cacheRead": 0,
+			"cacheWrite": 0,
+			"totalTokens": 30,
+			"cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0 }
+		},
+		"stopReason": "error",
+		"errorMessage": "context full",
+		"timestamp": 1717200000001
+	},
+	"errorKind": { "kind": "context_overflow", "usedTokens": 250000 }
+}

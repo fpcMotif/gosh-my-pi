@@ -4,10 +4,45 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+// TestRootSubcommandSet pins the registered subcommand set to the
+// gmp-supported commands. The dead Crush subcommands (server, logs,
+// projects, dirs, update-providers, session) were removed in the
+// carve-out cmd cleanup; this guards against any of them — or a new
+// Crush-runtime command — being re-registered against the inert
+// internal/{server,db,...} packages. (The synthetic "completion" /
+// "help" commands are injected by fang/cobra during Execute, not at
+// init, so they are not present here.)
+func TestRootSubcommandSet(t *testing.T) {
+	want := []string{
+		"login",
+		"logout",
+		"models",
+		"run",
+		"schema",
+		"stats",
+	}
+
+	var got []string
+	for _, c := range rootCmd.Commands() {
+		got = append(got, c.Name())
+	}
+	sort.Strings(got)
+
+	if len(got) != len(want) {
+		t.Fatalf("subcommands = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("subcommands = %v, want %v", got, want)
+		}
+	}
+}
 
 func newBackendTestCommand(t *testing.T, agentCmd string) *cobra.Command {
 	t.Helper()

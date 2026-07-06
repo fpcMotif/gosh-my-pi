@@ -4,13 +4,7 @@ import type { Static, TSchema } from "@sinclair/typebox";
 import { applyToolProxy } from "../../extensibility/tool-proxy";
 import type { Theme } from "../../modes/theme/theme";
 import { RequestCorrelator } from "./request-correlator";
-import type {
-	RpcHostToolCallRequest,
-	RpcHostToolCancelRequest,
-	RpcHostToolDefinition,
-	RpcHostToolResult,
-	RpcHostToolUpdate,
-} from "./rpc-types";
+import type { RpcHostToolDefinition, RpcHostToolResult, RpcHostToolUpdate } from "./rpc-types";
 import type { WireFrame } from "./wire/v1";
 
 /**
@@ -84,10 +78,6 @@ export class RpcHostToolBridge {
 
 	constructor(output: RpcHostToolOutput) {
 		this.#output = output;
-	}
-
-	getToolNames(): string[] {
-		return Array.from(this.#definitions.keys());
 	}
 
 	setTools(tools: RpcHostToolDefinition[]): AgentTool[] {

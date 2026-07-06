@@ -729,9 +729,19 @@ function buildParams(
 	if (options?.toolChoice !== undefined && compat.supportsToolChoice) {
 		params.tool_choice = mapToOpenAICompletionsToolChoice(options.toolChoice);
 	}
+	if (isForcedToolChoice(params.tool_choice) && !compat.supportsForcedToolChoice) {
+		// Some thinking-required OpenAI-compatible models reject forced
+		// `tool_choice` while still accepting tools with the default auto
+		// selector. Keep the tool available and let the model choose it.
+		params.tool_choice = "auto";
+	}
 
 	if (compat.thinkingFormat === "zai" && model.reasoning) {
-		Reflect.set(params, "thinking", { type: options?.reasoning ? "enabled" : "disabled" });
+		if (options?.reasoning) {
+			Reflect.set(params, "thinking", { type: "enabled" });
+		} else if (compat.reasoningDisableMode !== "omit") {
+			Reflect.set(params, "thinking", { type: "disabled" });
+		}
 	} else if (compat.thinkingFormat === "qwen" && model.reasoning) {
 		Reflect.set(params, "enable_thinking", !!options?.reasoning);
 	} else if (compat.thinkingFormat === "qwen-chat-template" && model.reasoning) {

@@ -12,7 +12,6 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/util"
 )
@@ -26,11 +25,6 @@ type ActionQuit = tea.QuitMsg
 // ActionOpenDialog is a message to open a dialog.
 type ActionOpenDialog struct {
 	DialogID string
-}
-
-// ActionSelectSession is a message indicating a session has been selected.
-type ActionSelectSession struct {
-	Session session.Session
 }
 
 // ActionSelectModel is a message indicating a model has been selected.
@@ -60,6 +54,10 @@ type (
 	// has been selected.
 	ActionSelectReasoningEffort struct {
 		Effort string
+	}
+	// ActionSelectTheme is a message indicating a theme has been selected.
+	ActionSelectTheme struct {
+		Name string
 	}
 	ActionPermissionResponse struct {
 		Permission permission.PermissionRequest
