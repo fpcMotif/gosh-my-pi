@@ -74,7 +74,7 @@ type AuthProviderMetadata = {
 
 const BUILTIN_AUTH_PROVIDERS: readonly AuthProviderMetadata[] = [
 	{ id: "openai-codex", name: "OpenAI Codex", available: true },
-	{ id: "kimi", name: "Kimi", available: true },
+	{ id: "kimi-code", name: "Kimi", available: true },
 	{ id: "moonshot", name: "Moonshot", available: true },
 	{ id: "zai", name: "zAI", available: true },
 	{ id: "kagi", name: "Kagi", available: true },

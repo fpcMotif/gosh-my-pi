@@ -159,4 +159,42 @@ describe("buildRpcModelCatalog", () => {
 			}),
 		]);
 	});
+
+	it("registers the canonical 'kimi-code' id (not legacy 'kimi') as a login-capable built-in provider", () => {
+		const kimi = model("kimi-code", "kimi-k2");
+		const catalog = buildRpcModelCatalog(
+			sessionStub({
+				allModels: [kimi],
+				availableModels: [],
+				authenticatedProviders: [],
+			}),
+		);
+
+		expect(catalog.models).toEqual([
+			expect.objectContaining({
+				provider: "kimi-code",
+				providerName: "Kimi",
+				available: false,
+				loginSupported: true,
+				loginAvailable: true,
+			}),
+		]);
+
+		const legacyKimi = model("kimi", "kimi-k2");
+		const legacyCatalog = buildRpcModelCatalog(
+			sessionStub({
+				allModels: [legacyKimi],
+				availableModels: [],
+				authenticatedProviders: [],
+			}),
+		);
+		expect(legacyCatalog.models).toEqual([
+			expect.objectContaining({
+				provider: "kimi",
+				providerName: "kimi",
+				loginSupported: false,
+				loginAvailable: false,
+			}),
+		]);
+	});
 });
