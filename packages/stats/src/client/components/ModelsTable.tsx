@@ -67,7 +67,10 @@ type ModelPerformanceSeries = {
 export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 	const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
-	const performanceSeriesByKey = useMemo(() => buildModelPerformanceLookup(performanceSeries), [performanceSeries]);
+	const performanceSeriesByKey = useMemo(
+		() => buildModelPerformanceLookup(performanceSeries, Date.now()),
+		[performanceSeries],
+	);
 	const theme = useSystemTheme();
 	const chartTheme = CHART_THEMES[theme];
 	const sortedModels = [...models].sort(
@@ -330,10 +333,14 @@ function PerformanceChart({
 	return <Line data={chartData} options={options} />;
 }
 
-function buildModelPerformanceLookup(points: ModelPerformancePoint[], days = 14): Map<string, ModelPerformanceSeries> {
+function buildModelPerformanceLookup(
+	points: ModelPerformancePoint[],
+	now: number,
+	days = 14,
+): Map<string, ModelPerformanceSeries> {
 	const dayMs = 24 * 60 * 60 * 1000;
 	const maxTimestamp = points.reduce((max, point) => Math.max(max, point.timestamp), 0);
-	const anchor = maxTimestamp > 0 ? maxTimestamp : Math.floor(Date.now() / dayMs) * dayMs;
+	const anchor = maxTimestamp > 0 ? maxTimestamp : Math.floor(now / dayMs) * dayMs;
 	const start = anchor - (days - 1) * dayMs;
 	const buckets = Array.from({ length: days }, (_, index) => start + index * dayMs);
 	const bucketIndex = new Map(buckets.map((timestamp, index) => [timestamp, index]));
