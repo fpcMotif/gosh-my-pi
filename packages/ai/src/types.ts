@@ -444,6 +444,19 @@ export interface OpenAICompat {
 	 * enabled` whenever both are present. Default: auto-detected (Kimi).
 	 */
 	disableReasoningOnForcedToolChoice?: boolean;
+	/**
+	 * Whether forced `tool_choice` values (`"required"` or named tools) are accepted.
+	 * When false, request builders keep tools available but downgrade forced choices
+	 * to provider-default auto selection. Default: true.
+	 */
+	supportsForcedToolChoice?: boolean;
+	/**
+	 * How to represent a caller-disabled thinking request when `thinkingFormat: "zai"`.
+	 * "disabled" sends `thinking: { type: "disabled" }` (default). "omit" drops the
+	 * `thinking` field entirely instead, for thinking-required models (e.g. native
+	 * Kimi K2.7 Code) that 400 on an explicit disabled value. Default: "disabled".
+	 */
+	reasoningDisableMode?: "disabled" | "omit";
 	/** OpenRouter-specific routing preferences. Only used when baseUrl points to OpenRouter. */
 	openRouterRouting?: OpenRouterRouting;
 	/** Vercel AI Gateway routing preferences. Only used when baseUrl points to Vercel AI Gateway. */
