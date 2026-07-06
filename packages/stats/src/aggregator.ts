@@ -58,7 +58,7 @@ async function syncSessionFile(sessionFile: string): Promise<number> {
  * Sync all session files to the database.
  * Returns the number of new entries processed.
  */
-export async function syncAllSessions(): Promise<{ processed: number; files: number }> {
+async function doSyncAllSessions(): Promise<{ processed: number; files: number }> {
 	await initDb();
 
 	const files = await listAllSessionFiles();
@@ -73,6 +73,45 @@ export async function syncAllSessions(): Promise<{ processed: number; files: num
 	}
 
 	return { processed: totalProcessed, files: filesProcessed };
+}
+
+type SyncResult = { processed: number; files: number };
+let currentSyncPromise: Promise<SyncResult> | null = null;
+let nextSyncPromise: Promise<SyncResult> | null = null;
+
+/**
+ * Sync all session files to the database with promise coalescing.
+ * This optimization prevents redundant file I/O and database queries
+ * from concurrent frontend requests while ensuring updates arriving
+ * during an ongoing sync are not dropped.
+ */
+export function syncAllSessions(): Promise<SyncResult> {
+	if (nextSyncPromise) {
+		return nextSyncPromise;
+	}
+
+	if (currentSyncPromise) {
+		nextSyncPromise = currentSyncPromise
+			.catch(() => {})
+			.then(() => {
+				currentSyncPromise = nextSyncPromise;
+				nextSyncPromise = null;
+				return doSyncAllSessions();
+			})
+			.finally(() => {
+				if (!nextSyncPromise) {
+					currentSyncPromise = null;
+				}
+			});
+		return nextSyncPromise;
+	}
+
+	currentSyncPromise = doSyncAllSessions().finally(() => {
+		if (!nextSyncPromise) {
+			currentSyncPromise = null;
+		}
+	});
+	return currentSyncPromise;
 }
 
 /**
