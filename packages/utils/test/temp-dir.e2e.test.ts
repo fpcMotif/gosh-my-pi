@@ -94,7 +94,9 @@ describe("TempDir lifecycle", () => {
 			});
 
 			const spawnCalls: string[][] = [];
-			const originalSpawnSync: SpawnSyncForTest = (cmd, options) => Bun.spawnSync(cmd, options);
+			// Capture before spyOn: a lazy `Bun.spawnSync` lookup would resolve to
+			// the mock and recurse infinitely.
+			const originalSpawnSync: SpawnSyncForTest = Bun.spawnSync.bind(Bun) as SpawnSyncForTest;
 			const bunForTest = Bun as { spawnSync: SpawnSyncForTest };
 			vi.spyOn(bunForTest, "spawnSync").mockImplementation((cmd, options) => {
 				spawnCalls.push([...cmd]);
