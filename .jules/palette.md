@@ -1,0 +1,4 @@
+## 2025-02-12 - Adding screen reader and tooltip support for icon-only table cells
+
+**Learning:** When using icon-only table cells (like for displaying a success or error status), relying on the icon's color and shape alone fails screen readers and leaves some users guessing. Adding a tooltip provides useful clarification on hover while a wrapper element with `role="img"` and an `aria-label` ensures standard accessibility tools properly interpret the status. Hiding the icon itself with `aria-hidden="true"` prevents redundant announcements.
+**Action:** When implementing an icon-only element for status indicators, especially in tables or tightly packed UI where text labels don't fit, always wrap the icon in a semantic `span` (or `div`) that includes a descriptive `title`, `aria-label`, and `role="img"`, and add `aria-hidden="true"` to the SVG/Lucide icon itself.
