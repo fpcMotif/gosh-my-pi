@@ -108,19 +108,35 @@ export function syncAllSessions(): Promise<{ processed: number; files: number }>
 
 /**
  * Get all dashboard stats.
+ *
+ * Performance: Uses promise coalescing to deduplicate concurrent dashboard reads.
+ * The dashboard UI loads multiple API endpoints concurrently on initial render,
+ * and we want to ensure we only query the DB once per load burst.
  */
-export async function getDashboardStats(): Promise<DashboardStats> {
-	await initDb();
+let dashboardStatsPromise: Promise<DashboardStats> | null = null;
 
-	return {
-		overall: getOverallStats(),
-		byModel: getStatsByModel(),
-		byFolder: getStatsByFolder(),
-		timeSeries: getTimeSeries(24),
-		modelSeries: getModelTimeSeries(14),
-		modelPerformanceSeries: getModelPerformanceSeries(14),
-		costSeries: getCostTimeSeries(90),
-	};
+export function getDashboardStats(): Promise<DashboardStats> {
+	if (dashboardStatsPromise) {
+		return dashboardStatsPromise;
+	}
+
+	dashboardStatsPromise = (async () => {
+		await initDb();
+
+		return {
+			overall: getOverallStats(),
+			byModel: getStatsByModel(),
+			byFolder: getStatsByFolder(),
+			timeSeries: getTimeSeries(24),
+			modelSeries: getModelTimeSeries(14),
+			modelPerformanceSeries: getModelPerformanceSeries(14),
+			costSeries: getCostTimeSeries(90),
+		};
+	})().finally(() => {
+		dashboardStatsPromise = null;
+	});
+
+	return dashboardStatsPromise;
 }
 export async function getRecentRequests(limit?: number): Promise<MessageStats[]> {
 	await initDb();
