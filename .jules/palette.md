@@ -1,0 +1,3 @@
+## 2024-07-08 - Accessible Icon-Only Status Indicators
+**Learning:** Raw SVG or Lucide icons used as status indicators (like Success/Error circles in tables) are invisible to screen readers and lack native hover tooltips. When users depend on these visual cues to understand row state, it creates a significant accessibility barrier.
+**Action:** When implementing icon-only status indicators, strictly wrap the icon in a semantic wrapper (`<span role="img" aria-label="Status Name" title="Status Name">`) and apply `aria-hidden="true"` to the inner SVG/icon itself. This explicitly describes the intent to assistive technologies while providing a native browser tooltip for mouse users.
