@@ -1,0 +1,3 @@
+## 2023-10-27 - Icon-Only Status Indicators Accessibility
+**Learning:** Icon-only status indicators in tables (like success/error icons) need specific ARIA roles, labels, and hidden attributes to be accessible to screen readers, while also providing hover tooltips for mouse users.
+**Action:** Always wrap icon-only status indicators in a semantic element (like `span`) containing `role="img"`, `aria-label`, and `title`. Apply `aria-hidden="true"` to the inner SVG or Lucide icon itself.
