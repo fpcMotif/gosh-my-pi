@@ -41,11 +41,13 @@ test and a `go test` resolve deterministically.
 | `agent_start.json`                  | `agent_start`                                            |
 | `agent_end.json`                    | `agent_end` (no `errorKind`)                             |
 | `agent_end.error_kind.json`         | `agent_end` with `errorKind` (`usage_limit`)             |
+| `agent_end.fatal_reason.json`       | `agent_end` with `errorKind` (`fatal`, with `reason`)    |
 | `turn_end.json`                     | `turn_end` with message + toolResults                    |
 | `message_start.json`                | `message_start`                                          |
 | `message_update.text_delta.json`    | `message_update` carrying a `text_delta` sub-event       |
 | `message_update.toolcall_end.json`  | `message_update` carrying a `toolcall_end` sub-event     |
 | `message_end.error_kind.json`       | `message_end` with `errorKind` (`context_overflow`)      |
+| `message_end.fatal_no_reason.json`  | `message_end` with `errorKind` (`fatal`, no `reason`)    |
 | `tool_execution_start.json`         | `tool_execution_start` (bash, with `presentation`)       |
 | `tool_execution_update.json`        | `tool_execution_update` (read, with code `presentation`) |
 | `tool_execution_end.edit_diff.json` | `tool_execution_end` for an edit diff (`details.diff`)   |

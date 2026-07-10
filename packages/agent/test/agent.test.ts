@@ -489,7 +489,7 @@ describe("Agent", () => {
 			expect((caught as Error).message).toBe("No model configured");
 			expect(caught).toBeInstanceOf(InvalidAgentState);
 			expect((caught as InvalidAgentState).reason).toBe("no-model");
-			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
+			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal", reason: "No model configured" });
 		});
 
 		it("continue() throws InvalidAgentState(no-messages) when there are no messages to continue from", async () => {
@@ -505,7 +505,10 @@ describe("Agent", () => {
 			expect((caught as Error).message).toBe("No messages to continue from");
 			expect(caught).toBeInstanceOf(InvalidAgentState);
 			expect((caught as InvalidAgentState).reason).toBe("no-messages");
-			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
+			expect(errorToKind(caught as InvalidAgentState)).toEqual({
+				kind: "fatal",
+				reason: "No messages to continue from",
+			});
 		});
 
 		it("continue() throws InvalidAgentState(invalid-continue-role) when the last message is assistant and nothing is queued", async () => {
@@ -522,7 +525,10 @@ describe("Agent", () => {
 			expect((caught as Error).message).toBe("Cannot continue from message role: assistant");
 			expect(caught).toBeInstanceOf(InvalidAgentState);
 			expect((caught as InvalidAgentState).reason).toBe("invalid-continue-role");
-			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
+			expect(errorToKind(caught as InvalidAgentState)).toEqual({
+				kind: "fatal",
+				reason: "Cannot continue from message role: assistant",
+			});
 		});
 
 		it("continue() throws InvalidAgentState(no-model) when no model is configured and the last message is not assistant", async () => {
@@ -540,7 +546,7 @@ describe("Agent", () => {
 			expect((caught as Error).message).toBe("No model configured");
 			expect(caught).toBeInstanceOf(InvalidAgentState);
 			expect((caught as InvalidAgentState).reason).toBe("no-model");
-			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
+			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal", reason: "No model configured" });
 		});
 	});
 });

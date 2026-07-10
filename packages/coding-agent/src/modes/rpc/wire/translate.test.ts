@@ -234,6 +234,18 @@ describe("toWireEvent — AgentEvent variants → v1 wire", () => {
 		}
 	});
 
+	test("message_end passes through fatal error kind's reason", () => {
+		const wire = toWireEvent({
+			type: "message_end",
+			message: assistantMessage({ stopReason: "error", errorMessage: "malformed schema" }) as AgentMessage,
+			errorKind: { kind: "fatal", reason: "malformed schema" },
+		});
+		expect(wire?.type).toBe("message_end");
+		if (wire?.type === "message_end") {
+			expect(wire.errorKind).toEqual({ kind: "fatal", reason: "malformed schema" });
+		}
+	});
+
 	test("tool_execution_start", () => {
 		const wire = toWireEvent({
 			type: "tool_execution_start",

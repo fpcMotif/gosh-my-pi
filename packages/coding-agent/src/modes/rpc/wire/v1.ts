@@ -101,7 +101,7 @@ export type WireErrorKindV1 =
 	| { kind: "context_overflow"; usedTokens?: number }
 	| { kind: "usage_limit"; retryAfterMs: number }
 	| { kind: "transient"; retryAfterMs?: number; reason?: WireTransientReasonV1 }
-	| { kind: "fatal" };
+	| { kind: "fatal"; reason?: string };
 
 // ============================================================================
 // Messages — discriminated union by `role`

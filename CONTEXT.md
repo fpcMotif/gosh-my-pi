@@ -10,7 +10,12 @@ the same language.
 A typed classification of an assistant-message error attached to `AgentEvent`
 variants `agent_end` and `message_end`. Populated by pi-agent-core at the
 emission boundary. Four variants: `context_overflow`, `usage_limit`,
-`transient`, `fatal`.
+`transient`, `fatal`. The `fatal` variant carries an optional `reason`: a
+short label (first line of the underlying error text, truncated to 200
+chars) when the classifier has one, absent for the fully generic case (e.g.
+an assistant message with no `errorMessage` at all). The wire projection
+(`WireErrorKindV1` in `packages/coding-agent/src/modes/rpc/wire/v1.ts`)
+passes `reason` through unchanged.
 _Avoid_: error type, error category, error class.
 
 **TransientReason**:
@@ -682,6 +687,12 @@ tests can pin both branches without mutating globals (per AGENTS.md
   event stream — never by re-parsing `errorMessage`. The auto-compaction
   retry path that catches a thrown `Error` (no `AgentEvent`) is the one
   documented exception and uses the lower-level pi-ai classifiers directly.
+- On the **GmpWorkspace** side, `applyWireErrorKind` (`apps/tui-go/internal/workspace/error_kind.go`)
+  merges the wire `errorKind` into the assistant message's Finish rather than
+  unconditionally overwriting it: a reason-less generic `fatal` yields to a
+  Finish message already populated from the message's own `errorMessage`,
+  since the latter carries more information; every other kind (including a
+  reason-ful `fatal`) keeps replacing.
 - An **AgentSession** subscribes to `AgentEvent`s and routes them to its
   internal subsystems. After candidate #1b lands, those subsystems become
   independent subscribers in the **Reactor** model.

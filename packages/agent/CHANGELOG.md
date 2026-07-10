@@ -10,6 +10,7 @@
 
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
 - Changed agent prompt/continue precondition failures to raise `InvalidAgentState` instead of a bare `Error` (messages unchanged), so `mapToAgentRunError` no longer flattens them into `ConfigInvalid`.
+- Changed `AgentErrorKind`'s `fatal` variant to carry an optional `reason` (first line of the underlying error text, truncated to 200 chars) instead of discarding it, so hosts see why a turn failed fatally instead of a bare label.
 
 ## [14.5.10] - 2026-04-30
 
