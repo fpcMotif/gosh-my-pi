@@ -96,6 +96,11 @@ func (w *GmpWorkspace) translateEvent(ev *ompclient.AgentEvent) tea.Msg {
 		slog.Warn("gmp workspace: diagnostic frame", "kind", ev.Kind, "payload", truncateForLog(ev.Payload))
 		return nil
 	default:
+		// An event kind this build of the frontend doesn't recognize (e.g. a
+		// newer backend added a variant this client predates). Dropping it
+		// silently is the same frozen-looking-transcript failure mode as the
+		// _raw/extension_error case above — log so the gap is diagnosable.
+		slog.Warn("gmp workspace: unknown event kind", "kind", ev.Kind, "payload", truncateForLog(ev.Payload))
 		return nil
 	}
 }

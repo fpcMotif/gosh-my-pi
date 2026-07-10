@@ -1,7 +1,7 @@
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { describe, expect, test } from "bun:test";
 import { classifyAssistantError, errorToKind } from "../src/error-kind";
-import { ProviderHttpError } from "../src/errors";
+import { AgentBusy, InvalidAgentState, ProviderHttpError, SessionStorageError } from "../src/errors";
 import { createAssistantMessage, createUsage } from "./helpers";
 
 function errorMessage(error: string, usage?: Partial<AssistantMessage["usage"]>): AssistantMessage {
@@ -21,7 +21,11 @@ describe("classifyAssistantError", () => {
 
 	test("returns fatal when stopReason is error but no errorMessage", () => {
 		const msg = createAssistantMessage([], "error");
-		expect(classifyAssistantError(msg)?.kind).toBe("fatal");
+		const kind = classifyAssistantError(msg);
+		expect(kind?.kind).toBe("fatal");
+		if (kind?.kind === "fatal") {
+			expect(kind.reason).toBeUndefined();
+		}
 	});
 
 	test("classifies context overflow from error pattern", () => {
@@ -78,7 +82,20 @@ describe("classifyAssistantError", () => {
 
 	test("classifies fatal for unrecognized error", () => {
 		const msg = errorMessage("malformed schema validation failed");
-		expect(classifyAssistantError(msg)?.kind).toBe("fatal");
+		const kind = classifyAssistantError(msg);
+		expect(kind?.kind).toBe("fatal");
+		if (kind?.kind === "fatal") {
+			expect(kind.reason).toBe("malformed schema validation failed");
+		}
+	});
+
+	test("fatal reason is the first line, truncated to 200 chars", () => {
+		const msg = errorMessage(`${"x".repeat(250)}\nsecond line is dropped`);
+		const kind = classifyAssistantError(msg);
+		expect(kind?.kind).toBe("fatal");
+		if (kind?.kind === "fatal") {
+			expect(kind.reason).toBe(`${"x".repeat(200)}…`);
+		}
 	});
 
 	test("context_overflow takes precedence over usage_limit", () => {
@@ -105,5 +122,26 @@ describe("errorToKind ProviderHttpError", () => {
 
 	test.each([0, 99])("sub-100 sentinel %i (no response reached) is transient, not fatal", status => {
 		expect(httpError(status).kind).toBe("transient");
+	});
+
+	test("permanent status carries an HTTP-prefixed reason", () => {
+		expect(httpError(404)).toEqual({ kind: "fatal", reason: "HTTP 404: boom" });
+	});
+});
+
+describe("errorToKind fatal reason population", () => {
+	test("tags with an explicit message field surface it as reason", () => {
+		const error = new AgentBusy({ message: "agent is already processing a prompt" });
+		expect(errorToKind(error)).toEqual({ kind: "fatal", reason: "agent is already processing a prompt" });
+	});
+
+	test("InvalidAgentState surfaces its message as reason", () => {
+		const error = new InvalidAgentState({ reason: "no-model", message: "No model configured" });
+		expect(errorToKind(error)).toEqual({ kind: "fatal", reason: "No model configured" });
+	});
+
+	test("tags with no message field (Data.TaggedError forwards none) yield an undefined reason", () => {
+		const error = new SessionStorageError({ path: "/tmp/session.jsonl", operation: "write", cause: undefined });
+		expect(errorToKind(error)).toEqual({ kind: "fatal", reason: undefined });
 	});
 });

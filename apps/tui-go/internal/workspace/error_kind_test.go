@@ -1,6 +1,8 @@
 package workspace
 
 import (
+	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -69,6 +71,86 @@ func TestApplyWireErrorKindIgnoresNonAssistant(t *testing.T) {
 	msg := message.Message{Role: message.User}
 	if applyWireErrorKind(&msg, []byte(`{"errorKind":{"kind":"fatal"}}`)) {
 		t.Error("applyWireErrorKind mutated a non-assistant message")
+	}
+}
+
+// TestApplyWireErrorKindPreservesFinishOnReasonlessFatal is the regression test
+// for the clobber bug: gmp_parse.go already attaches a Finish carrying the
+// assistant message's own (full-text) errorMessage before applyWireErrorKind
+// runs. A reason-less generic fatal (`{kind:"fatal"}`, no `reason`) is
+// strictly less informative than that prior message, so it must not overwrite
+// it with the bare "Fatal error" label. Confirmed to fail against the
+// pre-merge-rule applyWireErrorKind (unconditional AddFinish) before this
+// exception was added.
+func TestApplyWireErrorKindPreservesFinishOnReasonlessFatal(t *testing.T) {
+	msg := message.Message{Role: message.Assistant}
+	msg.AddFinish(message.FinishReasonError, "the real underlying cause from errorMessage", "")
+
+	if applyWireErrorKind(&msg, []byte(`{"errorKind":{"kind":"fatal"}}`)) {
+		t.Fatal("applyWireErrorKind returned true, want false (must not clobber the prior Finish)")
+	}
+	fin, ok := finishPart(msg)
+	if !ok {
+		t.Fatal("Finish part was removed, want the prior Finish preserved")
+	}
+	if fin.Message != "the real underlying cause from errorMessage" {
+		t.Errorf("Finish.Message = %q, want the prior message preserved verbatim", fin.Message)
+	}
+}
+
+// TestApplyWireErrorKindReplacesOnFatalWithReason: a reason-ful fatal carries
+// strictly more information than any prior Finish, so it keeps replacing
+// (same rule as every other errorKind).
+func TestApplyWireErrorKindReplacesOnFatalWithReason(t *testing.T) {
+	msg := message.Message{Role: message.Assistant}
+	msg.AddFinish(message.FinishReasonError, "stale generic message", "")
+
+	if !applyWireErrorKind(&msg, []byte(`{"errorKind":{"kind":"fatal","reason":"malformed schema validation failed"}}`)) {
+		t.Fatal("applyWireErrorKind returned false, want true (reason-ful fatal must replace)")
+	}
+	fin, ok := finishPart(msg)
+	if !ok {
+		t.Fatal("no Finish part after applyWireErrorKind")
+	}
+	if !strings.Contains(fin.Message, "malformed schema validation failed") {
+		t.Errorf("Finish.Message = %q, want it to carry the fatal reason", fin.Message)
+	}
+}
+
+// TestApplyWireErrorKindAppliesReasonlessFatalWhenNoPriorMessage: when there is
+// no prior Finish message to protect (e.g. the assistant message never
+// carried an errorMessage), the reason-less fatal still applies its (bare)
+// description rather than silently doing nothing.
+func TestApplyWireErrorKindAppliesReasonlessFatalWhenNoPriorMessage(t *testing.T) {
+	msg := message.Message{Role: message.Assistant}
+
+	if !applyWireErrorKind(&msg, []byte(`{"errorKind":{"kind":"fatal"}}`)) {
+		t.Fatal("applyWireErrorKind returned false, want true (no prior Finish message to protect)")
+	}
+	fin, ok := finishPart(msg)
+	if !ok {
+		t.Fatal("no Finish part after applyWireErrorKind")
+	}
+	if fin.Message != "Fatal error" {
+		t.Errorf("Finish.Message = %q, want the bare fatal label", fin.Message)
+	}
+}
+
+// TestDescribeAgentErrorKindUnknownKindLogsAndReturnsFalse: an unrecognized
+// errorKind.kind must not fail silently — describeAgentErrorKind returns
+// ("", false) AND a warning is logged so the gap is diagnosable (rather than a
+// frozen-looking transcript with no observable cause).
+func TestDescribeAgentErrorKindUnknownKindLogsAndReturnsFalse(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	if _, ok := describeAgentErrorKind([]byte(`{"errorKind":{"kind":"some_future_kind"}}`)); ok {
+		t.Error("describeAgentErrorKind ok=true for an unknown kind, want false")
+	}
+	if !strings.Contains(buf.String(), "unknown errorKind") {
+		t.Errorf("log output = %q, want a warning naming the unknown errorKind", buf.String())
 	}
 }
 

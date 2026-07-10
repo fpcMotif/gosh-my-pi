@@ -204,7 +204,10 @@ function toWireErrorKind(kind: AgentErrorKind): WireErrorKindV1 {
 				...(kind.reason !== undefined && { reason: kind.reason }),
 			};
 		case "fatal":
-			return { kind: "fatal" };
+			return {
+				kind: "fatal",
+				...(kind.reason !== undefined && { reason: kind.reason }),
+			};
 	}
 }
 

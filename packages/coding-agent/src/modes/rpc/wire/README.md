@@ -72,7 +72,9 @@ Emitted when the prompt cycle terminates (success, abort, or error).
 - `{kind: "context_overflow", usedTokens?: number}`
 - `{kind: "usage_limit", retryAfterMs: number}`
 - `{kind: "transient", retryAfterMs?: number, reason?: TransientReason}`
-- `{kind: "fatal"}`
+- `{kind: "fatal", reason?: string}` — `reason` is a short label (first line, ≤200 chars) when
+  the classifier has one; absent for the reason-less generic fatal (e.g. an empty
+  `errorMessage`).
 
 ### `turn_start` / `turn_end`
 

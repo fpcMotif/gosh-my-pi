@@ -22,7 +22,22 @@ export type AgentErrorKind =
 	| { kind: "context_overflow"; usedTokens?: number }
 	| { kind: "usage_limit"; retryAfterMs: number }
 	| { kind: "transient"; retryAfterMs?: number; reason?: TransientReason }
-	| { kind: "fatal" };
+	| { kind: "fatal"; reason?: string };
+
+/** Max length of a `fatal` kind's `reason` label — the full text still rides `errorMessage`. */
+const FATAL_REASON_MAX_LENGTH = 200;
+
+/**
+ * Short label for a `fatal` classification: the first line of `text`,
+ * truncated to `FATAL_REASON_MAX_LENGTH` chars. Returns `undefined` when
+ * `text` is empty/undefined so reason-less fatals stay reason-less rather
+ * than carrying an empty string.
+ */
+function fatalReason(text: string | undefined): string | undefined {
+	if (text === undefined || text === "") return undefined;
+	const firstLine = text.split("\n", 1)[0] ?? text;
+	return firstLine.length > FATAL_REASON_MAX_LENGTH ? `${firstLine.slice(0, FATAL_REASON_MAX_LENGTH)}…` : firstLine;
+}
 
 /**
  * Classify an assistant message that has stopped with an error. Returns
@@ -63,7 +78,7 @@ export function classifyAssistantError(message: AssistantMessage, contextWindow?
 			: { kind: "transient", reason: transientReason };
 	}
 
-	return { kind: "fatal" };
+	return { kind: "fatal", reason: fatalReason(errorMessage) };
 }
 
 /**
@@ -92,14 +107,20 @@ export function errorToKind(error: AgentTaggedError): AgentErrorKind {
 			return error.usedTokens !== undefined
 				? { kind: "context_overflow", usedTokens: error.usedTokens }
 				: { kind: "context_overflow" };
-		case "ProviderHttpError":
+		case "ProviderHttpError": {
 			// Classify by HTTP status, not unconditionally transient: a permanent
 			// client error (401/403/400/404/422 ...) will never succeed on retry,
 			// so surfacing it as "transient, retrying" misleads the UI and any
 			// retry hint. Retryable statuses (5xx, 408, 429) stay transient; a
 			// missing status means a pre-response transport failure, which is
 			// retryable. Mirrors isRetryableStatus in packages/ai/src/utils/retry.ts.
-			return isRetryableHttpStatus(error.status) ? { kind: "transient" } : { kind: "fatal" };
+			if (isRetryableHttpStatus(error.status)) return { kind: "transient" };
+			const detail = fatalReason(error.message);
+			return {
+				kind: "fatal",
+				reason: detail !== undefined ? `HTTP ${error.status}: ${detail}` : `HTTP ${error.status}`,
+			};
+		}
 		case "UsageLimitError":
 			return { kind: "usage_limit", retryAfterMs: error.retryAfterMs };
 		case "LocalAbort":
@@ -114,6 +135,9 @@ export function errorToKind(error: AgentTaggedError): AgentErrorKind {
 		case "SessionStorageError":
 		case "SubprocessAborted":
 		case "InvalidAgentState":
-			return { kind: "fatal" };
+			// `.message` is empty ("") for tags with no explicit `message` field in
+			// their props (Data.TaggedError only forwards an explicit `message`
+			// field to the underlying Error) — fatalReason yields `undefined` there.
+			return { kind: "fatal", reason: fatalReason(error.message) };
 	}
 }

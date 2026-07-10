@@ -13,6 +13,7 @@
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt and updated TypeScript project diagnostics to use tsgo.
 - Renamed the installed CLI command and prebuilt binary artifacts from `omp` to `gmp` to avoid collisions with an existing `omp` command.
 - Decomposed the 2,200-line `gmp_workspace.go` god-file into eight focused `package workspace` files (catalog, auth, tool-approval, subscribe, events, parse, stubs) with no behavior change; removed dead wire/auth/catalog types across the seam; and tightened the `RpcClient` model-command return types and the tool-approval emit type-lock.
+- Changed the OMP-RPC v1 `fatal` `errorKind` to carry an optional `reason` (additive within v1); the Go TUI now preserves a prior, more informative Finish message instead of clobbering it with the bare "Fatal error" label when the wire carries the reason-less generic fatal.
 
 ### Removed
 

@@ -91,6 +91,20 @@ const cases: Array<{ fixture: string; event: AgentSessionEvent }> = [
 		},
 	},
 	{
+		fixture: "agent_end.fatal_reason.json",
+		event: {
+			type: "agent_end",
+			messages: [
+				assistantMessage({
+					content: [{ type: "text", text: "partial" }],
+					stopReason: "error",
+					errorMessage: "malformed schema validation failed",
+				}) as AgentMessage,
+			],
+			errorKind: { kind: "fatal", reason: "malformed schema validation failed" },
+		},
+	},
+	{
 		fixture: "turn_end.json",
 		event: {
 			type: "turn_end",
@@ -157,6 +171,14 @@ const cases: Array<{ fixture: string; event: AgentSessionEvent }> = [
 				errorMessage: "context full",
 			}) as AgentMessage,
 			errorKind: { kind: "context_overflow", usedTokens: 250_000 },
+		},
+	},
+	{
+		fixture: "message_end.fatal_no_reason.json",
+		event: {
+			type: "message_end",
+			message: assistantMessage({ content: [], stopReason: "error" }) as AgentMessage,
+			errorKind: { kind: "fatal" },
 		},
 	},
 	{

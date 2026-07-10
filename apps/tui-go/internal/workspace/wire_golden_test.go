@@ -87,6 +87,21 @@ func TestWireGoldenAgentEndErrorKind(t *testing.T) {
 	}
 }
 
+// TestWireGoldenAgentEndFatalReason: a reason-ful fatal errorKind decodes into
+// a description that carries the reason (not the bare "Fatal error" label)
+// through the real describeAgentErrorKind seam, mirroring
+// TestWireGoldenAgentEndErrorKind above for the fatal variant.
+func TestWireGoldenAgentEndFatalReason(t *testing.T) {
+	raw := loadWireFixture(t, "agent_end.fatal_reason.json")
+	desc, ok := describeAgentErrorKind(raw)
+	if !ok {
+		t.Fatal("describeAgentErrorKind ok=false, want a fatal description")
+	}
+	if !strings.Contains(desc, "malformed schema validation failed") {
+		t.Errorf("description %q does not carry the fatal reason", desc)
+	}
+}
+
 // TestWireGoldenAgentEndNoErrorKind: the plain agent_end fixture has no
 // errorKind, so the bridge falls through to a clean end-turn (no error desc).
 func TestWireGoldenAgentEndNoErrorKind(t *testing.T) {
@@ -124,6 +139,33 @@ func TestWireGoldenMessageEndErrorKind(t *testing.T) {
 	}
 	if !strings.Contains(fin.Message, "Context window full") {
 		t.Errorf("Finish.Message = %q, want context-overflow text", fin.Message)
+	}
+}
+
+// TestWireGoldenMessageEndFatalNoReason: the message_end fatal-no-reason
+// fixture carries no prior errorMessage (message.content is empty), so there
+// is no Finish message to protect — the merge rule in applyWireErrorKind
+// still applies the bare "Fatal error" label rather than leaving the
+// assistant card with a silent, unexplained end-turn.
+func TestWireGoldenMessageEndFatalNoReason(t *testing.T) {
+	raw := loadWireFixture(t, "message_end.fatal_no_reason.json")
+	w := newTestGmpWorkspace()
+	w.currentAssistantID = "asst-golden"
+
+	msg := w.handleMessageEnd(raw)
+	ev, ok := msg.(pubsub.Event[message.Message])
+	if !ok {
+		t.Fatalf("handleMessageEnd returned %T, want pubsub.Event[message.Message]", msg)
+	}
+	fin, ok := finishPart(ev.Payload)
+	if !ok {
+		t.Fatal("assistant message has no Finish after message_end with fatal errorKind")
+	}
+	if fin.Reason != message.FinishReasonError {
+		t.Errorf("Finish.Reason = %q, want %q", fin.Reason, message.FinishReasonError)
+	}
+	if fin.Message != "Fatal error" {
+		t.Errorf("Finish.Message = %q, want the bare fatal label", fin.Message)
 	}
 }
 

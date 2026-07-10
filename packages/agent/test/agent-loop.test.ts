@@ -846,7 +846,10 @@ describe("agentLoopContinue with AgentMessage", () => {
 		expect(caught).toBeInstanceOf(InvalidAgentState);
 		expect((caught as InvalidAgentState).reason).toBe("no-messages");
 		expect((caught as Error).message).toBe("Cannot continue: no messages in context");
-		expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
+		expect(errorToKind(caught as InvalidAgentState)).toEqual({
+			kind: "fatal",
+			reason: "Cannot continue: no messages in context",
+		});
 	});
 
 	it("should continue from existing context without emitting user message events", async () => {
