@@ -51,6 +51,7 @@ const AGENT_RUN_ERROR_TAGS: readonly string[] = [
 	"SubprocessAborted",
 	"ContextOverflow",
 	"TurnAborted",
+	"InvalidAgentState",
 ];
 
 function isAgentRunError(value: unknown): value is AgentRunError {

@@ -7,7 +7,7 @@ import { Effect, Exit, Option } from "@oh-my-pi/pi-utils/effect";
 import { Cause } from "@oh-my-pi/pi-utils/effect";
 import { fromPartial } from "@total-typescript/shoehorn";
 import type { Agent } from "../../src/agent";
-import { AgentBusy, ContextOverflow, ProviderHttpError } from "../../src/errors";
+import { AgentBusy, ContextOverflow, InvalidAgentState, ProviderHttpError } from "../../src/errors";
 import { AgentRunController } from "../../src/run/agent-run";
 import { LiveClock } from "../../src/run/clock";
 
@@ -69,6 +69,21 @@ describe("AgentRunController.run — failure channel preserves tagged errors", (
 		if (result.ok) return;
 		expect(result.error).toBe(original);
 		expect(result.error).toBeInstanceOf(AgentBusy);
+	});
+
+	it("InvalidAgentState thrown from agent.continue surfaces as the same instance in the failure channel", async () => {
+		const original = new InvalidAgentState({ reason: "no-messages", message: "No messages to continue from" });
+		const controller = controllerFor({
+			continue: async () => {
+				throw original;
+			},
+		});
+		const program = controller.run({ kind: "continue" }).pipe(Effect.provide(LiveClock));
+		const result = await runUnwrap(program);
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.error).toBe(original);
+		expect(result.error).toBeInstanceOf(InvalidAgentState);
 	});
 
 	it("ContextOverflow surfaces with usedTokens preserved", async () => {
