@@ -2,9 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `InvalidAgentState` tagged error for caller-precondition violations on a live `Agent` (no model configured, no messages to continue from, continuing from an assistant-role tail with nothing queued).
+
 ### Changed
 
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
+- Changed agent prompt/continue precondition failures to raise `InvalidAgentState` instead of a bare `Error` (messages unchanged), so `mapToAgentRunError` no longer flattens them into `ConfigInvalid`.
 
 ## [14.5.10] - 2026-04-30
 

@@ -554,6 +554,17 @@ replace them. It intentionally does not write recovery markers;
 _Avoid_: turn pump, turn driver, AgentTurnRunner, durable workflow,
 Workflow.
 
+**InvalidAgentState**:
+Tagged error (`packages/agent/src/errors.ts`) for a caller-precondition
+violation on a live `Agent` — calling `prompt()` with no model configured,
+or `continue()` with no messages, or from an assistant-role tail with
+nothing queued. Carries `reason: "no-model" | "no-messages" |
+"invalid-continue-role"` plus the original `message`. `errorToKind` maps
+it to `{ kind: "fatal" }`. Distinct from **ConfigInvalid**, whose domain
+is config-file load/validation failures, not in-memory misuse of an
+already-constructed `Agent`. _Avoid_: precondition error, agent misuse
+error, ConfigInvalid (for these sites).
+
 **RecoveryMarker**:
 A typed JSONL line (`event: "recovery-marker"`) appended to the session
 log at three well-defined safe points: after `message_end`, after each

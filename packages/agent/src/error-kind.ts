@@ -113,6 +113,7 @@ export function errorToKind(error: AgentTaggedError): AgentErrorKind {
 		case "ToolExecError":
 		case "SessionStorageError":
 		case "SubprocessAborted":
+		case "InvalidAgentState":
 			return { kind: "fatal" };
 	}
 }

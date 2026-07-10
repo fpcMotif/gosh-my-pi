@@ -18,6 +18,7 @@ import {
 } from "@oh-my-pi/pi-ai";
 import { agentLoop, agentLoopContinue } from "./agent-loop";
 import { classifyAssistantError } from "./error-kind";
+import { InvalidAgentState } from "./errors";
 import {
 	AgentBusyError,
 	type AgentContext,
@@ -340,7 +341,8 @@ export class Agent {
 			throw new AgentBusyError();
 		}
 
-		if (this.#state.model === null || this.#state.model === undefined) throw new Error("No model configured");
+		if (this.#state.model === null || this.#state.model === undefined)
+			throw new InvalidAgentState({ reason: "no-model", message: "No model configured" });
 
 		const msgs = preparePromptMessages(input, imagesOrOptions);
 		const promptOptions = preparePromptOptions(input, imagesOrOptions, options);
@@ -357,7 +359,8 @@ export class Agent {
 		}
 
 		const messages = this.#state.messages;
-		if (messages.length === 0) throw new Error("No messages to continue from");
+		if (messages.length === 0)
+			throw new InvalidAgentState({ reason: "no-messages", message: "No messages to continue from" });
 
 		if (messages[messages.length - 1].role === "assistant") {
 			const queuedSteering = this.#dequeueSteeringMessages();
@@ -376,7 +379,10 @@ export class Agent {
 				return;
 			}
 
-			throw new Error("Cannot continue from message role: assistant");
+			throw new InvalidAgentState({
+				reason: "invalid-continue-role",
+				message: "Cannot continue from message role: assistant",
+			});
 		}
 
 		await this.#runLoop(undefined);
@@ -389,7 +395,8 @@ export class Agent {
 	 */
 	async #runLoop(messages?: AgentMessage[], options?: AgentPromptOptions & { skipInitialSteeringPoll?: boolean }) {
 		const model = this.#state.model;
-		if (model === null || model === undefined) throw new Error("No model configured");
+		if (model === null || model === undefined)
+			throw new InvalidAgentState({ reason: "no-model", message: "No model configured" });
 
 		const { promise, resolve } = Promise.withResolvers<void>();
 		this.#runningPrompt = promise;

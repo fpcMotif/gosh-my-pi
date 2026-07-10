@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { Agent, type AgentTool, type AnyAgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import {
+	Agent,
+	type AgentTool,
+	type AnyAgentTool,
+	errorToKind,
+	InvalidAgentState,
+	ThinkingLevel,
+} from "@oh-my-pi/pi-agent-core";
 import { getBundledModel, type SimpleStreamOptions, type ThinkingBudgets } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { Type } from "@sinclair/typebox";
@@ -464,6 +471,76 @@ describe("Agent", () => {
 			const agent = new Agent();
 			agent.setAssistantMessageEventInterceptor(() => {});
 			expect(() => agent.setAssistantMessageEventInterceptor(undefined)).not.toThrow();
+		});
+	});
+
+	describe("caller-precondition throws", () => {
+		it("prompt() throws InvalidAgentState(no-model) when no model is configured", async () => {
+			const agent = new Agent();
+			agent.setModel(undefined);
+
+			let caught: unknown;
+			try {
+				await agent.prompt("hi");
+			} catch (error) {
+				caught = error;
+			}
+
+			expect((caught as Error).message).toBe("No model configured");
+			expect(caught).toBeInstanceOf(InvalidAgentState);
+			expect((caught as InvalidAgentState).reason).toBe("no-model");
+			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
+		});
+
+		it("continue() throws InvalidAgentState(no-messages) when there are no messages to continue from", async () => {
+			const agent = new Agent();
+
+			let caught: unknown;
+			try {
+				await agent.continue();
+			} catch (error) {
+				caught = error;
+			}
+
+			expect((caught as Error).message).toBe("No messages to continue from");
+			expect(caught).toBeInstanceOf(InvalidAgentState);
+			expect((caught as InvalidAgentState).reason).toBe("no-messages");
+			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
+		});
+
+		it("continue() throws InvalidAgentState(invalid-continue-role) when the last message is assistant and nothing is queued", async () => {
+			const agent = new Agent();
+			agent.appendMessage(createAssistantMessage([{ type: "text", text: "hi" }]));
+
+			let caught: unknown;
+			try {
+				await agent.continue();
+			} catch (error) {
+				caught = error;
+			}
+
+			expect((caught as Error).message).toBe("Cannot continue from message role: assistant");
+			expect(caught).toBeInstanceOf(InvalidAgentState);
+			expect((caught as InvalidAgentState).reason).toBe("invalid-continue-role");
+			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
+		});
+
+		it("continue() throws InvalidAgentState(no-model) when no model is configured and the last message is not assistant", async () => {
+			const agent = new Agent();
+			agent.setModel(undefined);
+			agent.appendMessage({ role: "user", content: "hi", timestamp: Date.now() });
+
+			let caught: unknown;
+			try {
+				await agent.continue();
+			} catch (error) {
+				caught = error;
+			}
+
+			expect((caught as Error).message).toBe("No model configured");
+			expect(caught).toBeInstanceOf(InvalidAgentState);
+			expect((caught as InvalidAgentState).reason).toBe("no-model");
+			expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
 		});
 	});
 });

@@ -1,6 +1,7 @@
 import { EventStream, type AssistantMessage, type ToolResultMessage } from "@oh-my-pi/pi-ai";
 import { Effect } from "@oh-my-pi/pi-utils/effect";
 import { type AgentErrorKind, classifyAssistantError } from "./error-kind";
+import { InvalidAgentState } from "./errors";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, StreamFn } from "./types";
 import { createAbortedToolResult, executeToolCalls, INTENT_FIELD } from "./agent-loop/execution";
 import { streamAssistantResponse } from "./agent-loop/streaming";
@@ -333,7 +334,7 @@ export function agentLoopContinue(
 	streamFn?: StreamFn,
 ): EventStream<AgentEvent, AgentMessage[]> {
 	if (context.messages.length === 0) {
-		throw new Error("Cannot continue: no messages in context");
+		throw new InvalidAgentState({ reason: "no-messages", message: "Cannot continue: no messages in context" });
 	}
 	const stream = new EventStream<AgentEvent, AgentMessage[]>();
 	const newMessages: AgentMessage[] = [];

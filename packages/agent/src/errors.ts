@@ -97,6 +97,18 @@ export class TurnAborted extends Data.TaggedError("TurnAborted")<{
 }> {}
 
 /**
+ * Caller violated a precondition on a live `Agent` (e.g. calling `prompt()`
+ * with no model configured, or `continue()` with no messages / from an
+ * assistant-role tail with nothing queued). Distinct from `ConfigInvalid`,
+ * whose domain is config-file load/validation failures, not in-memory
+ * misuse of an already-constructed `Agent`.
+ */
+export class InvalidAgentState extends Data.TaggedError("InvalidAgentState")<{
+	readonly reason: "no-model" | "no-messages" | "invalid-continue-role";
+	readonly message: string;
+}> {}
+
+/**
  * Discriminated union of every tagged error in the agent runtime. The
  * `errorToKind` bridge in `./error-kind` exhaustively matches against this.
  */
@@ -110,7 +122,8 @@ export type AgentTaggedError =
 	| SessionStorageError
 	| SubprocessAborted
 	| ContextOverflow
-	| TurnAborted;
+	| TurnAborted
+	| InvalidAgentState;
 
 /**
  * The full union of tagged errors that can surface from a single agent run.

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { agentLoop, agentLoopContinue, INTENT_FIELD } from "@oh-my-pi/pi-agent-core/agent-loop";
+import { errorToKind } from "@oh-my-pi/pi-agent-core/error-kind";
+import { InvalidAgentState } from "@oh-my-pi/pi-agent-core/errors";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -820,6 +822,31 @@ describe("agentLoopContinue with AgentMessage", () => {
 		};
 
 		expect(() => agentLoopContinue(context, config)).toThrow("Cannot continue: no messages in context");
+	});
+
+	it("throws InvalidAgentState(no-messages) when context has no messages", () => {
+		const context: AgentContext = {
+			systemPrompt: "You are helpful.",
+			messages: [],
+			tools: [],
+		};
+
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+		};
+
+		let caught: unknown;
+		try {
+			agentLoopContinue(context, config);
+		} catch (error) {
+			caught = error;
+		}
+
+		expect(caught).toBeInstanceOf(InvalidAgentState);
+		expect((caught as InvalidAgentState).reason).toBe("no-messages");
+		expect((caught as Error).message).toBe("Cannot continue: no messages in context");
+		expect(errorToKind(caught as InvalidAgentState)).toEqual({ kind: "fatal" });
 	});
 
 	it("should continue from existing context without emitting user message events", async () => {
