@@ -2,8 +2,23 @@
 
 ## Status
 
-Proposed — 2026-05-11. Drafted in P4d (codex provider migration);
-finalised when P4f deletes the per-provider tracker plumbing.
+Accepted and landed. Drafted in P4d (codex provider migration,
+2026-05-11/12). P4e (`openai-responses.ts` + `openai-completions.ts`
+migrated onto `Http.requestStream`, commit `708ba0e58`) and P4f
+(`createAbortSourceTracker` / `packages/ai/src/utils/abort.ts` deleted,
+commit `7f8a64bc5`) both landed 2026-05-13 — both were already present
+on this worktree's branch history before the 2026-07-11 P4e follow-up
+session below ran, so there is no plumbing left to delete in a future
+PR.
+
+2026-07-11 follow-up: `openai-effect-stream-providers.test.ts` gained
+direct characterization tests for the caller-abort-vs-`LocalAbort`
+precedence contract (ADR-0004 Bug #2) on `openai-responses.ts` and
+`openai-completions.ts` specifically — the existing suite covered
+happy-path routing and `LocalAbort` formatting for both providers, but
+only `openai-codex-stream.test.ts` exercised a real caller-abort ->
+`stopReason: "aborted"` assertion. No production code changed in this
+follow-up.
 
 ## Context
 
