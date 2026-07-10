@@ -5,6 +5,7 @@
 ### Changed
 
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
+- Replaced the string-prefix ("Codex websocket transport error: ...") protocol between `openai-codex/websocket.ts` and `openai-codex-responses.ts` with a module-local `CodexWebSocketTransportError` tagged error and reason enum; behavior (fatal/retryable classification, fallback-to-SSE decisions, surfaced error text) is unchanged.
 
 ### Fixed
 

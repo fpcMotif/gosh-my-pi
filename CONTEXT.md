@@ -645,6 +645,19 @@ in `packages/agent/src/run/`. Today identical to `AgentTaggedError`;
 may diverge if errors are introduced that fire only outside a run.
 Public type, re-exported from `packages/agent/src/index.ts`.
 
+**CodexWebSocketTransportError** _(tagged error in
+`packages/ai/src/providers/openai-codex/websocket.ts`)_:
+Module-local `Data.TaggedError` for the Codex WebSocket transport;
+replaces the old string-prefix ("Codex websocket transport error: …")
+protocol. Carries a closed `reason` union plus an optional `detail`
+string — `openai-codex-responses.ts` classifies fatal-vs-retryable by
+reason-set membership instead of message substrings. Deliberately
+**not** part of `AgentTaggedError`: it never escapes
+`openai-codex-responses.ts`, which stringifies it into
+`AssistantMessage.errorMessage` before the caller sees it. Per
+ADR-0005, WebSocket transport is out of scope for the HTTP-stream
+watchdog consolidation and stays its own failure domain.
+
 **runAgentRequest** _(`packages/coding-agent/src/session/run-bridge.ts`)_:
 The `OMP_RECOVERY_POLICY`-gated wrapper around `Agent.prompt` /
 `Agent.continue`. Signature
