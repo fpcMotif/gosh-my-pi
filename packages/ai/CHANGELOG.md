@@ -6,6 +6,7 @@
 
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
 - Replaced the string-prefix ("Codex websocket transport error: ...") protocol between `openai-codex/websocket.ts` and `openai-codex-responses.ts` with a module-local `CodexWebSocketTransportError` tagged error and reason enum; behavior (fatal/retryable classification, fallback-to-SSE decisions, surfaced error text) is unchanged.
+- Migrated `openai-responses.ts` and `openai-completions.ts` off the per-provider `createAbortSourceTracker` + `createWatchdog` wiring onto the Http Layer's `Http.requestStream` (ADR-0005 P4e/P4f), matching `openai-codex-responses.ts`'s P4d migration. `createAbortSourceTracker` and `packages/ai/src/utils/abort.ts` are now deleted; each provider describes its stream intent (`idleTimeoutMs`, `firstEventWatchdog`) and the Layer enforces it. Caller-initiated abort still maps to `stopReason: "aborted"`; provider-local stall/idle/first-event timeout still maps to `stopReason: "error"` with a `LocalAbort`-formatted message (e.g. `"OpenAI responses stream timeout after 123ms"`). Added direct characterization tests for the caller-abort-vs-`LocalAbort` precedence contract on both providers.
 
 ### Fixed
 

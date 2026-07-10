@@ -6,7 +6,7 @@ import { streamOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-cod
 import { streamOpenAICompletions } from "@oh-my-pi/pi-ai/providers/openai-completions";
 import { streamOpenAIResponses } from "@oh-my-pi/pi-ai/providers/openai-responses";
 import type { AssistantMessage, Context, Model } from "@oh-my-pi/pi-ai/types";
-import { Effect } from "@oh-my-pi/pi-utils/effect";
+import { Effect, effectFromSignal } from "@oh-my-pi/pi-utils/effect";
 
 function makeUnusedRequest(): HttpShape["request"] {
 	return () => Effect.fail(new HttpError({ cause: new Error("unused"), url: "unused" }));
@@ -38,6 +38,25 @@ function makeFailingHttp(error: LocalAbort, calls: HttpStreamOpts<unknown>[]): H
 		requestStream: <T>(opts: HttpStreamOpts<T>) => {
 			calls.push(opts as HttpStreamOpts<unknown>);
 			return Effect.fail(error);
+		},
+	};
+}
+
+/**
+ * Reproduces the real Http.requestStream's caller-abort race (see
+ * packages/ai/src/layers/http.ts's `effectFromSignal(opts.callerSignal, program)`)
+ * without any fetch/SSE plumbing: the open Effect never settles on its own, so
+ * the only way it completes is via the caller signal interrupting the fiber.
+ * Used to characterize ADR-0004's "caller signal wins -> stopReason 'aborted'"
+ * contract for providers that no longer merge signals themselves.
+ */
+function makeCallerInterruptHttp(calls: HttpStreamOpts<unknown>[]): HttpShape {
+	return {
+		request: makeUnusedRequest(),
+		requestStream: <T>(opts: HttpStreamOpts<T>) => {
+			calls.push(opts as HttpStreamOpts<unknown>);
+			const hang = Effect.never as Effect.Effect<AsyncIterable<T>, LocalAbort>;
+			return opts.callerSignal === undefined ? hang : effectFromSignal(opts.callerSignal, hang);
 		},
 	};
 }
@@ -171,6 +190,41 @@ describe("OpenAI providers Effect stream integration", () => {
 		expect(result.errorMessage).toBe("OpenAI responses stream timeout after 17ms");
 	});
 
+	it("classifies a caller-initiated abort as stopReason 'aborted' for openai-responses", async () => {
+		const calls: HttpStreamOpts<unknown>[] = [];
+		const controller = new AbortController();
+		const resultPromise = finalMessage(
+			streamOpenAIResponses(makeResponsesModel(), makeContext(), {
+				apiKey: "test-key",
+				httpService: makeCallerInterruptHttp(calls),
+				signal: controller.signal,
+			}),
+		);
+		controller.abort();
+		const result = await resultPromise;
+
+		expect(calls).toHaveLength(1);
+		expect(result.stopReason).toBe("aborted");
+		expect(result.errorMessage).toBe("Request was aborted");
+	});
+
+	it("keeps stopReason 'error' for openai-responses when LocalAbort races a simultaneous caller abort", async () => {
+		const calls: HttpStreamOpts<unknown>[] = [];
+		const controller = new AbortController();
+		controller.abort();
+		const result = await finalMessage(
+			streamOpenAIResponses(makeResponsesModel(), makeContext(), {
+				apiKey: "test-key",
+				httpService: makeFailingHttp(new LocalAbort({ kind: "stall", durationMs: 42 }), calls),
+				signal: controller.signal,
+			}),
+		);
+
+		expect(calls).toHaveLength(1);
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toBe("OpenAI responses stream stall after 42ms");
+	});
+
 	it("routes openai-completions through Http.requestStream with caller signal and first-event watchdog", async () => {
 		const calls: HttpStreamOpts<unknown>[] = [];
 		const controller = new AbortController();
@@ -215,6 +269,41 @@ describe("OpenAI providers Effect stream integration", () => {
 		expect(calls).toHaveLength(1);
 		expect(result.stopReason).toBe("error");
 		expect(result.errorMessage).toBe("OpenAI completions stream idle after 23ms");
+	});
+
+	it("classifies a caller-initiated abort as stopReason 'aborted' for openai-completions", async () => {
+		const calls: HttpStreamOpts<unknown>[] = [];
+		const controller = new AbortController();
+		const resultPromise = finalMessage(
+			streamOpenAICompletions(makeCompletionsModel(), makeContext(), {
+				apiKey: "test-key",
+				httpService: makeCallerInterruptHttp(calls),
+				signal: controller.signal,
+			}),
+		);
+		controller.abort();
+		const result = await resultPromise;
+
+		expect(calls).toHaveLength(1);
+		expect(result.stopReason).toBe("aborted");
+		expect(result.errorMessage).toBe("Request was aborted");
+	});
+
+	it("keeps stopReason 'error' for openai-completions when LocalAbort races a simultaneous caller abort", async () => {
+		const calls: HttpStreamOpts<unknown>[] = [];
+		const controller = new AbortController();
+		controller.abort();
+		const result = await finalMessage(
+			streamOpenAICompletions(makeCompletionsModel(), makeContext(), {
+				apiKey: "test-key",
+				httpService: makeFailingHttp(new LocalAbort({ kind: "stall", durationMs: 42 }), calls),
+				signal: controller.signal,
+			}),
+		);
+
+		expect(calls).toHaveLength(1);
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toBe("OpenAI completions stream stall after 42ms");
 	});
 
 	it("routes openai-codex responses through Http.requestStream with caller signal and first-event watchdog", async () => {
