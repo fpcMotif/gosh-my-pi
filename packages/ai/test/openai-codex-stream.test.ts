@@ -2975,4 +2975,115 @@ describe("openai-codex streaming", () => {
 		expect(requestTurnStates[0]).toBeNull();
 		expect(requestTurnStates[1]).toBe("turn-state-1");
 	});
+
+	// Characterization test (pins CURRENT behavior before the tagged-error
+	// refactor of websocket.ts / openai-codex-responses.ts): a WebSocket
+	// 'error' DOM event that fires MID-STREAM (after open + after the first
+	// stream message has already been delivered) is not in the retryable
+	// message-substring set, so it is a hard failure — the provider must
+	// NOT fall back to SSE. This must stay green across the refactor.
+	it("surfaces a hard failure (not an SSE fallback) for a mid-stream websocket error event", async () => {
+		const tempDir = TempDir.createSync("@pi-codex-stream-");
+		setAgentDir(tempDir.path());
+
+		const payload = Buffer.from(
+			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
+			"utf8",
+		).toBase64();
+		const token = `aaa.${payload}.bbb`;
+		const fetchMock = vi.fn(async () => {
+			throw new Error("SSE fallback should not be called for a mid-stream websocket error");
+		});
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		type WsListener = (event: Event) => void;
+		class MidStreamErrorWebSocket {
+			static readonly CONNECTING = 0;
+			static readonly OPEN = 1;
+			static readonly CLOSING = 2;
+			static readonly CLOSED = 3;
+			readyState = MidStreamErrorWebSocket.CONNECTING;
+			#listeners = new Map<string, Set<WsListener>>();
+
+			constructor(_url: string, _options?: { headers?: Record<string, string> }) {
+				setTimeout(() => {
+					this.readyState = MidStreamErrorWebSocket.OPEN;
+					this.#emit("open", new Event("open"));
+				}, 0);
+			}
+
+			addEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type) ?? new Set<WsListener>();
+				listeners.add(listener as WsListener);
+				this.#listeners.set(type, listeners);
+			}
+
+			removeEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type);
+				listeners?.delete(listener as WsListener);
+			}
+
+			send(): void {
+				// First event of the response arrives normally...
+				this.#emit(
+					"message",
+					fromAny<Event>({
+						data: JSON.stringify({
+							type: "response.output_item.added",
+							item: { type: "message", id: "msg_1", role: "assistant", status: "in_progress", content: [] },
+						}),
+					}),
+				);
+				// ...then the socket fails mid-stream, before any terminal event.
+				setTimeout(() => {
+					this.#emit("error", new Event("error"));
+					this.#emit("close", fromAny<Event>({ code: 1006 }));
+					this.readyState = MidStreamErrorWebSocket.CLOSED;
+				}, 0);
+			}
+
+			close(): void {
+				this.readyState = MidStreamErrorWebSocket.CLOSED;
+			}
+
+			#emit(type: string, event: Event): void {
+				const listeners = this.#listeners.get(type);
+				if (!listeners) return;
+				for (const listener of listeners) {
+					listener(event);
+				}
+			}
+		}
+
+		global.WebSocket = MidStreamErrorWebSocket as unknown as typeof WebSocket;
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.3-codex-spark",
+			name: "GPT-5.3 Codex Spark",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			preferWebsockets: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128000,
+			maxTokens: 128000,
+		};
+		const context: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+		const providerSessionState = new Map<string, ProviderSessionState>();
+
+		const result = await streamOpenAICodexResponses(model, context, {
+			apiKey: token,
+			sessionId: "ws-mid-stream-error-session",
+			providerSessionState,
+		}).result();
+
+		expect(result.stopReason).toBe("error");
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
 });

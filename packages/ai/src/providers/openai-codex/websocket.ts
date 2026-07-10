@@ -11,7 +11,7 @@
 //     interruption tears down the fiber and any in-flight watchdogs.
 
 import { logger } from "@oh-my-pi/pi-utils";
-import { Duration, Effect, effectFromSignal } from "@oh-my-pi/pi-utils/effect";
+import { Data, Duration, Effect, effectFromSignal } from "@oh-my-pi/pi-utils/effect";
 import type { RequestBody } from "./request-transformer";
 
 export type CodexTransport = "sse" | "websocket";
@@ -32,10 +32,80 @@ export type CodexWebSocketSessionState = {
 };
 
 export const CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS = 10_000;
-export const CODEX_WEBSOCKET_TRANSPORT_ERROR_PREFIX = "Codex websocket transport error";
 
-export function createCodexWebSocketTransportError(message: string): Error {
-	return new Error(`${CODEX_WEBSOCKET_TRANSPORT_ERROR_PREFIX}: ${message}`);
+/**
+ * Reason discriminator for {@link CodexWebSocketTransportError}. Replaces the
+ * former string-prefix ("Codex websocket transport error: ...") protocol
+ * that openai-codex-responses.ts used to classify failures via substring
+ * matching on `.message`.
+ */
+export type CodexWebSocketTransportErrorReason =
+	| "connect-timeout"
+	| "not-open"
+	| "concurrent-request"
+	| "aborted"
+	| "socket-error"
+	| "closed-before-open"
+	| "closed-mid-stream"
+	| "malformed-message"
+	| "first-event-timeout"
+	| "idle-timeout"
+	| "unknown";
+
+export class CodexWebSocketTransportError extends Data.TaggedError("CodexWebSocketTransportError")<{
+	readonly reason: CodexWebSocketTransportErrorReason;
+	readonly detail?: string;
+}> {}
+
+export function createCodexWebSocketTransportError(
+	reason: CodexWebSocketTransportErrorReason,
+	detail?: string,
+): CodexWebSocketTransportError {
+	return new CodexWebSocketTransportError({ reason, detail });
+}
+
+/** Mirrors {@link unwrapLocalAbort} in "../errors" — unwrap a tagged error from its cause chain. */
+export function unwrapCodexWebSocketTransportError(error: unknown): CodexWebSocketTransportError | undefined {
+	if (error instanceof CodexWebSocketTransportError) return error;
+	const cause = (error as { cause?: unknown } | null | undefined)?.cause;
+	if (cause instanceof CodexWebSocketTransportError) return cause;
+	return undefined;
+}
+
+/**
+ * Mirrors {@link formatLocalAbortMessage} in "../errors" — stringify a tagged
+ * error into diagnostic text. The wording of each branch is load-bearing: it
+ * feeds the generic classifyTransient regex classifier downstream
+ * (rate-limit-utils.ts), so the "timeout" / "closed" / "connection error"
+ * tokens must match what the old prefixed messages used to say.
+ */
+export function formatCodexWebSocketTransportErrorMessage(error: CodexWebSocketTransportError): string {
+	switch (error.reason) {
+		case "connect-timeout":
+			return "connection timeout";
+		case "not-open":
+			return "websocket connection is unavailable";
+		case "concurrent-request":
+			return "websocket request already in progress";
+		case "aborted":
+			return "request was aborted";
+		case "socket-error":
+			return `websocket error: ${error.detail ?? ""}`;
+		case "closed-before-open":
+			return `websocket closed before open (${error.detail ?? ""})`;
+		case "closed-mid-stream":
+			return error.detail !== undefined
+				? `websocket closed (${error.detail})`
+				: "websocket closed before response completion";
+		case "malformed-message":
+			return error.detail ?? "malformed websocket message";
+		case "first-event-timeout":
+			return "timeout waiting for first websocket event";
+		case "idle-timeout":
+			return "idle timeout waiting for websocket";
+		case "unknown":
+			return error.detail ?? "unknown websocket transport error";
+	}
 }
 
 export function headersToRecord(headers: Headers): Record<string, string> {
@@ -112,7 +182,7 @@ export class CodexWebSocketConnection {
 		const connectTimeout = Effect.sleep(Duration.millis(CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS)).pipe(
 			Effect.flatMap(() => {
 				this.close("connect-timeout");
-				return Effect.fail(createCodexWebSocketTransportError("connection timeout"));
+				return Effect.fail(createCodexWebSocketTransportError("connect-timeout"));
 			}),
 		);
 		const handshake = Effect.raceFirst(this.#openSocketEffect(), connectTimeout);
@@ -131,16 +201,16 @@ export class CodexWebSocketConnection {
 		signal?: AbortSignal,
 	): AsyncGenerator<Record<string, unknown>> {
 		if (this.#socket === null || this.#socket.readyState !== WebSocket.OPEN) {
-			throw createCodexWebSocketTransportError("websocket connection is unavailable");
+			throw createCodexWebSocketTransportError("not-open");
 		}
 		if (this.#activeRequest) {
-			throw createCodexWebSocketTransportError("websocket request already in progress");
+			throw createCodexWebSocketTransportError("concurrent-request");
 		}
 		this.#activeRequest = true;
 
 		const onAbort = (): void => {
 			this.close("aborted");
-			this.#push(createCodexWebSocketTransportError("request was aborted"));
+			this.#push(createCodexWebSocketTransportError("aborted"));
 		};
 
 		if (signal !== undefined) {
@@ -165,11 +235,17 @@ export class CodexWebSocketConnection {
 	async *#streamUntilTerminal(sawFirstEvent: boolean): AsyncGenerator<Record<string, unknown>> {
 		const next = await this.#nextMessage(
 			sawFirstEvent ? this.#idleTimeoutMs : this.#firstEventTimeoutMs,
-			sawFirstEvent ? "idle timeout waiting for websocket" : "timeout waiting for first websocket event",
+			sawFirstEvent ? "idle-timeout" : "first-event-timeout",
 		);
 		if (next instanceof Error) throw next;
 		if (next === null) {
-			throw createCodexWebSocketTransportError("websocket closed before response completion");
+			// Structurally unreachable: the only #push(null) call site (the
+			// "close" listener below) always pushes a "closed-mid-stream"
+			// CodexWebSocketTransportError immediately before it on the same
+			// FIFO queue, so #nextMessage drains — and #streamUntilTerminal
+			// throws — that error first. Kept as a defensive fallback rather
+			// than an assertion in case the queue's push ordering ever changes.
+			throw createCodexWebSocketTransportError("closed-mid-stream");
 		}
 		yield next;
 		const eventType = typeof next.type === "string" ? next.type : "";
@@ -216,7 +292,7 @@ export class CodexWebSocketConnection {
 						? eventRecord.error.message
 						: undefined) ||
 					String(event.type);
-				const transportError = createCodexWebSocketTransportError(`websocket error: ${detail}`);
+				const transportError = createCodexWebSocketTransportError("socket-error", detail);
 				if (settled) {
 					this.#push(transportError);
 					return;
@@ -226,10 +302,10 @@ export class CodexWebSocketConnection {
 			socket.addEventListener("close", event => {
 				this.#socket = null;
 				if (!settled) {
-					settleFailure(createCodexWebSocketTransportError(`websocket closed before open (${event.code})`));
+					settleFailure(createCodexWebSocketTransportError("closed-before-open", String(event.code)));
 					return;
 				}
-				this.#push(createCodexWebSocketTransportError(`websocket closed (${event.code})`));
+				this.#push(createCodexWebSocketTransportError("closed-mid-stream", String(event.code)));
 				this.#push(null);
 			});
 			socket.addEventListener("message", event => this.#dispatchMessage(event));
@@ -256,7 +332,7 @@ export class CodexWebSocketConnection {
 			}
 			this.#push(parsed);
 		} catch (error) {
-			this.#push(createCodexWebSocketTransportError(String(error)));
+			this.#push(createCodexWebSocketTransportError("malformed-message", String(error)));
 		}
 	}
 
@@ -273,7 +349,10 @@ export class CodexWebSocketConnection {
 		if (waiter !== undefined) waiter();
 	}
 
-	async #nextMessage(timeoutMs: number, timeoutReason: string): Promise<CodexWebSocketQueueItem> {
+	async #nextMessage(
+		timeoutMs: number,
+		timeoutReason: "first-event-timeout" | "idle-timeout",
+	): Promise<CodexWebSocketQueueItem> {
 		const drained = this.#drainQueue();
 		if (drained !== undefined) return drained;
 		const outcome = await Effect.runPromise(this.#waitOneCycleEffect(timeoutMs));
@@ -307,7 +386,7 @@ export class CodexWebSocketConnection {
 
 	#asTransportError(err: unknown): Error {
 		if (err instanceof Error) return err;
-		return createCodexWebSocketTransportError(String(err));
+		return createCodexWebSocketTransportError("unknown", String(err));
 	}
 }
 

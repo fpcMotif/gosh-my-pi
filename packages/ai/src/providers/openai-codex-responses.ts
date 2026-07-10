@@ -64,13 +64,16 @@ import {
 import { parseCodexError } from "./openai-codex/response-handler";
 import {
 	CODEX_WEBSOCKET_CONNECT_TIMEOUT_MS,
-	CODEX_WEBSOCKET_TRANSPORT_ERROR_PREFIX,
 	CodexWebSocketConnection,
+	CodexWebSocketTransportError,
 	type CodexTransport,
 	type CodexWebSocketConnectionOptions,
 	type CodexWebSocketSessionState,
+	type CodexWebSocketTransportErrorReason,
 	createCodexWebSocketTransportError,
+	formatCodexWebSocketTransportErrorMessage,
 	headersToRecord,
+	unwrapCodexWebSocketTransportError,
 } from "./openai-codex/websocket";
 import {
 	encodeResponsesToolCallId,
@@ -112,7 +115,19 @@ const X_CODEX_TURN_STATE_HEADER = "x-codex-turn-state";
 const X_MODELS_ETAG_HEADER = "x-models-etag";
 const X_REASONING_INCLUDED_HEADER = "x-reasoning-included";
 /** Connection-level websocket failures that should immediately fall back to SSE without retrying. */
-const CODEX_WEBSOCKET_FATAL_PATTERNS = ["websocket error:", "websocket closed before open", "connection timeout"];
+const CODEX_WEBSOCKET_FATAL_REASONS: ReadonlySet<CodexWebSocketTransportErrorReason> = new Set([
+	"connect-timeout",
+	"socket-error",
+	"closed-before-open",
+]);
+/** Mid-stream websocket failures that are safe to retry (reopen the socket or replay over SSE). */
+const CODEX_WEBSOCKET_RETRYABLE_REASONS: ReadonlySet<CodexWebSocketTransportErrorReason> = new Set([
+	"not-open",
+	"closed-mid-stream",
+	"idle-timeout",
+	"first-event-timeout",
+	"malformed-message",
+]);
 
 type CodexStreamCompletion = {
 	readonly firstTokenTime?: number;
@@ -263,28 +278,22 @@ function getCodexProviderSessionState(
 	return created;
 }
 
-function isCodexWebSocketFatalError(error: Error): boolean {
-	const msg = error.message.toLowerCase();
-	return CODEX_WEBSOCKET_FATAL_PATTERNS.some(pattern => msg.includes(pattern.toLowerCase()));
+/** Human-readable text for debug logs — prefers the tagged reason phrase over the generic `.message`. */
+function describeCodexWebSocketError(error: Error): string {
+	const wsError = unwrapCodexWebSocketTransportError(error);
+	return wsError !== undefined ? formatCodexWebSocketTransportErrorMessage(wsError) : error.message;
+}
+
+function isCodexWebSocketFatalError(error: unknown): boolean {
+	return error instanceof CodexWebSocketTransportError && CODEX_WEBSOCKET_FATAL_REASONS.has(error.reason);
 }
 
 function isCodexWebSocketTransportError(error: unknown): boolean {
-	if (!(error instanceof Error)) return false;
-	return error.message.startsWith(CODEX_WEBSOCKET_TRANSPORT_ERROR_PREFIX);
+	return error instanceof CodexWebSocketTransportError;
 }
 
 function isCodexWebSocketRetryableStreamError(error: unknown): boolean {
-	if (!(error instanceof Error) || !isCodexWebSocketTransportError(error)) return false;
-	const message = error.message.toLowerCase();
-	return (
-		message.includes("websocket closed (") ||
-		message.includes("websocket closed before response completion") ||
-		message.includes("websocket connection is unavailable") ||
-		message.includes("idle timeout waiting for websocket") ||
-		message.includes("timeout waiting for first websocket event") ||
-		message.includes("syntaxerror") ||
-		message.includes("json")
-	);
+	return error instanceof CodexWebSocketTransportError && CODEX_WEBSOCKET_RETRYABLE_REASONS.has(error.reason);
 }
 
 function updateCodexSessionMetadataFromHeaders(
@@ -578,7 +587,7 @@ async function openInitialCodexWebSocketWithRetry(
 				const activateFallback = isFatal || state.websocketRetries >= state.websocketRetryBudget;
 				recordCodexWebSocketFailure(websocketState, activateFallback);
 				logCodexDebug("codex websocket fallback", {
-					error: websocketError.message,
+					error: describeCodexWebSocketError(websocketError),
 					retry: state.websocketRetries,
 					retryBudget: state.websocketRetryBudget,
 					activated: activateFallback,
@@ -709,7 +718,7 @@ async function reopenCodexWebSocketRuntimeStream(
 		// instead of surfacing a raw transport error to the caller.
 		recordCodexWebSocketFailure(state, true);
 		logCodexDebug("codex websocket reopen failed, falling back to SSE", {
-			error: wsError.message,
+			error: describeCodexWebSocketError(wsError),
 			retry: runtime.websocketStreamRetries,
 		});
 		await reopenCodexSseRuntimeStream(context, runtime, state);
@@ -1331,12 +1340,19 @@ async function tryReplayWebsocketFailureOverSse(
 	const state = websocketState;
 	const streamError = error instanceof Error ? error : new Error(String(error));
 	const replayingBufferedOutputOverSse = context.output.content.length > 0;
+	// Invariant: canReplay (checked above) already required
+	// isCodexWebSocketRetryableStreamError(error), and the fatal/retryable
+	// reason sets are disjoint by construction (CODEX_WEBSOCKET_FATAL_REASONS
+	// vs CODEX_WEBSOCKET_RETRYABLE_REASONS) — so isFatal is always false on
+	// this line. Kept as a typed no-op rather than deleted: the type system
+	// can't express "these two Sets never intersect", so the invariant is
+	// documented here instead of asserted.
 	const isFatal = isCodexWebSocketFatalError(streamError);
 	const activateFallback =
 		replayingBufferedOutputOverSse || isFatal || retryState.websocketStreamRetries >= getCodexWebSocketRetryBudget();
 	recordCodexWebSocketFailure(state, activateFallback);
 	logCodexDebug("codex websocket stream fallback", {
-		error: streamError.message,
+		error: describeCodexWebSocketError(streamError),
 		retry: retryState.websocketStreamRetries,
 		retryBudget: getCodexWebSocketRetryBudget(),
 		activated: activateFallback,
@@ -1478,9 +1494,13 @@ async function handleCodexStreamFailure(
 		resetCodexSessionMetadata(context.requestContext.websocketState);
 	}
 	const localAbort = unwrapLocalAbort(error);
+	const wsTransportError = unwrapCodexWebSocketTransportError(error);
 	if (localAbort !== undefined) {
 		output.stopReason = "error";
 		output.errorMessage = formatLocalAbortMessage("Codex stream", localAbort);
+	} else if (wsTransportError !== undefined) {
+		output.stopReason = context.options?.signal?.aborted ? "aborted" : "error";
+		output.errorMessage = formatCodexWebSocketTransportErrorMessage(wsTransportError);
 	} else {
 		output.stopReason = context.options?.signal?.aborted ? "aborted" : "error";
 		output.errorMessage = await finalizeErrorMessage(
