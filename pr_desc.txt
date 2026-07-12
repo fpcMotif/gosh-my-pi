@@ -1,0 +1,12 @@
+## What
+Added an `aria-label` property to the interactive table rows (`<tr>` elements with `tabIndex={0}`) in the `RequestList` component.
+
+## Why
+This component acts as an interactive button list for model requests, triggering a detail view upon click or "Enter"/"Space" key presses. Without an `aria-label`, screen readers may only announce "row" or generic table semantics rather than conveying the interactive purpose of the element to visually impaired users navigating via keyboard.
+
+## Before/After
+- **Before**: `<tr tabIndex={0} ...>`
+- **After**: `<tr tabIndex={0} aria-label={"View details for ${req.model} request"} ...>`
+
+## Accessibility
+- Provides a clear, descriptive accessible name for screen reader users when focusing on a request row.
