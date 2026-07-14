@@ -38,6 +38,7 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 									}
 								}}
 								tabIndex={0}
+								aria-label={`View details for ${req.model} request`}
 								className="table-row cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-cyan)] focus-visible:bg-[var(--bg-hover)]"
 							>
 								<td className="py-3 px-4">
