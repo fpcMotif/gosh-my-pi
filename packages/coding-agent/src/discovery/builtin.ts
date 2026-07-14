@@ -302,10 +302,13 @@ registerProvider<Skill>(skillCapability.id, {
 async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashCommand>> {
 	const items: SlashCommand[] = [];
 	const warnings: string[] = [];
+	const configDirs = await getConfigDirs(ctx);
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
+	// Optimization: Parallelize directory I/O across configuration levels
+	// to reduce total initialization latency while preserving order.
+	const loadPromises = configDirs.map(({ dir, level }) => {
 		const commandsDir = path.join(dir, "commands");
-		const result = await loadFilesFromDir<SlashCommand>(ctx, commandsDir, PROVIDER_ID, level, {
+		return loadFilesFromDir<SlashCommand>(ctx, commandsDir, PROVIDER_ID, level, {
 			extensions: ["md"],
 			transform: (name, content, path, source) => ({
 				name: name.replace(/\.md$/, ""),
@@ -315,6 +318,10 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 				_source: source,
 			}),
 		});
+	});
+
+	const results = await Promise.all(loadPromises);
+	for (const result of results) {
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
 	}
@@ -334,14 +341,21 @@ registerProvider<SlashCommand>(slashCommandCapability.id, {
 async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 	const items: Rule[] = [];
 	const warnings: string[] = [];
+	const configDirs = await getConfigDirs(ctx);
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
+	// Optimization: Parallelize directory I/O across configuration levels
+	// to reduce total initialization latency while preserving order.
+	const loadPromises = configDirs.map(({ dir, level }) => {
 		const rulesDir = path.join(dir, "rules");
-		const result = await loadFilesFromDir<Rule>(ctx, rulesDir, PROVIDER_ID, level, {
+		return loadFilesFromDir<Rule>(ctx, rulesDir, PROVIDER_ID, level, {
 			extensions: ["md", "mdc"],
 			transform: (name, content, path, source) =>
 				buildRuleFromMarkdown(name, content, path, source, { stripNamePattern: /\.(md|mdc)$/ }),
 		});
+	});
+
+	const results = await Promise.all(loadPromises);
+	for (const result of results) {
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
 	}
@@ -361,10 +375,13 @@ registerProvider<Rule>(ruleCapability.id, {
 async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
 	const items: Prompt[] = [];
 	const warnings: string[] = [];
+	const configDirs = await getConfigDirs(ctx);
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
+	// Optimization: Parallelize directory I/O across configuration levels
+	// to reduce total initialization latency while preserving order.
+	const loadPromises = configDirs.map(({ dir, level }) => {
 		const promptsDir = path.join(dir, "prompts");
-		const result = await loadFilesFromDir<Prompt>(ctx, promptsDir, PROVIDER_ID, level, {
+		return loadFilesFromDir<Prompt>(ctx, promptsDir, PROVIDER_ID, level, {
 			extensions: ["md"],
 			transform: (name, content, path, source) => ({
 				name: name.replace(/\.md$/, ""),
@@ -373,6 +390,10 @@ async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
 				_source: source,
 			}),
 		});
+	});
+
+	const results = await Promise.all(loadPromises);
+	for (const result of results) {
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
 	}
@@ -568,10 +589,13 @@ registerProvider<Extension>(extensionCapability.id, {
 async function loadInstructions(ctx: LoadContext): Promise<LoadResult<Instruction>> {
 	const items: Instruction[] = [];
 	const warnings: string[] = [];
+	const configDirs = await getConfigDirs(ctx);
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
+	// Optimization: Parallelize directory I/O across configuration levels
+	// to reduce total initialization latency while preserving order.
+	const loadPromises = configDirs.map(({ dir, level }) => {
 		const instructionsDir = path.join(dir, "instructions");
-		const result = await loadFilesFromDir<Instruction>(ctx, instructionsDir, PROVIDER_ID, level, {
+		return loadFilesFromDir<Instruction>(ctx, instructionsDir, PROVIDER_ID, level, {
 			extensions: ["md"],
 			transform: (name, content, path, source) => {
 				const { frontmatter, body } = parseFrontmatter(content, { source: path });
@@ -584,6 +608,10 @@ async function loadInstructions(ctx: LoadContext): Promise<LoadResult<Instructio
 				};
 			},
 		});
+	});
+
+	const results = await Promise.all(loadPromises);
+	for (const result of results) {
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);
 	}
@@ -778,12 +806,22 @@ registerProvider<CustomTool>(toolCapability.id, {
 async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	const items: Settings[] = [];
 	const warnings: string[] = [];
+	const configDirs = await getConfigDirs(ctx);
 
-	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const settingsPath = path.join(dir, "settings.json");
-		const content = await readFile(settingsPath);
+	// Optimization: Parallelize settings file reads across configuration levels
+	// to reduce total initialization latency while preserving order.
+	const settingsPaths = configDirs.map(({ dir, level }) => ({
+		settingsPath: path.join(dir, "settings.json"),
+		level,
+	}));
+
+	const contents = await Promise.all(settingsPaths.map(({ settingsPath }) => readFile(settingsPath)));
+
+	for (let i = 0; i < settingsPaths.length; i++) {
+		const content = contents[i];
 		if (content === null || content === undefined || content === "") continue;
 
+		const { settingsPath, level } = settingsPaths[i];
 		const data = tryParseJson<Record<string, unknown>>(content);
 		if (!data) {
 			warnings.push(`Failed to parse ${settingsPath}`);
