@@ -74,6 +74,9 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
+		-- Performance optimization: Composite index for getRecentErrors to prevent O(N) table scans
+		-- when searching for stop_reason='error' and ordering by timestamp DESC
+		CREATE INDEX IF NOT EXISTS idx_messages_stop_reason_timestamp ON messages(stop_reason, timestamp);
 
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
