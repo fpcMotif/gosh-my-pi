@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Inbox, XCircle } from "lucide-react";
 import type { MessageStats } from "../types";
 
 interface RequestListProps {
@@ -38,6 +38,8 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 									}
 								}}
 								tabIndex={0}
+								aria-label={`View details for ${req.model} request`}
+								title={`View details for ${req.model} request`}
 								className="table-row cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-cyan)] focus-visible:bg-[var(--bg-hover)]"
 							>
 								<td className="py-3 px-4">
@@ -67,8 +69,11 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 						))}
 						{requests.length === 0 && (
 							<tr>
-								<td colSpan={6} className="py-12 text-center text-[var(--text-muted)] text-sm">
-									No requests found
+								<td colSpan={6} className="py-12">
+									<div className="flex flex-col items-center justify-center text-[var(--text-muted)] gap-2">
+										<Inbox size={24} className="opacity-50" />
+										<span className="text-sm">No requests found</span>
+									</div>
 								</td>
 							</tr>
 						)}
