@@ -197,9 +197,19 @@ auto-compaction model candidates from role models plus the largest remaining
 fallback. Lives in
 `packages/coding-agent/src/session/context-pressure-policy.ts`.
 
+**Compaction application**:
+The session transition in which an accepted compaction becomes active history
+seen by the agent and post-compaction observers. It is distinct from summary
+generation, generic history rewriting, and durable persistence completion.
+_Avoid_: compaction transaction, compaction persistence, history rewrite.
+
 The mutating compaction orchestrator itself (`#runAutoCompaction`,
 `#checkCompaction`, `#tryContextPromotion`, `#pruneToolOutputs`, `compact()`
-from `./compaction`) intentionally stays on AgentSession - it
+from `./compaction`) intentionally stays on AgentSession. Manual and automatic
+compaction share a private application tail. Compaction and successful
+tool-output pruning share only post-history-rewrite reconciliation; pruning is
+not compaction and emits no `session_compact` event. The full orchestrator
+stays on AgentSession because it
 has 12+ session-callback dependencies (handoff, schedulePostPromptTask,
 emitSessionEvent, scheduleAutoContinuePrompt, scheduleAgentContinue,
 syncTodoPhasesFromBranch, providerSessions.closeForCodexHistoryRewrite,

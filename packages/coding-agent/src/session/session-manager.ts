@@ -2035,11 +2035,16 @@ export class SessionManager {
 		return true;
 	}
 
-	_persist(entry: SessionEntry): void {
+	#preflightPersistence(): boolean {
 		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
-			return;
+			return false;
 		const persistError = this.#log.getError();
 		if (persistError) throw persistError;
+		return true;
+	}
+
+	_persist(entry: SessionEntry): void {
+		if (!this.#preflightPersistence()) return;
 
 		// Normally we wait for the first assistant message before persisting to avoid
 		// creating files for sessions that never produce output. Once ensureOnDisk() has
@@ -2074,6 +2079,7 @@ export class SessionManager {
 	}
 
 	#appendEntry(entry: SessionEntry): void {
+		this.#preflightPersistence();
 		this.#fileEntries.push(entry);
 		this.#byId.set(entry.id, entry);
 		this.#leafId = entry.id;
@@ -2584,7 +2590,6 @@ export class SessionManager {
 		if (branchFromId !== null && !this.#byId.has(branchFromId)) {
 			throw new Error(`Entry ${branchFromId} not found`);
 		}
-		this.#leafId = branchFromId;
 		const entry: BranchSummaryEntry = {
 			type: "branch_summary",
 			id: generateId(this.#byId),

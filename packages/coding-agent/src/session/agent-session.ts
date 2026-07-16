@@ -154,13 +154,7 @@ import { formatRetryFallbackSelector, RetryFallbackPolicy } from "./retry-fallba
 import { RetryController } from "./retry-controller";
 import { StreamingEditGuard } from "./streaming-edit-guard";
 import { formatSessionDumpText } from "./session-dump-format";
-import type {
-	BranchSummaryEntry,
-	CompactionEntry,
-	NewSessionOptions,
-	SessionContext,
-	SessionManager,
-} from "./session-manager";
+import type { BranchSummaryEntry, NewSessionOptions, SessionContext, SessionManager } from "./session-manager";
 import { getLatestCompactionEntry } from "./session-manager";
 import { ToolChoiceQueue } from "./tool-choice-queue";
 import { SessionLifecycleController } from "./session-lifecycle-controller";
@@ -3158,6 +3152,35 @@ export class AgentSession {
 	// Compaction
 	// =========================================================================
 
+	#rebuildAfterHistoryRewrite(): void {
+		const sessionContext = this.buildDisplaySessionContext();
+		this.agent.replaceMessages(sessionContext.messages);
+		this.#lifecycle.syncTodoPhasesFromBranch();
+		this.#providerSessions.closeForCodexHistoryRewrite(this.model);
+	}
+
+	async #applyCompaction(result: CompactionResult, fromExtension: boolean): Promise<void> {
+		const compactionEntryId = this.sessionManager.appendCompaction(
+			result.summary,
+			result.shortSummary,
+			result.firstKeptEntryId,
+			result.tokensBefore,
+			result.details,
+			fromExtension,
+			result.preserveData,
+		);
+		const compactionEntry = this.sessionManager.getEntry(compactionEntryId);
+		this.#rebuildAfterHistoryRewrite();
+
+		if (this.#extensionRunner && compactionEntry?.type === "compaction") {
+			await this.#extensionRunner.emit({
+				type: "session_compact",
+				compactionEntry,
+				fromExtension,
+			});
+		}
+	}
+
 	async #pruneToolOutputs(): Promise<{ prunedCount: number; tokensSaved: number } | undefined> {
 		const branchEntries = this.sessionManager.getBranch();
 		const result = pruneToolOutputs(branchEntries, DEFAULT_PRUNE_CONFIG);
@@ -3166,10 +3189,7 @@ export class AgentSession {
 		}
 
 		await this.sessionManager.rewriteEntries();
-		const sessionContext = this.buildDisplaySessionContext();
-		this.agent.replaceMessages(sessionContext.messages);
-		this.#lifecycle.syncTodoPhasesFromBranch();
-		this.#providerSessions.closeForCodexHistoryRewrite(this.model);
+		this.#rebuildAfterHistoryRewrite();
 		return result;
 	}
 
@@ -3286,34 +3306,6 @@ export class AgentSession {
 				throw new Error("Compaction cancelled");
 			}
 
-			this.sessionManager.appendCompaction(
-				summary,
-				shortSummary,
-				firstKeptEntryId,
-				tokensBefore,
-				details,
-				fromExtension,
-				preserveData,
-			);
-			const newEntries = this.sessionManager.getEntries();
-			const sessionContext = this.buildDisplaySessionContext();
-			this.agent.replaceMessages(sessionContext.messages);
-			this.#lifecycle.syncTodoPhasesFromBranch();
-			this.#providerSessions.closeForCodexHistoryRewrite(this.model);
-
-			// Get the saved compaction entry for the hook
-			const savedCompactionEntry = newEntries.find(e => e.type === "compaction" && e.summary === summary) as
-				| CompactionEntry
-				| undefined;
-
-			if (this.#extensionRunner && savedCompactionEntry) {
-				await this.#extensionRunner.emit({
-					type: "session_compact",
-					compactionEntry: savedCompactionEntry,
-					fromExtension,
-				});
-			}
-
 			const compactionResult: CompactionResult = {
 				summary,
 				shortSummary,
@@ -3322,6 +3314,7 @@ export class AgentSession {
 				details,
 				preserveData,
 			};
+			await this.#applyCompaction(compactionResult, fromExtension);
 			options?.onComplete?.(compactionResult);
 			return compactionResult;
 		} catch (error) {
@@ -4303,34 +4296,6 @@ export class AgentSession {
 				return;
 			}
 
-			this.sessionManager.appendCompaction(
-				summary,
-				shortSummary,
-				firstKeptEntryId,
-				tokensBefore,
-				details,
-				fromExtension,
-				preserveData,
-			);
-			const newEntries = this.sessionManager.getEntries();
-			const sessionContext = this.buildDisplaySessionContext();
-			this.agent.replaceMessages(sessionContext.messages);
-			this.#lifecycle.syncTodoPhasesFromBranch();
-			this.#providerSessions.closeForCodexHistoryRewrite(this.model);
-
-			// Get the saved compaction entry for the hook
-			const savedCompactionEntry = newEntries.find(e => e.type === "compaction" && e.summary === summary) as
-				| CompactionEntry
-				| undefined;
-
-			if (this.#extensionRunner && savedCompactionEntry) {
-				await this.#extensionRunner.emit({
-					type: "session_compact",
-					compactionEntry: savedCompactionEntry,
-					fromExtension,
-				});
-			}
-
 			const result: CompactionResult = {
 				summary,
 				shortSummary,
@@ -4339,6 +4304,7 @@ export class AgentSession {
 				details,
 				preserveData,
 			};
+			await this.#applyCompaction(result, fromExtension);
 			await this.#emitSessionEvent({ type: "auto_compaction_end", action, result, aborted: false, willRetry });
 
 			if (!willRetry && reason !== "idle" && compactionSettings.autoContinue !== false) {
