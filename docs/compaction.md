@@ -137,6 +137,13 @@ Pruned tool results are replaced with:
 
 If pruning changes entries, session storage is rewritten and agent message state is refreshed before `ContextPressurePolicy` applies the token savings to threshold decisions.
 
+Successful pruning shares only post-rewrite reconciliation with compaction: it
+rebuilds live messages and todo phases and closes provider history after the
+rewrite succeeds. It appends no compaction entry and emits no
+`session_compact` event. Its write atomicity remains unresolved: live entries
+can still change before rewrite persistence fails. Pruning does not stage or
+roll back those changes.
+
 ### Boundary and cut-point logic
 
 `prepareCompaction()` only considers entries since the last compaction entry (if any).
@@ -238,10 +245,22 @@ Summary text gets file tags appended via prompt template:
 
 After summary generation (or hook-provided summary), agent session:
 
-1. Appends `CompactionEntry` with `appendCompaction(...)` for context-full maintenance; handoff strategy creates a new session and injects a handoff `custom_message` instead.
-2. Rebuilds display context from the active leaf via `buildDisplaySessionContext()`.
-3. Replaces live agent messages with rebuilt context.
-4. Emits `session_compact` hook event.
+1. Appends `CompactionEntry` with `appendCompaction(...)` for context-full maintenance and keeps the returned entry ID. Handoff strategy instead creates a new session and injects a handoff `custom_message`.
+2. Resolves that returned ID to the exact new `CompactionEntry`. Summary text is not used as identity.
+3. Rebuilds display context from the active leaf via `buildDisplaySessionContext()` and replaces live agent messages.
+4. Synchronizes todo phases from the rebuilt branch.
+5. Closes Codex Responses provider history for the current model.
+6. Emits `session_compact` with the exact resolved entry.
+
+The order is the same for manual and automatic compaction. Thus hook observers
+see rebuilt messages, synchronized todos, and closed provider history. Two
+entries may have the same summary; the event still reports the entry created by
+the current append.
+
+Append acceptance updates memory and queues persistence. It does not mean the
+write has passed `flush()` or `fsync()`. A new asynchronous failure may latch
+after acceptance and surface on `flush()` or a later append. Compaction adds no
+extra durability barrier.
 
 ## Branch summarization pipeline
 

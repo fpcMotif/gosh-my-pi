@@ -406,9 +406,12 @@ Algorithm:
 
 ### Write pipeline
 
-Writes are serialized through an internal promise chain (`#persistChain`) and `NdjsonFileWriter`.
+Writes are serialized through `NdjsonAppendLog`'s internal chain and `NdjsonFileWriter`.
 
-- `append*` updates in-memory state immediately.
+- Before an `append*` mutates entries, indexes, leaf state, or usage state, it
+  rejects any persistence error already latched for the active session file.
+- After that preflight, `append*` updates in-memory state immediately and queues
+  persistence.
 - Persistence is deferred until at least one assistant message exists.
    - Before first assistant: entries are retained in memory; no file append occurs.
    - When first assistant exists: full in-memory session is flushed to file.
@@ -424,7 +427,11 @@ Rationale in code: avoid persisting sessions that never produced an assistant re
 
 ### Error behavior
 
-- Persistence errors are latched (`#persistError`) and rethrown on subsequent operations.
+- `NdjsonAppendLog` latches the first persistence error and rethrows it on subsequent operations.
+- A known latched error fails the next append before in-memory state changes.
+- A new asynchronous write failure may latch after an append was accepted. That
+  append remains in memory; `flush()` or a later protected append surfaces the
+  failure.
 - First error is logged once with session file context.
 - Writer close is best-effort but propagates the first meaningful error.
 
