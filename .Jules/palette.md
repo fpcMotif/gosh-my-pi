@@ -5,3 +5,6 @@
 ## 2024-05-10 - [Global Focus Visible Outline]
 **Learning:** Adding a global `*:focus-visible` outline is an extremely efficient and maintainable way to ensure baseline keyboard accessibility across a web app without having to add utility classes (e.g. `focus-visible:ring-2`) to every interactive component individually.
 **Action:** Always check if a global focus visible rule exists before trying to add utility classes individually to buttons or inputs, unless a specific component requires a custom focus ring style.
+## 2024-05-18 - [Status Icon Accessibility]
+**Learning:** Icon-only status indicators in tables (like CheckCircle and XCircle) cause confusing screen reader announcements and lack hover context for visual users.
+**Action:** Wrap icon-only indicators in a semantic element containing a `title` and `aria-label` with `role="img"`, and apply `aria-hidden="true"` to the inner SVG/icon to prevent duplicate announcements.
