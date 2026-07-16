@@ -6,7 +6,7 @@ single shared source of truth consumed by **both** sides of the bridge:
 
 - **TypeScript (encode parity)** —
   `packages/coding-agent/src/modes/rpc/wire/golden-fixtures.test.ts` builds the
-  internal `AgentSessionEvent` for each variant, runs `toWireEvent(...)`, and
+  internal `AgentSessionEvent` for each variant, runs the wire translator, and
   asserts the result deep-equals the fixture. A renamed/added/dropped wire field
   in `translate.ts` or `v1.ts` fails this test.
 - **Go (decode parity)** —
@@ -47,7 +47,9 @@ test and a `go test` resolve deterministically.
 | `message_update.toolcall_end.json`  | `message_update` carrying a `toolcall_end` sub-event     |
 | `message_end.error_kind.json`       | `message_end` with `errorKind` (`context_overflow`)      |
 | `tool_execution_start.json`         | `tool_execution_start` (bash, with `presentation`)       |
+| `tool_execution_start.block.json`   | `tool_execution_start` with block `presentation`         |
 | `tool_execution_update.json`        | `tool_execution_update` (read, with code `presentation`) |
+| `tool_execution_end.read.json`      | `tool_execution_end` with retained read arguments        |
 | `tool_execution_end.edit_diff.json` | `tool_execution_end` for an edit diff (`details.diff`)   |
 | `extension_error.json`              | `extension_error` diagnostic frame (G22)                 |
 | `ordering.sequence.jsonl`           | one full ordered prompt cycle (JSONL, one frame/line)    |

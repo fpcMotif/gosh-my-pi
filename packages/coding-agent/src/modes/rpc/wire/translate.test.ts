@@ -3,9 +3,14 @@ import type { AssistantMessage, AssistantMessageEvent, ToolCall, ToolResultMessa
 import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionEvent } from "../../../session/agent-session";
+import type { ToolPresentation } from "../../../tools/presentation-types";
 import { toolPresenters, type ToolPresenter } from "../../../tools/presenters";
-import { toWireEvent } from "./translate";
+import { createWireEventTranslator } from "./translate";
 import type { WireEventV1 } from "./v1";
+
+function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
+	return createWireEventTranslator()(event);
+}
 
 // ============================================================================
 // Fixture builders — mirror the shape pi-ai/pi-agent-core produce
@@ -391,6 +396,86 @@ describe("toWireEvent — AgentEvent variants → v1 wire", () => {
 			expect(wire.isError).toBe(false);
 			expect(wire.result.content).toHaveLength(1);
 		}
+	});
+
+	test("session translator retains read arguments for the final presentation", () => {
+		const translate = createWireEventTranslator();
+		translate({
+			type: "tool_execution_start",
+			toolCallId: "call-read-1",
+			toolName: "read",
+			args: { path: "src/value.ts" },
+		});
+
+		const wire = translate({
+			type: "tool_execution_end",
+			toolCallId: "call-read-1",
+			toolName: "read",
+			result: {
+				content: [{ type: "text", text: "1|const value = 1;" }],
+				details: { kind: "file", displayContent: { text: "const value = 1;", startLine: 1 } },
+			},
+		});
+
+		expect(wire?.type).toBe("tool_execution_end");
+		if (wire?.type === "tool_execution_end") {
+			expect(wire.result.presentation).toEqual({
+				type: "code",
+				code: {
+					code: "const value = 1;",
+					language: "typescript",
+					title: "Read src/value.ts",
+					status: "complete",
+					expanded: false,
+				},
+			});
+		}
+	});
+
+	test("presenter failure omits presentation without dropping the terminal event", () => {
+		const translate = createWireEventTranslator({
+			read: {
+				presentResult: () => {
+					throw new Error("result failed");
+				},
+			},
+		});
+		const wire = translate({
+			type: "tool_execution_end",
+			toolCallId: "call-read-1",
+			toolName: "read",
+			result: { content: [{ type: "text", text: "raw result" }] },
+			isError: true,
+		});
+
+		expect(wire).toEqual({
+			type: "tool_execution_end",
+			toolCallId: "call-read-1",
+			toolName: "read",
+			result: { content: [{ type: "text", text: "raw result" }] },
+			isError: true,
+		});
+	});
+
+	test("malformed presenter output omits presentation without dropping the event", () => {
+		const translate = createWireEventTranslator({
+			read: {
+				presentCall: () => ({ type: "block" }) as unknown as ToolPresentation,
+			},
+		});
+		const wire = translate({
+			type: "tool_execution_start",
+			toolCallId: "call-read-1",
+			toolName: "read",
+			args: { path: "src/value.ts" },
+		});
+
+		expect(wire).toEqual({
+			type: "tool_execution_start",
+			toolCallId: "call-read-1",
+			toolName: "read",
+			args: { path: "src/value.ts" },
+		});
 	});
 });
 

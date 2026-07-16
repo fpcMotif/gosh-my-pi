@@ -17,6 +17,16 @@ import (
 func SyntaxHighlight(st *styles.Styles, source, fileName string, bg color.Color) (string, error) {
 	// Determine the language lexer to use
 	l := lexers.Match(fileName)
+	return syntaxHighlight(st, source, l, bg)
+}
+
+// SyntaxHighlightLanguage applies syntax highlighting using an explicit
+// language identifier.
+func SyntaxHighlightLanguage(st *styles.Styles, source, language string, bg color.Color) (string, error) {
+	return syntaxHighlight(st, source, lexers.Get(language), bg)
+}
+
+func syntaxHighlight(st *styles.Styles, source string, l chroma.Lexer, bg color.Color) (string, error) {
 	if l == nil {
 		l = lexers.Analyse(source)
 	}

@@ -44,7 +44,7 @@ import type {
 	RpcResponse,
 	RpcSessionState,
 } from "./rpc-types";
-import { toWireEvent } from "./wire/translate";
+import { createWireEventTranslator } from "./wire/translate";
 import { OMP_RPC_SCHEMA_V1, type WireFrame } from "./wire/v1";
 
 // Re-export types for consumers
@@ -646,8 +646,9 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	// events (auto_compaction_*, auto_retry_*, ttsr_*, todo_*, irc_message,
 	// retry_fallback_*) translate to null and are dropped — they remain
 	// available to in-process subscribers but never reach the wire.
+	const translateWireEvent = createWireEventTranslator();
 	session.subscribe(event => {
-		const wire = toWireEvent(event);
+		const wire = translateWireEvent(event);
 		if (wire !== null) output(wire);
 	});
 

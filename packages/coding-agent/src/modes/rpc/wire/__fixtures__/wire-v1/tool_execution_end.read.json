@@ -1,0 +1,19 @@
+{
+	"type": "tool_execution_end",
+	"toolCallId": "call-read-1",
+	"toolName": "read",
+	"result": {
+		"content": [{ "type": "text", "text": "1|const value = 1;" }],
+		"details": { "kind": "file", "displayContent": { "text": "const value = 1;", "startLine": 1 } },
+		"presentation": {
+			"type": "code",
+			"code": {
+				"code": "const value = 1;",
+				"language": "typescript",
+				"title": "Read src/value.ts",
+				"status": "complete",
+				"expanded": false
+			}
+		}
+	}
+}

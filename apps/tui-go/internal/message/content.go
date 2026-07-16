@@ -99,23 +99,25 @@ func (bc BinaryContent) String(p catwalk.InferenceProvider) string {
 func (BinaryContent) isPart() {}
 
 type ToolCall struct {
-	ID               string `json:"id"`
-	Name             string `json:"name"`
-	Input            string `json:"input"`
-	ProviderExecuted bool   `json:"provider_executed"`
-	Finished         bool   `json:"finished"`
+	ID               string            `json:"id"`
+	Name             string            `json:"name"`
+	Input            string            `json:"input"`
+	ProviderExecuted bool              `json:"provider_executed"`
+	Finished         bool              `json:"finished"`
+	Presentation     *ToolPresentation `json:"presentation,omitempty"`
 }
 
 func (ToolCall) isPart() {}
 
 type ToolResult struct {
-	ToolCallID string `json:"tool_call_id"`
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	Data       string `json:"data"`
-	MIMEType   string `json:"mime_type"`
-	Metadata   string `json:"metadata"`
-	IsError    bool   `json:"is_error"`
+	ToolCallID   string            `json:"tool_call_id"`
+	Name         string            `json:"name"`
+	Content      string            `json:"content"`
+	Data         string            `json:"data"`
+	MIMEType     string            `json:"mime_type"`
+	Metadata     string            `json:"metadata"`
+	IsError      bool              `json:"is_error"`
+	Presentation *ToolPresentation `json:"presentation,omitempty"`
 }
 
 func (ToolResult) isPart() {}
@@ -347,12 +349,8 @@ func (m *Message) FinishToolCall(toolCallID string) {
 	for i, part := range m.Parts {
 		if c, ok := part.(ToolCall); ok {
 			if c.ID == toolCallID {
-				m.Parts[i] = ToolCall{
-					ID:       c.ID,
-					Name:     c.Name,
-					Input:    c.Input,
-					Finished: true,
-				}
+				c.Finished = true
+				m.Parts[i] = c
 				return
 			}
 		}
@@ -363,12 +361,8 @@ func (m *Message) AppendToolCallInput(toolCallID string, inputDelta string) {
 	for i, part := range m.Parts {
 		if c, ok := part.(ToolCall); ok {
 			if c.ID == toolCallID {
-				m.Parts[i] = ToolCall{
-					ID:       c.ID,
-					Name:     c.Name,
-					Input:    c.Input + inputDelta,
-					Finished: c.Finished,
-				}
+				c.Input += inputDelta
+				m.Parts[i] = c
 				return
 			}
 		}
@@ -379,6 +373,9 @@ func (m *Message) AddToolCall(tc ToolCall) {
 	for i, part := range m.Parts {
 		if c, ok := part.(ToolCall); ok {
 			if c.ID == tc.ID {
+				if tc.Presentation == nil {
+					tc.Presentation = c.Presentation
+				}
 				m.Parts[i] = tc
 				return
 			}
@@ -388,16 +385,23 @@ func (m *Message) AddToolCall(tc ToolCall) {
 }
 
 func (m *Message) SetToolCalls(tc []ToolCall) {
+	presentations := make(map[string]*ToolPresentation)
 	// remove any existing tool call part it could have multiple
 	parts := make([]ContentPart, 0)
 	for _, part := range m.Parts {
-		if _, ok := part.(ToolCall); ok {
+		if current, ok := part.(ToolCall); ok {
+			if current.Presentation != nil {
+				presentations[current.ID] = current.Presentation
+			}
 			continue
 		}
 		parts = append(parts, part)
 	}
 	m.Parts = parts
 	for _, toolCall := range tc {
+		if toolCall.Presentation == nil {
+			toolCall.Presentation = presentations[toolCall.ID]
+		}
 		m.Parts = append(m.Parts, toolCall)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
+	"github.com/stretchr/testify/require"
 )
 
 // Cross-language golden wire fixtures (gap G23).
@@ -224,11 +225,33 @@ func TestWireGoldenToolExecutionStart(t *testing.T) {
 	if !strings.Contains(calls[0].Input, "ls -la") {
 		t.Errorf("tool call input = %q, want it to carry the command args", calls[0].Input)
 	}
+	require.NotNil(t, calls[0].Presentation)
+	require.True(t, calls[0].Presentation.Usable())
+	require.Equal(t, message.ToolPresentationTypeStatus, calls[0].Presentation.Type)
+	require.Equal(t, "$ ls -la", calls[0].Presentation.Status.Description)
+}
+
+func TestWireGoldenToolExecutionStartBlock(t *testing.T) {
+	t.Parallel()
+	raw := loadWireFixture(t, "tool_execution_start.block.json")
+	w := newTestGmpWorkspace()
+
+	msg := w.handleToolExecutionStart(raw)
+	ev, ok := msg.(pubsub.Event[message.Message])
+	require.True(t, ok, "handleToolExecutionStart returned %T", msg)
+	calls := ev.Payload.ToolCalls()
+	require.Len(t, calls, 1)
+	presentation := calls[0].Presentation
+	require.NotNil(t, presentation)
+	require.True(t, presentation.Usable())
+	require.Equal(t, message.ToolPresentationTypeBlock, presentation.Type)
+	require.Len(t, presentation.Sections, 1)
+	require.Equal(t, []string{"const value = 2;"}, presentation.Sections[0].Lines)
 }
 
 // TestWireGoldenToolExecutionUpdate: the read update fixture creates a tool
-// result whose name is remapped to the renderer key (view) and whose metadata
-// carries the clean displayContent.
+// result whose name is remapped to the renderer key and whose code presentation
+// is authoritative over legacy metadata reconstruction.
 func TestWireGoldenToolExecutionUpdate(t *testing.T) {
 	raw := loadWireFixture(t, "tool_execution_update.json")
 	w := newTestGmpWorkspace()
@@ -237,15 +260,51 @@ func TestWireGoldenToolExecutionUpdate(t *testing.T) {
 	if tr.Name != "view" {
 		t.Errorf("ToolResult.Name = %q, want remapped %q", tr.Name, "view")
 	}
-	var meta struct {
-		Content string `json:"content"`
-	}
-	if err := json.Unmarshal([]byte(tr.Metadata), &meta); err != nil {
-		t.Fatalf("view metadata invalid: %v (%s)", err, tr.Metadata)
-	}
-	if meta.Content != "const value = 1;" {
-		t.Errorf("view metadata content = %q, want the clean displayContent", meta.Content)
-	}
+	require.NotNil(t, tr.Presentation)
+	require.True(t, tr.Presentation.Usable())
+	require.Equal(t, message.ToolPresentationTypeCode, tr.Presentation.Type)
+	require.Equal(t, "typescript", tr.Presentation.Code.Language)
+	require.Equal(t, "const value = 1;", tr.Presentation.Code.Code)
+	require.Empty(t, tr.Metadata, "legacy metadata must be absent while current presentation is usable")
+}
+
+func TestMalformedPresentationPreservesToolResultAndLegacyMetadata(t *testing.T) {
+	t.Parallel()
+	w := newTestGmpWorkspace()
+	raw := []byte(`{
+		"toolCallId":"call-read-malformed",
+		"toolName":"read",
+		"partialResult":{
+			"content":[{"type":"text","text":"1|const value = 1;"}],
+			"details":{"displayContent":{"text":"const value = 1;"}},
+			"presentation":{"type":"code","code":"not-an-object"}
+		}
+	}`)
+
+	tr := toolResultPart(t, w.handleToolExecutionUpdate(raw))
+	require.NotEmpty(t, tr.Content, "malformed presentation dropped raw tool content")
+	require.Nil(t, tr.Presentation)
+	require.NotEmpty(t, tr.Metadata, "malformed presentation suppressed legacy metadata")
+}
+
+func TestUnknownPresentationPreservesToolResultAndLegacyMetadata(t *testing.T) {
+	t.Parallel()
+	w := newTestGmpWorkspace()
+	raw := []byte(`{
+		"toolCallId":"call-read-future",
+		"toolName":"read",
+		"partialResult":{
+			"content":[{"type":"text","text":"1|const value = 1;"}],
+			"details":{"displayContent":{"text":"const value = 1;"}},
+			"presentation":{"type":"future","payload":{"new":"field"}}
+		}
+	}`)
+
+	tr := toolResultPart(t, w.handleToolExecutionUpdate(raw))
+	require.NotEmpty(t, tr.Content, "unknown presentation dropped raw tool content")
+	require.NotNil(t, tr.Presentation)
+	require.Equal(t, message.ToolPresentationType("future"), tr.Presentation.Type)
+	require.NotEmpty(t, tr.Metadata, "unknown presentation suppressed legacy metadata")
 }
 
 // TestWireGoldenToolExecutionEndEditDiff: the apply_patch end fixture remaps to
@@ -278,6 +337,21 @@ func TestWireGoldenToolExecutionEndEditDiff(t *testing.T) {
 	if meta.NewContent != wantNew {
 		t.Errorf("new_content = %q, want %q", meta.NewContent, wantNew)
 	}
+}
+
+func TestWireGoldenToolExecutionEndReadPresentation(t *testing.T) {
+	t.Parallel()
+	raw := loadWireFixture(t, "tool_execution_end.read.json")
+	w := newTestGmpWorkspace()
+
+	tr := toolResultPart(t, w.handleToolExecutionEnd(raw))
+	presentation := tr.Presentation
+	require.NotNil(t, presentation)
+	require.True(t, presentation.Usable())
+	require.Equal(t, message.ToolPresentationTypeCode, presentation.Type)
+	require.Equal(t, "Read src/value.ts", presentation.Code.Title, "final presentation must retain call path")
+	require.Equal(t, "typescript", presentation.Code.Language, "final presentation must retain language")
+	require.Empty(t, tr.Metadata, "usable presentation must suppress legacy reconstruction")
 }
 
 // TestWireGoldenTurnEnd: the turn_end fixture decodes the assistant message and

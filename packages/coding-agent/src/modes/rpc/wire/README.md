@@ -102,10 +102,34 @@ Tool invocation lifecycle. `update` events carry partial results for
 streaming tools; `end` carries the final result.
 
 ```typescript
-{type: "tool_execution_start", toolCallId: string, toolName: string, args: object, intent?: string}
+{type: "tool_execution_start", toolCallId: string, toolName: string, args: object, intent?: string, presentation?: WireToolPresentationV1}
 {type: "tool_execution_update", toolCallId: string, toolName: string, args: object, partialResult: WireToolResultV1}
 {type: "tool_execution_end", toolCallId: string, toolName: string, result: WireToolResultV1, isError?: boolean}
 ```
+
+`WireToolResultV1` may carry `presentation?: WireToolPresentationV1`, so
+presentations occur at these three paths:
+
+- `tool_execution_start.presentation`
+- `tool_execution_update.partialResult.presentation`
+- `tool_execution_end.result.presentation`
+
+Each value is a complete snapshot for that lifecycle phase. Hosts replace the
+prior snapshot. They do not merge fields. Presentation is optional metadata:
+presenter failure never drops the parent event or its raw content.
+
+`WireToolPresentationV1` is a discriminated union:
+
+- `status`: `status.title` plus optional `icon`, `spinnerFrame`, `titleColor`,
+  `description`, and `meta`.
+- `block`: optional `status` and `state`, ordered `sections` with optional
+  labels, and optional `applyBg`.
+- `code`: `code.code` plus optional `language`, `title`, `status`,
+  `spinnerFrame`, `output`, preview limits, and `expanded`.
+
+Hosts MUST ignore unknown fields and presentation variants without dropping the
+parent event. Missing, malformed, or unsupported presentation selects the
+host's legacy rendering path.
 
 ## Message shapes
 
@@ -201,7 +225,7 @@ at the wire chokepoint:
 - `irc_message`
 
 If a future feature needs one of these on the wire, additive evolution
-adds it to `WireEventV1` and `toWireEvent`.
+adds it to `WireEventV1` and `createWireEventTranslator`.
 
 ## Implementation guarantees
 
