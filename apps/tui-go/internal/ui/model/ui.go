@@ -1282,9 +1282,10 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 		existingToolItem := m.chat.MessageItem(tc.ID)
 		if toolItem, ok := existingToolItem.(chat.ToolMessageItem); ok {
 			existingToolCall := toolItem.ToolCall()
-			// only update if finished state changed or input changed
-			// to avoid clearing the cache
-			if (tc.Finished && !existingToolCall.Finished) || tc.Input != existingToolCall.Input {
+			// Only update when render inputs change to avoid clearing the cache.
+			if (tc.Finished && !existingToolCall.Finished) ||
+				tc.Input != existingToolCall.Input ||
+				tc.Presentation != existingToolCall.Presentation {
 				toolItem.SetToolCall(tc)
 			}
 		}

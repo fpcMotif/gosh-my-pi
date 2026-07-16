@@ -185,7 +185,7 @@ func newBaseToolMessageItem(
 		cachedMessageItem:        &cachedMessageItem{},
 		focusableMessageItem:     newFocusableMessageItem(v),
 		sty:                      sty,
-		toolRenderer:             toolRenderer,
+		toolRenderer:             newPresentationToolRenderer(toolRenderer),
 		toolCall:                 toolCall,
 		result:                   result,
 		status:                   status,
@@ -634,6 +634,18 @@ func toolOutputPlainContent(sty *styles.Styles, content string, width int, expan
 
 // toolOutputCodeContent renders code with syntax highlighting and line numbers.
 func toolOutputCodeContent(sty *styles.Styles, path, content string, offset, width int, expanded bool) string {
+	return toolOutputCodeContentLanguage(sty, path, "", content, offset, width, expanded)
+}
+
+func toolOutputCodeContentLanguage(
+	sty *styles.Styles,
+	path string,
+	language string,
+	content string,
+	offset int,
+	width int,
+	expanded bool,
+) string {
 	content = stringext.NormalizeSpace(content)
 
 	lines := strings.Split(content, "\n")
@@ -649,7 +661,12 @@ func toolOutputCodeContent(sty *styles.Styles, path, content string, offset, wid
 	}
 
 	bg := sty.Tool.ContentCodeBg
-	highlighted, _ := common.SyntaxHighlight(sty, strings.Join(displayLines, "\n"), path, bg)
+	var highlighted string
+	if language == "" {
+		highlighted, _ = common.SyntaxHighlight(sty, strings.Join(displayLines, "\n"), path, bg)
+	} else {
+		highlighted, _ = common.SyntaxHighlightLanguage(sty, strings.Join(displayLines, "\n"), language, bg)
+	}
 	highlightedLines := strings.Split(highlighted, "\n")
 
 	// Calculate line number width.

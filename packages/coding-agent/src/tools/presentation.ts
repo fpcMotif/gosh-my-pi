@@ -1,63 +1,19 @@
 import { Text, type Component } from "@oh-my-pi/pi-tui";
-import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme, ThemeColor } from "../modes/theme/theme";
-import { renderCodeCell, renderStatusLine } from "../tui";
+import { renderCodeCell, renderStatusLine, type StatusLineOptions } from "../tui";
 import { CachedOutputBlock } from "../tui/output-block";
-import type { State } from "../tui/types";
-import type { ToolUIStatus } from "./render-utils";
+import type { ToolPresentation, ToolPresentationStatus } from "./presentation-types";
 
-export type ToolPresentationCodeStatus = "pending" | "running" | "warning" | "complete" | "error";
+export * from "./presentation-types";
 
-export interface ToolPresentationStatus {
-	icon?: ToolUIStatus;
-	spinnerFrame?: number;
-	title: string;
-	titleColor?: ThemeColor;
-	description?: string;
-	meta?: string[];
+function toStatusLineOptions(status: ToolPresentationStatus): StatusLineOptions {
+	const { titleColor, ...options } = status;
+	return titleColor === undefined ? options : { ...options, titleColor: titleColor as ThemeColor };
 }
-
-export interface ToolPresentationSection {
-	label?: string;
-	lines: string[];
-}
-
-export interface ToolPresentationCode {
-	code: string;
-	language?: string;
-	title?: string;
-	status?: ToolPresentationCodeStatus;
-	spinnerFrame?: number;
-	output?: string;
-	outputMaxLines?: number;
-	codeMaxLines?: number;
-	expanded?: boolean;
-}
-
-export type ToolPresentation =
-	| {
-			type: "status";
-			status: ToolPresentationStatus;
-	  }
-	| {
-			type: "block";
-			status?: ToolPresentationStatus;
-			state?: State;
-			sections: ToolPresentationSection[];
-			applyBg?: boolean;
-	  }
-	| {
-			type: "code";
-			code: ToolPresentationCode;
-	  };
-
-export type ToolPresentationResult = ToolPresentation | undefined;
-
-export type ToolPresentationOptions = RenderResultOptions & { renderContext?: Record<string, unknown> };
 
 export function renderToolPresentation(presentation: ToolPresentation, uiTheme: Theme): Component {
 	if (presentation.type === "status") {
-		return new Text(renderStatusLine(presentation.status, uiTheme), 0, 0);
+		return new Text(renderStatusLine(toStatusLineOptions(presentation.status), uiTheme), 0, 0);
 	}
 
 	if (presentation.type === "code") {
@@ -82,7 +38,9 @@ export function renderToolPresentation(presentation: ToolPresentation, uiTheme: 
 		render(width: number): string[] {
 			return outputBlock.render(
 				{
-					header: presentation.status ? renderStatusLine(presentation.status, uiTheme) : undefined,
+					header: presentation.status
+						? renderStatusLine(toStatusLineOptions(presentation.status), uiTheme)
+						: undefined,
 					state: presentation.state,
 					sections: presentation.sections,
 					width,

@@ -1,0 +1,11 @@
+{
+	"type": "tool_execution_start",
+	"toolCallId": "call-edit-1",
+	"toolName": "edit",
+	"args": { "path": "src/value.ts", "newText": "const value = 2;" },
+	"presentation": {
+		"type": "block",
+		"status": { "icon": "pending", "title": "Edit", "description": "src/value.ts" },
+		"sections": [{ "lines": ["const value = 2;"] }]
+	}
+}

@@ -208,15 +208,13 @@ mutation, extension hooks) and a feedback loop into agent.continue. Risk vs
 reward made full extraction unwise this turn.
 
 **ToolPresentation**:
-Neutral tool presentation data in `packages/coding-agent/src/tools/presentation.ts`.
-The first slice supports status and output-block presentations plus a legacy
-`pi-tui` Adapter. `ToolExecutionComponent` now prefers `presentCall` /
-`presentResult` data from built-in renderers when available and falls back to
-the older component renderers. Initial migration covers simple `bash`, non-URL
-`read`, and non-vim `edit`/`apply_patch` call summaries, plus non-URL `read`
-result code blocks. Richer shell output and edit diff result presentation remain
-on the legacy renderers until their width-sensitive behavior has a dedicated
-migration pass.
+The frontend-neutral meaning of a tool call or result: status, semantic text
+sections, or code. Each value is a complete snapshot, never a rendering delta.
+It cannot control tool execution, persistence, approval, or error
+classification. Rendering Adapters own theme, width, expansion, truncation,
+and terminal sanitization. Producers own semantic normalization such as safe
+path display. During migration, an absent or unsupported ToolPresentation
+selects the frontend's legacy renderer.
 
 **pi-tui (legacy frontend, scheduled for deletion — candidate #3)**:
 The in-process TUI library at `packages/tui/`. Originally hosted both the

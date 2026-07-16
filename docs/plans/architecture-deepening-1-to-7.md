@@ -39,9 +39,9 @@ This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architect
    - _Downside/rollback:_ RecoveryLedger centralizes recovery-marker write timing and state; if it causes sequencing confusion, rollback by moving write timing back into AgentSession while keeping RecoveryMarker writes in one place and reintroducing a thinner helper on a smaller scope.
 - [x] **Step 4 complete** - ContextPressure decision module.
    - _Downside/rollback:_ `ContextPressurePolicy` improves decision-table testability but adds one more hop between the automatic compaction trigger and the session mutations. If debugging pressure decisions gets harder, rollback by moving `decideContextPressure` back into `#checkCompaction` while keeping the pure candidate-ordering tests as a guard.
-- [ ] **Step 5 pending** - ToolPresentation module.
-   - _Progress:_ First slice added neutral `ToolPresentation` status/block data, a legacy `pi-tui` Adapter, `ToolExecutionComponent` preference for presentation data, and `bash`/non-URL `read` call-summary migration. Second slice added non-vim `edit`/`apply_patch` call-summary presentation data while leaving legacy result rendering intact. Third slice added neutral code-cell presentation and moved non-URL `read` results onto it.
-   - _Downside/rollback:_ Shell output and edit diff result presentation are still legacy-renderer owned because their width-sensitive output needs separate migration. Rollback by removing `presentCall`/`presentResult` preference in `ToolExecutionComponent` and leaving the adapter module unused.
+- [x] **Step 5 complete** - ToolPresentation module.
+   - _Result:_ Frontend-neutral presentation types and a session projector now cross RPC. `tui-go` renders structured summaries first and keeps legacy edit-result text as an explicit fallback. Contract tests, Go adapter tests, wire checks, and live terminal proof cover the migrated path.
+   - _Downside/rollback:_ Legacy `pi-tui` still owns its width-sensitive rendering. Rollback by removing the RPC presentation fields and returning `tui-go` to legacy result parsing.
 - [ ] **Step 6 pending** — Direct `RpcModelCatalog` picker.
 - [ ] **Step 7 pending** — Collapse gmp-only `Workspace` seam.
 

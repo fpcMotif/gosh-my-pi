@@ -116,6 +116,56 @@ func TestToAIMessage_ASCIIButInvalidBase64(t *testing.T) {
 	require.Equal(t, mediaLoadFailedPlaceholder, textContent.Text)
 }
 
+func TestToolCallUpdatesPreservePresentation(t *testing.T) {
+	t.Parallel()
+
+	presentation := &ToolPresentation{
+		Type: ToolPresentationTypeStatus,
+		Status: &ToolPresentationStatus{
+			Title:       "Bash",
+			Description: "$ echo hello",
+		},
+	}
+	msg := &Message{Parts: []ContentPart{ToolCall{
+		ID:               "call-1",
+		Name:             "bash",
+		Input:            `{"command":"echo`,
+		ProviderExecuted: true,
+		Presentation:     presentation,
+	}}}
+
+	msg.AppendToolCallInput("call-1", ` hello"}`)
+	msg.FinishToolCall("call-1")
+
+	calls := msg.ToolCalls()
+	require.Len(t, calls, 1)
+	require.Equal(t, `{"command":"echo hello"}`, calls[0].Input)
+	require.True(t, calls[0].Finished)
+	require.True(t, calls[0].ProviderExecuted)
+	require.Same(t, presentation, calls[0].Presentation)
+}
+
+func TestToolCallReplacementPreservesPresentationWhenSnapshotOmitsIt(t *testing.T) {
+	t.Parallel()
+
+	presentation := &ToolPresentation{
+		Type:   ToolPresentationTypeStatus,
+		Status: &ToolPresentationStatus{Title: "Read"},
+	}
+	msg := &Message{Parts: []ContentPart{ToolCall{
+		ID:           "call-1",
+		Name:         "view",
+		Input:        `{}`,
+		Presentation: presentation,
+	}}}
+
+	msg.AddToolCall(ToolCall{ID: "call-1", Name: "view", Input: `{"path":"a.go"}`})
+	require.Same(t, presentation, msg.ToolCalls()[0].Presentation)
+
+	msg.SetToolCalls([]ToolCall{{ID: "call-1", Name: "view", Input: `{"path":"b.go"}`}})
+	require.Same(t, presentation, msg.ToolCalls()[0].Presentation)
+}
+
 func BenchmarkPromptWithTextAttachments(b *testing.B) {
 	cases := []struct {
 		name        string

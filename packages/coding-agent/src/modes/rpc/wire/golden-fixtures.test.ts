@@ -3,8 +3,12 @@ import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { describe, expect, test } from "bun:test";
 import * as path from "node:path";
 import type { AgentSessionEvent } from "../../../session/agent-session";
-import { toWireEvent } from "./translate";
+import { createWireEventTranslator } from "./translate";
 import type { WireEventV1, WireExtensionErrorFrameV1 } from "./v1";
+
+function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
+	return createWireEventTranslator()(event);
+}
 
 // ============================================================================
 // Cross-language golden wire fixtures (gap G23).
@@ -170,6 +174,15 @@ const cases: Array<{ fixture: string; event: AgentSessionEvent }> = [
 		},
 	},
 	{
+		fixture: "tool_execution_start.block.json",
+		event: {
+			type: "tool_execution_start",
+			toolCallId: "call-edit-1",
+			toolName: "edit",
+			args: { path: "src/value.ts", newText: "const value = 2;" },
+		},
+	},
+	{
 		fixture: "tool_execution_update.json",
 		event: {
 			type: "tool_execution_update",
@@ -230,6 +243,27 @@ describe("OMP-RPC v1 golden fixtures — TS encode parity", () => {
 		expect(typeof fixture.extensionPath).toBe("string");
 		expect(typeof fixture.event).toBe("string");
 		expect(typeof fixture.error).toBe("string");
+	});
+
+	test("tool_execution_end.read.json retains start arguments in the final snapshot", async () => {
+		const translate = createWireEventTranslator();
+		translate({
+			type: "tool_execution_start",
+			toolCallId: "call-read-1",
+			toolName: "read",
+			args: { path: "src/value.ts" },
+		});
+		const wire = translate({
+			type: "tool_execution_end",
+			toolCallId: "call-read-1",
+			toolName: "read",
+			result: {
+				content: [{ type: "text", text: "1|const value = 1;" }],
+				details: { kind: "file", displayContent: { text: "const value = 1;", startLine: 1 } },
+			},
+		});
+
+		expect(wire).toEqual((await loadFixture("tool_execution_end.read.json")) as WireEventV1);
 	});
 });
 

@@ -2,7 +2,7 @@
  * Internal AgentSessionEvent → OMP-RPC v1 wire event translation.
  *
  * This module is the wire contract. The exhaustive `switch` in
- * {@link toWireEvent} forces the compiler to flag any new internal
+ * {@link createWireEventTranslator} forces the compiler to flag any new internal
  * variant — failing to handle it is a type error. Internal-only events
  * (the 10 coding-agent session extensions) translate to `null` and are
  * dropped at the {@link rpc-mode} chokepoint.
@@ -34,9 +34,14 @@ import type {
 	HookMessage,
 	PythonExecutionMessage,
 } from "../../../session/messages";
-import type { ToolPresentation, ToolPresentationCode, ToolPresentationStatus } from "../../../tools/presentation";
-import { toolPresenters } from "../../../tools/presenters";
-import type { RenderResultOptions } from "../../../extensibility/custom-tools/types";
+import { createToolPresentationProjector, type ToolPresentationProjector } from "../../../tools/presentation-projector";
+import type {
+	ToolPresentation,
+	ToolPresentationCode,
+	ToolPresentationResult,
+	ToolPresentationStatus,
+} from "../../../tools/presentation-types";
+import { toolPresenters, type ToolPresenter } from "../../../tools/presenters";
 import type {
 	WireAssistantContentBlockV1,
 	WireAssistantMessageEventV1,
@@ -54,6 +59,7 @@ import type {
 	WireThinkingContentV1,
 	WireToolCallV1,
 	WireToolPresentationV1,
+	WireToolPresentationStatusV1,
 	WireToolResultMessageV1,
 	WireToolResultV1,
 	WireUsageV1,
@@ -71,7 +77,24 @@ import type {
  * dropped from the wire — they remain available to in-process subscribers
  * but never reach external consumers.
  */
-export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
+export type WireEventTranslator = (event: AgentSessionEvent) => WireEventV1 | null;
+
+export function createWireEventTranslator(
+	presenters: Readonly<Record<string, ToolPresenter>> = toolPresenters,
+): WireEventTranslator {
+	const projector = createToolPresentationProjector(presenters, failure => {
+		logger.warn(`tool presenter threw on ${failure.method}`, {
+			toolName: failure.toolName,
+			error: failure.error,
+		});
+	});
+	return event => translateWireEvent(event, projector);
+}
+
+function translateWireEvent(
+	event: AgentSessionEvent,
+	projectPresentation: ToolPresentationProjector,
+): WireEventV1 | null {
 	switch (event.type) {
 		case "agent_start":
 			return { type: "agent_start" };
@@ -117,7 +140,7 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 				toolName: event.toolName,
 				args: event.args,
 				...(event.intent !== undefined && { intent: event.intent }),
-				...withWirePresentation(toWireCallPresentation(event.toolName, event.args)),
+				...withWirePresentation(toWirePresentationResult(event.toolName, projectPresentation(event))),
 			};
 
 		case "tool_execution_update":
@@ -126,10 +149,10 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 				toolCallId: event.toolCallId,
 				toolName: event.toolName,
 				args: event.args,
-				partialResult: toWireToolExecutionResult(event.toolName, event.partialResult, event.args, {
-					expanded: false,
-					isPartial: true,
-				}),
+				partialResult: toWireToolExecutionResult(
+					event.partialResult,
+					toWirePresentationResult(event.toolName, projectPresentation(event)),
+				),
 			};
 
 		case "tool_execution_end":
@@ -137,10 +160,10 @@ export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
 				type: "tool_execution_end",
 				toolCallId: event.toolCallId,
 				toolName: event.toolName,
-				result: toWireToolExecutionResult(event.toolName, event.result, undefined, {
-					expanded: false,
-					isPartial: false,
-				}),
+				result: toWireToolExecutionResult(
+					event.result,
+					toWirePresentationResult(event.toolName, projectPresentation(event)),
+				),
 				...(event.isError !== undefined && { isError: event.isError }),
 			};
 
@@ -412,15 +435,13 @@ function toWireToolResult(result: { content: (TextContent | ImageContent)[]; det
 }
 
 function toWireToolExecutionResult(
-	toolName: string,
 	result: { content: (TextContent | ImageContent)[]; details?: unknown },
-	args: Record<string, unknown> | undefined,
-	options: RenderResultOptions,
+	presentation: WireToolPresentationV1 | undefined,
 ): WireToolResultV1 {
 	const wireResult = toWireToolResult(result);
 	return {
 		...wireResult,
-		...withWirePresentation(toWireResultPresentation(toolName, result, options, args)),
+		...withWirePresentation(presentation),
 	};
 }
 
@@ -430,39 +451,23 @@ function withWirePresentation(
 	return presentation === undefined ? {} : { presentation };
 }
 
-function toWireCallPresentation(toolName: string, args: Record<string, unknown>): WireToolPresentationV1 | undefined {
-	const presenter = toolPresenters[toolName];
-	if (!presenter?.presentCall) return undefined;
-	try {
-		const presentation = presenter.presentCall(args, { expanded: false, isPartial: true });
-		return presentation === undefined ? undefined : toWireToolPresentation(presentation);
-	} catch (error) {
-		// Presenter contract: must not throw. Log so silent wire drift is at least
-		// observable, and drop the presentation field for this frame.
-		logger.warn("tool presenter threw on presentCall", { toolName, error: String(error) });
-		return undefined;
-	}
-}
-
-function toWireResultPresentation(
+function toWirePresentationResult(
 	toolName: string,
-	result: { content: (TextContent | ImageContent)[]; details?: unknown },
-	options: RenderResultOptions,
-	args?: Record<string, unknown>,
+	presentation: ToolPresentationResult,
 ): WireToolPresentationV1 | undefined {
-	const presenter = toolPresenters[toolName];
-	if (!presenter?.presentResult) return undefined;
+	if (presentation === undefined) return undefined;
 	try {
-		const presentation = presenter.presentResult(result, options, args);
-		return presentation === undefined ? undefined : toWireToolPresentation(presentation);
+		return toWireToolPresentation(presentation);
 	} catch (error) {
-		// Presenter contract: must not throw. See toWireCallPresentation.
-		logger.warn("tool presenter threw on presentResult", { toolName, error: String(error) });
+		logger.warn("Tool presentation projection failed", {
+			toolName,
+			error: String(error).slice(0, 500),
+		});
 		return undefined;
 	}
 }
 
-function toWireToolPresentationStatus(status: ToolPresentationStatus): WireToolPresentationV1["status"] {
+function toWireToolPresentationStatus(status: ToolPresentationStatus): WireToolPresentationStatusV1 {
 	return {
 		...(status.icon !== undefined && { icon: status.icon }),
 		...(status.spinnerFrame !== undefined && { spinnerFrame: status.spinnerFrame }),

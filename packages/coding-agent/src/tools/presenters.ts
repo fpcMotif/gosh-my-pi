@@ -20,7 +20,7 @@
  */
 import { editToolPresenter } from "../edit/renderer";
 import { bashToolPresenter } from "./bash";
-import type { ToolPresentationOptions, ToolPresentationResult } from "./presentation";
+import type { ToolPresentationOptions, ToolPresentationResult } from "./presentation-types";
 import { readToolPresenter } from "./read";
 import { recipeToolPresenter } from "./recipe/render";
 
