@@ -58,9 +58,18 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 								</td>
 								<td className="py-3 px-4 text-center">
 									{req.errorMessage ? (
-										<XCircle size={16} className="text-[var(--accent-red)] mx-auto" />
+										<span
+											role="img"
+											aria-label="Error"
+											title={req.errorMessage}
+											className="flex justify-center"
+										>
+											<XCircle size={16} className="text-[var(--accent-red)]" aria-hidden="true" />
+										</span>
 									) : (
-										<CheckCircle2 size={16} className="text-[var(--accent-green)] mx-auto" />
+										<span role="img" aria-label="Success" title="Success" className="flex justify-center">
+											<CheckCircle2 size={16} className="text-[var(--accent-green)]" aria-hidden="true" />
+										</span>
 									)}
 								</td>
 							</tr>
