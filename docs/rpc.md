@@ -16,7 +16,7 @@ Primary implementation:
 ## Startup
 
 ```bash
-omp --mode rpc [regular CLI options]
+gmp --mode rpc [regular CLI options]
 ```
 
 Behavior notes:
@@ -24,9 +24,15 @@ Behavior notes:
 - `@file` CLI arguments are rejected in RPC mode.
 - RPC mode disables automatic session title generation by default to avoid an extra model call.
 - RPC mode resets workflow-altering `todo.*`, `task.*`, `async.*`, and `bash.autoBackground.*` settings to their built-in defaults instead of inheriting user overrides.
-- The process reads stdin as JSONL (`readJsonl(Bun.stdin.stream())`).
-- At startup it writes `{ "type": "ready" }` before processing commands.
-- When stdin closes, pending host-tool calls are rejected and the process exits with code `0`.
+- At startup it writes `{ "type": "ready", "schema": "omp-rpc/v1" }`.
+- One inbound router then reads stdin before `session_start` hooks run.
+  Extension UI and host-tool replies route immediately. Commands wait in a
+  bounded 128-slot FIFO until startup settles, then execute one at a time.
+- A full command FIFO returns a correlated overload failure. Reply routing
+  stays live, so an interactive command cannot deadlock on its own reply.
+- When stdin closes, queued commands are discarded, current and future
+  correlated waits fail, and the process exits with code `0` after any
+  in-flight command returns.
 - Responses/events are written as one JSON object per line.
 
 ## Transport and Framing
@@ -60,8 +66,11 @@ All commands accept optional `id?: string`.
 Important edge behavior from runtime:
 
 - Unknown command responses are emitted with `id: undefined` (even if the request had an `id`).
-- Parse/handler exceptions in the input loop emit `command: "parse"` with `id: undefined`.
-- `prompt` and `abort_and_prompt` return immediate success, then may emit a later error response with the **same** id if async prompt scheduling fails.
+- Malformed JSON or malformed command envelopes emit `command: "parse"` with `id: undefined`.
+- Once an object has a string command `type` and optional string `id`, an unexpected command-handler failure emits `success: false` with that command and id. Hosts must not wait for their deadline.
+- A command rejected by the bounded ingress FIFO also retains its id. It was
+  not executed and may be retried after pending work completes.
+- `prompt` and `abort_and_prompt` return immediate success. Later prompt failures emit terminal `agent_end` failure state, not a second response for an id already resolved.
 
 ## Command Schema (canonical)
 
@@ -69,11 +78,11 @@ Important edge behavior from runtime:
 
 ### Prompting
 
-- `{ id?, type: "prompt", message: string, images?: ImageContent[], streamingBehavior?: "steer" | "followUp" }`
+- `{ id?, type: "prompt", message: string, images?: ImageContent[], streamingBehavior?: "steer" | "followUp", clientMessageId?: string }`
 - `{ id?, type: "steer", message: string, images?: ImageContent[] }`
 - `{ id?, type: "follow_up", message: string, images?: ImageContent[] }`
 - `{ id?, type: "abort" }`
-- `{ id?, type: "abort_and_prompt", message: string, images?: ImageContent[] }`
+- `{ id?, type: "abort_and_prompt", message: string, images?: ImageContent[], clientMessageId?: string }`
 - `{ id?, type: "new_session", parentSession?: string }`
 
 ### State
@@ -84,7 +93,8 @@ Important edge behavior from runtime:
 
 ### Model
 
-- `{ id?, type: "set_model", provider: string, modelId: string }`
+- `{ id?, type: "models.catalog" }`
+- `{ id?, type: "set_model", provider: string, modelId: string, role?: string }`
 - `{ id?, type: "cycle_model" }`
 - `{ id?, type: "get_available_models" }`
 
@@ -128,6 +138,25 @@ Important edge behavior from runtime:
 
 - `{ id?, type: "get_messages" }`
 
+`clientMessageId` is a host-generated id for `prompt` and
+`abort_and_prompt`. The backend copies it to the resulting user message's
+wire `id`, letting a host reconcile an optimistic message by id rather than
+by content.
+
+### Auth and providers
+
+- `{ id?, type: "auth.login", provider?: string }`
+- `{ id?, type: "auth.logout", provider: string }`
+- `{ id?, type: "providers.list_supported" }`
+- `{ id?, type: "providers.list_authenticated" }`
+
+An omitted `auth.login.provider` starts the backend picker. The host receives
+an `auth.pick_provider` extension UI request and returns an
+`extension_ui_response` with the chosen provider id or cancellation. Login
+completes with `{ provider, ok }`; logout returns `{ provider }`. Supported
+providers include id, display name, and availability. Authenticated providers
+are returned as ids.
+
 ## Response Schema
 
 All command results use `RpcResponse`:
@@ -137,12 +166,50 @@ All command results use `RpcResponse`:
 
 Data payloads are command-specific and defined in `rpc-types.ts`.
 
+### Model catalog and selection
+
+`models.catalog` is the backend-owned catalog. It returns `models`, `roles`,
+and the optional active `current` model. A role may retain its raw selector
+for display. When resolved, `provider` and `modelId` identify its target.
+Unset or unresolved roles may omit all three fields. Hosts select concrete
+catalog entries; they must not invent a target for an unresolved role.
+
+`set_model` returns the selected `Model` plus a required receipt:
+
+```json
+{
+	"provider": "...",
+	"id": "...",
+	"activeModel": { "provider": "...", "id": "..." },
+	"thinkingLevel": "high",
+	"assignment": {
+		"role": "default",
+		"selector": "provider/model:high",
+		"provider": "provider",
+		"modelId": "model"
+	}
+}
+```
+
+All three receipt fields are required. `activeModel` and `thinkingLevel` are
+nullable. Omitted `role` and
+`role: "default"` switch the active model. A named role only assigns that role; the
+receipt's `activeModel` remains the active session model. The legacy
+`gmp/gmp-backend` success response is isolated compatibility behavior for old
+hosts. New hosts must use `models.catalog`.
+
+`set_thinking_level` returns `{ "thinkingLevel": string | null }`: the
+effective backend level after model policy, not merely the requested level.
+
 ### `get_state` payload
+
+`model` is an optional full `Model`, not a provider/id summary.
+`thinkingLevel` is optional and also accepts `inherit`.
 
 ```json
 {
 	"model": { "provider": "...", "id": "..." },
-	"thinkingLevel": "off|minimal|low|medium|high|xhigh",
+	"thinkingLevel": "inherit|off|minimal|low|medium|high|xhigh",
 	"isStreaming": false,
 	"isCompacting": false,
 	"steeringMode": "all|one-at-a-time",
@@ -177,6 +244,20 @@ Data payloads are command-specific and defined in `rpc-types.ts`.
 	]
 }
 ```
+
+### `new_session` payload
+
+Modern success returns the same authoritative state snapshot as `get_state`,
+avoiding a second request after a session switch:
+
+```json
+{ "cancelled": false, "state": { "sessionId": "..." } }
+```
+
+An extension may refuse the switch. That receipt is `{ "cancelled": true }`
+and has no `state`. Older v1 backends may return `{ "cancelled": false }`
+without `state`; new hosts may issue `get_state` as a compatibility fallback.
+Hosts must not send the pending prompt to the old session.
 
 ### `set_todos` payload
 
@@ -436,7 +517,7 @@ Failures are `success: false` with string `error`.
 ### Recoverability expectations
 
 - Most command failures are recoverable; process remains alive.
-- Malformed JSONL / parse-loop exceptions emit a `parse` error response and continue reading subsequent lines.
+- Malformed JSONL / command envelopes emit an uncorrelated `parse` error response and continue reading subsequent lines. Unexpected failures after command-envelope validation return a correlated command error.
 - Empty `set_session_name` is rejected (`Session name cannot be empty`).
 - Extension UI responses with unknown `id` are ignored.
 - Process termination conditions are stdin close or explicit extension-triggered shutdown after the current command.

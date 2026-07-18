@@ -165,4 +165,10 @@ export class RpcHostToolBridge {
 		this.#correlator.cancelAll(message);
 		this.#updateCallbacks.clear();
 	}
+
+	/** Reject all current and future host-tool requests after transport EOF. */
+	close(message: string): void {
+		this.#correlator.close(message);
+		this.#updateCallbacks.clear();
+	}
 }

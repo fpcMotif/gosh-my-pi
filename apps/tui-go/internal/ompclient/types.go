@@ -1,14 +1,14 @@
-// Package ompclient implements a Go client for the omp coding-agent
-// RPC mode (JSONL over stdin/stdout). The protocol mirrors
+// Package ompclient implements a Go client for the gmp coding-agent RPC mode
+// (JSONL over stdin/stdout). The protocol mirrors
 // packages/coding-agent/src/modes/rpc/rpc-types.ts.
 //
-// This is the lowest layer of the omp <-> Crush TUI bridge. It is
-// transport-only: it spawns `omp --mode rpc` (or an override binary),
+// This is the lowest layer of the gmp <-> Bubble Tea bridge. It is
+// transport-only: it spawns `gmp --mode rpc` (or an override binary),
 // sends commands as JSON lines, and yields responses, agent events,
 // extension UI requests, and host tool requests as typed Go values.
 //
 // Higher layers (internal/workspace) translate this into the
-// crush.workspace.Workspace interface that the TUI consumes.
+// workspace.Workspace interface that the TUI consumes.
 //
 // Wire schema: the backend declares "omp-rpc/v1" on the one-shot `ready`
 // frame at startup (see ExpectedSchema). Per the OMP-RPC v1 contract,
@@ -33,7 +33,7 @@ type ReadyFrame struct {
 }
 
 // Command is the discriminated union of messages the host (TUI) can
-// send to the omp RPC server. Mirrors RpcCommand in rpc-types.ts.
+// send to the gmp RPC server. Mirrors RpcCommand in rpc-types.ts.
 //
 // Only the fields that the current MVP actually uses are typed
 // individually; everything else round-trips through Extra so callers
@@ -121,7 +121,7 @@ func (c Command) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// ImageContent is the omp/pi-ai image payload.
+// ImageContent is the gmp/pi-ai image payload.
 type ImageContent struct {
 	Type     string `json:"type"`
 	Source   string `json:"source,omitempty"`

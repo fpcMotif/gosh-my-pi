@@ -50,7 +50,7 @@ func renderPresentationStatus(
 	opts *ToolRenderOpts,
 	status *message.ToolPresentationStatus,
 ) string {
-	header := renderPresentationHeader(sty, width, opts, status.Title, status.Description)
+	header := renderPresentationHeader(sty, width, opts, status.Title, status.Description, status.Icon)
 	if opts.Compact || len(status.Meta) == 0 {
 		return header
 	}
@@ -79,7 +79,7 @@ func renderPresentationBlock(
 		title = presentation.Status.Title
 		description = presentation.Status.Description
 	}
-	header := renderPresentationHeader(sty, width, opts, title, description)
+	header := renderPresentationHeader(sty, width, opts, title, description, blockPresentationIcon(presentation))
 	if opts.Compact {
 		return header
 	}
@@ -110,7 +110,7 @@ func renderPresentationCode(
 	if title == "" {
 		title = humanizedToolName(opts.ToolCall.Name)
 	}
-	header := renderPresentationHeader(sty, width, opts, title, "")
+	header := renderPresentationHeader(sty, width, opts, title, "", codePresentationIcon(code.Status))
 	if opts.Compact {
 		return header
 	}
@@ -185,14 +185,66 @@ func renderPresentationHeader(
 	opts *ToolRenderOpts,
 	title string,
 	description string,
+	icon message.ToolPresentationIcon,
 ) string {
 	title = sanitizePresentationLine(title)
 	description = sanitizePresentationLine(description)
-	header := toolHeader(sty, opts.Status, title, width, opts.Compact, description)
+	header := toolHeaderWithIcon(sty, presentationToolIcon(sty, opts.Status, icon), title, width, opts.Compact, description)
 	if opts.IsSpinning && opts.Anim != nil {
 		header += " " + opts.Anim.Render()
 	}
 	return ansi.Truncate(header, width, "…")
+}
+
+func presentationToolIcon(sty *styles.Styles, lifecycle ToolStatus, hint message.ToolPresentationIcon) string {
+	if lifecycle != ToolStatusSuccess {
+		return toolIcon(sty, lifecycle)
+	}
+	switch hint {
+	case message.ToolPresentationIconWarning:
+		return sty.Tool.IconWarning.String()
+	case message.ToolPresentationIconInfo:
+		return sty.Tool.IconInfo.String()
+	default:
+		return toolIcon(sty, lifecycle)
+	}
+}
+
+func blockPresentationIcon(presentation *message.ToolPresentation) message.ToolPresentationIcon {
+	if presentation.Status != nil && presentation.Status.Icon != "" {
+		return presentation.Status.Icon
+	}
+	switch presentation.State {
+	case message.ToolPresentationStatePending:
+		return message.ToolPresentationIconPending
+	case message.ToolPresentationStateRunning:
+		return message.ToolPresentationIconRunning
+	case message.ToolPresentationStateSuccess:
+		return message.ToolPresentationIconSuccess
+	case message.ToolPresentationStateError:
+		return message.ToolPresentationIconError
+	case message.ToolPresentationStateWarning:
+		return message.ToolPresentationIconWarning
+	default:
+		return ""
+	}
+}
+
+func codePresentationIcon(status message.ToolPresentationCodeStatus) message.ToolPresentationIcon {
+	switch status {
+	case message.ToolPresentationCodeStatusPending:
+		return message.ToolPresentationIconPending
+	case message.ToolPresentationCodeStatusRunning:
+		return message.ToolPresentationIconRunning
+	case message.ToolPresentationCodeStatusWarning:
+		return message.ToolPresentationIconWarning
+	case message.ToolPresentationCodeStatusComplete:
+		return message.ToolPresentationIconSuccess
+	case message.ToolPresentationCodeStatusError:
+		return message.ToolPresentationIconError
+	default:
+		return ""
+	}
 }
 
 func renderPresentationText(

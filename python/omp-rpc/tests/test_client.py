@@ -578,6 +578,11 @@ class RpcClientTests(unittest.TestCase):
     def make_client(self, server: str = FAKE_SERVER, **kwargs: object) -> RpcClient:
         return RpcClient(command=[sys.executable, "-u", "-c", server], startup_timeout=2.0, request_timeout=2.0, **kwargs)
 
+    def test_default_command_uses_shipped_gmp_binary(self) -> None:
+        client = RpcClient()
+
+        self.assertEqual(client.command[:3], ("gmp", "--mode", "rpc"))
+
     def test_command_builder_supports_common_rpc_options(self) -> None:
         client = RpcClient(
             executable="omp",

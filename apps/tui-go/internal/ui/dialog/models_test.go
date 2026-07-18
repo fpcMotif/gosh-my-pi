@@ -3,162 +3,163 @@ package dialog
 import (
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	tea "charm.land/bubbletea/v2"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/csync"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	uistyles "github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
 )
 
-// modelsTestWorkspace is the minimum Workspace stub the picker needs.
-// We embed the interface so unimplemented methods panic loudly if a
-// future test path reaches them — exposing untested code paths instead
-// of silently returning zero values.
+// modelsTestWorkspace supplies only the local UI state the picker retains.
+// Catalog truth arrives separately as a ModelCatalog snapshot.
 type modelsTestWorkspace struct {
 	workspace.Workspace
-	cfg     *config.Config
-	gmpMode bool
+	cfg *config.Config
 }
 
 func (w *modelsTestWorkspace) Config() *config.Config { return w.cfg }
-func (w *modelsTestWorkspace) IsGmpMode() bool        { return w.gmpMode }
 
-// gmpModeCfg mirrors the Bridge Model Catalog shape GmpWorkspace builds
-// from backend models.catalog: real backend providers, not the synthetic
-// gmp/gmp-backend placeholder.
-func gmpModeCfg(t *testing.T) *config.Config {
+func newTestModels(t *testing.T, catalog workspace.ModelCatalog) *Models {
 	t.Helper()
-	progress := true
-	providers := csync.NewMap[string, config.ProviderConfig]()
-	providers.Set("chatgpt-sub", config.ProviderConfig{
-		ID:     "chatgpt-sub",
-		Name:   "ChatGPT subscription",
-		Type:   catwalk.TypeOpenAI,
-		APIKey: "gmp-authenticated",
-		Models: []catwalk.Model{
-			{ID: "gpt-5.5", Name: "GPT-5.5"},
-		},
-	})
-	providers.Set("openai-codex", config.ProviderConfig{
-		ID:   "openai-codex",
-		Name: "OpenAI Codex",
-		Type: catwalk.TypeOpenAI,
-		Models: []catwalk.Model{
-			{ID: "gpt-5.3-codex-spark", Name: "gpt-5.3-codex-spark (login required)"},
-		},
-	})
-	return &config.Config{
-		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Provider: "chatgpt-sub", Model: "gpt-5.5"},
-			config.SelectedModelTypeSmall: {Provider: "openai-codex", Model: "gpt-5.3-codex-spark"},
-		},
+	styles := uistyles.CharmtonePantera()
+	ws := &modelsTestWorkspace{cfg: &config.Config{
+		Models:       make(map[config.SelectedModelType]config.SelectedModel),
 		RecentModels: make(map[config.SelectedModelType][]config.SelectedModel),
-		Providers:    providers,
-		Options: &config.Options{
-			ContextPaths:              []string{},
-			DataDirectory:             ".omp",
-			Progress:                  &progress,
-			TUI:                       &config.TUIOptions{},
-			DisableDefaultProviders:   true,
-			DisableProviderAutoUpdate: true,
-		},
-		Permissions: &config.Permissions{},
-	}
-}
-
-func newTestModels(t *testing.T, ws workspace.Workspace) *Models {
-	t.Helper()
-	st := uistyles.CharmtonePantera()
-	com := &common.Common{Workspace: ws, Styles: &st}
-	m, err := NewModels(com, false)
+	}}
+	m, err := NewModels(&common.Common{Workspace: ws, Styles: &styles}, catalog, false)
 	if err != nil {
 		t.Fatalf("NewModels failed: %v", err)
 	}
 	return m
 }
 
-// TestModels_GmpModeShowsBridgeCatalogProviders guards the bridge
-// contract: in gmp mode the picker renders the backend catalog snapshot
-// already installed in cfg.Providers, rather than collapsing everything
-// back to the legacy synthetic gmp/gmp-backend placeholder.
-func TestModels_GmpModeShowsBridgeCatalogProviders(t *testing.T) {
+func testCatalog() workspace.ModelCatalog {
+	return workspace.ModelCatalog{
+		Models: []workspace.ModelCatalogEntry{
+			{
+				Provider:       "chatgpt-sub",
+				ProviderName:   "ChatGPT subscription",
+				ID:             "gpt-5.5",
+				Name:           "GPT-5.5",
+				Available:      true,
+				Authenticated:  true,
+				LoginAvailable: true,
+			},
+			{
+				Provider:       "openai-codex",
+				ProviderName:   "OpenAI Codex",
+				ID:             "gpt-5.3-codex-spark",
+				Name:           "GPT-5.3 Codex Spark",
+				Available:      false,
+				LoginAvailable: true,
+			},
+		},
+		Roles: []workspace.ModelCatalogRole{
+			{Role: "default", Provider: "chatgpt-sub", ModelID: "gpt-5.5"},
+			{Role: "smol", Provider: "openai-codex", ModelID: "gpt-5.3-codex-spark"},
+		},
+	}
+}
+
+func TestModels_RendersDirectCatalogGroups(t *testing.T) {
 	t.Parallel()
 
-	cfg := gmpModeCfg(t)
-	ws := &modelsTestWorkspace{cfg: cfg, gmpMode: true}
-	m := newTestModels(t, ws)
-
-	groups := m.list.Groups()
-	titles := groupTitles(groups)
+	m := newTestModels(t, testCatalog())
+	titles := groupTitles(m.list.Groups())
 	if !containsTitle(titles, "ChatGPT subscription") || !containsTitle(titles, "OpenAI Codex") {
-		t.Fatalf("group titles = %v, want backend providers", titles)
+		t.Fatalf("group titles = %v, want direct catalog providers", titles)
 	}
-	for _, group := range groups {
+	for _, group := range m.list.Groups() {
 		for _, item := range group.Items {
 			if item.model.ID == "gmp-backend" {
-				t.Fatalf("picker leaked synthetic model: %#v", item.model)
+				t.Fatalf("picker rendered synthetic model: %#v", item.model)
 			}
 		}
 	}
 }
 
-// TestModels_NonGmpModeKeepsCustomProviders guards the non-gmp branch:
-// vanilla Crush users with custom providers (e.g. chatgpt-sub via a
-// localhost openai-compat) and DisableDefaultProviders=true must still
-// see their entries. Regression target: the gmp-mode filter must not
-// leak into non-gmp installs.
-func TestModels_NonGmpModeKeepsCustomProviders(t *testing.T) {
+func TestModels_UsesTopLevelRolesForSelection(t *testing.T) {
 	t.Parallel()
 
-	progress := true
-	providers := csync.NewMap[string, config.ProviderConfig]()
-	providers.Set("chatgpt-sub", config.ProviderConfig{
-		ID:   "chatgpt-sub",
-		Name: "ChatGPT subscription via local Codex proxy",
-		Type: catwalk.TypeOpenAI,
-		Models: []catwalk.Model{
-			{ID: "gpt-5.5", Name: "GPT-5.5"},
-		},
-	})
-	cfg := &config.Config{
-		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Provider: "chatgpt-sub", Model: "gpt-5.5"},
-		},
-		RecentModels: make(map[config.SelectedModelType][]config.SelectedModel),
-		Providers:    providers,
-		Options: &config.Options{
-			Progress:                  &progress,
-			TUI:                       &config.TUIOptions{},
-			DisableDefaultProviders:   true,
-			DisableProviderAutoUpdate: true,
-		},
-		Permissions: &config.Permissions{},
-	}
-	ws := &modelsTestWorkspace{cfg: cfg, gmpMode: false}
-	m := newTestModels(t, ws)
+	m := newTestModels(t, testCatalog())
+	assertSelectedModel(t, m, "chatgpt-sub", "gpt-5.5", config.SelectedModelTypeLarge)
 
-	groups := m.list.Groups()
-	if len(groups) != 1 {
-		t.Fatalf("groups len = %d, want 1; titles = %v",
-			len(groups), groupTitles(groups))
+	m.modelType = ModelTypeSmall
+	if err := m.setProviderItems(); err != nil {
+		t.Fatalf("setProviderItems failed: %v", err)
 	}
-	if got := string(groups[0].Items[0].prov.ID); got != "chatgpt-sub" {
-		t.Fatalf("item provider = %q, want %q", got, "chatgpt-sub")
+	assertSelectedModel(t, m, "openai-codex", "gpt-5.3-codex-spark", config.SelectedModelTypeSmall)
+}
+
+func TestModels_CurrentDoesNotReplaceMissingDefaultRole(t *testing.T) {
+	t.Parallel()
+
+	catalog := testCatalog()
+	catalog.Roles = nil
+	catalog.Current = &workspace.ModelCatalogModel{Provider: "openai-codex", ID: "gpt-5.3-codex-spark"}
+	m := newTestModels(t, catalog)
+
+	if _, ok := m.roleSelection("default"); ok {
+		t.Fatal("default role was inferred from current")
 	}
 }
 
-// TestModels_GmpVirtualProviderConstantMatchesWorkspace pins the
-// hard-coded id in the dialog package to the canonical workspace
-// constant. We intentionally don't import workspace at runtime to
-// avoid a back-reference; this test is the integrity check that keeps
-// the two in sync.
-func TestModels_GmpVirtualProviderConstantMatchesWorkspace(t *testing.T) {
+func TestModels_LabelsUnavailableAndGatesReauthentication(t *testing.T) {
 	t.Parallel()
-	if gmpVirtualProviderID != workspace.GmpProviderID {
-		t.Fatalf("gmpVirtualProviderID = %q, workspace.GmpProviderID = %q",
-			gmpVirtualProviderID, workspace.GmpProviderID)
+
+	m := newTestModels(t, testCatalog())
+	item := findModelItem(t, m.list.Groups(), "openai-codex", "gpt-5.3-codex-spark")
+	if item.model.Name != "GPT-5.3 Codex Spark (login required)" {
+		t.Fatalf("model label = %q", item.model.Name)
 	}
+	m.list.SetSelectedItem(item.ID())
+	if m.isSelectedConfigured() {
+		t.Fatal("unauthenticated model offered reauthentication")
+	}
+
+	item = findModelItem(t, m.list.Groups(), "chatgpt-sub", "gpt-5.5")
+	m.list.SetSelectedItem(item.ID())
+	if !m.isSelectedConfigured() {
+		t.Fatal("authenticated model with login support hid reauthentication")
+	}
+}
+
+func TestModels_EmitsCatalogRoleSelection(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModels(t, testCatalog())
+	action, ok := m.HandleMsg(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter})).(ActionSelectModel)
+	if !ok {
+		t.Fatalf("action = %T, want ActionSelectModel", action)
+	}
+	if action.Provider.ID != "chatgpt-sub" || action.Model.Model != "gpt-5.5" || action.ModelType != config.SelectedModelTypeLarge {
+		t.Fatalf("selection = %#v", action)
+	}
+}
+
+func assertSelectedModel(t *testing.T, m *Models, provider, model string, modelType config.SelectedModelType) {
+	t.Helper()
+	selected, ok := m.list.SelectedItem().(*ModelItem)
+	if !ok {
+		t.Fatalf("selected item = %T, want ModelItem", m.list.SelectedItem())
+	}
+	got := selected.SelectedModel()
+	if got.Provider != provider || got.Model != model || selected.SelectedModelType() != modelType {
+		t.Fatalf("selected = %#v, type = %q", got, selected.SelectedModelType())
+	}
+}
+
+func findModelItem(t *testing.T, groups []ModelGroup, provider, model string) *ModelItem {
+	t.Helper()
+	for _, group := range groups {
+		for _, item := range group.Items {
+			if string(item.prov.ID) == provider && item.model.ID == model {
+				return item
+			}
+		}
+	}
+	t.Fatalf("model %s/%s not found", provider, model)
+	return nil
 }
 
 func groupTitles(groups []ModelGroup) []string {

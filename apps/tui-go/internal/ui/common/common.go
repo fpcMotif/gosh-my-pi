@@ -7,11 +7,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/atotto/clipboard"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/util"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
-	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // MaxAttachmentSize defines the maximum allowed size for file attachments (5 MB).
@@ -45,14 +45,10 @@ func DefaultCommon(ws workspace.Workspace) *Common {
 // largeModelProviderID returns the provider ID of the currently selected
 // large model, or the empty string if none is set or the workspace is nil.
 func largeModelProviderID(ws workspace.Workspace) string {
-	if ws == nil {
+	if ws == nil || !ws.AgentIsReady() {
 		return ""
 	}
-	cfg := ws.Config()
-	if cfg == nil {
-		return ""
-	}
-	return cfg.Models[config.SelectedModelTypeLarge].Provider
+	return ws.AgentModel().ModelCfg.Provider
 }
 
 // IsHyper reports whether the currently selected large model is provided

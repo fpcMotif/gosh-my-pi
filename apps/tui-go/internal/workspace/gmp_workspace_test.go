@@ -292,7 +292,9 @@ func TestFinishAssistant_appendsTextWhenEmpty(t *testing.T) {
 	nextUIEvent(t, w) // user
 	nextUIEvent(t, w) // assistant
 
-	w.AgentCancel("")
+	if err := w.AgentCancel(context.Background(), ""); err != nil {
+		t.Fatalf("AgentCancel: %v", err)
+	}
 	ev := nextMessageEvent(t, w)
 	if ev.Payload.Content().Text != "Request canceled" {
 		t.Fatalf("text=%q want Request canceled", ev.Payload.Content().Text)
@@ -347,11 +349,11 @@ func TestAgentGetters(t *testing.T) {
 		t.Fatalf("AgentIsSessionBusy want false")
 	}
 	m := w.AgentModel()
-	if m.ModelCfg.Model != gmpModelID {
-		t.Fatalf("AgentModel=%v", m)
+	if m.ModelCfg.Provider != "" || m.ModelCfg.Model != "" || m.CatwalkCfg.ID != "" {
+		t.Fatalf("AgentModel=%v, want empty before catalog refresh", m)
 	}
-	if !w.AgentIsReady() {
-		t.Fatalf("AgentIsReady want true")
+	if w.AgentIsReady() {
+		t.Fatalf("AgentIsReady want false before backend model sync")
 	}
 	if w.AgentQueuedPrompts("x") != 0 {
 		t.Fatalf("AgentQueuedPrompts want 0")
@@ -376,11 +378,6 @@ func TestTrivialMethods(t *testing.T) {
 	w := newTestGmpWorkspace()
 
 	w.AgentClearQueue("x")
-
-	m := w.GetDefaultSmallModel("any")
-	if m.Model != gmpModelID {
-		t.Fatalf("GetDefaultSmallModel=%v", m)
-	}
 
 	w.PermissionGrant(permission.PermissionRequest{})
 	w.PermissionGrantPersistent(permission.PermissionRequest{})
@@ -562,14 +559,6 @@ func TestConfigAccessors(t *testing.T) {
 		t.Fatalf("Resolver nil")
 	}
 
-	m := config.SelectedModel{Provider: "p", Model: "m"}
-	if err := w.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeLarge, m); err != nil {
-		t.Fatalf("UpdatePreferredModel err=%v", err)
-	}
-	if w.AgentModel().ModelCfg.Model != "m" {
-		t.Fatalf("model not updated")
-	}
-
 	if err := w.SetCompactMode(config.ScopeGlobal, true); err != nil {
 		t.Fatalf("SetCompactMode err=%v", err)
 	}
@@ -600,125 +589,6 @@ func TestConfigAccessors(t *testing.T) {
 	}
 	if err := w.RefreshOAuthToken(context.Background(), config.ScopeGlobal, "p"); err != nil {
 		t.Fatalf("RefreshOAuthToken err=%v", err)
-	}
-}
-
-func TestGmpWorkspaceApplyModelCatalogBuildsBridgeConfig(t *testing.T) {
-	w := newTestGmpWorkspace()
-
-	w.mu.Lock()
-	w.applyModelCatalogLocked(gmpModelCatalogResponse{
-		Models: []GmpModelCatalogEntry{
-			{
-				Provider:       "chatgpt-sub",
-				ProviderName:   "ChatGPT subscription",
-				ID:             "gpt-5.5",
-				Name:           "GPT-5.5",
-				Available:      true,
-				Authenticated:  true,
-				Roles:          []string{"default"},
-				ContextWindow:  200000,
-				MaxTokens:      8192,
-				Reasoning:      true,
-				SupportsImages: true,
-			},
-			{
-				Provider:       "openai-codex",
-				ProviderName:   "OpenAI Codex",
-				ID:             "gpt-5.3-codex-spark",
-				Name:           "gpt-5.3-codex-spark",
-				Available:      false,
-				LoginSupported: true,
-				LoginAvailable: true,
-				Roles:          []string{"smol"},
-			},
-		},
-		Current: &struct {
-			Provider string `json:"provider"`
-			ID       string `json:"id"`
-			Name     string `json:"name"`
-		}{
-			Provider: "chatgpt-sub",
-			ID:       "gpt-5.5",
-			Name:     "GPT-5.5",
-		},
-	})
-	w.mu.Unlock()
-
-	cfg := w.Config()
-	if got := cfg.Models[config.SelectedModelTypeLarge]; got.Provider != "chatgpt-sub" || got.Model != "gpt-5.5" {
-		t.Fatalf("large model = %#v, want chatgpt-sub/gpt-5.5", got)
-	}
-	if got := cfg.Models[config.SelectedModelTypeSmall]; got.Provider != "openai-codex" || got.Model != "gpt-5.3-codex-spark" {
-		t.Fatalf("small model = %#v, want openai-codex/gpt-5.3-codex-spark", got)
-	}
-	if _, ok := cfg.Providers.Get(gmpProviderID); ok {
-		t.Fatalf("bridge catalog should replace synthetic gmp provider")
-	}
-	chatgpt, ok := cfg.Providers.Get("chatgpt-sub")
-	if !ok || chatgpt.APIKey == "" || len(chatgpt.Models) != 1 {
-		t.Fatalf("chatgpt-sub provider = %#v, ok=%v", chatgpt, ok)
-	}
-	codex, ok := cfg.Providers.Get("openai-codex")
-	if !ok || codex.APIKey != "" || len(codex.Models) != 1 {
-		t.Fatalf("openai-codex provider = %#v, ok=%v", codex, ok)
-	}
-	if got := codex.Models[0].Name; got != "gpt-5.3-codex-spark (login required)" {
-		t.Fatalf("locked model display name = %q", got)
-	}
-	entry, ok := w.ModelCatalogEntry("openai-codex", "gpt-5.3-codex-spark")
-	if !ok || entry.Available || !entry.LoginAvailable {
-		t.Fatalf("catalog entry = %#v, ok=%v", entry, ok)
-	}
-}
-
-func TestGmpWorkspaceUpdatePreferredModelSendsRole(t *testing.T) {
-	w, pc := gmpWorkspaceWithClient(t)
-	defer pc.close()
-
-	done := make(chan error, 1)
-	go func() {
-		done <- w.UpdatePreferredModel(
-			config.ScopeGlobal,
-			config.SelectedModelTypeSmall,
-			config.SelectedModel{Provider: "openai-codex", Model: "gpt-5.3-codex-spark"},
-		)
-	}()
-
-	frame := pc.waitForFrame(t, 2*time.Second)
-	if frame["type"] != "set_model" {
-		t.Fatalf("frame type = %v, want set_model", frame["type"])
-	}
-	if frame["provider"] != "openai-codex" || frame["modelId"] != "gpt-5.3-codex-spark" {
-		t.Fatalf("set_model frame = %#v", frame)
-	}
-	if frame["role"] != "smol" {
-		t.Fatalf("role = %v, want smol", frame["role"])
-	}
-	id, _ := frame["id"].(string)
-	if id == "" {
-		t.Fatalf("set_model frame missing id: %#v", frame)
-	}
-	if err := pc.writeInbound(map[string]any{
-		"id":      id,
-		"type":    "response",
-		"command": "set_model",
-		"success": true,
-		"data": map[string]any{
-			"provider": "openai-codex",
-			"id":       "gpt-5.3-codex-spark",
-		},
-	}); err != nil {
-		t.Fatalf("write response: %v", err)
-	}
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("UpdatePreferredModel err=%v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatalf("timed out waiting for UpdatePreferredModel")
 	}
 }
 
@@ -950,7 +820,9 @@ func TestFinishAssistant_skipsTextAppendWhenContentExists(t *testing.T) {
 	})
 	nextMessageEvent(t, w)
 
-	w.AgentCancel("")
+	if err := w.AgentCancel(context.Background(), ""); err != nil {
+		t.Fatalf("AgentCancel: %v", err)
+	}
 	ev := nextMessageEvent(t, w)
 	if ev.Payload.Content().Text != "existing" {
 		t.Fatalf("text=%q want existing", ev.Payload.Content().Text)
@@ -962,12 +834,17 @@ func TestFinishAssistant_skipsTextAppendWhenContentExists(t *testing.T) {
 // message channel. Used to pin the post-b83fca9 invariant that sendUI must
 // not block its caller even when program.Send blocks.
 type recordingSender struct {
-	mu   sync.Mutex
-	msgs []tea.Msg
-	hold chan struct{}
+	mu          sync.Mutex
+	msgs        []tea.Msg
+	hold        chan struct{}
+	started     chan struct{}
+	startedOnce sync.Once
 }
 
 func (r *recordingSender) Send(msg tea.Msg) {
+	if r.started != nil {
+		r.startedOnce.Do(func() { close(r.started) })
+	}
 	if r.hold != nil {
 		<-r.hold
 	}
@@ -982,13 +859,202 @@ func (r *recordingSender) count() int {
 	return len(r.msgs)
 }
 
+// newBlockedSenderWorkspace holds the one UI drainer in Program.Send. Tests
+// can then inspect the mailbox deterministically without racing delivery.
+func newBlockedSenderWorkspace(t *testing.T) (*GmpWorkspace, *recordingSender, func()) {
+	return newBlockedSenderWorkspaceWithClient(t, nil)
+}
+
+func newBlockedSenderWorkspaceWithClient(t *testing.T, client *ompclient.Client) (*GmpWorkspace, *recordingSender, func()) {
+	t.Helper()
+
+	w := NewGmpWorkspace(client, "/tmp/project")
+	sender := &recordingSender{
+		hold:    make(chan struct{}),
+		started: make(chan struct{}),
+	}
+	w.program = sender
+	w.startUIDrain()
+
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(sender.hold) }) }
+	t.Cleanup(w.Shutdown)
+	t.Cleanup(release)
+
+	w.sendUI(pubsub.Event[session.Session]{
+		Type:    pubsub.CreatedEvent,
+		Payload: session.Session{ID: "inflight"},
+	})
+	select {
+	case <-sender.started:
+	case <-time.After(testEventTimeout):
+		t.Fatal("Program.Send did not begin")
+	}
+	return w, sender, release
+}
+
+func queuedMessageUpdate(id, text string, finished bool) tea.Msg {
+	parts := []message.ContentPart{message.TextContent{Text: text}}
+	if finished {
+		parts = append(parts, message.Finish{Reason: message.FinishReasonEndTurn})
+	}
+	return pubsub.Event[message.Message]{
+		Type:    pubsub.UpdatedEvent,
+		Payload: message.Message{ID: id, Parts: parts},
+	}
+}
+
+func TestSendUI_MailboxOverloadAddsTerminalAndDropsLaterOffers(t *testing.T) {
+	w, sender, release := newBlockedSenderWorkspace(t)
+
+	for i := range uiMailboxNormalCapacity {
+		w.sendUI(pubsub.Event[session.Session]{
+			Type:    pubsub.CreatedEvent,
+			Payload: session.Session{ID: fmt.Sprintf("edge-%d", i)},
+		})
+	}
+	w.sendUI(pubsub.Event[session.Session]{
+		Type:    pubsub.CreatedEvent,
+		Payload: session.Session{ID: "overflow"},
+	})
+
+	w.mu.RLock()
+	queued := append([]*uiMailboxSlot(nil), w.uiMailbox...)
+	overloaded := w.uiOverloaded
+	w.mu.RUnlock()
+	if len(queued) != uiMailboxCapacity {
+		t.Fatalf("mailbox length = %d, want normal cap plus terminal = %d", len(queued), uiMailboxCapacity)
+	}
+	if !overloaded {
+		t.Fatal("mailbox did not latch overload")
+	}
+	for i, slot := range queued[:uiMailboxNormalCapacity] {
+		event, ok := slot.msg.(pubsub.Event[session.Session])
+		if !ok || event.Payload.ID != fmt.Sprintf("edge-%d", i) {
+			t.Fatalf("normal mailbox slot %d = %#v, want FIFO edge-%d", i, slot.msg, i)
+		}
+	}
+	terminal, ok := queued[uiMailboxNormalCapacity].msg.(BackendExitedMsg)
+	if !ok || terminal.Reason != BackendExitUIOverload {
+		t.Fatalf("terminal mailbox slot = %#v, want UI overload backend exit", queued[uiMailboxNormalCapacity].msg)
+	}
+
+	w.sendUI(pubsub.Event[session.Session]{
+		Type:    pubsub.CreatedEvent,
+		Payload: session.Session{ID: "after-overload"},
+	})
+	w.mu.RLock()
+	laterLen := len(w.uiMailbox)
+	w.mu.RUnlock()
+	if laterLen != uiMailboxCapacity {
+		t.Fatalf("mailbox length after overload = %d, want unchanged %d", laterLen, uiMailboxCapacity)
+	}
+
+	release()
+	waitForSenderCount(t, sender, uiMailboxCapacity+1) // inflight plus queue
+}
+
+func TestSendUI_MailboxOverloadDoesNotWaitForClientClose(t *testing.T) {
+	pc := newPipeClient(t)
+	defer pc.close()
+	w, _, release := newBlockedSenderWorkspaceWithClient(t, pc.Client)
+
+	for i := range uiMailboxNormalCapacity {
+		w.sendUI(pubsub.Event[session.Session]{
+			Type:    pubsub.CreatedEvent,
+			Payload: session.Session{ID: fmt.Sprintf("edge-%d", i)},
+		})
+	}
+	done := make(chan struct{})
+	go func() {
+		w.sendUI(pubsub.Event[session.Session]{
+			Type:    pubsub.CreatedEvent,
+			Payload: session.Session{ID: "overflow"},
+		})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("sendUI waited for Client.Close after mailbox overload")
+	}
+
+	// The closer waits for the transport reader. Let it finish before test
+	// cleanup so the test leaves no blocked goroutine behind.
+	_ = pc.clientStdout.Close()
+	select {
+	case <-pc.Done():
+	case <-time.After(testEventTimeout):
+		t.Fatal("mailbox overload did not close the client")
+	}
+	release()
+}
+
+func TestSendUI_MailboxCapReplacesPendingUpdate(t *testing.T) {
+	w, sender, release := newBlockedSenderWorkspace(t)
+
+	for i := range uiMailboxNormalCapacity - 1 {
+		w.sendUI(pubsub.Event[session.Session]{
+			Type:    pubsub.CreatedEvent,
+			Payload: session.Session{ID: fmt.Sprintf("edge-%d", i)},
+		})
+	}
+	w.sendUI(queuedMessageUpdate("assistant-1", "first", false))
+	w.sendUI(queuedMessageUpdate("assistant-1", "latest", false))
+
+	w.mu.RLock()
+	queued := append([]*uiMailboxSlot(nil), w.uiMailbox...)
+	overloaded := w.uiOverloaded
+	w.mu.RUnlock()
+	if len(queued) != uiMailboxNormalCapacity {
+		t.Fatalf("mailbox length = %d, want cap %d after replacement", len(queued), uiMailboxNormalCapacity)
+	}
+	if overloaded {
+		t.Fatal("same-ID update at cap triggered overload")
+	}
+	updated, ok := queued[uiMailboxNormalCapacity-1].msg.(pubsub.Event[message.Message])
+	if !ok || updated.Payload.Content().Text != "latest" {
+		t.Fatalf("pending update = %#v, want latest full snapshot", queued[uiMailboxNormalCapacity-1].msg)
+	}
+
+	release()
+	waitForSenderCount(t, sender, uiMailboxNormalCapacity+1) // inflight plus queue
+}
+
+func TestSendUI_FinishedMessageUpdateIsFIFOEdge(t *testing.T) {
+	w, sender, release := newBlockedSenderWorkspace(t)
+
+	w.sendUI(queuedMessageUpdate("assistant-1", "streaming", false))
+	w.sendUI(queuedMessageUpdate("assistant-1", "finished", true))
+	w.sendUI(queuedMessageUpdate("assistant-1", "next", false))
+
+	w.mu.RLock()
+	queued := append([]*uiMailboxSlot(nil), w.uiMailbox...)
+	w.mu.RUnlock()
+	if len(queued) != 3 {
+		t.Fatalf("mailbox length = %d, want three FIFO snapshots around finish", len(queued))
+	}
+	for i, want := range []string{"streaming", "finished", "next"} {
+		event, ok := queued[i].msg.(pubsub.Event[message.Message])
+		if !ok || event.Payload.Content().Text != want {
+			t.Fatalf("mailbox slot %d = %#v, want %q message snapshot", i, queued[i].msg, want)
+		}
+		if i == 1 && !event.Payload.IsFinished() {
+			t.Fatal("finished snapshot was not preserved as a FIFO edge")
+		}
+	}
+
+	release()
+	waitForSenderCount(t, sender, 4) // inflight plus three snapshots
+}
+
 // TestSendUI_DoesNotBlockCallerAndPreservesOrder pins the two invariants of
 // the program-bound UI path:
 //
 //   - Non-blocking: sendUI must not block its caller even when program.Send is
 //     blocked. sendUI may run on the Bubble Tea Update goroutine, which also
 //     drains program.Send, so a synchronous Send there deadlocks (the b83fca9
-//     fix). It enqueues to uiQueue instead.
+//     fix). It enqueues to the mailbox instead.
 //   - FIFO order: a single drain goroutine calls program.Send in submission
 //     order. The previous per-message `go program.Send` raced one goroutine
 //     per message, so an earlier streamed snapshot could overwrite a later
@@ -996,9 +1062,10 @@ func (r *recordingSender) count() int {
 //     release and assert they arrive strictly in order.
 func TestSendUI_DoesNotBlockCallerAndPreservesOrder(t *testing.T) {
 	w := NewGmpWorkspace(nil, "/tmp/project")
+	t.Cleanup(w.Shutdown)
 	sender := &recordingSender{hold: make(chan struct{})}
 	w.program = sender
-	go w.drainUI()
+	w.startUIDrain()
 
 	const n = 8
 	done := make(chan struct{})
@@ -1037,6 +1104,145 @@ func TestSendUI_DoesNotBlockCallerAndPreservesOrder(t *testing.T) {
 		if want := fmt.Sprintf("%d", i); ev.Payload.ID != want {
 			t.Fatalf("message %d out of FIFO order: got ID %q, want %q", i, ev.Payload.ID, want)
 		}
+	}
+}
+
+func TestSendUI_CoalescesHighRateMessageUpdates(t *testing.T) {
+	w := NewGmpWorkspace(nil, "/tmp/project")
+	t.Cleanup(w.Shutdown)
+	sender := &recordingSender{
+		hold:    make(chan struct{}),
+		started: make(chan struct{}),
+	}
+	w.program = sender
+	w.startUIDrain()
+
+	w.sendUI(pubsub.Event[session.Session]{
+		Type:    pubsub.CreatedEvent,
+		Payload: session.Session{ID: "start"},
+	})
+	select {
+	case <-sender.started:
+	case <-time.After(testEventTimeout):
+		t.Fatal("Program.Send did not begin")
+	}
+
+	const updates = 5_000
+	done := make(chan struct{})
+	go func() {
+		for i := range updates {
+			w.sendUI(pubsub.Event[message.Message]{
+				Type: pubsub.UpdatedEvent,
+				Payload: message.Message{
+					ID:    "assistant-1",
+					Parts: []message.ContentPart{message.TextContent{Text: fmt.Sprintf("%d", i)}},
+				},
+			})
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(testEventTimeout):
+		t.Fatal("sendUI blocked while Program.Send was held")
+	}
+
+	w.mu.RLock()
+	queued := append([]*uiMailboxSlot(nil), w.uiMailbox...)
+	w.mu.RUnlock()
+	if len(queued) != 1 {
+		t.Fatalf("queued messages=%d, want 1 coalesced update", len(queued))
+	}
+	updated, ok := queued[0].msg.(pubsub.Event[message.Message])
+	if !ok || updated.Payload.Content().Text != "4999" {
+		t.Fatalf("queued update=%#v, want final full snapshot", queued[0].msg)
+	}
+
+	close(sender.hold)
+	waitForSenderCount(t, sender, 2)
+}
+
+func TestSendUI_MessageUpdatesRespectSemanticBarrier(t *testing.T) {
+	w := NewGmpWorkspace(nil, "/tmp/project")
+	t.Cleanup(w.Shutdown)
+	sender := &recordingSender{
+		hold:    make(chan struct{}),
+		started: make(chan struct{}),
+	}
+	w.program = sender
+	w.startUIDrain()
+
+	w.sendUI(pubsub.Event[session.Session]{
+		Type:    pubsub.CreatedEvent,
+		Payload: session.Session{ID: "start"},
+	})
+	select {
+	case <-sender.started:
+	case <-time.After(testEventTimeout):
+		t.Fatal("Program.Send did not begin")
+	}
+
+	w.sendUI(pubsub.Event[message.Message]{
+		Type:    pubsub.UpdatedEvent,
+		Payload: message.Message{ID: "assistant-1", Parts: []message.ContentPart{message.TextContent{Text: "before"}}},
+	})
+	w.sendUI(BackendExitedMsg{})
+	w.sendUI(pubsub.Event[message.Message]{
+		Type:    pubsub.UpdatedEvent,
+		Payload: message.Message{ID: "assistant-1", Parts: []message.ContentPart{message.TextContent{Text: "after"}}},
+	})
+
+	close(sender.hold)
+	waitForSenderCount(t, sender, 4)
+
+	sender.mu.Lock()
+	defer sender.mu.Unlock()
+	before, ok := sender.msgs[1].(pubsub.Event[message.Message])
+	if !ok || before.Payload.Content().Text != "before" {
+		t.Fatalf("first update=%#v, want pre-edge snapshot", sender.msgs[1])
+	}
+	if _, ok := sender.msgs[2].(BackendExitedMsg); !ok {
+		t.Fatalf("barrier=%T, want BackendExitedMsg", sender.msgs[2])
+	}
+	after, ok := sender.msgs[3].(pubsub.Event[message.Message])
+	if !ok || after.Payload.Content().Text != "after" {
+		t.Fatalf("second update=%#v, want post-edge snapshot", sender.msgs[3])
+	}
+}
+
+func TestShutdownStopsUIDrainAndDropsFutureMessages(t *testing.T) {
+	w := NewGmpWorkspace(nil, "/tmp/project")
+	w.program = &recordingSender{}
+	w.startUIDrain()
+	w.Shutdown()
+	w.Shutdown()
+
+	select {
+	case <-w.uiDrained:
+	case <-time.After(testEventTimeout):
+		t.Fatal("UI drain did not stop after shutdown")
+	}
+
+	w.sendUI(pubsub.Event[session.Session]{
+		Type:    pubsub.CreatedEvent,
+		Payload: session.Session{ID: "after-shutdown"},
+	})
+	w.mu.RLock()
+	queued := len(w.uiMailbox)
+	w.mu.RUnlock()
+	if queued != 0 {
+		t.Fatalf("shutdown mailbox has %d messages, want 0", queued)
+	}
+}
+
+func waitForSenderCount(t *testing.T, sender *recordingSender, want int) {
+	t.Helper()
+	deadline := time.Now().Add(testEventTimeout)
+	for sender.count() < want && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := sender.count(); got != want {
+		t.Fatalf("sender saw %d messages, want %d", got, want)
 	}
 }
 
@@ -1262,7 +1468,7 @@ func TestSubscribe_NormalizesNilProgram(t *testing.T) {
 
 // TestNoOpStubs covers the trivial no-op stubs that exist for interface
 // conformance: AgentClearQueue, Permission*, FileTrackerRecordRead,
-// LSP*, MCPRefresh*, RefreshMCPTools, Shutdown, GetDefaultSmallModel,
+// LSP*, MCPRefresh*, RefreshMCPTools, Shutdown,
 // LSPGetStates, FileTrackerLastReadTime, FileTrackerListReadFiles,
 // AgentQueuedPromptsList, MCPGetStates, ReadMCPResource, GetMCPPrompt.
 func TestNoOpStubs(t *testing.T) {
@@ -1303,12 +1509,6 @@ func TestNoOpStubs(t *testing.T) {
 	}
 	if _, err := w.GetMCPPrompt("n", "p", nil); err == nil {
 		t.Fatal("GetMCPPrompt want ErrUnsupported")
-	}
-
-	got := w.GetDefaultSmallModel("openai")
-	want := w.cfg.Models[config.SelectedModelTypeSmall]
-	if got.Provider != want.Provider || got.Model != want.Model {
-		t.Fatalf("GetDefaultSmallModel=%+v want %+v", got, want)
 	}
 
 	w.Shutdown()

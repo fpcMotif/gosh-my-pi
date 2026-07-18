@@ -3,30 +3,98 @@ package model
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/auth"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/permission"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/chat"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/dialog"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/util"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
 )
 
 type toolApprovalReplyHandler interface {
-	HandleToolApprovalReply(permission.PermissionRequest, bool)
+	HandleToolApprovalReply(permission.PermissionRequest, bool) error
+}
+
+type toolApprovalReplyResultMsg struct {
+	permission permission.PermissionRequest
+	approved   bool
+	err        error
+}
+
+func sendToolApprovalReply(
+	handler toolApprovalReplyHandler,
+	perm permission.PermissionRequest,
+	approved bool,
+) tea.Cmd {
+	return func() tea.Msg {
+		return toolApprovalReplyResultMsg{
+			permission: perm,
+			approved:   approved,
+			err:        handler.HandleToolApprovalReply(perm, approved),
+		}
+	}
 }
 
 // gmpModelSelectionResultMsg carries the outcome of the off-loop model
 // selection round-trips back into Update.
 type gmpModelSelectionResultMsg struct {
-	action        dialog.ActionSelectModel
-	loginProvider string // non-empty: provider needs auth before the selection can apply
-	applied       bool
-	err           error
+	action         dialog.ActionSelectModel
+	loginProvider  string // non-empty: provider needs auth before the selection can apply
+	retryAttempted bool
+	applied        bool
+	err            error
+}
+
+// pendingGmpModelSelection is a single login continuation. Reauth is cleared
+// before storage; a post-login retry gets no second login attempt.
+type pendingGmpModelSelection struct {
+	action   dialog.ActionSelectModel
+	provider string
+}
+
+func (m *UI) assistantModelDisplayInfo(msg *message.Message) chat.ModelDisplayInfo {
+	display := chat.ModelDisplayInfo{
+		ModelName:    msg.Model,
+		ProviderName: msg.Provider,
+	}
+	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
+	if !ok {
+		return display
+	}
+	for _, entry := range gw.ModelCatalog().Models {
+		if entry.Provider != msg.Provider || entry.ID != msg.Model {
+			continue
+		}
+		if entry.Name != "" {
+			display.ModelName = entry.Name
+		}
+		if entry.ProviderName != "" {
+			display.ProviderName = entry.ProviderName
+		}
+		break
+	}
+	return display
+}
+
+// gmpModelCatalogResultMsg carries the outcome of an off-loop catalog refresh.
+// Update owns dialog state; the command only fetches a snapshot.
+type gmpModelCatalogResultMsg struct {
+	catalog      workspace.ModelCatalog
+	isOnboarding bool
+	epoch        uint64
+	err          error
+}
+
+// gmpPendingModelAuthResultMsg reports a failed login dispatch. The pending
+// selection must not survive a command that never reached the backend.
+type gmpPendingModelAuthResultMsg struct {
+	err error
 }
 
 // handleGmpSelectModel dispatches the catalog lookup / refresh / set_model
@@ -35,7 +103,8 @@ type gmpModelSelectionResultMsg struct {
 // backend is slow or wedged.
 func (m *UI) handleGmpSelectModel(gw *workspace.GmpWorkspace, msg dialog.ActionSelectModel) tea.Cmd {
 	m.dialog.CloseDialog(dialog.ModelsID)
-	return func() tea.Msg { return resolveGmpModelSelection(gw, msg, false) }
+	m.invalidateGmpModelCatalogRequest()
+	return func() tea.Msg { return resolveGmpModelSelection(gw, msg) }
 }
 
 // resolveGmpModelSelection performs the blocking catalog / set_model work.
@@ -43,41 +112,76 @@ func (m *UI) handleGmpSelectModel(gw *workspace.GmpWorkspace, msg dialog.ActionS
 func resolveGmpModelSelection(
 	gw *workspace.GmpWorkspace,
 	msg dialog.ActionSelectModel,
-	forceRefresh bool,
 ) gmpModelSelectionResultMsg {
-	refresh := func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return gw.RefreshModelCatalog(ctx)
-	}
-	if forceRefresh {
-		if err := refresh(); err != nil {
-			return gmpModelSelectionResultMsg{action: msg, err: err}
-		}
-	}
-	entry, ok := gw.ModelCatalogEntry(msg.Model.Provider, msg.Model.Model)
-	if !ok && !forceRefresh {
-		if err := refresh(); err != nil {
-			return gmpModelSelectionResultMsg{action: msg, err: err}
-		}
-		entry, ok = gw.ModelCatalogEntry(msg.Model.Provider, msg.Model.Model)
-	}
-	if ok && (!entry.Available || msg.ReAuthenticate) {
-		if !entry.LoginAvailable {
-			return gmpModelSelectionResultMsg{
-				action: msg,
-				err:    fmt.Errorf("model unavailable: %s/%s", msg.Model.Provider, msg.Model.Model),
-			}
-		}
-		return gmpModelSelectionResultMsg{action: msg, loginProvider: entry.Provider}
-	}
-	if err := gw.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
+	role, err := gmpCatalogRole(msg.ModelType)
+	if err != nil {
 		return gmpModelSelectionResultMsg{action: msg, err: err}
 	}
-	if err := refresh(); err != nil {
-		slog.Warn("gmp: catalog refresh after model select failed", "error", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result, err := gw.SelectModel(ctx, workspace.ModelSelection{
+		Role:           role,
+		Provider:       msg.Model.Provider,
+		ModelID:        msg.Model.Model,
+		Reauthenticate: msg.ReAuthenticate,
+	})
+	if err != nil {
+		return gmpModelSelectionResultMsg{action: msg, err: err}
+	}
+	if result.LoginProvider != "" {
+		return gmpModelSelectionResultMsg{action: msg, loginProvider: result.LoginProvider}
 	}
 	return gmpModelSelectionResultMsg{action: msg, applied: true}
+}
+
+func gmpCatalogRole(modelType config.SelectedModelType) (string, error) {
+	switch modelType {
+	case config.SelectedModelTypeLarge:
+		return "default", nil
+	case config.SelectedModelTypeSmall:
+		return "smol", nil
+	default:
+		return "", fmt.Errorf("unsupported model role: %s", modelType)
+	}
+}
+
+// nextGmpThinkingLevel chooses the next backend-owned thinking level without
+// consulting the legacy local model cache.
+func nextGmpThinkingLevel(gw *workspace.GmpWorkspace) string {
+	if current := gw.ThinkingLevel(); current != "" && current != "off" {
+		return "off"
+	}
+	model := gw.AgentModel().CatwalkCfg
+	if model.DefaultReasoningEffort != "" {
+		return model.DefaultReasoningEffort
+	}
+	if len(model.ReasoningLevels) > 0 {
+		return model.ReasoningLevels[0]
+	}
+	return "medium"
+}
+
+// setGmpThinkingLevel keeps the RPC round-trip outside Bubble Tea Update.
+func setGmpThinkingLevel(gw *workspace.GmpWorkspace, level, label string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := gw.SetThinkingLevel(ctx, level); err != nil {
+			return util.ReportError(err)()
+		}
+		effective := gw.ThinkingLevel()
+		if label == "Thinking mode" {
+			status := "enabled"
+			if effective == "" || effective == "off" {
+				status = "disabled"
+			}
+			return util.NewInfoMsg(label + " " + status)
+		}
+		if effective == "" || effective == "off" {
+			return util.NewInfoMsg(label + " disabled")
+		}
+		return util.NewInfoMsg(label + " set to " + effective)
+	}
 }
 
 // handleGmpModelSelectionResult applies the UI-side effects of a finished
@@ -87,9 +191,16 @@ func (m *UI) handleGmpModelSelectionResult(msg gmpModelSelectionResultMsg) tea.C
 		return util.ReportError(msg.err)
 	}
 	if msg.loginProvider != "" {
+		if msg.retryAttempted {
+			return util.ReportError(fmt.Errorf("model unavailable after login: %s/%s", msg.action.Model.Provider, msg.action.Model.Model))
+		}
 		pending := msg.action
-		m.pendingGmpModelSelection = &pending
-		return m.runGmpAuthCommand(auth.CommandLogin, msg.loginProvider)
+		pending.ReAuthenticate = false
+		m.pendingGmpModelSelection = &pendingGmpModelSelection{
+			action:   pending,
+			provider: msg.loginProvider,
+		}
+		return m.runGmpAuthForPendingModel(msg.loginProvider)
 	}
 	if !msg.applied {
 		return nil
@@ -106,7 +217,9 @@ func (m *UI) handleGmpModelSelectionResult(msg gmpModelSelectionResultMsg) tea.C
 		m.com.Config().SetupAgents()
 		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
 			cmds = append(cmds, func() tea.Msg {
-				if err := gw.InitCoderAgent(context.TODO()); err != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				if err := gw.InitCoderAgent(ctx); err != nil {
 					return util.InfoMsg{Type: util.InfoTypeError, Msg: err.Error()}
 				}
 				return nil
@@ -118,6 +231,25 @@ func (m *UI) handleGmpModelSelectionResult(msg gmpModelSelectionResultMsg) tea.C
 	return tea.Batch(cmds...)
 }
 
+func (m *UI) refreshGmpModelCatalog(isOnboarding bool) tea.Cmd {
+	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
+	if !ok {
+		return util.ReportError(fmt.Errorf("model catalog requires the gmp backend"))
+	}
+	m.modelCatalogRequestEpoch++
+	epoch := m.modelCatalogRequestEpoch
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		catalog, err := gw.RefreshModelCatalog(ctx)
+		return gmpModelCatalogResultMsg{catalog: catalog, isOnboarding: isOnboarding, epoch: epoch, err: err}
+	}
+}
+
+func (m *UI) invalidateGmpModelCatalogRequest() {
+	m.modelCatalogRequestEpoch++
+}
+
 func (m *UI) retryPendingGmpModelSelection() tea.Cmd {
 	if m.pendingGmpModelSelection == nil {
 		return nil
@@ -127,11 +259,18 @@ func (m *UI) retryPendingGmpModelSelection() tea.Cmd {
 		m.pendingGmpModelSelection = nil
 		return nil
 	}
-	pending := *m.pendingGmpModelSelection
+	pending := m.pendingGmpModelSelection.action
 	m.pendingGmpModelSelection = nil
-	// Post-login the catalog still has the entry as unauthenticated; force a
-	// refresh off-loop before re-resolving.
-	return func() tea.Msg { return resolveGmpModelSelection(gw, pending, true) }
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := gw.RefreshModelCatalog(ctx); err != nil {
+			return gmpModelSelectionResultMsg{action: pending, err: err}
+		}
+		result := resolveGmpModelSelection(gw, pending)
+		result.retryAttempted = true
+		return result
+	}
 }
 
 func (m *UI) openAuthenticationDialog(provider catwalk.Provider, _ config.SelectedModel, _ config.SelectedModelType) tea.Cmd {
@@ -139,10 +278,25 @@ func (m *UI) openAuthenticationDialog(provider catwalk.Provider, _ config.Select
 	// the RPC bridge: dispatch auth.login, the gmp backend drives the
 	// flow back via extension_ui_request frames into the GmpAuth
 	// dialog. The legacy Crush dialogs (NewAPIKeyInput / NewOAuthHyper
-	// / NewOAuthCopilot) and the IsGmpMode == false branch were
+	// / NewOAuthCopilot) and the removed local-config branch were
 	// removed in carve-out Phase 1 lite — they wrote to local
 	// crush.json which is the wrong store for this fork.
 	return m.runGmpAuthCommand(auth.CommandLogin, string(provider.ID))
+}
+
+func (m *UI) runGmpAuthForPendingModel(provider string) tea.Cmd {
+	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
+	if !ok {
+		return func() tea.Msg {
+			return gmpPendingModelAuthResultMsg{err: fmt.Errorf("auth.login requires the gmp backend")}
+		}
+	}
+	return func() tea.Msg {
+		if err := gw.SendAuthCommand(auth.CommandLogin, provider); err != nil {
+			return gmpPendingModelAuthResultMsg{err: err}
+		}
+		return nil
+	}
 }
 
 // runGmpAuthCommand sends an auth.login / auth.logout RPC command to the
@@ -194,9 +348,10 @@ func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
 	// supersedes it, so deny the superseded request first — otherwise no
 	// extension_ui_response is ever sent for it and the backend tool sits
 	// pending until its multi-minute approval deadline.
+	var reply tea.Cmd
 	if gw, ok := m.com.Workspace.(toolApprovalReplyHandler); ok {
 		if prev := m.pendingToolApproval; prev != nil && prev.ID != "" && prev.ID != perm.ID {
-			gw.HandleToolApprovalReply(*prev, false)
+			reply = sendToolApprovalReply(gw, *prev, false)
 		}
 		if perm.ID != "" {
 			superseded := perm
@@ -206,10 +361,12 @@ func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
 		}
 	}
 
-	// Close any existing permissions dialog first.
 	m.dialog.CloseDialog(dialog.PermissionsID)
+	m.openPermissionDialog(perm)
+	return reply
+}
 
-	// Get diff mode from config.
+func (m *UI) openPermissionDialog(perm permission.PermissionRequest) {
 	var opts []dialog.PermissionsOption
 	if diffMode := m.com.Config().Options.TUI.DiffMode; diffMode != "" {
 		opts = append(opts, dialog.WithDiffMode(diffMode == "split"))
@@ -217,5 +374,4 @@ func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
 
 	permDialog := dialog.NewPermissions(m.com, perm, opts...)
 	m.dialog.OpenDialog(permDialog)
-	return nil
 }

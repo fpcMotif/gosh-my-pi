@@ -16,6 +16,7 @@
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
 import { $env, logger, readLines, Snowflake } from "@oh-my-pi/pi-utils";
+import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type {
 	ExtensionUIContext,
 	ExtensionUIDialogOptions,
@@ -28,7 +29,8 @@ import { getOAuthProviders } from "@oh-my-pi/pi-ai";
 import type { OAuthProviderId } from "@oh-my-pi/pi-ai/utils/oauth/types";
 import { formatModelString, parseModelString } from "../../config/model-resolver";
 import { getKnownRoleIds } from "../../config/model-registry";
-import { isRpcHostToolResult, isRpcHostToolUpdate, RpcHostToolBridge } from "./host-tools";
+import { RpcHostToolBridge } from "./host-tools";
+import { isRpcCommandEnvelope, RpcInboundRouter, type RpcCommandEnvelope } from "./rpc-ingress";
 import { RequestCorrelator } from "./request-correlator";
 import { RpcOAuthController } from "./rpc-oauth-controller";
 import { createToolApprovalHook } from "./rpc-tool-approval";
@@ -37,12 +39,14 @@ import type {
 	RpcModelCatalog,
 	RpcModelCatalogEntry,
 	RpcModelCatalogRole,
+	RpcModelSelectionReceipt,
 	RpcCommand,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
 	RpcHostToolDefinition,
 	RpcResponse,
 	RpcSessionState,
+	RpcThinkingLevelReceipt,
 } from "./rpc-types";
 import { createWireEventTranslator } from "./wire/translate";
 import { OMP_RPC_SCHEMA_V1, type WireFrame } from "./wire/v1";
@@ -51,6 +55,32 @@ import { OMP_RPC_SCHEMA_V1, type WireFrame } from "./wire/v1";
 export type * from "./rpc-types";
 
 type RpcOutput = (frame: WireFrame) => void;
+
+/**
+ * The transport validates only the command envelope. Command-specific fields
+ * stay owned by their handlers, but a valid id/type pair must survive any
+ * handler failure so a waiting host does not time out.
+ */
+export { isRpcCommandEnvelope } from "./rpc-ingress";
+
+/** Runs one validated command and turns an unexpected handler failure into its correlated response. */
+export async function executeRpcCommand(
+	command: RpcCommandEnvelope,
+	handler: () => Promise<RpcResponse | null>,
+): Promise<RpcResponse | null> {
+	try {
+		return await handler();
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		return {
+			id: command.id,
+			type: "response",
+			command: command.type,
+			success: false,
+			error: `Command execution failed: ${message}`,
+		};
+	}
+}
 
 /**
  * Emits the terminal failure signal for a detached prompt that rejected after
@@ -64,6 +94,98 @@ type RpcOutput = (frame: WireFrame) => void;
 export function emitDetachedPromptFailure(output: (frame: WireFrame) => void, error: Error): void {
 	logger.warn("detached prompt rejected after ack", { error: error.message });
 	output({ type: "agent_end", messages: [], errorKind: { kind: "fatal" } });
+}
+
+type RpcSessionStateTool = {
+	name: string;
+	description: string;
+	parameters: unknown;
+};
+
+/** The session data needed for the authoritative state snapshot. */
+export type RpcSessionStateSource = Omit<RpcSessionState, "messageCount" | "dumpTools"> & {
+	messages: { readonly length: number };
+	tools: readonly RpcSessionStateTool[];
+};
+type RpcSessionStateReader = Pick<
+	AgentSession,
+	| "model"
+	| "thinkingLevel"
+	| "isStreaming"
+	| "isCompacting"
+	| "steeringMode"
+	| "followUpMode"
+	| "interruptMode"
+	| "sessionFile"
+	| "sessionId"
+	| "sessionName"
+	| "autoCompactionEnabled"
+	| "messages"
+	| "queuedMessageCount"
+	| "getTodoPhases"
+	| "systemPrompt"
+	| "agent"
+>;
+
+/** Builds the complete backend-owned state snapshot for RPC receipts. */
+export function buildRpcSessionState(session: RpcSessionStateSource): RpcSessionState {
+	return {
+		model: session.model,
+		thinkingLevel: session.thinkingLevel,
+		isStreaming: session.isStreaming,
+		isCompacting: session.isCompacting,
+		steeringMode: session.steeringMode,
+		followUpMode: session.followUpMode,
+		interruptMode: session.interruptMode,
+		sessionFile: session.sessionFile,
+		sessionId: session.sessionId,
+		sessionName: session.sessionName,
+		autoCompactionEnabled: session.autoCompactionEnabled,
+		messageCount: session.messages.length,
+		queuedMessageCount: session.queuedMessageCount,
+		todoPhases: session.todoPhases,
+		systemPrompt: session.systemPrompt,
+		dumpTools: session.tools.map(tool => ({
+			name: tool.name,
+			description: tool.description,
+			parameters: tool.parameters,
+		})),
+	};
+}
+
+/** Dispatch the state read through the same response builder as the RPC loop. */
+export function dispatchRpcSessionStateCommand(
+	session: RpcSessionStateReader,
+	command: Extract<RpcCommand, { type: "get_state" }>,
+): RpcResponse {
+	return {
+		id: command.id,
+		type: "response",
+		command: "get_state",
+		success: true,
+		data: buildRpcSessionState(readRpcSessionState(session)),
+	};
+}
+
+function readRpcSessionState(session: RpcSessionStateReader): RpcSessionStateSource {
+	return {
+		model: session.model,
+		thinkingLevel: session.thinkingLevel,
+		isStreaming: session.isStreaming,
+		isCompacting: session.isCompacting,
+		steeringMode: session.steeringMode,
+		followUpMode: session.followUpMode,
+		interruptMode: session.interruptMode,
+		sessionFile: session.sessionFile,
+		sessionId: session.sessionId,
+		sessionName: session.sessionName,
+		autoCompactionEnabled: session.autoCompactionEnabled,
+		messages: session.messages,
+		queuedMessageCount: session.queuedMessageCount,
+		todoPhases: session.getTodoPhases(),
+		systemPrompt: session.systemPrompt,
+		tools: session.agent.state.tools,
+	};
 }
 
 type AuthProviderMetadata = {
@@ -120,12 +242,13 @@ export function buildRpcModelCatalog(session: AgentSession): RpcModelCatalog {
 
 	const roles: RpcModelCatalogRole[] = getKnownRoleIds(session.settings).map(role => {
 		const selector = session.settings.getModelRole(role);
+		const resolved = selector ? session.resolveRoleModel(role, session.modelRegistry.getAll()) : undefined;
 		const parsed = selector ? parseModelString(selector) : undefined;
 		return {
 			role,
 			selector,
-			provider: parsed?.provider,
-			modelId: parsed?.id,
+			provider: resolved?.provider ?? parsed?.provider,
+			modelId: resolved?.id ?? parsed?.id,
 		};
 	});
 
@@ -165,6 +288,128 @@ export function buildRpcModelCatalog(session: AgentSession): RpcModelCatalog {
 		roles,
 		current,
 	};
+}
+
+type RpcModelSelectionCommand = Extract<RpcCommand, { type: "set_model" }>;
+type RpcModelSelectionSession = Pick<
+	AgentSession,
+	"model" | "thinkingLevel" | "settings" | "modelRegistry" | "resolveRoleModel" | "setModel" | "assignModelRole"
+>;
+type RpcModelSelectionResult = { ok: true; receipt: RpcModelSelectionReceipt | null } | { ok: false; error: string };
+type RpcThinkingLevelSession = Pick<AgentSession, "thinkingLevel" | "setThinkingLevel">;
+type RpcAuthoritativeReceiptCommand = Extract<RpcCommand, { type: "new_session" | "set_model" | "set_thinking_level" }>;
+type RpcAuthoritativeReceiptSession = RpcModelSelectionSession &
+	RpcThinkingLevelSession &
+	RpcSessionStateReader &
+	Pick<AgentSession, "newSession">;
+
+/**
+ * Apply an RPC model selection. Only the default role changes the active
+ * session model; named roles configure later selection paths.
+ */
+export async function applyRpcModelSelection(
+	session: RpcModelSelectionSession,
+	command: RpcModelSelectionCommand,
+): Promise<RpcModelSelectionResult> {
+	const role = command.role ?? "default";
+	if (role === "" || role !== role.trim()) {
+		return { ok: false, error: "Model role must be non-empty and have no surrounding whitespace" };
+	}
+
+	// Backward compatibility for older Go bridge builds that used a synthetic
+	// placeholder before models.catalog existed.
+	if (command.provider === "gmp" && command.modelId === "gmp-backend") {
+		return { ok: true, receipt: null };
+	}
+
+	const model = session.modelRegistry.find(command.provider, command.modelId);
+	if (!model) {
+		return { ok: false, error: `Model not found: ${command.provider}/${command.modelId}` };
+	}
+
+	if (role === "default") {
+		await session.setModel(model, role);
+	} else {
+		await session.assignModelRole(model, role);
+	}
+	const selector = session.settings.getModelRole(role);
+	if (!selector) {
+		return { ok: false, error: `Model role was not persisted: ${role}` };
+	}
+	const resolvedAssignment = session.resolveRoleModel(role, session.modelRegistry.getAll());
+	const parsedAssignment = parseModelString(selector);
+	return {
+		ok: true,
+		receipt: {
+			...model,
+			activeModel: session.model ?? null,
+			thinkingLevel: session.thinkingLevel ?? null,
+			assignment: {
+				role,
+				selector,
+				provider: resolvedAssignment?.provider ?? parsedAssignment?.provider ?? model.provider,
+				modelId: resolvedAssignment?.id ?? parsedAssignment?.id ?? model.id,
+			},
+		},
+	};
+}
+
+/** Apply a requested thinking level and return the backend's effective level. */
+export function applyRpcThinkingLevel(session: RpcThinkingLevelSession, level: ThinkingLevel): RpcThinkingLevelReceipt {
+	session.setThinkingLevel(level);
+	return { thinkingLevel: session.thinkingLevel ?? null };
+}
+
+/**
+ * Dispatch commands whose receipt is the backend's authoritative state. This
+ * seam keeps the v1 wire response coupled to the mutation that produced it.
+ */
+export async function dispatchRpcAuthoritativeReceiptCommand(
+	session: RpcAuthoritativeReceiptSession,
+	command: RpcAuthoritativeReceiptCommand,
+): Promise<RpcResponse> {
+	switch (command.type) {
+		case "new_session": {
+			const options =
+				command.parentSession !== null && command.parentSession !== undefined && command.parentSession !== ""
+					? { parentSession: command.parentSession }
+					: undefined;
+			const cancelled = !(await session.newSession(options));
+			if (cancelled) {
+				return {
+					id: command.id,
+					type: "response",
+					command: "new_session",
+					success: true,
+					data: { cancelled: true },
+				};
+			}
+			return {
+				id: command.id,
+				type: "response",
+				command: "new_session",
+				success: true,
+				data: { cancelled: false, state: buildRpcSessionState(readRpcSessionState(session)) },
+			};
+		}
+
+		case "set_model": {
+			const result = await applyRpcModelSelection(session, command);
+			if (!result.ok) {
+				return { id: command.id, type: "response", command: "set_model", success: false, error: result.error };
+			}
+			return { id: command.id, type: "response", command: "set_model", success: true, data: result.receipt };
+		}
+
+		case "set_thinking_level":
+			return {
+				id: command.id,
+				type: "response",
+				command: "set_thinking_level",
+				success: true,
+				data: applyRpcThinkingLevel(session, command.level),
+			};
+	}
 }
 
 function normalizeHostToolDefinitions(tools: RpcHostToolDefinition[]): RpcHostToolDefinition[] {
@@ -350,6 +595,40 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 	const extensionUIRequests = new RequestCorrelator();
 	const hostToolBridge = new RpcHostToolBridge(output);
+	let executeQueuedCommand: ((command: RpcCommandEnvelope) => Promise<void>) | undefined;
+	const ingress = new RpcInboundRouter({
+		input: readLines(Bun.stdin.stream()),
+		onCommand: async command => {
+			if (executeQueuedCommand === undefined) {
+				throw new Error("RPC command execution started before startup completed");
+			}
+			await executeQueuedCommand(command);
+		},
+		onExtensionUIResponse: response => {
+			extensionUIRequests.resolve(response.id, response);
+		},
+		onHostToolResult: result => {
+			hostToolBridge.handleResult(result);
+		},
+		onHostToolUpdate: update => {
+			hostToolBridge.handleUpdate(update);
+		},
+		onParseError: message => {
+			output(errorResp(undefined, "parse", message));
+		},
+		onQueueFull: command => {
+			output(
+				errorResp(command.id, command.type, "RPC command queue is full; retry after pending commands complete"),
+			);
+		},
+		onEnd: () => {
+			extensionUIRequests.close("RPC client disconnected before extension UI response");
+			hostToolBridge.close("RPC client disconnected before host tool execution completed");
+		},
+	});
+	// The reader starts before session_start. Startup hooks may wait for a
+	// dialog reply, which must not wait behind startup itself.
+	ingress.start();
 
 	// Shutdown request flag (wrapped in object to allow mutation with const)
 	const shutdownState = { requested: false };
@@ -703,39 +982,11 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return success(id, "abort_and_prompt");
 			}
 
-			case "new_session": {
-				const options =
-					command.parentSession !== null && command.parentSession !== undefined && command.parentSession !== ""
-						? { parentSession: command.parentSession }
-						: undefined;
-				const cancelled = !(await session.newSession(options));
-				return success(id, "new_session", { cancelled });
-			}
+			case "new_session":
+				return dispatchRpcAuthoritativeReceiptCommand(session, command);
 
 			case "get_state": {
-				const state: RpcSessionState = {
-					model: session.model,
-					thinkingLevel: session.thinkingLevel,
-					isStreaming: session.isStreaming,
-					isCompacting: session.isCompacting,
-					steeringMode: session.steeringMode,
-					followUpMode: session.followUpMode,
-					interruptMode: session.interruptMode,
-					sessionFile: session.sessionFile,
-					sessionId: session.sessionId,
-					sessionName: session.sessionName,
-					autoCompactionEnabled: session.autoCompactionEnabled,
-					messageCount: session.messages.length,
-					queuedMessageCount: session.queuedMessageCount,
-					todoPhases: session.getTodoPhases(),
-					systemPrompt: session.systemPrompt,
-					dumpTools: session.agent.state.tools.map(tool => ({
-						name: tool.name,
-						description: tool.description,
-						parameters: tool.parameters,
-					})),
-				};
-				return success(id, "get_state", state);
+				return dispatchRpcSessionStateCommand(session, command);
 			}
 
 			case "set_todos": {
@@ -754,19 +1005,8 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return success(id, "models.catalog", buildRpcModelCatalog(session));
 			}
 
-			case "set_model": {
-				// Backward compatibility for older Go bridge builds that used
-				// a synthetic placeholder before models.catalog existed.
-				if (command.provider === "gmp" && command.modelId === "gmp-backend") {
-					return success(id, "set_model", session.model ?? null);
-				}
-				const model = session.modelRegistry.find(command.provider, command.modelId);
-				if (!model) {
-					return errorResp(id, "set_model", `Model not found: ${command.provider}/${command.modelId}`);
-				}
-				await session.setModel(model, command.role ?? "default");
-				return success(id, "set_model", model);
-			}
+			case "set_model":
+				return dispatchRpcAuthoritativeReceiptCommand(session, command);
 
 			case "cycle_model": {
 				const result = await session.cycleModel();
@@ -781,10 +1021,8 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return success(id, "get_available_models", { models });
 			}
 
-			case "set_thinking_level": {
-				session.setThinkingLevel(command.level);
-				return success(id, "set_thinking_level");
-			}
+			case "set_thinking_level":
+				return dispatchRpcAuthoritativeReceiptCommand(session, command);
 
 			case "cycle_thinking_level": {
 				const level = session.cycleThinkingLevel();
@@ -890,52 +1128,39 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				// correlated auth.pick_provider extension_ui_request. The Go
 				// side (Bubble Tea dialog.GmpAuth and CLI authCLIDriver) both
 				// already route this method. See ADR 0002.
-				//
-				// Detached like `prompt`: the login flow awaits correlated
-				// extension_ui_responses (picker, code prompts) that arrive on
-				// this same stdin loop, so awaiting it inside handleCommand
-				// deadlocks the reader on its own reply. The final response for
-				// this command id is emitted when the flow completes.
-				const login = async (): Promise<RpcResponse> => {
-					const resolved = await resolveAuthLoginProvider(command.provider, extensionUIRequests, output, () =>
-						getAuthProviderMetadata()
-							.filter(p => p.available)
-							.map(p => p.id),
-					);
-					if (!resolved.ok) {
-						return errorResp(id, "auth.login", resolved.error);
-					}
-					const provider = resolved.provider;
-					const controller = new RpcOAuthController({
-						provider,
-						correlator: extensionUIRequests,
-						output,
-					});
-					return runAuthCommand(
-						id,
-						"auth.login",
-						async () => {
-							await session.modelRegistry.authStorage.login(provider as OAuthProviderId, {
-								onAuth: info => controller.onAuth(info),
-								onProgress: msg => controller.onProgress(msg),
-								onPrompt: prompt => controller.onPrompt(prompt),
-								onManualCodeInput: () => controller.onManualCodeInput(),
-							});
-							// Snapshot the post-login authenticated provider list so
-							// the Go-side workspace refreshes its catalog without an
-							// extra round-trip. AuthStorage.list() is the source of
-							// truth for "who has stored credentials".
-							controller.emitResult(true, undefined, session.modelRegistry.authStorage.list());
-							return { provider, ok: true };
-						},
-						message => controller.emitResult(false, message),
-					);
-				};
-				login().then(output, (error: Error) => {
-					logger.warn("detached auth.login rejected", { error: error.message });
-					output(errorResp(id, "auth.login", error.message));
+				const resolved = await resolveAuthLoginProvider(command.provider, extensionUIRequests, output, () =>
+					getAuthProviderMetadata()
+						.filter(p => p.available)
+						.map(p => p.id),
+				);
+				if (!resolved.ok) {
+					return errorResp(id, "auth.login", resolved.error);
+				}
+				const provider = resolved.provider;
+				const controller = new RpcOAuthController({
+					provider,
+					correlator: extensionUIRequests,
+					output,
 				});
-				return null;
+				return runAuthCommand(
+					id,
+					"auth.login",
+					async () => {
+						await session.modelRegistry.authStorage.login(provider as OAuthProviderId, {
+							onAuth: info => controller.onAuth(info),
+							onProgress: msg => controller.onProgress(msg),
+							onPrompt: prompt => controller.onPrompt(prompt),
+							onManualCodeInput: () => controller.onManualCodeInput(),
+						});
+						// Snapshot the post-login authenticated provider list so
+						// the Go-side workspace refreshes its catalog without an
+						// extra round-trip. AuthStorage.list() is the source of
+						// truth for "who has stored credentials".
+						controller.emitResult(true, undefined, session.modelRegistry.authStorage.list());
+						return { provider, ok: true };
+					},
+					message => controller.emitResult(false, message),
+				);
 			}
 
 			case "auth.logout": {
@@ -984,51 +1209,18 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		process.exit(0);
 	}
 
-	// Listen for JSON input using Bun's stdin. Read raw lines and parse each
-	// frame individually: a single malformed line must surface a recoverable
-	// `parse` error response, not throw out of the loop and kill the server.
-	// `readJsonl` re-throws a JSONL syntax error as a generator throw that
-	// escapes the in-body try/catch, so any partial write / truncated frame /
-	// non-JSON noise on stdin would take the backend down and strand every
-	// in-flight request (wire spec: unknown input is soft-handled, not fatal).
-	const decoder = new TextDecoder();
-	for await (const lineBytes of readLines(Bun.stdin.stream())) {
-		try {
-			const raw = decoder.decode(lineBytes).trim();
-			if (raw.length === 0) continue;
-			const parsed: unknown = JSON.parse(raw);
+	// Unknown command types remain handler-owned and intentionally return an
+	// uncorrelated response for v1 compatibility. Known command exceptions
+	// instead preserve their id through executeRpcCommand.
+	executeQueuedCommand = async command => {
+		const response = await executeRpcCommand(command, () => handleCommand(command as RpcCommand));
+		if (response !== null) output(response);
+		await checkShutdownRequested();
+	};
+	await checkShutdownRequested();
+	ingress.activate();
+	await ingress.complete;
 
-			// Handle extension UI responses — route via correlator. Stale ids are no-ops.
-			if ((parsed as RpcExtensionUIResponse).type === "extension_ui_response") {
-				const response = parsed as RpcExtensionUIResponse;
-				extensionUIRequests.resolve(response.id, response);
-				continue;
-			}
-
-			if (isRpcHostToolResult(parsed)) {
-				hostToolBridge.handleResult(parsed);
-				continue;
-			}
-
-			if (isRpcHostToolUpdate(parsed)) {
-				hostToolBridge.handleUpdate(parsed);
-				continue;
-			}
-
-			// Handle regular commands
-			const command = parsed as RpcCommand;
-			const response = await handleCommand(command);
-			if (response !== null) output(response);
-
-			// Check for deferred shutdown request (idle between commands)
-			await checkShutdownRequested();
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			output(errorResp(undefined, "parse", `Failed to parse command: ${message}`));
-		}
-	}
-
-	// stdin closed — RPC client is gone, exit cleanly
-	hostToolBridge.rejectAllPending("RPC client disconnected before host tool execution completed");
+	// stdin closed — RPC client is gone, exit cleanly.
 	process.exit(0);
 }

@@ -1,6 +1,6 @@
 # OMP-RPC v1 — cross-language golden wire fixtures
 
-Each file in this directory is the **exact wire JSON** a real `omp --mode rpc`
+Each file in this directory is the **exact wire JSON** a real `gmp --mode rpc`
 backend emits for one representative OMP-RPC v1 frame variant. They are the
 single shared source of truth consumed by **both** sides of the bridge:
 

@@ -50,6 +50,7 @@ interface PendingEntry {
 
 export class RequestCorrelator {
 	#pending = new Map<string, PendingEntry>();
+	#closedReason?: string;
 
 	/**
 	 * Register a new pending request. Returns a unique id and a promise that
@@ -58,6 +59,15 @@ export class RequestCorrelator {
 	 */
 	register<T>(opts: RegisterOptions<T> = {}): CorrelatedRequest<T> {
 		const id = opts.id ?? (Snowflake.next() as string);
+		if (this.#closedReason !== undefined) {
+			const hasDefaultValue = Object.hasOwn(opts, "defaultValue");
+			return {
+				id,
+				promise: hasDefaultValue
+					? Promise.resolve(opts.defaultValue as T)
+					: Promise.reject(new Error(this.#closedReason)),
+			};
+		}
 
 		// An explicit id colliding with a live entry would silently overwrite it,
 		// orphaning the prior promise (whose cleanup then deletes the slot the new
@@ -177,6 +187,12 @@ export class RequestCorrelator {
 			this.cancel(id, reason);
 		}
 		return ids.length;
+	}
+
+	/** Permanently stop new requests and cancel every current request. */
+	close(reason = "Request correlator closed"): number {
+		this.#closedReason = reason;
+		return this.cancelAll(reason);
 	}
 
 	/**

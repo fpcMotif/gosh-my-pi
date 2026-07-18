@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/ultraviolet/layout"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/logo"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
 )
 
 // modelInfo renders the current model information including reasoning
@@ -20,23 +21,26 @@ func (m *UI) modelInfo(width int) string {
 	providerName := ""
 
 	if model != nil {
-		// Get provider name first
-		providerConfig, ok := m.com.Config().Providers.Get(model.ModelCfg.Provider)
-		if ok {
-			providerName = providerConfig.Name
-
-			// Only check reasoning if model can reason
-			if model.CatwalkCfg.CanReason {
-				if len(model.CatwalkCfg.ReasoningLevels) == 0 {
-					if model.ModelCfg.Think {
-						reasoningInfo = "Thinking On"
-					} else {
-						reasoningInfo = "Thinking Off"
-					}
-				} else {
-					reasoningEffort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.DefaultReasoningEffort)
-					reasoningInfo = fmt.Sprintf("Reasoning %s", common.FormatReasoningEffort(reasoningEffort))
+		providerName = model.ModelCfg.Provider
+		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
+			for _, entry := range gw.ModelCatalog().Models {
+				if entry.Provider == model.ModelCfg.Provider && entry.ID == model.ModelCfg.Model && entry.ProviderName != "" {
+					providerName = entry.ProviderName
+					break
 				}
+			}
+		}
+
+		if model.CatwalkCfg.CanReason {
+			if len(model.CatwalkCfg.ReasoningLevels) == 0 {
+				if model.ModelCfg.Think {
+					reasoningInfo = "Thinking On"
+				} else {
+					reasoningInfo = "Thinking Off"
+				}
+			} else {
+				reasoningEffort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.DefaultReasoningEffort)
+				reasoningInfo = fmt.Sprintf("Reasoning %s", common.FormatReasoningEffort(reasoningEffort))
 			}
 		}
 	}

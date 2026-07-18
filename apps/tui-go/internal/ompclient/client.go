@@ -28,6 +28,17 @@ const (
 	scannerMaxBufferSize     = 16 * 1024 * 1024
 )
 
+const (
+	exitOpen uint32 = iota
+	exitIntentional
+	exitUnexpected
+)
+
+// ErrIngressFull means a required inbound frame could not be handed to its
+// consumer. The client fails closed rather than dropping the frame or growing
+// an unbounded backlog.
+var ErrIngressFull = errors.New("ompclient: inbound queue full")
+
 // Options configures the omp RPC subprocess.
 type Options struct {
 	// Bin is the binary to spawn. Defaults to "gmp" (the local fork's
@@ -81,6 +92,10 @@ type Client struct {
 	closed    atomic.Bool
 	closeOnce sync.Once
 
+	processReapOnce sync.Once
+	processDone     chan struct{}
+	processErr      error
+
 	events         chan *AgentEvent
 	extensionUI    chan *ExtensionUIReq
 	hostToolCall   chan *HostToolCallReq
@@ -90,16 +105,12 @@ type Client struct {
 	readErr   atomic.Pointer[error]
 	done      chan struct{}
 
-	// exited is closed exactly once when the read loop terminates
-	// unexpectedly (peer EOF / subprocess crash) rather than via an
-	// intentional Close. closeRequested gates this: Close sets it before
-	// winding the loop down so the EOF that Close itself triggers does NOT
-	// surface as a backend-exited signal (no false "connection lost" banner
-	// on a clean quit). BackendExited exposes the channel; the UI observes
-	// it to enter a legible "backend exited" render state.
-	exited         chan struct{}
-	exitedOnce     sync.Once
-	closeRequested atomic.Bool
+	// exitKind arbitrates the first terminal cause. Close claims intentional
+	// before touching pipes; inbound overflow claims unexpected at detection.
+	// This prevents a concurrent Close from masking an already-detected fault.
+	exited     chan struct{}
+	exitedOnce sync.Once
+	exitKind   atomic.Uint32
 
 	// schema holds the wire schema string from the `ready` handshake frame
 	// (empty until the frame arrives). schemaMismatch records whether it
@@ -158,6 +169,7 @@ func Spawn(ctx context.Context, opts Options) (*Client, error) {
 		hostToolCancel: make(chan *HostToolCancelReq, sideChannelBufferSize),
 		done:           make(chan struct{}),
 		exited:         make(chan struct{}),
+		processDone:    make(chan struct{}),
 	}
 	go c.readLoop()
 	return c, nil
@@ -180,6 +192,7 @@ func NewWithIO(stdin io.WriteCloser, stdout io.ReadCloser) *Client {
 		hostToolCancel: make(chan *HostToolCancelReq, sideChannelBufferSize),
 		done:           make(chan struct{}),
 		exited:         make(chan struct{}),
+		processDone:    make(chan struct{}),
 	}
 	go c.readLoop()
 	return c
@@ -198,7 +211,8 @@ func (c *Client) HostToolCalls() <-chan *HostToolCallReq { return c.hostToolCall
 // HostToolCancels yields incoming host tool cancellation requests.
 func (c *Client) HostToolCancels() <-chan *HostToolCancelReq { return c.hostToolCancel }
 
-// Done is closed once the read loop exits (subprocess gone).
+// Done is closed once the read loop exits. Automatic process reaping may still
+// be in progress after an unexpected exit.
 func (c *Client) Done() <-chan struct{} { return c.done }
 
 // BackendExited is closed exactly once when the read loop terminates
@@ -280,7 +294,7 @@ func (c *Client) Call(ctx context.Context, cmd Command) (*Response, error) {
 	case resp := <-respCh:
 		cleanup()
 		if resp == nil {
-			return nil, errors.New("ompclient: subprocess exited before response")
+			return nil, c.exitError()
 		}
 		if !resp.Success {
 			return resp, fmt.Errorf("omp rpc error (%s): %s", resp.Command, resp.Error)
@@ -291,11 +305,15 @@ func (c *Client) Call(ctx context.Context, cmd Command) (*Response, error) {
 		return nil, ctx.Err()
 	case <-c.done:
 		cleanup()
-		if errp := c.readErr.Load(); errp != nil && *errp != nil {
-			return nil, fmt.Errorf("ompclient: subprocess exited: %w", *errp)
-		}
-		return nil, errors.New("ompclient: subprocess exited")
+		return nil, c.exitError()
 	}
+}
+
+func (c *Client) exitError() error {
+	if errp := c.readErr.Load(); errp != nil && *errp != nil {
+		return fmt.Errorf("ompclient: subprocess exited: %w", *errp)
+	}
+	return errors.New("ompclient: subprocess exited")
 }
 
 // Close terminates the subprocess and releases resources.
@@ -305,59 +323,133 @@ func (c *Client) Close() error {
 		// Mark the shutdown as intentional BEFORE closing stdin so the read
 		// loop's resulting EOF is not mistaken for a crash and does not fire
 		// the BackendExited signal.
-		c.closeRequested.Store(true)
-		c.closed.Store(true)
-		_ = c.stdin.Close()
-		// Best-effort termination if it doesn't exit on its own. cmd is nil
-		// for NewWithIO clients (no subprocess); closing stdin is enough to
-		// wind down the peer-driven read loop.
-		if c.cmd != nil && c.cmd.Process != nil {
-			_ = c.cmd.Process.Signal(os.Interrupt)
-		}
-		// Wait for read loop to drain.
-		select {
-		case <-c.done:
-		case <-time.After(subprocessShutdownGrace):
-			if c.cmd != nil && c.cmd.Process != nil {
-				_ = c.cmd.Process.Kill()
-			}
-			<-c.done
+		c.exitKind.CompareAndSwap(exitOpen, exitIntentional)
+		c.stopBackend()
+		if err := c.waitForReadLoop(); err != nil {
+			firstErr = err
 		}
 		if c.cmd != nil {
-			if err := c.cmd.Wait(); err != nil {
-				firstErr = err
+			c.startProcessReaper()
+			select {
+			case <-c.processDone:
+				if firstErr == nil && c.processErr != nil {
+					firstErr = c.processErr
+				}
+			case <-time.After(2 * subprocessShutdownGrace):
+				if firstErr == nil {
+					firstErr = errors.New("ompclient: timed out reaping subprocess")
+				}
 			}
 		}
 	})
 	return firstErr
 }
 
+// waitForReadLoop gives the backend one grace period, then closes the local
+// stdout pipe so descendants cannot retain it and hold Scanner open. The
+// second wait is also bounded: a broken ReadCloser cannot hang Close.
+func (c *Client) waitForReadLoop() error {
+	select {
+	case <-c.done:
+		return nil
+	case <-time.After(subprocessShutdownGrace):
+		if c.cmd != nil && c.cmd.Process != nil {
+			_ = c.cmd.Process.Kill()
+		}
+		_ = c.stdout.Close()
+	}
+
+	select {
+	case <-c.done:
+		return nil
+	case <-time.After(subprocessShutdownGrace):
+		return errors.New("ompclient: timed out stopping read loop")
+	}
+}
+
+// startProcessReaper gives Cmd.Wait exactly one owner. Unexpected read-loop
+// exits call this after Done closes; Close may call it concurrently.
+func (c *Client) startProcessReaper() {
+	if c.cmd == nil {
+		return
+	}
+	c.processReapOnce.Do(func() {
+		go func() {
+			c.processErr = c.reapProcess()
+			close(c.processDone)
+		}()
+	})
+}
+
+// reapProcess bounds process reaping. A backend can ignore both closed stdin
+// and Interrupt; in that case the reaper escalates to Kill.
+func (c *Client) reapProcess() error {
+	result := make(chan error, 1)
+	go func() { result <- c.cmd.Wait() }()
+
+	select {
+	case err := <-result:
+		return err
+	case <-time.After(subprocessShutdownGrace):
+		if c.cmd.Process != nil {
+			_ = c.cmd.Process.Kill()
+		}
+	}
+
+	select {
+	case err := <-result:
+		return err
+	case <-time.After(subprocessShutdownGrace):
+		return errors.New("ompclient: subprocess did not exit after kill")
+	}
+}
+
 // readLoop owns stdout. It decodes JSONL frames and dispatches them.
 func (c *Client) readLoop() {
-	defer close(c.done)
-	defer close(c.events)
-	defer close(c.extensionUI)
-	defer close(c.hostToolCall)
-	defer close(c.hostToolCancel)
+	unexpectedExit := false
+	defer func() {
+		_ = c.stdout.Close()
+		close(c.hostToolCancel)
+		close(c.hostToolCall)
+		close(c.extensionUI)
+		close(c.events)
+		close(c.done)
+		if unexpectedExit {
+			c.startProcessReaper()
+		}
+	}()
 
 	scanner := bufio.NewScanner(c.stdout)
 	scanner.Buffer(make([]byte, scannerInitialBufferSize), scannerMaxBufferSize)
 
-	for scanner.Scan() {
+	var readErr error
+	for {
+		if !scanner.Scan() {
+			unexpectedExit = c.claimUnexpectedExit()
+			break
+		}
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
-		c.dispatch(line)
+		if err := c.dispatch(line); err != nil {
+			readErr = err
+			unexpectedExit = c.claimUnexpectedExit()
+			break
+		}
 	}
-	if err := scanner.Err(); err != nil {
-		c.readErr.Store(&err)
+	if readErr == nil {
+		readErr = scanner.Err()
+	}
+	if readErr != nil {
+		c.readErr.Store(&readErr)
 	}
 	// The loop only reaches here when stdout hits EOF / error, i.e. the peer
 	// is gone. If Close did not request this shutdown, it is an unexpected
 	// exit (subprocess crash / peer EOF): fire BackendExited exactly once so
 	// the UI can render a legible "connection lost" state.
-	if !c.closeRequested.Load() {
+	if unexpectedExit {
+		c.stopBackend()
 		c.exitedOnce.Do(func() { close(c.exited) })
 	}
 	// Wake any pending callers.
@@ -369,69 +461,64 @@ func (c *Client) readLoop() {
 	c.mu.Unlock()
 }
 
-// emitEvent delivers an agent event to the Events() consumer without ever
-// blocking the read loop. A blocked send would also stall response dispatch
-// (both run in this single goroutine), freezing every in-flight Call. The
-// 256-slot buffer plus a fast consumer means the default branch is a
-// last-resort safety valve; dropping is correctness-safe because v1 streaming
-// frames each carry a full accumulated snapshot, so a later frame restores any
-// skipped intermediate state.
-func (c *Client) emitEvent(ev *AgentEvent) {
-	select {
-	case c.events <- ev:
-	default:
-		slog.Warn("ompclient: events buffer full, dropping frame to keep response dispatch alive", "kind", ev.Kind)
+// claimUnexpectedExit atomically preserves the first terminal cause.
+func (c *Client) claimUnexpectedExit() bool {
+	if c.exitKind.CompareAndSwap(exitOpen, exitUnexpected) {
+		return true
+	}
+	return c.exitKind.Load() == exitUnexpected
+}
+
+// stopBackend requests subprocess termination without waiting.
+func (c *Client) stopBackend() {
+	c.closed.Store(true)
+	_ = c.stdin.Close()
+	if c.cmd != nil && c.cmd.Process != nil {
+		_ = c.cmd.Process.Signal(os.Interrupt)
 	}
 }
 
-// sendSideChannel delivers a side-channel frame (extension UI request, host
-// tool call/cancel) without ever blocking the read loop. A blocked send in
-// dispatch would also stall response and agent-event delivery — they all run in
-// this single goroutine — so a stuck side-channel consumer would otherwise
-// wedge the whole stream once the 16-slot buffer fills. Unlike agent events,
-// these frames cannot be dropped: each one carries a backend promise that
-// strands (until its multi-minute deadline) without a reply. So on a full
-// buffer we spill to a short-lived goroutine that completes the blocking send.
-// The goroutine recovers because the read loop closes these channels on exit;
-// a spill still in flight at that moment would otherwise panic on
-// send-to-closed-channel and crash the process.
-func sendSideChannel[T any](ch chan T, frame T) {
+// emitEvent offers an event without blocking response dispatch. A full queue
+// is terminal: dropping agent frames loses protocol state.
+func (c *Client) emitEvent(ev *AgentEvent) error {
+	select {
+	case c.events <- ev:
+		return nil
+	default:
+		c.claimUnexpectedExit()
+		return fmt.Errorf("%w: events", ErrIngressFull)
+	}
+}
+
+// sendSideChannel offers a required side-channel frame without blocking the
+// read loop. A full queue is terminal: every frame represents a backend
+// promise that must not be dropped or deferred in an unbounded goroutine.
+func sendSideChannel[T any](c *Client, ch chan<- T, frame T, name string) error {
 	select {
 	case ch <- frame:
+		return nil
 	default:
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					// Lost a frame: the read loop closed the side-channels
-					// mid-spill. Recovering avoids a send-on-closed-channel
-					// crash; log so a frame dropped during shutdown (which
-					// strands its backend promise until deadline) is observable.
-					slog.Debug("ompclient: dropped spilled side-channel frame on shutdown", "recover", r)
-				}
-			}()
-			ch <- frame
-		}()
+		c.claimUnexpectedExit()
+		return fmt.Errorf("%w: %s", ErrIngressFull, name)
 	}
 }
 
 // dispatch routes a single decoded frame to the right channel.
-func (c *Client) dispatch(line []byte) {
+func (c *Client) dispatch(line []byte) error {
 	var probe struct {
 		Type string `json:"type"`
 		ID   string `json:"id,omitempty"`
 	}
 	if err := json.Unmarshal(line, &probe); err != nil {
 		// Malformed; surface as best-effort agent_event with raw payload.
-		c.emitEvent(&AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)})
-		return
+		return c.emitEvent(&AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)})
 	}
 
 	switch probe.Type {
 	case "response":
 		var r Response
 		if err := json.Unmarshal(line, &r); err != nil {
-			c.emitEvent(&AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)})
-			return
+			return c.emitEvent(&AgentEvent{Kind: "_raw", Payload: bytes.Clone(line)})
 		}
 		// Delete the pending entry under the lock before delivering so a
 		// duplicate/late response with the same id finds no waiter (ok=false)
@@ -453,33 +540,34 @@ func (c *Client) dispatch(line []byte) {
 		var r ExtensionUIReq
 		if err := json.Unmarshal(line, &r); err == nil {
 			r.Raw = bytes.Clone(line)
-			sendSideChannel(c.extensionUI, &r)
+			return sendSideChannel(c, c.extensionUI, &r, "extension UI requests")
 		}
 	case "host_tool_call":
 		var r HostToolCallReq
 		if err := json.Unmarshal(line, &r); err == nil {
-			sendSideChannel(c.hostToolCall, &r)
+			return sendSideChannel(c, c.hostToolCall, &r, "host tool calls")
 		}
 	case "host_tool_cancel":
 		var r HostToolCancelReq
 		if err := json.Unmarshal(line, &r); err == nil {
-			sendSideChannel(c.hostToolCancel, &r)
+			return sendSideChannel(c, c.hostToolCancel, &r, "host tool cancels")
 		}
 	case "ready":
 		c.recordReadySchema(line)
 		// Soft-buffer: preserve the ready frame as a raw agent event so a
 		// consumer can still observe the handshake (and any unknown schema)
 		// instead of silently dropping it.
-		c.emitEvent(&AgentEvent{Kind: probe.Type, Payload: bytes.Clone(line)})
+		return c.emitEvent(&AgentEvent{Kind: probe.Type, Payload: bytes.Clone(line)})
 	default:
 		// Treat everything else as an agent event. The frame's "type"
 		// becomes the event Kind (message_update, tool_execution_start,
 		// etc.); the full body is preserved for the consumer to parse.
-		c.emitEvent(&AgentEvent{
+		return c.emitEvent(&AgentEvent{
 			Kind:    probe.Type,
 			Payload: bytes.Clone(line),
 		})
 	}
+	return nil
 }
 
 // recordReadySchema decodes the `ready` handshake frame, stores the

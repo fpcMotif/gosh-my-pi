@@ -139,7 +139,9 @@ func TestHandleToolApprovalReply_SendsConfirmFrame(t *testing.T) {
 	w, pc := gmpWorkspaceWithClient(t)
 	defer pc.close()
 
-	w.HandleToolApprovalReply(permRequestWithID("id-x"), true)
+	if err := w.HandleToolApprovalReply(permRequestWithID("id-x"), true); err != nil {
+		t.Fatalf("HandleToolApprovalReply: %v", err)
+	}
 	frame := pc.waitForFrame(t, 2*time.Second)
 	if frame["type"] != "extension_ui_response" || frame["id"] != "id-x" || frame["confirmed"] != true {
 		t.Fatalf("unexpected approve frame: %#v", frame)
@@ -150,7 +152,9 @@ func TestHandleToolApprovalReply_SendsDenyFrame(t *testing.T) {
 	w, pc := gmpWorkspaceWithClient(t)
 	defer pc.close()
 
-	w.HandleToolApprovalReply(permRequestWithID("id-y"), false)
+	if err := w.HandleToolApprovalReply(permRequestWithID("id-y"), false); err != nil {
+		t.Fatalf("HandleToolApprovalReply: %v", err)
+	}
 	frame := pc.waitForFrame(t, 2*time.Second)
 	if frame["id"] != "id-y" || frame["confirmed"] != false {
 		t.Fatalf("expected confirmed=false deny frame, got %#v", frame)
@@ -165,7 +169,17 @@ func TestHandleToolApprovalReply_NoOpOnEmptyID(t *testing.T) {
 			t.Fatalf("HandleToolApprovalReply panicked: %v", r)
 		}
 	}()
-	w.HandleToolApprovalReply(permRequestWithID(""), true)
+	if err := w.HandleToolApprovalReply(permRequestWithID(""), true); err != nil {
+		t.Fatalf("empty id: %v", err)
+	}
+}
+
+func TestHandleToolApprovalReply_ReturnsMissingClient(t *testing.T) {
+	t.Parallel()
+	w := &GmpWorkspace{}
+	if err := w.HandleToolApprovalReply(permRequestWithID("id-x"), true); err == nil {
+		t.Fatal("expected missing-client error")
+	}
 }
 
 // The tool-approval decoder parity tests (TestDecoderParity / TestEnsureParity_*)

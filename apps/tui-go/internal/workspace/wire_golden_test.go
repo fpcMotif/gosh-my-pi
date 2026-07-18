@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -270,21 +271,48 @@ func TestWireGoldenToolExecutionUpdate(t *testing.T) {
 
 func TestMalformedPresentationPreservesToolResultAndLegacyMetadata(t *testing.T) {
 	t.Parallel()
+	for name, presentation := range map[string]string{
+		"wrong code type":    `{"type":"code","code":"not-an-object"}`,
+		"missing code field": `{"type":"code","code":{}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			w := newTestGmpWorkspace()
+			raw := []byte(fmt.Sprintf(`{
+				"toolCallId":"call-read-malformed",
+				"toolName":"read",
+				"partialResult":{
+					"content":[{"type":"text","text":"1|const value = 1;"}],
+					"details":{"displayContent":{"text":"const value = 1;"}},
+					"presentation":%s
+				}
+			}`, presentation))
+
+			tr := toolResultPart(t, w.handleToolExecutionUpdate(raw))
+			require.NotEmpty(t, tr.Content, "malformed presentation dropped raw tool content")
+			require.Nil(t, tr.Presentation)
+			require.NotEmpty(t, tr.Metadata, "malformed presentation suppressed legacy metadata")
+		})
+	}
+}
+
+func TestEmptyCodePresentationRemainsUsable(t *testing.T) {
+	t.Parallel()
 	w := newTestGmpWorkspace()
 	raw := []byte(`{
-		"toolCallId":"call-read-malformed",
+		"toolCallId":"call-read-empty",
 		"toolName":"read",
 		"partialResult":{
-			"content":[{"type":"text","text":"1|const value = 1;"}],
-			"details":{"displayContent":{"text":"const value = 1;"}},
-			"presentation":{"type":"code","code":"not-an-object"}
+			"content":[{"type":"text","text":""}],
+			"details":{"displayContent":{"text":""}},
+			"presentation":{"type":"code","code":{"code":"","title":"Read empty.ts"}}
 		}
 	}`)
 
 	tr := toolResultPart(t, w.handleToolExecutionUpdate(raw))
-	require.NotEmpty(t, tr.Content, "malformed presentation dropped raw tool content")
-	require.Nil(t, tr.Presentation)
-	require.NotEmpty(t, tr.Metadata, "malformed presentation suppressed legacy metadata")
+	require.NotNil(t, tr.Presentation)
+	require.True(t, tr.Presentation.Usable())
+	require.Empty(t, tr.Metadata, "valid empty code presentation used legacy metadata")
 }
 
 func TestUnknownPresentationPreservesToolResultAndLegacyMetadata(t *testing.T) {

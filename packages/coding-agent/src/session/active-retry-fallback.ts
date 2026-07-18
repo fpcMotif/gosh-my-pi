@@ -80,6 +80,7 @@ export class ActiveRetryFallback {
 		const currentThinkingLevel = this.#ctx.getThinkingLevel();
 		const nextThinkingLevel = selector.thinkingLevel ?? currentThinkingLevel;
 
+		this.#ctx.sessionManager.assertWritable();
 		this.#ctx.setModelWithReset(candidate);
 		this.#ctx.sessionManager.appendModelChange(`${candidate.provider}/${candidate.id}`, "temporary");
 		this.#ctx.settings.getStorage()?.recordModelUsage(`${candidate.provider}/${candidate.id}`);
@@ -137,6 +138,7 @@ export class ActiveRetryFallback {
 		const currentThinkingLevel = this.#ctx.getThinkingLevel();
 		const thinkingToApply =
 			currentThinkingLevel === lastAppliedFallbackThinkingLevel ? originalThinkingLevel : currentThinkingLevel;
+		this.#ctx.sessionManager.assertWritable();
 		this.#ctx.setModelWithReset(primaryModel);
 		this.#ctx.sessionManager.appendModelChange(`${primaryModel.provider}/${primaryModel.id}`, "temporary");
 		this.#ctx.settings.getStorage()?.recordModelUsage(`${primaryModel.provider}/${primaryModel.id}`);

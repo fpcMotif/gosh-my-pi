@@ -14,13 +14,8 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/util"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/workspace"
 )
-
-// gmpVirtualProviderID names the legacy synthetic provider kept only as
-// a fallback while the backend catalog is unavailable. In normal gmp
-// bridge mode the picker should render real backend providers fetched
-// through models.catalog, not this placeholder.
-const gmpVirtualProviderID = "gmp"
 
 // ModelType represents the type of model to select.
 type ModelType int
@@ -83,7 +78,7 @@ type Models struct {
 	isOnboarding bool
 
 	modelType ModelType
-	providers []catwalk.Provider
+	catalog   workspace.ModelCatalog
 
 	keyMap struct {
 		Tab      key.Binding
@@ -102,10 +97,11 @@ type Models struct {
 var _ Dialog = (*Models)(nil)
 
 // NewModels creates a new Models dialog.
-func NewModels(com *common.Common, isOnboarding bool) (*Models, error) {
+func NewModels(com *common.Common, catalog workspace.ModelCatalog, isOnboarding bool) (*Models, error) {
 	t := com.Styles
 	m := &Models{}
 	m.com = com
+	m.catalog = catalog
 	m.isOnboarding = isOnboarding
 
 	help := help.New()
@@ -147,24 +143,6 @@ func NewModels(com *common.Common, isOnboarding bool) (*Models, error) {
 		key.WithHelp("↑", "previous item"),
 	)
 	m.keyMap.Close = CloseKey
-
-	cfg := m.com.Config()
-	// When disable_default_providers is set, the local config explicitly
-	// disclaims the catwalk catalog (e.g. gmp mode owns its own credential
-	// store via AuthStorage). Skip the catalog fetch entirely so the picker
-	// only surfaces what cfg.Providers actually contains. Gmp mode also
-	// implies the same suppression even if the flag was not propagated.
-	suppress := m.isGmpMode() ||
-		(cfg != nil && cfg.Options != nil && cfg.Options.DisableDefaultProviders)
-	if suppress {
-		m.providers = nil
-	} else {
-		var err error
-		m.providers, err = config.Providers(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get providers: %w", err)
-		}
-	}
 
 	if err := m.setProviderItems(); err != nil {
 		return nil, fmt.Errorf("failed to set provider items: %w", err)
@@ -344,16 +322,6 @@ func (m *Models) FullHelp() [][]key.Binding {
 	return [][]key.Binding{m.ShortHelp()}
 }
 
-// isGmpMode reports whether the picker is running over the gmp RPC
-// bridge. Returns false when the workspace has not been wired (test
-// scaffolds that build a Models without going through Common).
-func (m *Models) isGmpMode() bool {
-	if m.com == nil || m.com.Workspace == nil {
-		return false
-	}
-	return m.com.Workspace.IsGmpMode()
-}
-
 func (m *Models) isSelectedConfigured() bool {
 	selectedItem := m.list.SelectedItem()
 	if selectedItem == nil {
@@ -363,149 +331,81 @@ func (m *Models) isSelectedConfigured() bool {
 	if !ok {
 		return false
 	}
-	providerID := string(modelItem.prov.ID)
-	_, isConfigured := m.com.Config().Providers.Get(providerID)
-	return isConfigured
+	entry, ok := m.catalogEntry(modelItem.SelectedModel())
+	return ok && entry.Authenticated && entry.LoginAvailable
 }
 
-func (m *Models) providerConfiguredForDisplay(provider config.ProviderConfig, configured bool) bool {
-	if !m.isGmpMode() {
-		return configured
-	}
-	return provider.APIKey != ""
-}
-
-// setProviderItems sets the provider items in the list.
+// setProviderItems adapts the backend-owned catalog for the inherited list.
+// It does not consult the local provider catalog: that catalog belongs to the
+// legacy Catwalk path, not the RPC backend.
 func (m *Models) setProviderItems() error {
 	t := m.com.Styles
 	cfg := m.com.Config()
 
 	var selectedItemID string
 	selectedType := m.modelType.Config()
-	currentModel := cfg.Models[selectedType]
+	currentModel, hasCurrentModel := m.roleSelection(modelRole(m.modelType))
 	recentItems := cfg.RecentModels[selectedType]
 
-	// Track providers already added to avoid duplicates
-	addedProviders := make(map[string]bool)
-
-	// Get a list of known providers to compare against. Honor
-	// disable_default_providers so callers that opt out of the catwalk
-	// catalog (e.g. gmp mode) do not silently re-acquire it here.
-	var knownProviders []catwalk.Provider
-	if cfg.Options == nil || !cfg.Options.DisableDefaultProviders {
-		var err error
-		knownProviders, err = config.Providers(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to get providers: %w", err)
-		}
-	}
-
-	containsProviderFunc := func(id string) func(p catwalk.Provider) bool {
-		return func(p catwalk.Provider) bool {
-			return p.ID == catwalk.InferenceProvider(id)
-		}
-	}
-
-	// itemsMap contains the keys of added model items.
 	itemsMap := make(map[string]*ModelItem)
-	groups := []ModelGroup{}
-	for id, p := range cfg.Providers.Seq2() {
-		if p.Disable {
+	providerEntries := make(map[string][]workspace.ModelCatalogEntry)
+	providerNames := make(map[string]string)
+	for _, entry := range m.catalog.Models {
+		if entry.Provider == "" || entry.ID == "" {
 			continue
 		}
-
-		// Check if this provider is not in the known providers list
-		if !slices.ContainsFunc(knownProviders, containsProviderFunc(id)) ||
-			!slices.ContainsFunc(m.providers, containsProviderFunc(id)) {
-			provider := p.ToProvider()
-
-			// Add this unknown provider to the list
-			name := cmp.Or(p.Name, id)
-
-			addedProviders[id] = true
-
-			group := NewModelGroup(t, name, m.providerConfiguredForDisplay(p, true))
-			for _, model := range p.Models {
-				item := NewModelItem(t, provider, model, m.modelType, false)
-				group.AppendItems(item)
-				itemsMap[item.ID()] = item
-				if model.ID == currentModel.Model && string(provider.ID) == currentModel.Provider {
-					selectedItemID = item.ID()
-				}
-			}
-			if len(group.Items) > 0 {
-				groups = append(groups, group)
-			}
-		}
+		providerEntries[entry.Provider] = append(providerEntries[entry.Provider], entry)
+		providerNames[entry.Provider] = cmp.Or(entry.ProviderName, entry.Provider)
 	}
 
-	// Move "Charm Hyper" to first position.
-	// (But still after recent models and custom providers).
-	slices.SortStableFunc(m.providers, func(a, b catwalk.Provider) int {
-		switch {
-		case a.ID == "hyper":
-			return -1
-		case b.ID == "hyper":
-			return 1
-		default:
-			return 0
+	providerIDs := make([]string, 0, len(providerEntries))
+	for providerID := range providerEntries {
+		providerIDs = append(providerIDs, providerID)
+	}
+	slices.SortFunc(providerIDs, func(a, b string) int {
+		if order := cmp.Compare(providerNames[a], providerNames[b]); order != 0 {
+			return order
 		}
+		return cmp.Compare(a, b)
 	})
 
-	// Now add known providers from the predefined list
-	for _, provider := range m.providers {
-		providerID := string(provider.ID)
-		if addedProviders[providerID] {
-			continue
-		}
-
-		providerConfig, providerConfigured := cfg.Providers.Get(providerID)
-		if providerConfigured && providerConfig.Disable {
-			continue
-		}
-
-		displayProvider := provider
-		if providerConfigured {
-			displayProvider.Name = cmp.Or(providerConfig.Name, displayProvider.Name)
-			modelIndex := make(map[string]int, len(displayProvider.Models))
-			for i, model := range displayProvider.Models {
-				modelIndex[model.ID] = i
+	groups := make([]ModelGroup, 0, len(providerIDs))
+	for _, providerID := range providerIDs {
+		entries := providerEntries[providerID]
+		slices.SortFunc(entries, func(a, b workspace.ModelCatalogEntry) int {
+			if order := cmp.Compare(cmp.Or(a.Name, a.ID), cmp.Or(b.Name, b.ID)); order != 0 {
+				return order
 			}
-			for _, model := range providerConfig.Models {
-				if model.ID == "" {
-					continue
-				}
-				if idx, ok := modelIndex[model.ID]; ok {
-					if model.Name != "" {
-						displayProvider.Models[idx].Name = model.Name
-					}
-					continue
-				}
-				model.Name = cmp.Or(model.Name, model.ID)
-				displayProvider.Models = append(displayProvider.Models, model)
-				modelIndex[model.ID] = len(displayProvider.Models) - 1
+			return cmp.Compare(a.ID, b.ID)
+		})
+
+		provider := catwalk.Provider{ID: catwalk.InferenceProvider(providerID), Name: providerNames[providerID]}
+		configured := false
+		group := NewModelGroup(t, providerNames[providerID], false)
+		for _, entry := range entries {
+			configured = configured || entry.Authenticated
+			model := catwalk.Model{
+				ID:               entry.ID,
+				Name:             displayCatalogModelName(entry),
+				ContextWindow:    entry.ContextWindow,
+				DefaultMaxTokens: entry.MaxTokens,
+				CanReason:        entry.Reasoning,
+				SupportsImages:   entry.SupportsImages,
 			}
-		}
-
-		name := cmp.Or(displayProvider.Name, providerID)
-
-		group := NewModelGroup(t, name, m.providerConfiguredForDisplay(providerConfig, providerConfigured))
-		for _, model := range displayProvider.Models {
 			item := NewModelItem(t, provider, model, m.modelType, false)
 			group.AppendItems(item)
 			itemsMap[item.ID()] = item
-			if model.ID == currentModel.Model && string(provider.ID) == currentModel.Provider {
+			if hasCurrentModel && item.ID() == modelKey(currentModel.Provider, currentModel.Model) {
 				selectedItemID = item.ID()
 			}
 		}
-
+		group.configured = configured
 		groups = append(groups, group)
 	}
 
 	if len(recentItems) > 0 {
 		recentGroup := NewModelGroup(t, "Recently used", false)
 
-		var validRecentItems []config.SelectedModel
 		for _, recent := range recentItems {
 			key := modelKey(recent.Provider, recent.Model)
 			item, ok := itemsMap[key]
@@ -517,17 +417,9 @@ func (m *Models) setProviderItems() error {
 			item = NewModelItem(t, item.prov, item.model, m.modelType, true)
 			item.showProvider = true
 
-			validRecentItems = append(validRecentItems, recent)
 			recentGroup.AppendItems(item)
 			if recent.Model == currentModel.Model && recent.Provider == currentModel.Provider {
 				selectedItemID = item.ID()
-			}
-		}
-
-		if len(validRecentItems) != len(recentItems) {
-			// FIXME: Does this need to be here? Is it mutating the config during a read?
-			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, fmt.Sprintf("recent_models.%s", selectedType), validRecentItems); err != nil {
-				return fmt.Errorf("failed to update recent models: %w", err)
 			}
 		}
 
@@ -547,6 +439,42 @@ func (m *Models) setProviderItems() error {
 	}
 
 	return nil
+}
+
+func modelRole(modelType ModelType) string {
+	if modelType == ModelTypeSmall {
+		return "smol"
+	}
+	return "default"
+}
+
+func (m *Models) roleSelection(role string) (config.SelectedModel, bool) {
+	for _, assignment := range m.catalog.Roles {
+		if assignment.Role == role && assignment.Provider != "" && assignment.ModelID != "" {
+			return config.SelectedModel{Provider: assignment.Provider, Model: assignment.ModelID}, true
+		}
+	}
+	return config.SelectedModel{}, false
+}
+
+func (m *Models) catalogEntry(model config.SelectedModel) (workspace.ModelCatalogEntry, bool) {
+	for _, entry := range m.catalog.Models {
+		if entry.Provider == model.Provider && entry.ID == model.Model {
+			return entry, true
+		}
+	}
+	return workspace.ModelCatalogEntry{}, false
+}
+
+func displayCatalogModelName(entry workspace.ModelCatalogEntry) string {
+	name := cmp.Or(entry.Name, entry.ID)
+	if entry.Available {
+		return name
+	}
+	if entry.LoginAvailable {
+		return name + " (login required)"
+	}
+	return name + " (unavailable)"
 }
 
 func modelKey(providerID, modelID string) string {

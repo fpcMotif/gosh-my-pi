@@ -2038,8 +2038,7 @@ export class SessionManager {
 	_persist(entry: SessionEntry): void {
 		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
 			return;
-		const persistError = this.#log.getError();
-		if (persistError) throw persistError;
+		this.assertWritable();
 
 		// Normally we wait for the first assistant message before persisting to avoid
 		// creating files for sessions that never produce output. Once ensureOnDisk() has
@@ -2073,7 +2072,16 @@ export class SessionManager {
 		}
 	}
 
+	/** Throw before a state change when the asynchronous persistence chain has failed. */
+	assertWritable(): void {
+		if (!this.persist || this.#sessionFile === null || this.#sessionFile === undefined || this.#sessionFile === "")
+			return;
+		const persistError = this.#log.getError();
+		if (persistError) throw persistError;
+	}
+
 	#appendEntry(entry: SessionEntry): void {
+		this.assertWritable();
 		this.#fileEntries.push(entry);
 		this.#byId.set(entry.id, entry);
 		this.#leafId = entry.id;

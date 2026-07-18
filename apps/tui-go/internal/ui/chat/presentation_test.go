@@ -171,6 +171,43 @@ func TestPresentationRendererUsesLifecycleErrorOverPresentationHint(t *testing.T
 	require.True(t, strings.HasPrefix(plain, styles.ToolError+" "), "presentation hint overrode lifecycle error: %q", plain)
 }
 
+func TestPresentationRendererUsesSemanticWarningAfterSuccessfulLifecycle(t *testing.T) {
+	t.Parallel()
+	sty := styles.CharmtonePantera()
+	renderer := newPresentationToolRenderer(fallbackToolRenderer{output: "LEGACY"})
+
+	for name, presentation := range map[string]*message.ToolPresentation{
+		"status icon": {
+			Type: message.ToolPresentationTypeStatus,
+			Status: &message.ToolPresentationStatus{
+				Icon:  message.ToolPresentationIconWarning,
+				Title: "Read",
+			},
+		},
+		"block state": {
+			Type:     message.ToolPresentationTypeBlock,
+			State:    message.ToolPresentationStateWarning,
+			Sections: []message.ToolPresentationSection{},
+		},
+		"code status": {
+			Type: message.ToolPresentationTypeCode,
+			Code: &message.ToolPresentationCode{
+				Code:   "const value = 1;",
+				Status: message.ToolPresentationCodeStatusWarning,
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := ansi.Strip(renderer.RenderTool(&sty, 40, &ToolRenderOpts{
+				ToolCall: message.ToolCall{Name: "read", Presentation: presentation},
+				Status:   ToolStatusSuccess,
+			}))
+			require.True(t, strings.HasPrefix(got, styles.ToolWarning+" "), "semantic warning missing: %q", got)
+		})
+	}
+}
+
 func TestPresentationRendererUsesOnlyCurrentPhase(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()

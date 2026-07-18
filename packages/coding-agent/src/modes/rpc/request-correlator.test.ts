@@ -83,6 +83,17 @@ describe("RequestCorrelator", () => {
 		});
 	});
 
+	test("close cancels current requests and rejects later registrations", async () => {
+		const c = new RequestCorrelator();
+		const current = c.register<string>();
+		expect(c.close("transport closed")).toBe(1);
+		await expect(current.promise).rejects.toThrow("transport closed");
+
+		const later = c.register<string>({ id: "after-eof" });
+		expect(c.pendingCount).toBe(0);
+		await expect(later.promise).rejects.toThrow("transport closed");
+	});
+
 	test("timeout fires and resolves with defaultValue", async () => {
 		const c = new RequestCorrelator();
 		let timeoutFired = false;

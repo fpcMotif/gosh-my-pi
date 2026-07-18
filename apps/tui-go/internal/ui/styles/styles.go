@@ -28,6 +28,8 @@ const (
 	ToolPending string = "●"
 	ToolSuccess string = "✓"
 	ToolError   string = "×"
+	ToolWarning string = "!"
+	ToolInfo    string = "i"
 
 	RadioOn  string = "◉"
 	RadioOff string = "○"
@@ -260,6 +262,8 @@ type Styles struct {
 		IconSuccess   lipgloss.Style
 		IconError     lipgloss.Style
 		IconCancelled lipgloss.Style
+		IconWarning   lipgloss.Style
+		IconInfo      lipgloss.Style
 
 		// Tool name styles
 		NameNormal lipgloss.Style // Top-level tool name

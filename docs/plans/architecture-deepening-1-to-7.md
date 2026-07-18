@@ -1,6 +1,7 @@
 # Architecture Deepening Plan: Candidates 1 to 7
 
-Status: draft plan for sequential execution.
+Status: complete. Steps 1-6 shipped. Candidate 7 was verified, partly applied,
+then closed when further extraction failed the leverage test.
 
 This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architecture/LANGUAGE.md`:
 **Module**, **Interface**, **Implementation**, **Depth**, **Seam**, **Adapter**, **Leverage**, **Locality**.
@@ -42,8 +43,10 @@ This plan follows the vocabulary in `CONTEXT.md` and `improve-codebase-architect
 - [x] **Step 5 complete** - ToolPresentation module.
    - _Result:_ Frontend-neutral presentation types and a session projector now cross RPC. `tui-go` renders structured summaries first and keeps legacy edit-result text as an explicit fallback. Contract tests, Go adapter tests, wire checks, and live terminal proof cover the migrated path.
    - _Downside/rollback:_ Legacy `pi-tui` still owns its width-sensitive rendering. Rollback by removing the RPC presentation fields and returning `tui-go` to legacy result parsing.
-- [ ] **Step 6 pending** — Direct `RpcModelCatalog` picker.
-- [ ] **Step 7 pending** — Collapse gmp-only `Workspace` seam.
+- [x] **Step 6 complete** — Direct `RpcModelCatalog` picker.
+   - _Result:_ Go owns an immutable backend-shaped catalog. Picker, role assignment, active model, thinking, auth continuation, header, and onboarding use backend truth and authoritative receipts. RPC work is bounded and off the Bubble Tea update loop.
+- [x] **Step 7 closed after verification** — Collapse gmp-only `Workspace` seam.
+   - _Result:_ `IsGmpMode()` and its false branches are gone. Further Interface splitting is rejected: one live Adapter exists, `Common.Workspace` is shared across the UI, and tests already embed the Interface and override only exercised methods. A split now would rethread dependencies without hiding complexity. Reopen only with a second Adapter or a concrete ownership redesign.
 
 ## 1. AgentSession Reactor event routing
 
@@ -490,6 +493,8 @@ Start with a small tool set, then migrate tool batches.
 
 ## 6. Direct RpcModelCatalog picker
 
+Status: complete. The slices below are the implementation record.
+
 ### Files
 
 - `packages/coding-agent/src/modes/rpc/rpc-types.ts`
@@ -561,6 +566,9 @@ The model picker consumes `RpcModelCatalog` directly.
 
 ## 7. Collapse gmp-only Workspace seam
 
+Status: closed after verification. `IsGmpMode()` is removed. Further Interface
+narrowing is rejected until the ownership or Adapter count changes.
+
 ### Files
 
 - `apps/tui-go/internal/workspace/workspace.go`
@@ -572,13 +580,16 @@ The model picker consumes `RpcModelCatalog` directly.
 
 ### Problem
 
-`Workspace.IsGmpMode()` remains even though ADR-0002 says `apps/tui-go` is gmp-only. This is a hypothetical Seam: one real Adapter remains.
-
-The large `Workspace` Interface also makes tests implement many unrelated methods. That is shallow: the Interface exposes nearly as much complexity as the Implementation.
+The obsolete `Workspace.IsGmpMode()` seam is gone. The remaining `Workspace`
+Interface is large, but it has one live Adapter. `Common.Workspace` supplies
+capabilities across most UI paths. Tests embed the Interface and override only
+the methods each case exercises; they do not implement every method.
 
 ### Deletion test
 
-Deleting `IsGmpMode()` should remove branches rather than spread logic. If logic spreads, candidate 6 was incomplete. Deleting the whole `Workspace` Interface today would be too large, but splitting caller-local Interfaces should concentrate test knowledge.
+Deleting `IsGmpMode()` removed branches. Splitting caller-local Interfaces now
+would move the same dependency list through `Common` and its consumers. That
+adds surface without a second Adapter, a narrower owner, or a safer test seam.
 
 ### Target shape
 
@@ -596,18 +607,19 @@ Deleting `IsGmpMode()` should remove branches rather than spread logic. If logic
    - Remove comments that mention `AppWorkspace` or `ClientWorkspace` as live Adapters.
    - Tests stop toggling gmp mode flags.
 
-3. **Narrow test seams**
-   - For model picker tests, define only the methods the picker uses.
-   - For auth flow tests, define only auth-related methods.
-   - Keep these Interfaces near the caller so they do not become new global shallow Modules.
+3. **Verify test seams**
+   - Model, auth, and dialog tests embed `workspace.Workspace` and override only
+     exercised methods.
+   - A caller-local Interface without a distinct owner would be ceremonial.
 
 4. **Review legacy config mutation methods**
    - `SetProviderAPIKey`, `ImportCopilot`, `RefreshOAuthToken`, and related legacy methods may be vestigial.
    - Do not delete until grep proves no live caller or an ADR says they are obsolete.
 
-5. **Shrink Workspace Interface**
-   - Move toward smaller Interfaces by area: session, model catalog, auth, messages, permissions.
-   - Only introduce a Seam when there are two real Adapters or a strong test seam need.
+5. **Reject premature Interface splitting**
+   - Keep the current shared Interface while one Adapter owns all capabilities.
+   - Revisit only when a second Adapter, a distinct capability owner, or a real
+     test seam gives the split leverage.
 
 ### Tests
 
@@ -619,7 +631,8 @@ Deleting `IsGmpMode()` should remove branches rather than spread logic. If logic
 
 - `IsGmpMode()` is gone.
 - No false gmp branch remains in live tui-go code.
-- Tests use narrow caller-local Interfaces instead of fake full Workspaces.
+- No ceremonial caller-local Interface is added without a distinct owner or
+  Adapter.
 
 ---
 

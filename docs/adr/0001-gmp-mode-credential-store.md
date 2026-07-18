@@ -4,6 +4,38 @@
 
 Accepted — 2026-05-07.
 
+## Implementation update — 2026-07-18
+
+The ownership decision stands. The old Bridge Model Catalog and synthetic Go
+provider are retired. `GmpWorkspace` now owns an immutable `ModelCatalog`
+projection of `RpcModelCatalog`; the picker reads it directly. Go neither
+rebuilds `cfg.Providers` nor writes `cfg.Models` as backend truth.
+
+`models.catalog` includes concrete provider/model targets for resolvable role
+selectors and preserves unresolved assignments without inventing a target.
+`default` changes the active model; named roles only assign a role. The Go
+`IsGmpMode()` seam is removed. `NewGmpWorkspace` is pure; `cmd/root.go` owns
+one bounded 30-second state-and-messages snapshot.
+
+The TypeScript RPC inbound router starts before awaited `session_start` hooks.
+Go starts its side-channel drainers before the first snapshot call. A startup
+dialog therefore receives a safe cancellation instead of deadlocking the
+command stream; agent events still wait until the snapshot is complete.
+
+Onboarding now uses `Workspace.AgentIsReady()` from that backend state; it
+does not infer readiness from `Config.IsConfigured()` or `cfg.Providers`.
+The full backend `Model` and nullable thinking level drive header capability.
+
+The TypeScript `gmp/gmp-backend` response remains isolated old-host
+compatibility. New Go code cannot use it. This update supersedes only the
+implementation details below, not the auth-store ownership decision.
+
+## Historical decision text — 2026-05-07
+
+The remaining sections preserve the original record. Bridge Model Catalog,
+synthetic provider, and `IsGmpMode()` describe the old implementation; the
+update above is current.
+
 ## Context
 
 `apps/tui-go` is a fork of charmbracelet/crush that can see two

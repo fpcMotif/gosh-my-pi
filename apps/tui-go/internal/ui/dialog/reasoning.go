@@ -8,7 +8,6 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/list"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
@@ -219,15 +218,9 @@ func (r *Reasoning) FullHelp() [][]key.Binding {
 }
 
 func (r *Reasoning) setReasoningItems() error {
-	cfg := r.com.Config()
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
-	if !ok {
-		return errors.New("agent configuration not found")
-	}
-
-	selectedModel := cfg.Models[agentCfg.Model]
-	model := cfg.GetModelByType(agentCfg.Model)
-	if model == nil {
+	agentModel := r.com.Workspace.AgentModel()
+	model := agentModel.CatwalkCfg
+	if model.ID == "" {
 		return errors.New("model configuration not found")
 	}
 
@@ -235,7 +228,7 @@ func (r *Reasoning) setReasoningItems() error {
 		return errors.New("no reasoning levels available")
 	}
 
-	currentEffort := selectedModel.ReasoningEffort
+	currentEffort := agentModel.ModelCfg.ReasoningEffort
 	if currentEffort == "" {
 		currentEffort = model.DefaultReasoningEffort
 	}

@@ -5,13 +5,12 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/fsext"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/common"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/styles"
-	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -143,10 +142,9 @@ func renderHeaderDetails(
 		parts = append(parts, t.LSP.ErrorDiagnostic.Render(fmt.Sprintf("%s%d", styles.LSPErrorIcon, lspErrorCount)))
 	}
 
-	agentCfg := com.Config().Agents[config.AgentCoder]
-	model := com.Config().GetModelByType(agentCfg.Model)
-	if model != nil && model.ContextWindow > 0 {
-		percentage := (float64(session.CompletionTokens+session.PromptTokens) / float64(model.ContextWindow)) * 100
+	contextWindow := com.Workspace.AgentModel().CatwalkCfg.ContextWindow
+	if contextWindow > 0 {
+		percentage := (float64(session.CompletionTokens+session.PromptTokens) / float64(contextWindow)) * 100
 		formattedPercentage := t.Header.Percentage.Render(fmt.Sprintf("%d%%", int(percentage)))
 		parts = append(parts, formattedPercentage)
 	}
