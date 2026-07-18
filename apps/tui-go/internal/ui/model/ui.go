@@ -23,7 +23,6 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/layout"
@@ -79,10 +78,11 @@ const (
 	minViewportHeight = 10
 )
 
-// backendExitedHeading is the heading shown when the gmp RPC subprocess
-// exits unexpectedly. Exported as a constant so the render state can be
-// asserted by tests without matching on incidental layout.
+// backendExitedHeading is the terminal-state heading. Tests assert it without
+// matching incidental layout.
 const backendExitedHeading = "Backend connection lost"
+
+const backendOverloadDetail = "The UI event queue filled before it could render updates. The backend was stopped."
 
 // If pasted text has more than 10 newlines, treat it as a file attachment.
 const pasteLinesThreshold = 10
@@ -148,6 +148,14 @@ type (
 		Content     string
 		Attachments []message.Attachment
 	}
+	// sessionCreationResultMsg resumes a first prompt after the backend has
+	// created its session off the Bubble Tea update loop.
+	sessionCreationResultMsg struct {
+		Session     session.Session
+		Content     string
+		Attachments []message.Attachment
+		Err         error
+	}
 
 	// closeDialogMsg is sent to close the current dialog.
 	closeDialogMsg struct{}
@@ -206,7 +214,8 @@ type UI struct {
 	status *Status
 
 	// isCanceling tracks whether the user has pressed escape once to cancel.
-	isCanceling bool
+	isCanceling     bool
+	sessionCreating bool
 
 	header *header
 
@@ -296,7 +305,8 @@ type UI struct {
 		draft    string
 	}
 
-	pendingGmpModelSelection *dialog.ActionSelectModel
+	pendingGmpModelSelection *pendingGmpModelSelection
+	modelCatalogRequestEpoch uint64
 
 	// pendingToolApproval holds the gmp tool-approval request whose permission
 	// dialog is currently open and unanswered. In gmp bridge mode every
@@ -307,12 +317,12 @@ type UI struct {
 	// deadline. Cleared once the user answers. Nil outside gmp mode.
 	pendingToolApproval *permission.PermissionRequest
 
-	// backendExited is set when the gmp RPC subprocess has exited
-	// unexpectedly (see workspace.BackendExitedMsg). While true, View
-	// renders a legible "backend connection lost" banner instead of the
-	// frozen transcript. There is no auto-respawn/reconnect — this is only
-	// the render state.
-	backendExited bool
+	// backendExited is set when the gmp RPC subprocess exits or the UI
+	// overload guard stops it (see workspace.BackendExitedMsg). While true,
+	// View renders a legible terminal banner instead of the frozen transcript.
+	// There is no auto-respawn/reconnect — this is only render state.
+	backendExited     bool
+	backendExitReason workspace.BackendExitReason
 }
 
 // New creates a new instance of the [UI] model.
@@ -393,7 +403,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 
 	desiredState := uiLanding
 	desiredFocus := uiFocusEditor
-	if !com.Config().IsConfigured() {
+	if !com.Workspace.AgentIsReady() {
 		desiredState = uiOnboarding
 	} else if n, _ := com.Workspace.ProjectNeedsInitialization(); n {
 		desiredState = uiInitialize
@@ -623,6 +633,25 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sendMessageMsg:
 		cmds = append(cmds, m.sendMessage(msg.Content, msg.Attachments...))
+	case sessionCreationResultMsg:
+		m.sessionCreating = false
+		if msg.Err != nil {
+			if !errors.Is(msg.Err, workspace.ErrSessionCreationCancelled) {
+				cmds = append(cmds, util.ReportError(msg.Err))
+			}
+			break
+		}
+		if msg.Session.ID == "" {
+			cmds = append(cmds, util.ReportError(errors.New("backend created a session without an id")))
+			break
+		}
+		if m.forceCompactMode {
+			m.isCompact = true
+		}
+		m.session = &msg.Session
+		m.sessionFiles = nil
+		m.setState(uiChat, m.focus)
+		cmds = append(cmds, m.runMessage(msg.Session.ID, msg.Content, msg.Attachments))
 
 	case userCommandsLoadedMsg:
 		m.customCommands = msg.Commands
@@ -747,14 +776,27 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.openOrUpdateGmpAuthDialog(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		if result, ok := msg.(auth.ShowResult); ok && result.Success {
-			if cmd := m.retryPendingGmpModelSelection(); cmd != nil {
+		if result, ok := msg.(auth.ShowResult); ok {
+			if !result.Success {
+				m.pendingGmpModelSelection = nil
+			} else if m.pendingGmpModelSelection == nil || result.Provider != m.pendingGmpModelSelection.provider {
+				m.pendingGmpModelSelection = nil
+			} else if cmd := m.retryPendingGmpModelSelection(); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
 	case auth.Submit, auth.Confirm, auth.Cancel:
+		if _, ok := msg.(auth.Cancel); ok {
+			m.pendingGmpModelSelection = nil
+		}
 		if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
-			gw.HandleAuthReply(msg)
+			reply := msg
+			cmds = append(cmds, func() tea.Msg {
+				if err := gw.HandleAuthReply(reply); err != nil {
+					return util.ReportError(err)()
+				}
+				return nil
+			})
 		}
 
 	// Tool-approval gate (ADR 0007): gmp emits tool.request_approval before
@@ -769,12 +811,26 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// to "running"; park it in awaiting-permission while the gate is open so
 		// the transcript doesn't show a tool running before it was approved.
 		m.setToolItemStatus(msg.ToolCallID, chat.ToolStatusAwaitingPermission)
+	case toolApprovalReplyResultMsg:
+		if msg.err != nil {
+			cmds = append(cmds, util.ReportError(msg.err))
+			if m.pendingToolApproval != nil && m.pendingToolApproval.ID == msg.permission.ID {
+				m.openPermissionDialog(msg.permission)
+				m.setToolItemStatus(msg.permission.ToolCallID, chat.ToolStatusAwaitingPermission)
+			}
+			break
+		}
+		if m.pendingToolApproval != nil && m.pendingToolApproval.ID == msg.permission.ID {
+			m.pendingToolApproval = nil
+		}
+		m.setToolItemStatus(msg.permission.ToolCallID, chat.ToolStatusRunning)
 
-	// The gmp RPC subprocess exited unexpectedly (peer EOF / crash). Enter
-	// the backend-exited render state so View draws a legible banner instead
-	// of a frozen transcript. No auto-respawn — render state only.
+		// The gmp RPC subprocess exited or the ingress guard stopped it. Enter the
+		// terminal render state so View draws a legible banner instead of a frozen
+		// transcript. No auto-respawn — render state only.
 	case workspace.BackendExitedMsg:
 		m.backendExited = true
+		m.backendExitReason = msg.Reason
 		m.todoIsSpinning = false
 		return m, nil
 
@@ -978,6 +1034,25 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleGmpModelSelectionResult(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case gmpModelCatalogResultMsg:
+		if msg.epoch != m.modelCatalogRequestEpoch {
+			break
+		}
+		if msg.err != nil {
+			cmds = append(cmds, util.ReportError(msg.err))
+			break
+		}
+		modelsDialog, err := dialog.NewModels(m.com, msg.catalog, msg.isOnboarding)
+		if err != nil {
+			cmds = append(cmds, util.ReportError(err))
+			break
+		}
+		m.dialog.OpenDialog(modelsDialog)
+	case gmpPendingModelAuthResultMsg:
+		m.pendingGmpModelSelection = nil
+		if msg.err != nil {
+			cmds = append(cmds, util.ReportError(msg.err))
+		}
 	case creditsUpdatedMsg:
 		m.hyperCredits = &msg.credits
 	case util.InfoMsg:
@@ -1066,7 +1141,7 @@ func (m *UI) setSessionMessages(msgs []message.Message) tea.Cmd {
 		case message.Assistant:
 			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, toolResultMap)...)
 			if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn {
-				infoItem := chat.NewAssistantInfoItem(m.com.Styles, msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
+				infoItem := chat.NewAssistantInfoItem(m.com.Styles, msg, m.assistantModelDisplayInfo(msg), time.Unix(m.lastUserMessageTime, 0))
 				items = append(items, infoItem)
 			}
 		default:
@@ -1195,7 +1270,7 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 			}
 		}
 		if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn {
-			infoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
+			infoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.assistantModelDisplayInfo(&msg), time.Unix(m.lastUserMessageTime, 0))
 			m.chat.AppendMessages(infoItem)
 			if m.chat.Follow() {
 				if cmd := m.chat.ScrollToBottomAndAnimate(); cmd != nil {
@@ -1272,7 +1347,7 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 
 	if isEndTurn {
 		if infoItem := m.chat.MessageItem(chat.AssistantInfoID(msg.ID)); infoItem == nil {
-			newInfoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
+			newInfoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.assistantModelDisplayInfo(&msg), time.Unix(m.lastUserMessageTime, 0))
 			m.chat.AppendMessages(newInfoItem)
 		}
 	}
@@ -1434,7 +1509,11 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			defer fimage.ResetCache()
 		}
 
+		closedModelsDialog := m.dialog.ContainsDialog(dialog.ModelsID)
 		m.dialog.CloseFrontDialog()
+		if closedModelsDialog {
+			m.invalidateGmpModelCatalogRequest()
+		}
 
 		if isOnboarding {
 			if cmd := m.openModelsDialog(); cmd != nil {
@@ -1494,7 +1573,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			break
 		}
 		cmds = append(cmds, func() tea.Msg {
-			err := m.com.Workspace.AgentSummarize(context.Background(), msg.SessionID)
+			ctx, cancel := context.WithTimeout(context.Background(), backendLongOperationTimeout)
+			defer cancel()
+			err := m.com.Workspace.AgentSummarize(ctx, msg.SessionID)
 			if err != nil {
 				return util.ReportError(err)()
 			}
@@ -1520,29 +1601,17 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleThinking:
-		cmds = append(cmds, func() tea.Msg {
-			cfg := m.com.Config()
-			if cfg == nil {
-				return util.ReportError(errors.New("configuration not found"))()
-			}
-
-			agentCfg, ok := cfg.Agents[config.AgentCoder]
-			if !ok {
-				return util.ReportError(errors.New("agent configuration not found"))()
-			}
-
-			currentModel := cfg.Models[agentCfg.Model]
-			currentModel.Think = !currentModel.Think
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
-				return util.ReportError(err)()
-			}
-			m.com.Workspace.UpdateAgentModel(context.TODO())
-			status := "disabled"
-			if currentModel.Think {
-				status = "enabled"
-			}
-			return util.NewInfoMsg("Thinking mode " + status)
-		})
+		if m.isAgentBusy() {
+			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait..."))
+			break
+		}
+		gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
+		if !ok {
+			cmds = append(cmds, util.ReportError(errors.New("thinking requires the gmp backend")))
+			break
+		}
+		level := nextGmpThinkingLevel(gw)
+		cmds = append(cmds, setGmpThinkingLevel(gw, level, "Thinking mode"))
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleTransparentBackground:
 		cmds = append(cmds, func() tea.Msg {
@@ -1591,29 +1660,12 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			break
 		}
 
-		cfg := m.com.Config()
-		if cfg == nil {
-			cmds = append(cmds, util.ReportError(errors.New("configuration not found")))
-			break
-		}
-
-		agentCfg, ok := cfg.Agents[config.AgentCoder]
+		gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
 		if !ok {
-			cmds = append(cmds, util.ReportError(errors.New("agent configuration not found")))
+			cmds = append(cmds, util.ReportError(errors.New("reasoning requires the gmp backend")))
 			break
 		}
-
-		currentModel := cfg.Models[agentCfg.Model]
-		currentModel.ReasoningEffort = msg.Effort
-		if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-			break
-		}
-
-		cmds = append(cmds, func() tea.Msg {
-			m.com.Workspace.UpdateAgentModel(context.TODO())
-			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
-		})
+		cmds = append(cmds, setGmpThinkingLevel(gw, msg.Effort, "Reasoning effort"))
 		m.dialog.CloseDialog(dialog.ReasoningID)
 	case dialog.ActionSelectTheme:
 		m.dialog.CloseDialog(dialog.ThemeID)
@@ -1630,12 +1682,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		// instead of to the no-op PermissionGrant/Deny. allow_session maps
 		// to a single approve for now (ADR 0007 out-of-scope note).
 		if gw, ok := m.com.Workspace.(toolApprovalReplyHandler); ok {
-			m.pendingToolApproval = nil
-			gw.HandleToolApprovalReply(msg.Permission, msg.Action != dialog.PermissionDeny)
-			// The tool card was parked in awaiting-permission while gated; the
-			// user has now answered, so drop it back to running. A landed result
-			// (success/error/denied) still overrides this via computeStatus.
-			m.setToolItemStatus(msg.Permission.ToolCallID, chat.ToolStatusRunning)
+			cmds = append(cmds, sendToolApprovalReply(gw, msg.Permission, msg.Action != dialog.PermissionDeny))
 			break
 		}
 		switch msg.Action {
@@ -1753,95 +1800,16 @@ func (m *UI) fetchHyperCredits() tea.Cmd {
 	}
 }
 
-// handleSelectModel performs the model selection after any provider
-// pre-checks (such as a silent Hyper OAuth refresh) have completed.
+// handleSelectModel delegates one gmp-only selection to the backend.
 func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
-	var cmds []tea.Cmd
-
 	if m.isAgentBusy() {
 		return util.ReportWarn("Agent is busy, please wait...")
 	}
-
-	cfg := m.com.Config()
-	if cfg == nil {
-		return util.ReportError(errors.New("configuration not found"))
+	gw, ok := m.com.Workspace.(*workspace.GmpWorkspace)
+	if !ok {
+		return util.ReportError(errors.New("model selection requires the gmp backend"))
 	}
-
-	if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
-		return m.handleGmpSelectModel(gw, msg)
-	}
-
-	var (
-		providerID   = msg.Model.Provider
-		isCopilot    = providerID == string(catwalk.InferenceProviderCopilot)
-		isConfigured = func() bool { _, ok := cfg.Providers.Get(providerID); return ok }
-		isOnboarding = m.state == uiOnboarding
-	)
-
-	// For Hyper, if the stored OAuth token is expired, try a silent
-	// refresh before deciding whether the provider is configured. Keeps
-	// users from hitting a 401 on their first message after the
-	// short-lived access token ages out.
-	if !msg.ReAuthenticate && providerID == "hyper" {
-		if pc, ok := cfg.Providers.Get(providerID); ok && pc.OAuthToken != nil && pc.OAuthToken.IsExpired() {
-			return m.refreshHyperAndRetrySelect(msg)
-		}
-	}
-
-	// Attempt to import GitHub Copilot tokens from VSCode if available.
-	if isCopilot && !isConfigured() && !msg.ReAuthenticate {
-		m.com.Workspace.ImportCopilot()
-	}
-
-	if !isConfigured() || msg.ReAuthenticate {
-		m.dialog.CloseDialog(dialog.ModelsID)
-		if cmd := m.openAuthenticationDialog(msg.Provider, msg.Model, msg.ModelType); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		return tea.Batch(cmds...)
-	}
-
-	if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, msg.ModelType, msg.Model); err != nil {
-		cmds = append(cmds, util.ReportError(err))
-	} else {
-		if msg.ModelType == config.SelectedModelTypeLarge {
-			// Swap the theme live based on the newly selected large
-			// model's provider.
-			m.applyProviderTheme(providerID)
-		}
-		if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
-			// Ensure small model is set is unset.
-			smallModel := m.com.Workspace.GetDefaultSmallModel(providerID)
-			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, config.SelectedModelTypeSmall, smallModel); err != nil {
-				cmds = append(cmds, util.ReportError(err))
-			}
-		}
-	}
-
-	cmds = append(cmds, func() tea.Msg {
-		if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
-			return util.ReportError(err)
-		}
-
-		modelMsg := fmt.Sprintf("%s model changed to %s", msg.ModelType, msg.Model.Model)
-
-		return util.NewInfoMsg(modelMsg)
-	})
-
-	m.dialog.CloseDialog(dialog.GmpAuthID)
-	m.dialog.CloseDialog(dialog.ModelsID)
-
-	if isOnboarding {
-		m.setState(uiLanding, uiFocusEditor)
-		m.com.Config().SetupAgents()
-		if err := m.com.Workspace.InitCoderAgent(context.TODO()); err != nil {
-			cmds = append(cmds, util.ReportError(err))
-		}
-	} else if m.com.IsHyper() {
-		cmds = append(cmds, m.fetchHyperCredits())
-	}
-
-	return tea.Batch(cmds...)
+	return m.handleGmpSelectModel(gw, msg)
 }
 
 func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
@@ -2361,7 +2329,7 @@ func (m *UI) View() tea.View {
 	}
 
 	if m.backendExited {
-		v.Content = renderBackendExitedBanner(m.width, m.height)
+		v.Content = renderBackendExitedBanner(m.width, m.height, m.backendExitReason)
 		return v
 	}
 
@@ -2449,18 +2417,22 @@ func renderTooSmallBanner(width, height int) string {
 	return b.String()
 }
 
-// renderBackendExitedBanner produces a centred, styled notice shown when the
-// gmp RPC subprocess exits unexpectedly. It reuses renderTooSmallBanner's
-// centring approach but colours the heading so the lost-connection state is
-// legible and distinct from a frozen transcript. There is no reconnect hint
-// — the MVP does not auto-respawn; the user restarts gmp-tui-go.
-func renderBackendExitedBanner(width, height int) string {
+// renderBackendExitedBanner produces a centred, styled terminal notice. It
+// reuses renderTooSmallBanner's centring approach but colours the heading so
+// the stopped-backend state is legible and distinct from a frozen transcript.
+// There is no reconnect hint — the MVP does not auto-respawn; the user
+// restarts gmp-tui-go.
+func renderBackendExitedBanner(width, height int, reason workspace.BackendExitReason) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
 	heading := lipgloss.NewStyle().Foreground(lipgloss.Red).Bold(true).Render(backendExitedHeading)
 	detail := "The gmp backend process exited unexpectedly."
 	hint := "Restart gmp-tui-go to reconnect."
+	if reason == workspace.BackendExitUIOverload {
+		detail = backendOverloadDetail
+		hint = "Restart gmp-tui-go after reducing event pressure."
+	}
 	lines := []string{heading, "", detail, "", hint}
 	var b strings.Builder
 	verticalPad := (height - len(lines)) / 2
@@ -2684,16 +2656,10 @@ func (m *UI) FullHelp() [][]key.Binding {
 }
 
 func (m *UI) currentModelSupportsImages() bool {
-	cfg := m.com.Config()
-	if cfg == nil {
+	if !m.com.Workspace.AgentIsReady() {
 		return false
 	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
-	if !ok {
-		return false
-	}
-	model := cfg.GetModelByType(agentCfg.Model)
-	return model != nil && model.SupportsImages
+	return m.com.Workspace.AgentModel().CatwalkCfg.SupportsImages
 }
 
 // toggleCompactMode toggles compact mode between uiChat and uiChatCompact states.
@@ -3360,7 +3326,13 @@ func (m *UI) refreshStyles() {
 	m.chat.InvalidateRenderCaches()
 }
 
-// sendMessage sends a message with the given content and attachments.
+const (
+	backendAckTimeout           = 30 * time.Second
+	backendLongOperationTimeout = 5 * time.Minute
+)
+
+// sendMessage prepares a prompt. Backend work always runs in a command, never
+// in Bubble Tea's update loop.
 func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.Cmd {
 	if cmd, trapped := m.trapLocalSlash(content); trapped {
 		return cmd
@@ -3369,38 +3341,42 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 		return util.ReportError(fmt.Errorf("coder agent is not initialized"))
 	}
 
-	var cmds []tea.Cmd
 	if !m.hasSession() {
-		newSession, err := m.com.Workspace.CreateSession(context.Background(), "New Session")
-		if err != nil {
-			return util.ReportError(err)
+		if m.sessionCreating {
+			return util.ReportWarn("Session creation is already in progress")
 		}
-		if m.forceCompactMode {
-			m.isCompact = true
+		m.sessionCreating = true
+		attachments = slices.Clone(attachments)
+		return func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), backendAckTimeout)
+			defer cancel()
+			newSession, err := m.com.Workspace.CreateSession(ctx, "New Session")
+			return sessionCreationResultMsg{
+				Session:     newSession,
+				Content:     content,
+				Attachments: attachments,
+				Err:         err,
+			}
 		}
-		if newSession.ID != "" {
-			m.session = &newSession
-			cmds = append(cmds, m.loadSession(newSession.ID))
-		}
-		m.setState(uiChat, m.focus)
 	}
+	return m.runMessage(m.session.ID, content, attachments)
+}
 
-	ctx := context.Background()
-	cmds = append(cmds, func() tea.Msg {
+func (m *UI) runMessage(sessionID, content string, attachments []message.Attachment) tea.Cmd {
+	trackFiles := func() tea.Msg {
+		ctx := context.Background()
 		for _, path := range m.sessionFileReads {
-			m.com.Workspace.FileTrackerRecordRead(ctx, m.session.ID, path)
+			m.com.Workspace.FileTrackerRecordRead(ctx, sessionID, path)
 			m.com.Workspace.LSPStart(ctx, path)
 		}
 		return nil
-	})
-
-	// Capture session ID to avoid race with main goroutine updating m.session.
-	sessionID := m.session.ID
-	cmds = append(cmds, func() tea.Msg {
-		err := m.com.Workspace.AgentRun(context.Background(), sessionID, content, attachments...)
+	}
+	runAgent := func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), backendAckTimeout)
+		defer cancel()
+		err := m.com.Workspace.AgentRun(ctx, sessionID, content, attachments...)
 		if err != nil {
-			isCancelErr := errors.Is(err, context.Canceled)
-			if isCancelErr {
+			if errors.Is(err, context.Canceled) {
 				return nil
 			}
 			return util.InfoMsg{
@@ -3409,8 +3385,8 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 			}
 		}
 		return nil
-	})
-	return tea.Batch(cmds...)
+	}
+	return tea.Batch(trackFiles, runAgent)
 }
 
 const cancelTimerDuration = 2 * time.Second
@@ -3437,11 +3413,18 @@ func (m *UI) cancelAgent() tea.Cmd {
 	if m.isCanceling {
 		// Second escape press - actually cancel the agent.
 		m.isCanceling = false
-		m.com.Workspace.AgentCancel(m.session.ID)
+		sessionID := m.session.ID
 		// Stop the spinning todo indicator.
 		m.todoIsSpinning = false
 		m.renderPills()
-		return nil
+		return func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), backendAckTimeout)
+			defer cancel()
+			if err := m.com.Workspace.AgentCancel(ctx, sessionID); err != nil {
+				return util.ReportError(err)()
+			}
+			return nil
+		}
 	}
 
 	// Check if there are queued prompts - if so, clear the queue.
@@ -3511,23 +3494,10 @@ func (m *UI) openModelsDialog() tea.Cmd {
 		return nil
 	}
 
-	if gw, ok := m.com.Workspace.(*workspace.GmpWorkspace); ok {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := gw.RefreshModelCatalog(ctx); err != nil {
-			return util.ReportError(err)
-		}
+	if _, ok := m.com.Workspace.(*workspace.GmpWorkspace); !ok {
+		return util.ReportError(errors.New("model picker requires the gmp backend"))
 	}
-
-	isOnboarding := m.state == uiOnboarding
-	modelsDialog, err := dialog.NewModels(m.com, isOnboarding)
-	if err != nil {
-		return util.ReportError(err)
-	}
-
-	m.dialog.OpenDialog(modelsDialog)
-
-	return nil
+	return m.refreshGmpModelCatalog(m.state == uiOnboarding)
 }
 
 // openCommandsDialog opens the commands dialog.
@@ -3652,19 +3622,10 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 }
 
 func (m *UI) handleReAuthenticate(providerID string) tea.Cmd {
-	cfg := m.com.Config()
-	if cfg == nil {
-		return nil
+	if _, ok := m.com.Workspace.(*workspace.GmpWorkspace); !ok {
+		return util.ReportError(errors.New("re-authentication requires the gmp backend"))
 	}
-	providerCfg, ok := cfg.Providers.Get(providerID)
-	if !ok {
-		return nil
-	}
-	agentCfg, ok := cfg.Agents[config.AgentCoder]
-	if !ok {
-		return nil
-	}
-	return m.openAuthenticationDialog(providerCfg.ToProvider(), cfg.Models[agentCfg.Model], agentCfg.Model)
+	return m.runGmpAuthCommand(auth.CommandLogin, providerID)
 }
 
 // newSession clears the current session state and prepares for a new session.
@@ -3980,7 +3941,11 @@ func (m *UI) runMCPPrompt(clientID, promptID string, arguments map[string]string
 
 func (m *UI) handleStateChanged() tea.Cmd {
 	return func() tea.Msg {
-		m.com.Workspace.UpdateAgentModel(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := m.com.Workspace.UpdateAgentModel(ctx); err != nil {
+			return util.InfoMsg{Type: util.InfoTypeError, Msg: err.Error()}
+		}
 		return mcpStateChangedMsg{
 			states: m.com.Workspace.MCPGetStates(),
 		}

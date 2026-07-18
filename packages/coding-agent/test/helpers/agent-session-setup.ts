@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { Agent } from "@oh-my-pi/pi-agent-core";
+import { Agent, type AgentTool } from "@oh-my-pi/pi-agent-core";
 import {
 	getBundledModel,
 	type AssistantMessage,
@@ -72,20 +72,25 @@ export interface LocalAgentSessionHarness {
 export async function createLocalAgentSessionHarness(
 	options: {
 		streamFn?: (model: Model, context: Context, options?: SimpleStreamOptions) => MockAssistantStream;
+		model?: Model;
 		systemPrompt?: string;
 		sessionManager?: SessionManager;
 		branchSummaryCompleter?: BranchSummaryCompleter;
+		tools?: AgentTool[];
+		toolRegistry?: Map<string, AgentTool>;
+		rebuildSystemPrompt?: (toolNames: string[], tools: Map<string, AgentTool>) => Promise<string>;
 	} = {},
 ): Promise<LocalAgentSessionHarness> {
 	const tempDir = TempDir.createSync("@omp-test-");
 	const sessionFile = path.join(tempDir.path(), "session.jsonl");
 	const dbPath = path.join(tempDir.path(), "agent.db");
 
-	const model = getBundledModel("openai", "gpt-4o-mini");
+	const model = options.model ?? getBundledModel("openai", "gpt-4o-mini");
 	const agent = new Agent({
 		initialState: {
 			model,
 			systemPrompt: options.systemPrompt ?? "",
+			tools: options.tools,
 		},
 		streamFn: options.streamFn ?? instantTextStreamFn("ok"),
 	});
@@ -102,6 +107,8 @@ export async function createLocalAgentSessionHarness(
 		settings,
 		modelRegistry,
 		branchSummaryCompleter: options.branchSummaryCompleter ?? localBranchSummaryCompleter,
+		toolRegistry: options.toolRegistry,
+		rebuildSystemPrompt: options.rebuildSystemPrompt,
 	});
 
 	return {

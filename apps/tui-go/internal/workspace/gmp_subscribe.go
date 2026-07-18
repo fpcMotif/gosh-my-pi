@@ -1,80 +1,136 @@
 package workspace
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ompclient"
+	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/pubsub"
 )
 
-// BackendExitedMsg is the typed tea.Msg delivered through the normal
-// program.Send / events path when the gmp RPC subprocess exits
-// unexpectedly (peer EOF / crash) rather than via an intentional
-// Shutdown/Close. The model layer renders a legible "backend connection
-// lost" banner on it instead of leaving the transcript frozen. It carries
-// no payload: the transport-local exit is the whole signal.
-type BackendExitedMsg struct{}
+const (
+	uiMailboxNormalCapacity   = 256
+	uiMailboxTerminalCapacity = 1
+	uiMailboxCapacity         = uiMailboxNormalCapacity + uiMailboxTerminalCapacity
+)
 
-func (w *GmpWorkspace) syncState(ctx context.Context) {
+// BackendExitReason distinguishes a failed backend from an intentional
+// protective shutdown. The UI renders the reason instead of claiming every
+// terminal state was a backend crash.
+type BackendExitReason uint8
+
+const (
+	BackendExitUnexpected BackendExitReason = iota
+	BackendExitUIOverload
+)
+
+// BackendExitedMsg is the terminal tea.Msg delivered through the normal
+// program.Send / events path when the backend exits unexpectedly or the UI
+// mailbox overload guard stops it. The model layer renders a legible state
+// instead of leaving the transcript frozen.
+type BackendExitedMsg struct {
+	Reason BackendExitReason
+}
+
+// backendSessionState is the validated subset of the backend's authoritative
+// RPC session snapshot that the workspace owns locally.
+type backendSessionState struct {
+	SessionID     string             `json:"sessionId"`
+	SessionName   string             `json:"sessionName"`
+	ThinkingLevel *string            `json:"thinkingLevel"`
+	Model         *ModelCatalogModel `json:"model"`
+}
+
+// SyncInitialSnapshot restores the backend session before the UI starts.
+// The caller owns one deadline for both calls, so startup cannot hang on a
+// healthy first response followed by a wedged history response.
+func (w *GmpWorkspace) SyncInitialSnapshot(ctx context.Context) error {
+	// Side requests can arrive while get_state is in flight. Consume them
+	// first so session_start never waits on a UI that does not exist yet.
+	// Agent events remain unread until Subscribe, preserving snapshot-first
+	// state application.
+	w.startSideDrains()
+	if err := w.syncState(ctx); err != nil {
+		return err
+	}
+	return w.syncMessages(ctx)
+}
+
+func (w *GmpWorkspace) syncState(ctx context.Context) error {
+	if err := w.acquireCatalogOp(ctx); err != nil {
+		return err
+	}
+	defer w.releaseCatalogOp()
+	return w.syncStateLocked(ctx)
+}
+
+// syncStateLocked serializes a get_state snapshot with model selection and
+// catalog refreshes. The caller must hold catalogOps.
+func (w *GmpWorkspace) syncStateLocked(ctx context.Context) error {
 	if w.client == nil {
-		return
+		return nil
 	}
 	resp, err := w.client.Call(ctx, ompclient.Command{Type: "get_state"})
 	if err != nil {
-		slog.Debug("gmp workspace: failed to sync state", "error", err)
-		return
+		return fmt.Errorf("get backend state: %w", err)
 	}
-	var st struct {
-		SessionID   string `json:"sessionId"`
-		SessionName string `json:"sessionName"`
-		Model       struct {
-			Provider string `json:"provider"`
-			ID       string `json:"id"`
-		} `json:"model"`
-	}
-	if err := json.Unmarshal(resp.Data, &st); err != nil {
-		return
+	st, err := parseBackendSessionState(resp.Data)
+	if err != nil {
+		return err
 	}
 	w.mu.Lock()
-	w.session.ID = st.SessionID
-	if w.session.Title == "" {
-		w.session.Title = st.SessionName
-	}
-	if st.Model.ID != "" {
-		modelName := st.Model.ID
-		providerID := cmp.Or(st.Model.Provider, gmpProviderID)
-		w.model = AgentModel{
-			CatwalkCfg: catwalk.Model{ID: st.Model.ID, Name: modelName},
-			ModelCfg: config.SelectedModel{
-				Provider: providerID,
-				Model:    st.Model.ID,
-			},
-		}
-	}
+	w.applyBackendSessionStateLocked(st)
 	w.mu.Unlock()
-	w.syncMessages(ctx)
+	return nil
 }
 
-func (w *GmpWorkspace) syncMessages(ctx context.Context) {
+// parseBackendSessionState validates a backend snapshot without changing local
+// state. Callers commit it only after every field is known-good.
+func parseBackendSessionState(data json.RawMessage) (backendSessionState, error) {
+	if string(data) == "null" {
+		return backendSessionState{}, errors.New("decode backend state: state must be an object")
+	}
+	var state backendSessionState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return backendSessionState{}, fmt.Errorf("decode backend state: %w", err)
+	}
+	if state.Model != nil && modelCatalogKey(state.Model.Provider, state.Model.ID) == "" {
+		return backendSessionState{}, errors.New("decode backend state: model has blank provider or id")
+	}
+	if state.ThinkingLevel != nil && !isThinkingLevel(*state.ThinkingLevel) {
+		return backendSessionState{}, fmt.Errorf("decode backend state: unsupported thinking level %q", *state.ThinkingLevel)
+	}
+	return state, nil
+}
+
+// applyBackendSessionStateLocked commits a previously validated backend
+// snapshot. The caller must hold w.mu.
+func (w *GmpWorkspace) applyBackendSessionStateLocked(state backendSessionState) {
+	w.session.ID = state.SessionID
+	if w.session.Title == "" {
+		w.session.Title = state.SessionName
+	}
+	w.applyActiveModelLocked(state.Model, state.ThinkingLevel)
+}
+
+func (w *GmpWorkspace) syncMessages(ctx context.Context) error {
 	if w.client == nil {
-		return
+		return nil
 	}
 	resp, err := w.client.Call(ctx, ompclient.Command{Type: "get_messages"})
 	if err != nil {
-		slog.Debug("gmp workspace: failed to sync messages", "error", err)
-		return
+		return fmt.Errorf("get backend messages: %w", err)
 	}
 	var payload struct {
 		Messages []json.RawMessage `json:"messages"`
 	}
 	if err := json.Unmarshal(resp.Data, &payload); err != nil {
-		return
+		return fmt.Errorf("decode backend messages: %w", err)
 	}
 	msgs := make([]message.Message, 0, len(payload.Messages))
 	for _, raw := range payload.Messages {
@@ -95,6 +151,7 @@ func (w *GmpWorkspace) syncMessages(ctx context.Context) {
 		}
 	}
 	w.mu.Unlock()
+	return nil
 }
 
 // -- Events --
@@ -112,45 +169,48 @@ func (w *GmpWorkspace) Subscribe(program *tea.Program) {
 	}
 	w.mu.Unlock()
 	// Start the single UI-drain goroutine once. It calls program.Send in FIFO
-	// order, preserving the order of streamed events that the per-message
-	// `go program.Send` previously scrambled.
+	// order while sendUI remains independent of a blocked Bubble Tea loop.
 	if program != nil {
-		w.uiDrainOnce.Do(func() { go w.drainUI() })
+		w.startUIDrain()
 	}
+	w.startSideDrains()
+	w.startEventsDrain()
+}
+
+// startSideDrains starts the three required response paths once. It is
+// separate from the agent-event drainer: startup needs these consumers before
+// its first RPC call, while agent events must wait for the snapshot commit.
+func (w *GmpWorkspace) startSideDrains() {
 	if w.client == nil {
 		return
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("GmpWorkspace.Subscribe panic", "recover", r)
-			program.Quit()
-		}
-	}()
+	w.sideDrainOnce.Do(func() {
+		go w.drainExtensionUI()
+		go w.drainHostToolCalls()
+		go w.drainHostToolCancels()
+	})
+}
 
-	// Drain the side-channels so the ompclient read-loop never blocks on a
-	// channel send. Without these consumers, the 17th unhandled
-	// extension_ui_request (or host_tool_call) would fill the 16-slot buffer
-	// and freeze the entire RPC stream — including command responses — until
-	// context-deadline. See D2 in the bridge review.
-	//
-	// The MVP responds with Cancelled: true to all UI prompts and with an
-	// error to any host tool call. Plumbing prompts into the Crush
-	// permission UI is a follow-up.
-	go w.drainExtensionUI()
-	go w.drainHostToolCalls()
-	go w.drainHostToolCancels()
-
-	for ev := range w.client.Events() {
-		w.handleAgentEvent(ev)
+// startEventsDrain attaches exactly one consumer to the transport event
+// stream. Subscribe may rebind the Bubble Tea program, but it must never split
+// events between multiple goroutines.
+func (w *GmpWorkspace) startEventsDrain() {
+	if w.client == nil {
+		return
 	}
-	w.setAgentBusy(false)
+	w.eventsDrainOnce.Do(func() {
+		go w.drainEvents()
+	})
+}
 
-	// The events channel only closes once the transport read loop ends. If
-	// that was an unexpected exit (peer EOF / subprocess crash) rather than
-	// an intentional Shutdown/Close, surface it to the UI as a typed message
-	// so the model can enter a legible "backend connection lost" state
-	// instead of freezing on the last transcript. Intentional shutdown
-	// leaves BackendExited open, so no false banner appears on a clean quit.
+func (w *GmpWorkspace) drainEvents() {
+	defer w.setAgentBusy(false)
+	for ev := range w.client.Events() {
+		drainStep("drainEvents", func() { w.handleAgentEvent(ev) })
+	}
+
+	// The events channel only closes when the transport exits. Intentional
+	// Shutdown leaves BackendExited open, so a clean quit has no false banner.
 	select {
 	case <-w.client.BackendExited():
 		w.sendUI(BackendExitedMsg{})
@@ -198,11 +258,15 @@ func (w *GmpWorkspace) dispatchExtensionUIRequest(req *ompclient.ExtensionUIReq)
 		return
 	}
 	if msg := w.translateAuthRequest(req); msg != nil {
-		w.sendUI(msg)
+		if !w.sendUI(msg) {
+			w.sendCancelledExtensionUIResponse(req.ID, req.Method)
+		}
 		return
 	}
 	if msg := w.translateToolApprovalRequest(req); msg != nil {
-		w.sendUI(msg)
+		if !w.sendUI(msg) {
+			w.sendCancelledExtensionUIResponse(req.ID, req.Method)
+		}
 		return
 	}
 	w.sendCancelledExtensionUIResponse(req.ID, req.Method)
@@ -210,6 +274,9 @@ func (w *GmpWorkspace) dispatchExtensionUIRequest(req *ompclient.ExtensionUIReq)
 
 func (w *GmpWorkspace) sendCancelledExtensionUIResponse(id string, method string) {
 	resp := buildCancelledExtensionUIResponse(id)
+	if w.client == nil {
+		return
+	}
 	if err := w.client.Send(resp); err != nil {
 		slog.Debug("gmp workspace: extension_ui_response send failed",
 			"id", id, "method", method, "error", err)
@@ -283,52 +350,153 @@ func (w *GmpWorkspace) drainHostToolCancels() {
 	}
 }
 
-func (w *GmpWorkspace) sendUI(msg tea.Msg) {
+func (w *GmpWorkspace) sendUI(msg tea.Msg) bool {
 	if msg == nil {
-		return
+		return false
 	}
 	w.mu.RLock()
+	if w.uiClosed {
+		w.mu.RUnlock()
+		return false
+	}
 	program := w.program
 	events := w.events
-	uiQueue := w.uiQueue
-	w.mu.RUnlock()
 	if program != nil {
-		// Hand the message to the single drain goroutine so program.Send is
-		// called in submission order. Enqueue is non-blocking; on a full queue
-		// we spill to a goroutine rather than block, because sendUI is
-		// sometimes invoked from inside the Bubble Tea Update goroutine (e.g.
-		// CreateSession during a SendMessage handler) and blocking there would
-		// deadlock against program.Send draining that same loop. Spill only
-		// triggers under sustained overload and self-heals: v1 frames carry
-		// full snapshots, so a later frame restores any transiently-reordered
-		// state.
-		select {
-		case uiQueue <- msg:
-		default:
-			go func() { uiQueue <- msg }()
-		}
-		return
+		w.mu.RUnlock()
+		return w.enqueueUI(msg)
 	}
 	if events == nil {
-		return
+		w.mu.RUnlock()
+		return false
 	}
 	select {
 	case events <- msg:
+		w.mu.RUnlock()
+		return true
 	default:
+		w.mu.RUnlock()
+		return false
 	}
 }
 
-// drainUI delivers queued program-bound messages in FIFO order. Running as a
-// single goroutine is what guarantees ordering; it reads w.program per message
-// so a re-Subscribe with a new program is honored and a nil program (between
-// subscribes) drops cleanly.
+// enqueueUI adds one message to the mailbox. A pending nonterminal message
+// update replaces the prior full snapshot for that message. Every other
+// message is a FIFO barrier: later updates cannot replace snapshots from
+// before that edge. The normal queue holds at most 256 slots. The 257th slot
+// is reserved for one terminal overload message, then all later offers drop.
+func (w *GmpWorkspace) enqueueUI(msg tea.Msg) bool {
+	var client *ompclient.Client
+	overloaded := false
+
+	w.mu.Lock()
+	if w.uiClosed || w.uiOverloaded {
+		w.mu.Unlock()
+		return false
+	}
+	if id, ok := pendingMessageUpdateID(msg); ok {
+		if slot := w.uiMessageUpdates[id]; slot != nil {
+			slot.msg = msg
+			w.mu.Unlock()
+			return true
+		}
+	}
+	if len(w.uiMailbox) >= uiMailboxNormalCapacity {
+		// The terminal slot makes the failure visible without dropping an
+		// earlier edge. Latch under the same lock so concurrent producers
+		// cannot append another terminal message or overrun the cap.
+		w.uiOverloaded = true
+		clear(w.uiMessageUpdates)
+		w.uiMailbox = append(w.uiMailbox, &uiMailboxSlot{
+			msg: BackendExitedMsg{Reason: BackendExitUIOverload},
+		})
+		client = w.client
+		overloaded = true
+	} else if id, ok := pendingMessageUpdateID(msg); ok {
+		slot := &uiMailboxSlot{msg: msg}
+		w.uiMailbox = append(w.uiMailbox, slot)
+		w.uiMessageUpdates[id] = slot
+	} else {
+		clear(w.uiMessageUpdates)
+		w.uiMailbox = append(w.uiMailbox, &uiMailboxSlot{msg: msg})
+	}
+	w.mu.Unlock()
+
+	select {
+	case w.uiWake <- struct{}{}:
+	default:
+	}
+	if overloaded {
+		// Client.Close waits for the reader. The terminal slot is already
+		// latched, so one bounded closer preserves nonblocking producers.
+		go w.closeClient(client)
+	}
+	return !overloaded
+}
+
+func (w *GmpWorkspace) startUIDrain() {
+	w.mu.RLock()
+	closed := w.uiClosed
+	w.mu.RUnlock()
+	if closed {
+		return
+	}
+	w.uiDrainOnce.Do(func() { go w.drainUI() })
+}
+
+func pendingMessageUpdateID(msg tea.Msg) (string, bool) {
+	event, ok := msg.(pubsub.Event[message.Message])
+	if !ok || event.Type != pubsub.UpdatedEvent || event.Payload.ID == "" || event.Payload.IsFinished() {
+		return "", false
+	}
+	return event.Payload.ID, true
+}
+
+func (w *GmpWorkspace) nextUIMessage() (tea.Msg, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.uiMailbox) == 0 {
+		return nil, false
+	}
+	slot := w.uiMailbox[0]
+	if len(w.uiMailbox) == 1 {
+		w.uiMailbox = nil
+	} else {
+		w.uiMailbox[0] = nil
+		w.uiMailbox = w.uiMailbox[1:]
+	}
+	if id, ok := pendingMessageUpdateID(slot.msg); ok && w.uiMessageUpdates[id] == slot {
+		delete(w.uiMessageUpdates, id)
+	}
+	return slot.msg, true
+}
+
+// drainUI is the sole caller of Program.Send. It reads w.program for each
+// message, so re-Subscribe uses the latest program and a nil gap drops safely.
 func (w *GmpWorkspace) drainUI() {
-	for msg := range w.uiQueue {
-		w.mu.RLock()
-		program := w.program
-		w.mu.RUnlock()
-		if program != nil {
-			program.Send(msg)
+	defer close(w.uiDrained)
+	for {
+		select {
+		case <-w.uiDone:
+			return
+		case <-w.uiWake:
+		}
+		for {
+			select {
+			case <-w.uiDone:
+				return
+			default:
+			}
+			msg, ok := w.nextUIMessage()
+			if !ok {
+				break
+			}
+			w.mu.RLock()
+			program := w.program
+			closed := w.uiClosed
+			w.mu.RUnlock()
+			if !closed && program != nil {
+				program.Send(msg)
+			}
 		}
 	}
 }

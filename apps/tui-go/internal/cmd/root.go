@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	fang "charm.land/fang/v2"
@@ -36,6 +37,8 @@ import (
 
 var clientHost string
 var executablePath = os.Executable
+
+const initialSnapshotTimeout = 30 * time.Second
 
 // defaultClientHost is the placeholder default for the advanced `--host`
 // flag. The flag targets the carved-out (inert) Crush client/server
@@ -118,7 +121,7 @@ gmp-tui-go --continue
 			tea.WithContext(cmd.Context()),
 			tea.WithFilter(ui.MouseEventFilter),
 		)
-		go ws.Subscribe(program)
+		ws.Subscribe(program)
 
 		if _, err := program.Run(); err != nil {
 			event.Error(err)
@@ -332,6 +335,12 @@ func setupGmpWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) 
 		return nil, nil, err
 	}
 	ws := workspace.NewGmpWorkspace(client, cwd)
+	ctx, cancel := context.WithTimeout(cmd.Context(), initialSnapshotTimeout)
+	defer cancel()
+	if err := ws.SyncInitialSnapshot(ctx); err != nil {
+		slog.Warn("Initial backend snapshot unavailable", "error", err)
+		_, _ = fmt.Fprintf(os.Stderr, "gmp-tui-go: warning: initial backend snapshot unavailable: %v\n", err)
+	}
 	return ws, ws.Shutdown, nil
 }
 

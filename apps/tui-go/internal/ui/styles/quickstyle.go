@@ -596,6 +596,8 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.IconSuccess = base.Foreground(o.success).SetString(ToolSuccess)
 	s.Tool.IconError = base.Foreground(o.error).SetString(ToolError)
 	s.Tool.IconCancelled = muted.SetString(ToolPending)
+	s.Tool.IconWarning = base.Foreground(o.warning).SetString(ToolWarning)
+	s.Tool.IconInfo = base.Foreground(o.info).SetString(ToolInfo)
 
 	s.Tool.NameNormal = base.Foreground(o.info)
 	s.Tool.NameNested = base.Foreground(o.info)

@@ -17,8 +17,11 @@ import type {
 	RpcHostToolDefinition,
 	RpcHostToolResult,
 	RpcHostToolUpdate,
+	RpcModelSelectionReceipt,
+	RpcNewSessionReceipt,
 	RpcResponse,
 	RpcSessionState,
+	RpcThinkingLevelReceipt,
 } from "./rpc-types";
 import type { WireExtensionErrorFrameV1 } from "./wire/v1";
 
@@ -408,9 +411,9 @@ export class RpcClient {
 	/**
 	 * Start a new session, optionally with parent tracking.
 	 * @param parentSession - Optional parent session path for lineage tracking
-	 * @returns Object with `cancelled: true` if an extension cancelled the new session
+	 * @returns A cancellation receipt or the authoritative state after a successful switch
 	 */
-	async newSession(parentSession?: string): Promise<{ cancelled: boolean }> {
+	async newSession(parentSession?: string): Promise<RpcNewSessionReceipt> {
 		const response = await this.#send({ type: "new_session", parentSession });
 		return this.#getData(response);
 	}
@@ -426,8 +429,8 @@ export class RpcClient {
 	/**
 	 * Set model by provider and ID.
 	 */
-	async setModel(provider: string, modelId: string): Promise<{ provider: string; id: string }> {
-		const response = await this.#send({ type: "set_model", provider, modelId });
+	async setModel(provider: string, modelId: string, role?: string): Promise<RpcModelSelectionReceipt | null> {
+		const response = await this.#send({ type: "set_model", provider, modelId, role });
 		return this.#getData(response);
 	}
 
@@ -456,8 +459,9 @@ export class RpcClient {
 	/**
 	 * Set thinking level.
 	 */
-	async setThinkingLevel(level: ThinkingLevel): Promise<void> {
-		await this.#send({ type: "set_thinking_level", level });
+	async setThinkingLevel(level: ThinkingLevel): Promise<RpcThinkingLevelReceipt> {
+		const response = await this.#send({ type: "set_thinking_level", level });
+		return this.#getData(response);
 	}
 
 	/**

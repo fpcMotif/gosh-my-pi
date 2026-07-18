@@ -7,9 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
-	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/anim"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/ui/attachments"
@@ -272,19 +270,25 @@ type AssistantInfoItem struct {
 	id                  string
 	message             *message.Message
 	sty                 *styles.Styles
-	cfg                 *config.Config
+	model               ModelDisplayInfo
 	lastUserMessageTime time.Time
 }
 
+// ModelDisplayInfo is the resolved display metadata for one assistant model.
+type ModelDisplayInfo struct {
+	ModelName    string
+	ProviderName string
+}
+
 // NewAssistantInfoItem creates a new AssistantInfoItem.
-func NewAssistantInfoItem(sty *styles.Styles, message *message.Message, cfg *config.Config, lastUserMessageTime time.Time) MessageItem {
+func NewAssistantInfoItem(sty *styles.Styles, message *message.Message, model ModelDisplayInfo, lastUserMessageTime time.Time) MessageItem {
 	return &AssistantInfoItem{
 		Versioned:           list.NewVersioned(),
 		cachedMessageItem:   &cachedMessageItem{},
 		id:                  AssistantInfoID(message.ID),
 		message:             message,
 		sty:                 sty,
-		cfg:                 cfg,
+		model:               model,
 		lastUserMessageTime: lastUserMessageTime,
 	}
 }
@@ -332,16 +336,8 @@ func (a *AssistantInfoItem) renderContent(width int) string {
 	duration := finishTime.Sub(a.lastUserMessageTime)
 	infoMsg := a.sty.Messages.AssistantInfoDuration.Render(duration.String())
 	icon := a.sty.Messages.AssistantInfoIcon.Render(styles.ModelIcon)
-	model := a.cfg.GetModel(a.message.Provider, a.message.Model)
-	if model == nil {
-		model = &catwalk.Model{Name: "Unknown Model"}
-	}
-	modelFormatted := a.sty.Messages.AssistantInfoModel.Render(model.Name)
-	providerName := a.message.Provider
-	if providerConfig, ok := a.cfg.Providers.Get(a.message.Provider); ok {
-		providerName = providerConfig.Name
-	}
-	provider := a.sty.Messages.AssistantInfoProvider.Render(fmt.Sprintf("via %s", providerName))
+	modelFormatted := a.sty.Messages.AssistantInfoModel.Render(a.model.ModelName)
+	provider := a.sty.Messages.AssistantInfoProvider.Render(fmt.Sprintf("via %s", a.model.ProviderName))
 	assistant := fmt.Sprintf("%s %s %s %s", icon, modelFormatted, provider, infoMsg)
 	return common.Section(a.sty, assistant, width)
 }

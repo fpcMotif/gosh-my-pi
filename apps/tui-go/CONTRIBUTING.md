@@ -19,17 +19,18 @@ attribution.
 ## Structure
 
 `apps/tui-go/` is a hard fork of [`charmbracelet/crush`](https://github.com/charmbracelet/crush)
-at release `v0.65.3`, integrated as the front-end for the `omp` coding agent
+at release `v0.65.3`, integrated as the front-end for the `gmp` coding agent
 that lives in `packages/coding-agent/` (TypeScript, MIT). The Go side and
-the TS side communicate via newline-delimited JSON over stdio (`omp --mode rpc`).
+the TS side communicate via newline-delimited JSON over stdio (`gmp --mode rpc`).
 
 The bridge lives in:
 
 - `internal/ompclient/` — RPC transport.
-- `internal/workspace/omp_workspace.go` — implements Crush's `Workspace`
+- `internal/workspace/gmp_workspace.go` — implements Crush's `Workspace`
   interface against the RPC client.
 - `internal/cmd/root.go` — wires the bridge as the default backend and
-  honours `OMP_TUI_BACKEND` as a dev override.
+  honours `GMP_TUI_BACKEND` as the dev override; `OMP_TUI_BACKEND` is a
+  legacy alias.
 
 When in doubt, do not modify Crush's inherited code paths. Add new code in
 the bridge layer above. This keeps `git subtree pull` merges from upstream
@@ -44,7 +45,7 @@ go vet ./...
 go test -timeout 60s ./internal/workspace ./internal/cmd ./internal/ui/model
 ```
 
-Integration test (gated, requires `omp` on PATH):
+Integration test (gated, requires `gmp` on PATH):
 
 ```bash
 go test -tags=integration ./internal/ompclient/...

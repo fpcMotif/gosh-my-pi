@@ -7,6 +7,29 @@ preservation clause in ADR 0001's _Consequences_ section. Bounded
 predecessor of the full Phase 1 carve-out
 (`apps/tui-go/docs/carve-out-plan.md`), which remains the north star.
 
+## Implementation update — 2026-07-18
+
+The planned direct picker migration is complete. The Go runtime no longer has
+`Workspace.IsGmpMode()`, a Bridge Model Catalog, or a synthetic
+`gmp/gmp-backend` provider. The picker receives immutable
+`GmpWorkspace.ModelCatalog()` snapshots and does not use `cfg.Models` or
+`cfg.Providers` as backend truth.
+
+`models.catalog` supplies concrete role targets. `default` selection switches
+the active model; named roles only assign a role. `NewGmpWorkspace` performs
+no RPC. `cmd/root.go` owns one bounded 30-second state-and-messages snapshot.
+Onboarding reads `Workspace.AgentIsReady()` from that backend snapshot, never
+`Config.IsConfigured()` or `cfg.Providers`. The full state model supplies
+header capabilities and nullable thinking.
+The TypeScript `gmp/gmp-backend` response remains isolated old-host
+compatibility, not a Go path. This update supersedes the deferred adapter and
+`IsGmpMode()` work in the historical plan below.
+
+## Historical decision text — 2026-05-07
+
+The remaining sections preserve the staged carve-out record. Future tense and
+retained-adapter notes below are historical; the update above is current.
+
 ## Context
 
 ADR 0001 left `*AppWorkspace` and `*ClientWorkspace` as live code

@@ -15,9 +15,9 @@ live in the backend (`packages/coding-agent` and friends), **not** here.
   is `apps/tui-go/docs/carve-out-plan.md`.
 - The transport client is `internal/ompclient`; the RPC↔UI bridge is
   `internal/workspace` (`GmpWorkspace`); the Bubble Tea model is `internal/ui`.
-- The upstream dual-mode workspaces (`*AppWorkspace`, `*ClientWorkspace`) and
-  the standalone Crush subcommands have been removed. `Workspace.IsGmpMode()`
-  is effectively constant `true`.
+- The upstream dual-mode workspaces (`*AppWorkspace`, `*ClientWorkspace`),
+  standalone Crush subcommands, and obsolete `Workspace.IsGmpMode()` seam have
+  been removed.
 
 > The "Architecture" and "Key Patterns" sections below are inherited from
 > upstream Crush and describe subsystems (in-process providers, LSP, SQLite

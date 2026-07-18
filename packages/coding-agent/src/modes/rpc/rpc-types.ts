@@ -110,6 +110,9 @@ export interface RpcSessionState {
 	dumpTools?: Array<{ name: string; description: string; parameters: unknown }>;
 }
 
+/** Result of a new-session request. A successful switch carries its authoritative state. */
+export type RpcNewSessionReceipt = { cancelled: true; state?: never } | { cancelled: false; state?: RpcSessionState };
+
 export interface RpcModelCatalogRole {
 	role: string;
 	selector?: string;
@@ -140,6 +143,26 @@ export interface RpcModelCatalog {
 	current?: Model;
 }
 
+/** A concrete role assignment confirmed by a successful `set_model` call. */
+export interface RpcModelAssignmentReceipt {
+	role: string;
+	selector: string;
+	provider: string;
+	modelId: string;
+}
+
+/** Acknowledged model selection state after the backend applies its policies. */
+export type RpcModelSelectionReceipt = Model & {
+	activeModel: Model | null;
+	thinkingLevel: ThinkingLevel | null;
+	assignment: RpcModelAssignmentReceipt;
+};
+
+/** Acknowledged effective thinking level after model-specific clamping. */
+export interface RpcThinkingLevelReceipt {
+	thinkingLevel: ThinkingLevel | null;
+}
+
 // ============================================================================
 // RPC Responses (stdout)
 // ============================================================================
@@ -152,7 +175,7 @@ export type RpcResponse =
 	| { id?: string; type: "response"; command: "follow_up"; success: true }
 	| { id?: string; type: "response"; command: "abort"; success: true }
 	| { id?: string; type: "response"; command: "abort_and_prompt"; success: true }
-	| { id?: string; type: "response"; command: "new_session"; success: true; data: { cancelled: boolean } }
+	| { id?: string; type: "response"; command: "new_session"; success: true; data: RpcNewSessionReceipt }
 
 	// State
 	| { id?: string; type: "response"; command: "get_state"; success: true; data: RpcSessionState }
@@ -172,7 +195,7 @@ export type RpcResponse =
 			type: "response";
 			command: "set_model";
 			success: true;
-			data: Model | null;
+			data: RpcModelSelectionReceipt | null;
 	  }
 	| {
 			id?: string;
@@ -190,7 +213,13 @@ export type RpcResponse =
 	  }
 
 	// Thinking
-	| { id?: string; type: "response"; command: "set_thinking_level"; success: true }
+	| {
+			id?: string;
+			type: "response";
+			command: "set_thinking_level";
+			success: true;
+			data: RpcThinkingLevelReceipt;
+	  }
 	| {
 			id?: string;
 			type: "response";

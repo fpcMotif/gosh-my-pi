@@ -1,8 +1,8 @@
 /**
  * OMP-RPC v1 — frozen wire vocabulary.
  *
- * This file is the **type-level contract** between the omp coding-agent
- * server (`omp --mode rpc`) and any consumer (today: `apps/tui-go`).
+ * This file is the **type-level contract** between the gmp coding-agent
+ * server (`gmp --mode rpc`) and any consumer (today: `apps/tui-go`).
  * Every event the server emits and every command the host sends MUST
  * conform to one of the unions defined here.
  *

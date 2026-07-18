@@ -11,7 +11,7 @@ call unconditionally. `executeSingleToolCall` resolves the tool by name
 and runs `tool.execute(...)` with no gate. That is correct for the
 in-process embedding (`packages/coding-agent` drives the runtime
 directly and already owns the tools it registers), but it is a gap for
-OMP-RPC bridge mode (`omp --mode rpc`, consumed by `apps/tui-go`).
+OMP-RPC bridge mode (`gmp --mode rpc`, consumed by `apps/tui-go`).
 
 In bridge mode the host (`apps/tui-go`) is a separate process that
 cannot see or veto what the backend agent does to the user's machine.
@@ -74,7 +74,7 @@ semantics.
 ### RPC mode policy (the host-agnostic hook's gmp implementation)
 
 `packages/coding-agent/src/modes/rpc/` provides the callback when driving
-the session under `omp --mode rpc` (`RpcToolApprovalController`,
+the session under `gmp --mode rpc` (`RpcToolApprovalController`,
 modeled on `RpcOAuthController`):
 
 - Tools in the destructive set (`bash`, `edit`, `apply_patch`, `write`)
@@ -111,6 +111,11 @@ uses. The in-process `permission.Service` stays inert (its
 parity check (mirror of the auth decoder parity check) makes a new
 method a startup panic until both the const list and the decoder map
 carry it.
+
+The RPC inbound control lane is live before `session_start` hooks and remains
+live while a command runs. Approval and auth replies therefore bypass the
+bounded command FIFO. Before Bubble Tea attaches, Go cancels interactive
+requests; it never leaves a backend promise orphaned.
 
 ## Consequences
 

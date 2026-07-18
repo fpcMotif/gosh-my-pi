@@ -219,6 +219,14 @@ func TestHandleAuthReply_NoOpOnUnrelatedMessage(t *testing.T) {
 	w.HandleAuthReply("not an auth reply")
 }
 
+func TestHandleAuthReply_ReturnsMissingClient(t *testing.T) {
+	t.Parallel()
+	w := &GmpWorkspace{}
+	if err := w.HandleAuthReply(auth.Submit{ID: "id", Value: "value"}); err == nil {
+		t.Fatal("expected missing-client error")
+	}
+}
+
 func TestBuildCancelledExtensionUIResponse(t *testing.T) {
 	t.Parallel()
 	got := buildCancelledExtensionUIResponse("id-c")
@@ -280,9 +288,8 @@ func TestDispatchExtensionUIRequest_AuthMethodForwardsToUI(t *testing.T) {
 // write paths (HandleAuthReply, sendCancelledExtensionUIResponse,
 // SendAuthCommand happy path) can be exercised without forking gmp.
 //
-// We assemble the workspace manually rather than calling NewGmpWorkspace
-// because the latter blocks on client.Call(get_state) during init, and the
-// test peer cannot reasonably reply to it before the test setup is done.
+// The constructor is pure. Attach the pipe client after creating the test
+// workspace so these tests keep their compact setup.
 func gmpWorkspaceWithClient(t *testing.T) (*GmpWorkspace, *pipeClient) {
 	t.Helper()
 	pc := newPipeClient(t)
@@ -294,7 +301,9 @@ func gmpWorkspaceWithClient(t *testing.T) (*GmpWorkspace, *pipeClient) {
 func TestHandleAuthReply_SendsSubmitFrame(t *testing.T) {
 	w, pc := gmpWorkspaceWithClient(t)
 	defer pc.close()
-	w.HandleAuthReply(auth.Submit{ID: "id-x", Value: "the-value"})
+	if err := w.HandleAuthReply(auth.Submit{ID: "id-x", Value: "the-value"}); err != nil {
+		t.Fatalf("HandleAuthReply: %v", err)
+	}
 	frame := pc.waitForFrame(t, 2*time.Second)
 	if frame["type"] != "extension_ui_response" || frame["id"] != "id-x" || frame["value"] != "the-value" {
 		t.Fatalf("unexpected frame: %#v", frame)
@@ -305,7 +314,9 @@ func TestHandleAuthReply_SendsCancelFrame(t *testing.T) {
 	w, pc := gmpWorkspaceWithClient(t)
 	defer pc.close()
 
-	w.HandleAuthReply(auth.Cancel{ID: "id-c"})
+	if err := w.HandleAuthReply(auth.Cancel{ID: "id-c"}); err != nil {
+		t.Fatalf("HandleAuthReply: %v", err)
+	}
 	frame := pc.waitForFrame(t, 2*time.Second)
 	if frame["cancelled"] != true {
 		t.Fatalf("expected cancelled=true, got %#v", frame)
@@ -332,12 +343,13 @@ func TestSendCancelledExtensionUIResponse_LogsOnSendError(t *testing.T) {
 	w.sendCancelledExtensionUIResponse("id", "select")
 }
 
-func TestHandleAuthReply_LogsOnSendError(t *testing.T) {
+func TestHandleAuthReply_ReturnsSendError(t *testing.T) {
 	w, pc := gmpWorkspaceWithClient(t)
 	_ = pc.clientStdin.Close()
 	defer pc.close()
-	// Should not panic; error is logged via slog.Debug.
-	w.HandleAuthReply(auth.Submit{ID: "id", Value: "v"})
+	if err := w.HandleAuthReply(auth.Submit{ID: "id", Value: "v"}); err == nil {
+		t.Fatal("expected send error")
+	}
 }
 
 func TestDrainExtensionUI_DispatchesAndExitsCleanly(t *testing.T) {

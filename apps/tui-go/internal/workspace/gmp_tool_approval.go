@@ -2,6 +2,8 @@ package workspace
 
 import (
 	"cmp"
+	"errors"
+	"fmt"
 	"log/slog"
 
 	tea "charm.land/bubbletea/v2"
@@ -86,14 +88,18 @@ func ToolApprovalPermissionRequest(req toolapproval.Request) permission.Permissi
 // HandleAuthReply uses. Approve → confirmed:true; deny (including a
 // dismissed dialog) → confirmed:false. The model layer calls this in gmp
 // mode instead of the inert Crush PermissionGrant/Deny no-ops.
-func (w *GmpWorkspace) HandleToolApprovalReply(perm permission.PermissionRequest, approved bool) {
-	if w.client == nil || perm.ID == "" {
-		return
+func (w *GmpWorkspace) HandleToolApprovalReply(perm permission.PermissionRequest, approved bool) error {
+	if perm.ID == "" {
+		return nil
+	}
+	if w.client == nil {
+		return errors.New("gmp client not initialised")
 	}
 	resp := buildToolApprovalReplyFrame(perm.ID, approved)
 	if err := w.client.Send(resp); err != nil {
-		slog.Debug("gmp workspace: tool-approval reply send failed", "id", perm.ID, "error", err)
+		return fmt.Errorf("send tool-approval reply %q: %w", perm.ID, err)
 	}
+	return nil
 }
 
 // buildToolApprovalReplyFrame assembles the extension_ui_response for a

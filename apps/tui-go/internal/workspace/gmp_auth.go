@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -70,14 +71,18 @@ func interpretAuthResponse(resp *ompclient.Response) error {
 // Confirm / Cancel) into the matching extension_ui_response on the
 // wire. The model layer calls this when the user dismisses an auth
 // dialog.
-func (w *GmpWorkspace) HandleAuthReply(msg tea.Msg) {
+func (w *GmpWorkspace) HandleAuthReply(msg tea.Msg) error {
 	resp, ok := buildAuthReplyFrame(msg)
 	if !ok {
-		return
+		return nil
+	}
+	if w.client == nil {
+		return errors.New("gmp client not initialised")
 	}
 	if err := w.client.Send(resp); err != nil {
-		slog.Debug("gmp workspace: auth reply send failed", "id", resp.ID, "error", err)
+		return fmt.Errorf("send auth reply %q: %w", resp.ID, err)
 	}
+	return nil
 }
 
 // buildAuthReplyFrame converts an inbound Bubble Tea auth reply message into

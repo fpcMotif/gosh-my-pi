@@ -5,12 +5,8 @@ import { describe, expect, test } from "bun:test";
 import type { AgentSessionEvent } from "../../../session/agent-session";
 import type { ToolPresentation } from "../../../tools/presentation-types";
 import { toolPresenters, type ToolPresenter } from "../../../tools/presenters";
-import { createWireEventTranslator } from "./translate";
+import { createWireEventTranslator, toWireEvent } from "./translate";
 import type { WireEventV1 } from "./v1";
-
-function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
-	return createWireEventTranslator()(event);
-}
 
 // ============================================================================
 // Fixture builders — mirror the shape pi-ai/pi-agent-core produce
@@ -92,7 +88,7 @@ describe("toWireEvent — exhaustiveness", () => {
 	});
 
 	test("unknown future events fail closed as internal-only", () => {
-		expect(toWireEvent(fromAny<AgentSessionEvent>({ type: "future_event" }))).toBeNull();
+		expect(toWireEvent(fromAny<AgentSessionEvent, object>({ type: "future_event" }))).toBeNull();
 	});
 });
 
@@ -101,6 +97,35 @@ describe("toWireEvent — exhaustiveness", () => {
 // ============================================================================
 
 describe("toWireEvent — AgentEvent variants → v1 wire", () => {
+	test("direct calls cannot retain another call's tool arguments", () => {
+		toWireEvent({
+			type: "tool_execution_start",
+			toolCallId: "direct-read-call",
+			toolName: "read",
+			args: { path: "src/private.ts" },
+		});
+
+		const wire = toWireEvent({
+			type: "tool_execution_end",
+			toolCallId: "direct-read-call",
+			toolName: "read",
+			result: {
+				content: [{ type: "text", text: "1|const value = true;" }],
+				details: { kind: "file", displayContent: { text: "const value = true;", startLine: 1 } },
+			},
+		});
+
+		expect(wire?.type).toBe("tool_execution_end");
+		if (wire?.type === "tool_execution_end") {
+			expect(wire.result.presentation).toMatchObject({
+				type: "code",
+				code: {
+					title: "Read",
+				},
+			});
+		}
+	});
+
 	test("agent_start", () => {
 		const wire = toWireEvent({ type: "agent_start" });
 		expect(wire).toEqual({ type: "agent_start" });
@@ -549,18 +574,21 @@ describe("toWireEvent — message projection details", () => {
 	});
 
 	test("falls back to hidden custom wire messages for unknown custom roles", () => {
-		const message = fromAny<AgentMessage>({ role: "futureRole", payload: { value: 1 }, timestamp: 99 });
+		const message = fromAny<AgentMessage, object>({ role: "futureRole", payload: { value: 1 }, timestamp: 99 });
 		const wire = toWireEvent({ type: "agent_end", messages: [message] });
 
 		expect(wire?.type).toBe("agent_end");
 		if (wire?.type === "agent_end") {
-			expect(wire.messages[0]).toMatchObject({
+			const [message] = wire.messages;
+			expect(message).toMatchObject({
 				role: "custom",
 				customType: "futureRole",
 				display: false,
 				timestamp: 99,
 			});
-			expect(wire.messages[0].content).toContain("futureRole");
+			if (message?.role === "custom") {
+				expect(message.content).toContain("futureRole");
+			}
 		}
 	});
 

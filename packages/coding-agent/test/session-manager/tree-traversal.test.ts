@@ -1,9 +1,23 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { type CustomEntry, SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { assistantMsg, userMsg } from "../utilities";
 
 describe("SessionManager append and tree traversal", () => {
 	describe("append operations", () => {
+		it("preflights persistence before appending an entry", () => {
+			const session = SessionManager.inMemory();
+			const before = session.getBranch();
+			const assertWritable = spyOn(session, "assertWritable").mockImplementation(() => {
+				throw new Error("persistence latched");
+			});
+			try {
+				expect(() => session.appendModelChange("openai/gpt-4")).toThrow("persistence latched");
+				expect(session.getBranch()).toEqual(before);
+			} finally {
+				assertWritable.mockRestore();
+			}
+		});
+
 		it("appendMessage creates entry with correct parentId chain", () => {
 			const session = SessionManager.inMemory();
 

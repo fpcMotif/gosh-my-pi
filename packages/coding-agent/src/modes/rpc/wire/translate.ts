@@ -91,6 +91,16 @@ export function createWireEventTranslator(
 	return event => translateWireEvent(event, projector);
 }
 
+/**
+ * Translate one event for direct consumers.
+ *
+ * This compatibility export is deliberately stateless. Consumers that need
+ * tool arguments retained across events must create and retain a translator.
+ */
+export function toWireEvent(event: AgentSessionEvent): WireEventV1 | null {
+	return createWireEventTranslator()(event);
+}
+
 function translateWireEvent(
 	event: AgentSessionEvent,
 	projectPresentation: ToolPresentationProjector,

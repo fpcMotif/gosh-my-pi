@@ -1,7 +1,5 @@
-// Package workspace defines the Workspace interface used by all
-// frontends (TUI, CLI) to interact with a running workspace. Two
-// implementations exist: one wrapping a local app.App instance and one
-// wrapping the HTTP client SDK.
+// Package workspace defines the Workspace interface used by the TUI and CLI
+// to interact with a running workspace.
 package workspace
 
 import (
@@ -54,10 +52,8 @@ type AgentModel struct {
 	ModelCfg   config.SelectedModel
 }
 
-// Workspace is the main abstraction consumed by the TUI and CLI. It
-// groups every operation a frontend needs to perform against a running
-// workspace, regardless of whether the workspace is in-process or
-// remote.
+// Workspace is the main abstraction consumed by the TUI and CLI. It groups
+// every operation a frontend needs from a running workspace.
 type Workspace interface {
 	// Sessions
 	CreateSession(ctx context.Context, title string) (session.Session, error)
@@ -75,7 +71,7 @@ type Workspace interface {
 
 	// Agent
 	AgentRun(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error
-	AgentCancel(sessionID string)
+	AgentCancel(ctx context.Context, sessionID string) error
 	AgentIsBusy() bool
 	AgentIsSessionBusy(sessionID string) bool
 	AgentModel() AgentModel
@@ -86,7 +82,6 @@ type Workspace interface {
 	AgentSummarize(ctx context.Context, sessionID string) error
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
-	GetDefaultSmallModel(providerID string) config.SelectedModel
 
 	// Permissions
 	PermissionGrant(perm permission.PermissionRequest)
@@ -114,17 +109,7 @@ type Workspace interface {
 	WorkingDir() string
 	Resolver() config.VariableResolver
 
-	// IsGmpMode reports whether this workspace is the gmp RPC bridge.
-	// Gmp mode owns its own credential store (gmp's AuthStorage) and the
-	// model registry, so the TUI must suppress every legacy provider /
-	// auth code path that would write into Crush's local stores. Picker
-	// scope, the api_key_input dialog, and `crush login` all branch on
-	// this. AppWorkspace and ClientWorkspace return false; GmpWorkspace
-	// returns true. See docs/adr/0001-gmp-mode-credential-store.md.
-	IsGmpMode() bool
-
 	// Config mutations (proxied to server in client mode)
-	UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error
 	SetCompactMode(scope config.Scope, enabled bool) error
 	SetProviderAPIKey(scope config.Scope, providerID string, apiKey any) error
 	SetConfigField(scope config.Scope, key string, value any) error

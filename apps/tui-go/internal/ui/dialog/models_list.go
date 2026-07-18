@@ -69,23 +69,23 @@ func (f *ModelsList) SetFilter(q string) {
 // SetSelected sets the selected item index. It overrides the base method to
 // skip non-model items.
 func (f *ModelsList) SetSelected(index int) {
-	if index < 0 || index >= f.Len() {
+	if index < 0 {
 		f.List.SetSelected(index)
 		return
 	}
 
-	f.List.SetSelected(index)
-	for {
-		selectedItem := f.SelectedItem()
-		if _, ok := selectedItem.(*ModelItem); ok {
+	modelIndex := 0
+	for itemIndex := range f.List.Len() {
+		if _, ok := f.List.ItemAt(itemIndex).(*ModelItem); !ok {
+			continue
+		}
+		if modelIndex == index {
+			f.List.SetSelected(itemIndex)
 			return
 		}
-		f.List.SetSelected(index + 1)
-		index++
-		if index >= f.Len() {
-			return
-		}
+		modelIndex++
 	}
+	f.List.SetSelected(-1)
 }
 
 // SetSelectedItem sets the selected item in the list by item ID.
@@ -95,14 +95,11 @@ func (f *ModelsList) SetSelectedItem(itemID string) {
 		return
 	}
 
-	count := 0
-	for _, g := range f.groups {
-		for _, item := range g.Items {
-			if item.ID() == itemID {
-				f.SetSelected(count)
-				return
-			}
-			count++
+	for index := range f.List.Len() {
+		item, ok := f.List.ItemAt(index).(*ModelItem)
+		if ok && item.ID() == itemID {
+			f.List.SetSelected(index)
+			return
 		}
 	}
 }

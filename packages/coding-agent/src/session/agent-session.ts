@@ -448,6 +448,7 @@ export class AgentSession {
 	#convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
 	#rebuildSystemPrompt: ((toolNames: string[], tools: Map<string, AgentTool>) => Promise<string>) | undefined;
 	#baseSystemPrompt: string;
+	#baseSystemPromptEditMode: EditMode;
 	#mcp: MCPSelectionStore;
 	#rpcHostToolNames = new Set<string>();
 
@@ -464,6 +465,7 @@ export class AgentSession {
 	#recoveryLedger: RecoveryLedger;
 
 	async #runAgentRequest(request: AgentRunRequest): Promise<void> {
+		await this.#ensureBaseSystemPromptForCurrentEditMode();
 		await runAgentRequest(this.agent, this.sessionManager, request, { enabled: isRecoveryPolicyEnabled() });
 	}
 
@@ -581,6 +583,7 @@ export class AgentSession {
 		this.#convertToLlm = config.convertToLlm ?? convertToLlm;
 		this.#rebuildSystemPrompt = config.rebuildSystemPrompt;
 		this.#baseSystemPrompt = this.agent.state.systemPrompt;
+		this.#baseSystemPromptEditMode = this.#resolveActiveEditMode();
 		this.#mcp = new MCPSelectionStore(
 			{
 				toolRegistry: this.#toolRegistry,
@@ -1569,11 +1572,30 @@ export class AgentSession {
 		return resolveEditMode(this.#getEditModeSession());
 	}
 
-	async #syncEditToolModeAfterModelChange(previousEditMode: EditMode): Promise<void> {
+	async #syncEditToolModeAfterModelChange(): Promise<void> {
 		const currentEditMode = this.#resolveActiveEditMode();
-		if (previousEditMode !== currentEditMode && this.getActiveToolNames().includes("edit")) {
-			await this.refreshBaseSystemPrompt();
+		if (this.#baseSystemPromptEditMode === currentEditMode) return;
+		if (!this.getActiveToolNames().includes("edit")) {
+			this.#baseSystemPromptEditMode = currentEditMode;
+			return;
 		}
+		try {
+			await this.refreshBaseSystemPrompt();
+		} catch (error) {
+			logger.warn("Failed to refresh system prompt after model change; will retry before next request", {
+				error: String(error),
+			});
+		}
+	}
+
+	async #ensureBaseSystemPromptForCurrentEditMode(): Promise<void> {
+		const currentEditMode = this.#resolveActiveEditMode();
+		if (this.#baseSystemPromptEditMode === currentEditMode) return;
+		if (!this.getActiveToolNames().includes("edit")) {
+			this.#baseSystemPromptEditMode = currentEditMode;
+			return;
+		}
+		await this.refreshBaseSystemPrompt();
 	}
 
 	isMCPDiscoveryEnabled(): boolean {
@@ -1634,6 +1656,7 @@ export class AgentSession {
 			this.#baseSystemPrompt = await this.#rebuildSystemPrompt(validToolNames, this.#toolRegistry);
 			this.agent.setSystemPrompt(this.#baseSystemPrompt);
 		}
+		this.#baseSystemPromptEditMode = this.#resolveActiveEditMode();
 		if (options?.persistMCPSelection !== false) {
 			this.#mcp.persistIfChanged(previousSelectedMCPToolNames);
 		}
@@ -1651,10 +1674,14 @@ export class AgentSession {
 
 	/** Rebuild the base system prompt using the current active tool set. */
 	async refreshBaseSystemPrompt(): Promise<void> {
-		if (!this.#rebuildSystemPrompt) return;
+		if (!this.#rebuildSystemPrompt) {
+			this.#baseSystemPromptEditMode = this.#resolveActiveEditMode();
+			return;
+		}
 		const activeToolNames = this.getActiveToolNames();
 		this.#baseSystemPrompt = await this.#rebuildSystemPrompt(activeToolNames, this.#toolRegistry);
 		this.agent.setSystemPrompt(this.#baseSystemPrompt);
+		this.#baseSystemPromptEditMode = this.#resolveActiveEditMode();
 	}
 
 	/**
@@ -1880,8 +1907,8 @@ export class AgentSession {
 		);
 	}
 
-	resolveRoleModel(role: string): Model | undefined {
-		return this.#resolveRoleModelFull(role, this.#modelRegistry.getAvailable(), this.model).model;
+	resolveRoleModel(role: string, candidates: Model[] = this.#modelRegistry.getAvailable()): Model | undefined {
+		return this.#resolveRoleModelFull(role, candidates, this.model).model;
 	}
 
 	/**
@@ -1889,8 +1916,11 @@ export class AgentSession {
 	 * Unlike resolveRoleModel(), this preserves the thinking level suffix
 	 * from role configuration (e.g., "anthropic/claude-sonnet-4-5:xhigh").
 	 */
-	resolveRoleModelWithThinking(role: string): ResolvedModelRoleValue {
-		return this.#resolveRoleModelFull(role, this.#modelRegistry.getAvailable(), this.model);
+	resolveRoleModelWithThinking(
+		role: string,
+		candidates: Model[] = this.#modelRegistry.getAvailable(),
+	): ResolvedModelRoleValue {
+		return this.#resolveRoleModelFull(role, candidates, this.model);
 	}
 
 	get promptTemplates(): ReadonlyArray<PromptTemplate> {
@@ -2839,11 +2869,11 @@ export class AgentSession {
 		role: string = "default",
 		options?: { selector?: string; thinkingLevel?: ThinkingLevel },
 	): Promise<void> {
-		const previousEditMode = this.#resolveActiveEditMode();
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
+		this.sessionManager.assertWritable();
 
 		this.#activeRetryFallback.clear();
 		this.#setModelWithProviderSessionReset(model);
@@ -2856,8 +2886,33 @@ export class AgentSession {
 
 		// Re-apply thinking for the newly selected model. Prefer the model's
 		// configured defaultLevel; otherwise preserve the current level.
-		this.setThinkingLevel(model.thinking?.defaultLevel ?? this.thinkingLevel);
-		await this.#syncEditToolModeAfterModelChange(previousEditMode);
+		const thinkingLevel =
+			options?.thinkingLevel === undefined || options.thinkingLevel === ThinkingLevel.Inherit
+				? (model.thinking?.defaultLevel ?? this.thinkingLevel)
+				: options.thinkingLevel;
+		this.setThinkingLevel(thinkingLevel);
+		await this.#syncEditToolModeAfterModelChange();
+	}
+
+	/**
+	 * Assign a model to a named role without changing the active model.
+	 * Validates the model can be used by this session before persisting it.
+	 */
+	async assignModelRole(
+		model: Model,
+		role: string,
+		options?: { selector?: string; thinkingLevel?: ThinkingLevel },
+	): Promise<void> {
+		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
+		if (apiKey === null || apiKey === undefined || apiKey === "") {
+			throw new Error(`No API key for ${model.provider}/${model.id}`);
+		}
+
+		this.settings.setModelRole(
+			role,
+			this.#formatRoleModelValue(role, model, options?.selector, options?.thinkingLevel),
+		);
+		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 	}
 
 	/**
@@ -2866,11 +2921,11 @@ export class AgentSession {
 	 * @throws Error if no API key available for the model
 	 */
 	async setModelTemporary(model: Model, thinkingLevel?: ThinkingLevel): Promise<void> {
-		const previousEditMode = this.#resolveActiveEditMode();
 		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
+		this.sessionManager.assertWritable();
 
 		this.#activeRetryFallback.clear();
 		this.#setModelWithProviderSessionReset(model);
@@ -2880,7 +2935,7 @@ export class AgentSession {
 		// Apply explicit thinking level if given; otherwise prefer the model's
 		// configured defaultLevel; otherwise re-clamp the current level.
 		this.setThinkingLevel(thinkingLevel ?? model.thinking?.defaultLevel ?? this.thinkingLevel);
-		await this.#syncEditToolModeAfterModelChange(previousEditMode);
+		await this.#syncEditToolModeAfterModelChange();
 	}
 
 	/**
@@ -2959,10 +3014,9 @@ export class AgentSession {
 		if (options?.temporary === true) {
 			await this.setModelTemporary(next.model, next.explicitThinkingLevel ? next.thinkingLevel : undefined);
 		} else {
-			await this.setModel(next.model, next.role);
-			if (next.explicitThinkingLevel && next.thinkingLevel !== undefined) {
-				this.setThinkingLevel(next.thinkingLevel);
-			}
+			await this.setModel(next.model, next.role, {
+				thinkingLevel: next.explicitThinkingLevel ? next.thinkingLevel : undefined,
+			});
 		}
 
 		return { model: next.model, thinkingLevel: this.thinkingLevel, role: next.role };
@@ -2991,7 +3045,6 @@ export class AgentSession {
 	}
 
 	async #cycleScopedModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
-		const previousEditMode = this.#resolveActiveEditMode();
 		const scopedModels = await this.#getScopedModelsWithApiKey();
 		if (scopedModels.length <= 1) return undefined;
 
@@ -3004,6 +3057,7 @@ export class AgentSession {
 		const next = scopedModels[nextIndex];
 
 		// Apply model
+		this.sessionManager.assertWritable();
 		this.#activeRetryFallback.clear();
 		this.#setModelWithProviderSessionReset(next.model);
 		this.sessionManager.appendModelChange(`${next.model.provider}/${next.model.id}`);
@@ -3012,13 +3066,12 @@ export class AgentSession {
 
 		// Apply the scoped model's configured thinking level
 		this.setThinkingLevel(next.thinkingLevel);
-		await this.#syncEditToolModeAfterModelChange(previousEditMode);
+		await this.#syncEditToolModeAfterModelChange();
 
 		return { model: next.model, thinkingLevel: this.thinkingLevel, isScoped: true };
 	}
 
 	async #cycleAvailableModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
-		const previousEditMode = this.#resolveActiveEditMode();
 		const availableModels = this.#modelRegistry.getAvailable();
 		if (availableModels.length <= 1) return undefined;
 
@@ -3034,6 +3087,7 @@ export class AgentSession {
 		if (apiKey === null || apiKey === undefined || apiKey === "") {
 			throw new Error(`No API key for ${nextModel.provider}/${nextModel.id}`);
 		}
+		this.sessionManager.assertWritable();
 
 		this.#activeRetryFallback.clear();
 		this.#setModelWithProviderSessionReset(nextModel);
@@ -3042,7 +3096,7 @@ export class AgentSession {
 		this.settings.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
 		// Re-apply the current thinking level for the newly selected model
 		this.setThinkingLevel(this.thinkingLevel);
-		await this.#syncEditToolModeAfterModelChange(previousEditMode);
+		await this.#syncEditToolModeAfterModelChange();
 
 		return { model: nextModel, thinkingLevel: this.thinkingLevel, isScoped: false };
 	}
@@ -3065,6 +3119,7 @@ export class AgentSession {
 	setThinkingLevel(level: ThinkingLevel | undefined, persist: boolean = false): void {
 		const effectiveLevel = resolveThinkingLevelForModel(this.model, level);
 		const isChanging = effectiveLevel !== this.#thinkingLevel;
+		if (isChanging) this.sessionManager.assertWritable();
 
 		this.#thinkingLevel = effectiveLevel;
 		this.agent.setThinkingLevel(toReasoningEffort(effectiveLevel) ?? Effort.Medium);
@@ -3192,6 +3247,7 @@ export class AgentSession {
 			if (!this.model) {
 				throw new Error("No model selected");
 			}
+			await this.#ensureBaseSystemPromptForCurrentEditMode();
 
 			const compactionSettings = this.settings.getGroup("compaction");
 			const compactionModel = this.model;
@@ -4805,6 +4861,7 @@ export class AgentSession {
 		const previousSelectedMCPToolNames = this.#mcp.captureSelectedSnapshot();
 		const previousTools = [...this.agent.state.tools];
 		const previousBaseSystemPrompt = this.#baseSystemPrompt;
+		const previousBaseSystemPromptEditMode = this.#baseSystemPromptEditMode;
 		const previousSystemPrompt = this.agent.state.systemPrompt;
 		const previousFallbackSelectedMCPToolNames =
 			previousSessionFile !== null && previousSessionFile !== undefined && previousSessionFile !== ""
@@ -4905,9 +4962,11 @@ export class AgentSession {
 				this.#mcp.restoreSelectedSnapshot(previousSelectedMCPToolNames);
 				this.agent.setTools(previousTools);
 				this.#baseSystemPrompt = previousBaseSystemPrompt;
+				this.#baseSystemPromptEditMode = previousBaseSystemPromptEditMode;
 				this.agent.setSystemPrompt(previousSystemPrompt);
 			}
 			this.#baseSystemPrompt = previousBaseSystemPrompt;
+			this.#baseSystemPromptEditMode = previousBaseSystemPromptEditMode;
 			this.agent.setSystemPrompt(previousSystemPrompt);
 			this.agent.replaceMessages(previousAgentMessages);
 			this.#pendingMessages.restore(previousPendingMessages);

@@ -2,11 +2,20 @@
 
 **Goal**: keep the upstream Crush Bubble Tea TUI + the JSONL bridge to the gmp TypeScript backend. Strip everything that exists only to power Crush's own LLM runtime, sessions, persistence, HTTP server, and OAuth flows.
 
-This is a planning document. Nothing is deleted yet. Use it as the punch list when executing.
+## Current status — 2026-07-18
+
+Phase 1 lite is complete: `apps/tui-go` is gmp-only,
+`setupGmpWorkspace()` creates the sole live workspace, and the old
+`OmpWorkspace`/`AppWorkspace`/`ClientWorkspace` paths are gone. The direct
+RPC catalog and host approval round-trip are also live.
+
+The full Phase 1/2 carve-out below remains future work. The findings and
+implementation plan below are a historical baseline, not current runtime
+documentation.
 
 ---
 
-## Findings
+## Historical findings
 
 Two passes mapped the codebase:
 
@@ -23,7 +32,7 @@ The carve-out keeps mode 1 and removes modes 2 and 3.
 
 ---
 
-## Phase 1 — pure-server deletion (mechanical, low risk)
+## Historical Phase 1 — pure-server deletion (mechanical, low risk)
 
 **Delete entirely:**
 
@@ -60,7 +69,7 @@ The carve-out keeps mode 1 and removes modes 2 and 3.
 
 ---
 
-## Phase 2 — gut Crush runtime, keep type surfaces (medium risk)
+## Historical Phase 2 — gut Crush runtime, keep type surfaces (medium risk)
 
 The UI imports `internal/agent`, `internal/session`, `internal/message`, `internal/oauth`, `internal/lsp`, `internal/permission`, `internal/hooks`, `internal/skills`, `internal/config`, `internal/commands`, `internal/history`. We can't delete these wholesale because the Bubble Tea views consume their types. We can, however, **reduce each to a thin type-only / pass-through layer** and drop the implementation.
 
@@ -104,7 +113,7 @@ Each step: delete, fix UI compile errors by bridging through `OmpWorkspace`, run
 
 ---
 
-## Phase 3 — bridge gaps (architectural)
+## Historical Phase 3 — bridge gaps (architectural)
 
 Things the omp bridge doesn't yet surface that the UI expects:
 

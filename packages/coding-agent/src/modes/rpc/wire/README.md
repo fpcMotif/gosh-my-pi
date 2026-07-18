@@ -5,7 +5,7 @@
 **Status:** Frozen. Additive evolution only within v1.
 
 This document is the source of truth for the wire vocabulary exchanged
-between `omp --mode rpc` (the server) and any consumer (today: `apps/tui-go`,
+between `gmp --mode rpc` (the server) and any consumer (today: `apps/tui-go`,
 tomorrow potentially web/IDE frontends).
 
 The TypeScript type contract lives in [`v1.ts`](v1.ts). The translator
@@ -160,7 +160,7 @@ The command set covers:
 
 - Prompting: `prompt`, `steer`, `follow_up`, `abort`, `abort_and_prompt`, `new_session`
 - State queries: `get_state`, `set_todos`, `set_host_tools`
-- Model: `set_model`, `cycle_model`, `get_available_models`
+- Model: `models.catalog`, `set_model`, `cycle_model`, `get_available_models`
 - Thinking: `set_thinking_level`, `cycle_thinking_level`
 - Queue modes: `set_steering_mode`, `set_follow_up_mode`, `set_interrupt_mode`
 - Compaction: `compact`, `set_auto_compaction`
@@ -169,9 +169,41 @@ The command set covers:
 - Session: `get_session_stats`, `export_html`, `switch_session`, `branch`,
   `get_branch_messages`, `get_last_assistant_text`, `set_session_name`
 - Messages: `get_messages`
+- Auth: `auth.login`, `auth.logout`
+- Providers: `providers.list_supported`, `providers.list_authenticated`
 
-Every command MAY carry an optional `id` field; the matching `response`
-frame echoes the `id` for correlation.
+`auth.login` accepts an optional provider. When absent, the server emits an
+`auth.pick_provider` extension UI request and continues after the host sends
+the chosen provider id or cancellation. `providers.list_supported` returns
+provider id, display name, and availability. `providers.list_authenticated`
+returns ids with stored credentials.
+
+Every command MAY carry an optional `id` field. Normal command responses echo
+it. Malformed envelopes and intentionally uncorrelated unknown-command
+responses do not.
+
+### New-session receipt
+
+`new_session` success data is `{ cancelled: true }` when an extension refuses
+the switch. Modern successful switches return
+`{ cancelled: false, state: RpcSessionState }`; older v1 backends may omit
+`state`. The snapshot has the exact `get_state` shape. New hosts may fall back
+to `get_state`; hosts that need only cancellation may ignore the additive field.
+
+### Model catalog and role assignment
+
+`models.catalog` returns the backend-owned `RpcModelCatalog`: model entries,
+role assignments, and the optional active model. A resolvable role includes
+its concrete `provider` and `modelId`; an unset or unresolved role may omit
+those fields and its diagnostic `selector`.
+
+`set_model` accepts an optional `role`. Missing or `default` changes the
+active model. A named role assigns only that role. Its success data is the
+selected `Model` extended with required `activeModel`, `thinkingLevel`, and
+exact role `assignment` fields. The first two are nullable.
+`set_thinking_level` returns `{ thinkingLevel: ThinkingLevel | null }` with the
+effective backend level. New hosts must use `models.catalog`; the
+`gmp/gmp-backend` response is isolated compatibility behavior for old hosts.
 
 ## Versioning rules
 

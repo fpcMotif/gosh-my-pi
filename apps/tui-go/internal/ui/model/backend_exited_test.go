@@ -45,6 +45,25 @@ func TestBackendExitedMsg_EntersBannerRenderState(t *testing.T) {
 	}
 }
 
+func TestBackendExitedMsg_OverloadRendersCause(t *testing.T) {
+	t.Parallel()
+
+	m := newTestUI()
+	m.com.Workspace = &bannerWorkspace{}
+
+	updated, _ := m.Update(workspace.BackendExitedMsg{Reason: workspace.BackendExitUIOverload})
+	ui, ok := updated.(*UI)
+	if !ok {
+		t.Fatalf("Update returned %T, want *UI", updated)
+	}
+	if ui.backendExitReason != workspace.BackendExitUIOverload {
+		t.Fatalf("backend exit reason = %v, want UI overload", ui.backendExitReason)
+	}
+	if content := ui.View().Content; !strings.Contains(content, backendOverloadDetail) {
+		t.Fatalf("overload detail missing after UI mailbox overload; got:\n%s", content)
+	}
+}
+
 // bannerWorkspace is a minimal Workspace stub: the backend-exited View path
 // only consults WorkingDir() (for the window title) before returning the
 // banner, so nothing else needs implementing.

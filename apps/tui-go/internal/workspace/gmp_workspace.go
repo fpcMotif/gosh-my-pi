@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/config"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/csync"
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/message"
@@ -19,20 +19,10 @@ import (
 	"github.com/fpcMotif/gosh-my-pi/apps/tui-go/internal/session"
 )
 
-const (
-	// GmpProviderID is the canonical id of the virtual provider that
-	// stands in for the gmp RPC bridge in Crush's provider map. Exported
-	// so the model picker, auth dialog router, and `crush login`
-	// command can recognise gmp-bridge entries without hard-coding the
-	// string.
-	GmpProviderID = "gmp"
-
-	gmpProviderID       = GmpProviderID
-	gmpModelID          = "gmp-backend"
-	gmpToolSessionDelim = "$$"
-)
+const gmpToolSessionDelim = "$$"
 
 var ErrUnsupported = errors.New("gmp backend: operation not supported in MVP")
+var ErrSessionCreationCancelled = errors.New("gmp backend: session creation cancelled")
 
 // GmpWorkspace implements the Workspace interface by talking to an
 // external `gmp --mode rpc` process over JSONL stdio.
@@ -55,8 +45,14 @@ type GmpWorkspace struct {
 	msgCounter         atomic.Uint64
 
 	model AgentModel
+	// thinkingLevel is the backend-owned session setting. Keep it separate
+	// from model metadata: the same model can run at any valid level.
+	thinkingLevel string
 
-	modelCatalog map[string]GmpModelCatalogEntry
+	modelCatalog ModelCatalog
+	// catalogOps serializes catalog transactions without holding mu across
+	// RPC. Waiting respects the caller deadline.
+	catalogOps chan struct{}
 
 	// program receives every UI-bound message via sendUI. In production this
 	// is *tea.Program; tests can swap in a fake that satisfies programSender
@@ -65,13 +61,25 @@ type GmpWorkspace struct {
 	// events is a test-only seam: tests assign a buffered channel here and
 	// drain it in nextMessageEvent. In production sendUI always uses program.
 	events chan tea.Msg
-	// uiQueue serializes program-bound messages through a single drain
-	// goroutine (started once in Subscribe) so streamed UI events keep their
-	// submission order. A bare `go program.Send` per message races and lets an
-	// earlier snapshot overwrite a later one.
-	uiQueue     chan tea.Msg
-	uiDrainOnce sync.Once
-	closeOnce   sync.Once
+	// uiMailbox holds program-bound UI messages. It coalesces pending full
+	// message snapshots without crossing lifecycle edges. uiWake starts one
+	// drain pass; producers never wait for Program.Send.
+	uiMailbox        []*uiMailboxSlot
+	uiMessageUpdates map[string]*uiMailboxSlot
+	uiWake           chan struct{}
+	uiDone           chan struct{}
+	uiDrained        chan struct{}
+	uiClosed         bool
+	uiOverloaded     bool
+	uiDrainOnce      sync.Once
+	sideDrainOnce    sync.Once
+	eventsDrainOnce  sync.Once
+	closeOnce        sync.Once
+	clientCloseOnce  sync.Once
+}
+
+type uiMailboxSlot struct {
+	msg tea.Msg
 }
 
 // programSender is the subset of *tea.Program that GmpWorkspace.sendUI uses.
@@ -91,17 +99,13 @@ func NewGmpWorkspace(client *ompclient.Client, cwd string) *GmpWorkspace {
 		resolver:           config.IdentityResolver(),
 		messages:           make(map[string]message.Message),
 		toolResultMessages: make(map[string]string),
-		modelCatalog:       make(map[string]GmpModelCatalogEntry),
-		uiQueue:            make(chan tea.Msg, 1024),
-		model: AgentModel{
-			CatwalkCfg: catwalk.Model{ID: gmpModelID, Name: "gmp backend"},
-			ModelCfg:   cfg.Models[config.SelectedModelTypeLarge],
-		},
-	}
-	// Best-effort initial state sync so the UI has a session ID immediately.
-	if client != nil {
-		w.syncState(context.Background())
-		_ = w.RefreshModelCatalog(context.Background())
+		modelCatalog:       ModelCatalog{},
+		catalogOps:         make(chan struct{}, 1),
+		uiMessageUpdates:   make(map[string]*uiMailboxSlot),
+		uiWake:             make(chan struct{}, 1),
+		uiDone:             make(chan struct{}),
+		uiDrained:          make(chan struct{}),
+		model:              AgentModel{},
 	}
 	return w
 }
@@ -114,15 +118,33 @@ func (w *GmpWorkspace) nextID(prefix string) string {
 // -- Sessions --
 
 func (w *GmpWorkspace) CreateSession(ctx context.Context, title string) (session.Session, error) {
+	var backendState *backendSessionState
 	if w.client != nil {
-		_, err := w.client.Call(ctx, ompclient.Command{Type: "new_session"})
+		if err := w.acquireCatalogOp(ctx); err != nil {
+			return session.Session{}, err
+		}
+		defer w.releaseCatalogOp()
+		resp, err := w.client.Call(ctx, ompclient.Command{Type: "new_session"})
 		if err != nil {
 			return session.Session{}, err
 		}
-		w.syncState(ctx)
+		state, err := parseNewSessionReceipt(resp.Data)
+		if err != nil {
+			return session.Session{}, err
+		}
+		if state == nil {
+			if err := w.syncStateLocked(ctx); err != nil {
+				return session.Session{}, err
+			}
+		} else {
+			backendState = state
+		}
 	}
 
 	w.mu.Lock()
+	if backendState != nil {
+		w.applyBackendSessionStateLocked(*backendState)
+	}
 	if w.session.ID == "" {
 		w.ensureSessionLocked()
 	}
@@ -138,6 +160,42 @@ func (w *GmpWorkspace) CreateSession(ctx context.Context, title string) (session
 	w.mu.Unlock()
 	w.sendUI(pubsub.Event[session.Session]{Type: pubsub.CreatedEvent, Payload: s})
 	return s, nil
+}
+
+// parseNewSessionReceipt accepts both the modern authoritative receipt and
+// the legacy cancelled-only response. A modern state must identify the new
+// session before callers are allowed to mutate local state.
+func parseNewSessionReceipt(data []byte) (*backendSessionState, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, fmt.Errorf("decode new_session response: %w", err)
+	}
+	cancelledData, ok := fields["cancelled"]
+	if !ok {
+		return nil, errors.New("decode new_session response: missing cancelled")
+	}
+	var cancelled bool
+	if err := json.Unmarshal(cancelledData, &cancelled); err != nil {
+		return nil, fmt.Errorf("decode new_session response: invalid cancelled: %w", err)
+	}
+	if cancelled {
+		return nil, ErrSessionCreationCancelled
+	}
+	stateData, ok := fields["state"]
+	if !ok {
+		return nil, nil
+	}
+	if string(stateData) == "null" {
+		return nil, errors.New("decode new_session response: state must be an object")
+	}
+	state, err := parseBackendSessionState(stateData)
+	if err != nil {
+		return nil, fmt.Errorf("decode new_session response state: %w", err)
+	}
+	if strings.TrimSpace(state.SessionID) == "" {
+		return nil, errors.New("decode new_session response: state has blank sessionId")
+	}
+	return &state, nil
 }
 
 func (w *GmpWorkspace) GetSession(ctx context.Context, sessionID string) (session.Session, error) {
@@ -287,14 +345,17 @@ func (w *GmpWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, a
 	return err
 }
 
-func (w *GmpWorkspace) AgentCancel(sessionID string) {
+func (w *GmpWorkspace) AgentCancel(ctx context.Context, sessionID string) error {
 	if w.client != nil {
-		_, _ = w.client.Call(context.Background(), ompclient.Command{Type: "abort"})
+		if _, err := w.client.Call(ctx, ompclient.Command{Type: "abort"}); err != nil {
+			return err
+		}
 	}
 	if msg := w.finishAssistant(message.FinishReasonCanceled, "Request canceled", ""); msg != nil {
 		w.sendUI(msg)
 	}
 	w.setAgentBusy(false)
+	return nil
 }
 
 func (w *GmpWorkspace) AgentIsBusy() bool {
@@ -314,7 +375,9 @@ func (w *GmpWorkspace) AgentModel() AgentModel {
 }
 
 func (w *GmpWorkspace) AgentIsReady() bool {
-	return true
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.model.ModelCfg.Provider != "" && w.model.ModelCfg.Model != ""
 }
 
 func (w *GmpWorkspace) AgentQueuedPrompts(sessionID string) int {
@@ -336,17 +399,11 @@ func (w *GmpWorkspace) AgentSummarize(ctx context.Context, sessionID string) err
 }
 
 func (w *GmpWorkspace) UpdateAgentModel(ctx context.Context) error {
-	w.syncState(ctx)
-	return nil
+	return w.syncState(ctx)
 }
 
 func (w *GmpWorkspace) InitCoderAgent(ctx context.Context) error {
-	w.syncState(ctx)
-	return nil
-}
-
-func (w *GmpWorkspace) GetDefaultSmallModel(providerID string) config.SelectedModel {
-	return w.cfg.Models[config.SelectedModelTypeSmall]
+	return w.syncState(ctx)
 }
 
 // -- Config (read-only) --
@@ -363,44 +420,7 @@ func (w *GmpWorkspace) Resolver() config.VariableResolver {
 	return w.resolver
 }
 
-// IsGmpMode reports true: GmpWorkspace IS the gmp RPC bridge. Callers
-// use this to short-circuit Crush legacy code paths that would write
-// credentials into local stores instead of routing through gmp's
-// AuthStorage over the auth.* RPC frames.
-func (*GmpWorkspace) IsGmpMode() bool { return true }
-
 // -- Config mutations --
-
-func (w *GmpWorkspace) UpdatePreferredModel(scope config.Scope, modelType config.SelectedModelType, model config.SelectedModel) error {
-	w.mu.Lock()
-	w.cfg.Models[modelType] = model
-	w.model = AgentModel{
-		CatwalkCfg: catwalk.Model{ID: model.Model, Name: model.Model},
-		ModelCfg:   model,
-	}
-	w.mu.Unlock()
-	if w.client == nil {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	_, err := w.client.Call(ctx, ompclient.Command{
-		Type:     "set_model",
-		Provider: model.Provider,
-		ModelID:  model.Model,
-		Role:     gmpRoleForModelType(modelType),
-	})
-	return err
-}
-
-func gmpRoleForModelType(modelType config.SelectedModelType) string {
-	switch modelType {
-	case config.SelectedModelTypeSmall:
-		return "smol"
-	default:
-		return "default"
-	}
-}
 
 func (w *GmpWorkspace) SetCompactMode(scope config.Scope, enabled bool) error {
 	w.cfg.Options.TUI.CompactMode = enabled
@@ -422,10 +442,25 @@ func (w *GmpWorkspace) SetConfigField(scope config.Scope, key string, value any)
 
 func (w *GmpWorkspace) Shutdown() {
 	w.closeOnce.Do(func() {
-		if w.client != nil {
-			_ = w.client.Close()
-		}
+		w.mu.Lock()
+		w.uiClosed = true
+		w.uiMailbox = nil
+		clear(w.uiMessageUpdates)
+		close(w.uiDone)
+		client := w.client
+		w.mu.Unlock()
+		w.closeClient(client)
 	})
+}
+
+// closeClient closes the RPC transport at most once. Callers capture client
+// while holding w.mu, then invoke this method after releasing it: Close waits
+// for the reader and may synchronously re-enter workspace shutdown paths.
+func (w *GmpWorkspace) closeClient(client *ompclient.Client) {
+	if client == nil {
+		return
+	}
+	w.clientCloseOnce.Do(func() { _ = client.Close() })
 }
 
 // -- helpers --
@@ -451,21 +486,9 @@ func (w *GmpWorkspace) sessionTitle() string {
 func newOmpConfig() *config.Config {
 	progress := true
 	cfg := &config.Config{
-		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Provider: gmpProviderID, Model: gmpModelID},
-			config.SelectedModelTypeSmall: {Provider: gmpProviderID, Model: gmpModelID},
-		},
+		Models:       make(map[config.SelectedModelType]config.SelectedModel),
 		RecentModels: make(map[config.SelectedModelType][]config.SelectedModel),
-		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
-			gmpProviderID: {
-				ID:   gmpProviderID,
-				Name: "gmp",
-				Type: catwalk.TypeOpenAI,
-				Models: []catwalk.Model{
-					{ID: gmpModelID, Name: "gmp backend"},
-				},
-			},
-		}),
+		Providers:    csync.NewMap[string, config.ProviderConfig](),
 		Options: &config.Options{
 			ContextPaths:  []string{},
 			DataDirectory: ".omp",

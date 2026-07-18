@@ -149,7 +149,7 @@ func TestAssistantInfoItem_VersionedAndFinished(t *testing.T) {
 		Role:  message.Assistant,
 		Parts: []message.ContentPart{message.Finish{Reason: message.FinishReasonEndTurn}},
 	}
-	item := NewAssistantInfoItem(&sty, msg, nil, time.Time{}).(*AssistantInfoItem)
+	item := NewAssistantInfoItem(&sty, msg, ModelDisplayInfo{}, time.Time{}).(*AssistantInfoItem)
 
 	require.True(t, item.Finished(), "AssistantInfoItem must be Finished()")
 	require.Equal(t, uint64(0), item.Version())

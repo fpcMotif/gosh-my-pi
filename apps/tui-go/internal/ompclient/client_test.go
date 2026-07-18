@@ -4,7 +4,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"os"
+	"os/signal"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -46,6 +52,51 @@ func newFakePeer(t *testing.T) *fakePeer {
 		_ = stdoutR.Close()
 	})
 	return fp
+}
+
+// TestOMPClientOverflowHelperProcess is a child process for
+// TestUnexpectedExitAutoReapsChild. It either overflows Events or closes
+// stdout, then ignores Interrupt until the automatic reaper escalates to Kill.
+func TestOMPClientOverflowHelperProcess(t *testing.T) {
+	mode := os.Getenv("GO_WANT_OMPCLIENT_EXIT_HELPER")
+	if mode == "" {
+		return
+	}
+	signal.Ignore(os.Interrupt)
+	_, _ = fmt.Fprint(os.Stdout, "{\"type\":\"ready\",\"schema\":\"omp-rpc/v1\"}\n")
+	switch mode {
+	case "overflow":
+		for range eventsBufferSize {
+			_, _ = fmt.Fprint(os.Stdout, "{\"type\":\"message_update\"}\n")
+		}
+	case "eof":
+		_ = os.Stdout.Close()
+	default:
+		os.Exit(2)
+	}
+	for {
+		time.Sleep(time.Hour)
+	}
+}
+
+type stubbornReadCloser struct {
+	release chan struct{}
+	once    sync.Once
+}
+
+func newStubbornReadCloser() *stubbornReadCloser {
+	return &stubbornReadCloser{release: make(chan struct{})}
+}
+
+func (r *stubbornReadCloser) Read([]byte) (int, error) {
+	<-r.release
+	return 0, io.EOF
+}
+
+func (r *stubbornReadCloser) Close() error { return nil }
+
+func (r *stubbornReadCloser) Release() {
+	r.once.Do(func() { close(r.release) })
 }
 
 // writeFrame emits one JSONL frame from the peer to the Client.
@@ -236,47 +287,211 @@ func TestSideChannelFanOut(t *testing.T) {
 	}
 }
 
-// TestReadLoop_SideChannelOverflowDoesNotWedgeResponses is the core
-// anti-deadlock guard for the side-channel path. extension_ui_request,
-// host_tool_call and host_tool_cancel frames share the single read-loop
-// goroutine with response dispatch, so a *blocking* side-channel send with no
-// consumer would stall every in-flight Call once the 16-slot buffer filled.
-// Here we flood the extension-UI side channel well past its buffer WITHOUT
-// draining it, then prove a pending Call's response still lands behind the
-// flood. The read loop must never block on a side-channel send.
-func TestReadLoop_SideChannelOverflowDoesNotWedgeResponses(t *testing.T) {
-	fp := newFakePeer(t)
+// TestReadLoop_EventOverflowFailsClosed proves the final ready frame is not
+// dropped when Events is full. The client exits, wakes the pending Call with
+// ErrIngressFull, and closes its streams instead of retaining hidden state.
+func TestReadLoop_EventOverflowFailsClosed(t *testing.T) {
+	frames := make([][]byte, eventsBufferSize+1)
+	for i := range eventsBufferSize {
+		frames[i] = []byte(`{"type":"message_update"}` + "\n")
+	}
+	frames[eventsBufferSize] = []byte(`{"type":"ready","schema":"omp-rpc/v1"}` + "\n")
 
+	fp := newFakePeer(t)
+	assertIngressOverflowFailsClosed(t, fp, frames)
+	assertChannelClosed(t, fp.client.Events())
+}
+
+// TestIngressOverflowCauseSurvivesConcurrentClose pins terminal-cause
+// arbitration. Once the bounded offer detects overflow, a later Close cannot
+// relabel it intentional and suppress BackendExited or automatic reaping.
+func TestIngressOverflowCauseSurvivesConcurrentClose(t *testing.T) {
+	fp := newFakePeer(t)
+	for range eventsBufferSize {
+		fp.client.events <- &AgentEvent{Kind: "message_update"}
+	}
+	if err := fp.client.emitEvent(&AgentEvent{Kind: "ready"}); !errors.Is(err, ErrIngressFull) {
+		t.Fatalf("emitEvent error = %v, want ErrIngressFull", err)
+	}
+	if got := fp.client.exitKind.Load(); got != exitUnexpected {
+		t.Fatalf("exit kind = %d, want unexpected", got)
+	}
+
+	closed := make(chan error, 1)
+	go func() { closed <- fp.client.Close() }()
+	_ = fp.peerWrite.Close()
+	select {
+	case <-closed:
+	case <-time.After(testTimeout):
+		t.Fatal("Close did not complete")
+	}
+	if got := fp.client.exitKind.Load(); got != exitUnexpected {
+		t.Fatalf("Close changed exit kind to %d", got)
+	}
+	select {
+	case <-fp.client.BackendExited():
+	case <-time.After(testTimeout):
+		t.Fatal("concurrent Close suppressed BackendExited")
+	}
+}
+
+// TestReadLoop_SideChannelOverflowFailsClosed proves all required
+// side-channel frames fail closed when their bounded queue is full. They must
+// neither disappear nor create a spill goroutine that can outlive the client.
+func TestReadLoop_SideChannelOverflowFailsClosed(t *testing.T) {
+	tests := []struct {
+		name         string
+		frame        []byte
+		assertClosed func(*testing.T, *Client)
+	}{
+		{
+			name:  "extension UI",
+			frame: []byte(`{"type":"extension_ui_request","id":"u","method":"auth.showProgress"}` + "\n"),
+			assertClosed: func(t *testing.T, c *Client) {
+				assertChannelClosed(t, c.ExtensionUIRequests())
+			},
+		},
+		{
+			name:  "host tool call",
+			frame: []byte(`{"type":"host_tool_call","id":"h","toolCallId":"tc","toolName":"tool","arguments":{}}` + "\n"),
+			assertClosed: func(t *testing.T, c *Client) {
+				assertChannelClosed(t, c.HostToolCalls())
+			},
+		},
+		{
+			name:  "host tool cancel",
+			frame: []byte(`{"type":"host_tool_cancel","id":"h","targetId":"tc"}` + "\n"),
+			assertClosed: func(t *testing.T, c *Client) {
+				assertChannelClosed(t, c.HostToolCancels())
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			frames := make([][]byte, sideChannelBufferSize+1)
+			for i := range frames {
+				frames[i] = tc.frame
+			}
+			fp := newFakePeer(t)
+			assertIngressOverflowFailsClosed(t, fp, frames)
+			tc.assertClosed(t, fp.client)
+		})
+	}
+}
+
+// TestUnexpectedExitAutoReapsChild proves both unexpected EOF and ingress
+// overflow latch BackendExited, preserve the unexpected cause, then reap an
+// Interrupt-resistant child without waiting for Close.
+func TestUnexpectedExitAutoReapsChild(t *testing.T) {
+	for _, mode := range []string{"overflow", "eof"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			client, err := Spawn(context.Background(), Options{
+				Bin:        os.Args[0],
+				PrefixArgs: []string{"-test.run=^TestOMPClientOverflowHelperProcess$", "--"},
+				Env:        append(os.Environ(), "GO_WANT_OMPCLIENT_EXIT_HELPER="+mode),
+				Stderr:     io.Discard,
+			})
+			if err != nil {
+				t.Fatalf("Spawn: %v", err)
+			}
+			t.Cleanup(func() { _ = client.Close() })
+
+			select {
+			case <-client.Done():
+			case <-time.After(testTimeout):
+				t.Fatalf("%s child did not stop the read loop", mode)
+			}
+			if got := client.Schema(); got != ExpectedSchema {
+				t.Fatalf("helper schema = %q, want %q", got, ExpectedSchema)
+			}
+			select {
+			case <-client.BackendExited():
+			case <-time.After(testTimeout):
+				t.Fatalf("%s did not signal BackendExited", mode)
+			}
+			if got := client.exitKind.Load(); got != exitUnexpected {
+				t.Fatalf("exit kind = %d, want unexpected", got)
+			}
+
+			select {
+			case <-client.processDone:
+			case <-time.After(subprocessShutdownGrace + testTimeout):
+				t.Fatalf("%s child was not reaped automatically", mode)
+			}
+			if state := client.cmd.ProcessState; state == nil {
+				t.Fatal("Cmd.Wait did not record a process state")
+			}
+		})
+	}
+}
+
+func assertIngressOverflowFailsClosed(t *testing.T, fp *fakePeer, frames [][]byte) {
+	t.Helper()
 	errCh := make(chan error, 1)
 	go func() {
 		_, err := fp.client.Call(context.Background(), Command{ID: "c1", Type: "prompt"})
 		errCh <- err
 	}()
-	fp.readCommand(t) // c1 is now registered as pending
+	fp.readCommand(t)
 
-	// Flood the extension-UI channel far past its buffer with no consumer,
-	// then the response. Written from a goroutine because under the pre-fix
-	// blocking send the read loop wedges and these pipe writes would block
-	// forever — the test must not depend on them completing. Avoid t.Fatalf
-	// off the test goroutine; ignore write errors on teardown instead.
+	writeErr := make(chan error, 1)
 	go func() {
-		uiFrame := []byte(`{"type":"extension_ui_request","id":"u","method":"auth.showProgress"}` + "\n")
-		for range sideChannelBufferSize * 3 {
-			if _, err := fp.peerWrite.Write(uiFrame); err != nil {
+		for _, frame := range frames {
+			if _, err := fp.peerWrite.Write(frame); err != nil {
+				writeErr <- err
 				return
 			}
 		}
-		respFrame := []byte(`{"id":"c1","type":"response","command":"prompt","success":true}` + "\n")
-		_, _ = fp.peerWrite.Write(respFrame)
+		writeErr <- nil
 	}()
 
 	select {
-	case err := <-errCh:
+	case err := <-writeErr:
 		if err != nil {
-			t.Fatalf("Call failed: %v", err)
+			t.Fatalf("write overflow frames: %v", err)
 		}
 	case <-time.After(testTimeout):
-		t.Fatal("response wedged behind unconsumed side-channel frames — read loop blocked on a full side-channel buffer")
+		t.Fatal("read loop blocked while offering an overflow frame")
+	}
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, ErrIngressFull) {
+			t.Fatalf("Call error = %v, want ErrIngressFull", err)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("pending Call wedged after ingress overflow")
+	}
+
+	select {
+	case <-fp.client.Done():
+	case <-time.After(testTimeout):
+		t.Fatal("client did not stop after ingress overflow")
+	}
+	select {
+	case <-fp.client.BackendExited():
+	case <-time.After(testTimeout):
+		t.Fatal("BackendExited not signalled after ingress overflow")
+	}
+	if _, err := fp.peerWrite.Write([]byte("{\"type\":\"late\"}\n")); err == nil {
+		t.Fatal("read loop left its stdout pipe open after overflow")
+	}
+}
+
+func assertChannelClosed[T any](t *testing.T, ch <-chan T) {
+	t.Helper()
+	deadline := time.After(testTimeout)
+	for {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return
+			}
+		case <-deadline:
+			t.Fatal("channel stayed open after client shutdown")
+		}
 	}
 }
 
@@ -301,6 +516,77 @@ func TestClose_ReturnsWithoutSubprocess(t *testing.T) {
 	// Idempotent: a second Close (closeOnce) returns immediately.
 	if err := fp.client.Close(); err != nil {
 		t.Fatalf("second Close returned %v, want nil", err)
+	}
+}
+
+// TestClose_ClosesStalledStdout proves a NewWithIO peer cannot retain stdout
+// and hold Close forever. After one grace period Close owns and closes its
+// local read end, which releases readLoop without a false BackendExited signal.
+func TestClose_ClosesStalledStdout(t *testing.T) {
+	t.Parallel()
+	stdinR, stdinW := io.Pipe()
+	stdoutR, stdoutW := io.Pipe()
+	client := NewWithIO(stdinW, stdoutR)
+	t.Cleanup(func() {
+		_ = stdinR.Close()
+		_ = stdoutW.Close()
+		_ = client.Close()
+	})
+
+	closed := make(chan error, 1)
+	go func() { closed <- client.Close() }()
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	case <-time.After(subprocessShutdownGrace + testTimeout):
+		t.Fatal("Close did not release a stalled stdout reader")
+	}
+	if _, err := stdoutW.Write([]byte("late\n")); err == nil {
+		t.Fatal("local stdout remained open after Close")
+	}
+	select {
+	case <-client.BackendExited():
+		t.Fatal("intentional stdout close signalled BackendExited")
+	default:
+	}
+}
+
+// TestClose_BoundsBrokenReadCloser proves even a ReadCloser whose Close does
+// not unblock Read cannot trap Close after the escalation step.
+func TestClose_BoundsBrokenReadCloser(t *testing.T) {
+	t.Parallel()
+	stdinR, stdinW := io.Pipe()
+	stdout := newStubbornReadCloser()
+	client := NewWithIO(stdinW, stdout)
+	t.Cleanup(func() {
+		stdout.Release()
+		_ = stdinR.Close()
+		_ = client.Close()
+	})
+
+	closed := make(chan error, 1)
+	go func() { closed <- client.Close() }()
+	select {
+	case err := <-closed:
+		if err == nil || !strings.Contains(err.Error(), "timed out stopping read loop") {
+			t.Fatalf("Close error = %v, want bounded read-loop timeout", err)
+		}
+	case <-time.After(3 * subprocessShutdownGrace):
+		t.Fatal("Close hung on a broken ReadCloser")
+	}
+
+	stdout.Release()
+	select {
+	case <-client.Done():
+	case <-time.After(testTimeout):
+		t.Fatal("read loop did not finish after test release")
+	}
+	select {
+	case <-client.BackendExited():
+		t.Fatal("intentional broken-reader close signalled BackendExited")
+	default:
 	}
 }
 
@@ -347,9 +633,8 @@ func TestBackendExited_IntentionalCloseDoesNotSignal(t *testing.T) {
 	// shutdown intentional, letting the read loop drain.
 	go func() {
 		// Close blocks on <-c.done until the read loop ends; closing the
-		// peer's stdout from here is what ends it. closeRequested is already
-		// set by the time Close reaches the wait, so the EOF is classified as
-		// intentional, not a crash.
+		// peer's stdout from here is what ends it. Close claims the intentional
+		// exit before waiting, so the EOF is not classified as a crash.
 		<-time.After(20 * time.Millisecond)
 		_ = fp.peerWrite.Close()
 	}()

@@ -21,8 +21,18 @@ func decodeToolPresentation(raw json.RawMessage) *message.ToolPresentation {
 	}
 	switch probe.Type {
 	case message.ToolPresentationTypeStatus,
-		message.ToolPresentationTypeBlock,
-		message.ToolPresentationTypeCode:
+		message.ToolPresentationTypeBlock:
+		var presentation message.ToolPresentation
+		if err := json.Unmarshal(raw, &presentation); err != nil || !presentation.Usable() {
+			logMalformedToolPresentation(raw)
+			return nil
+		}
+		return &presentation
+	case message.ToolPresentationTypeCode:
+		if !hasRequiredCodeField(raw) {
+			logMalformedToolPresentation(raw)
+			return nil
+		}
 		var presentation message.ToolPresentation
 		if err := json.Unmarshal(raw, &presentation); err != nil || !presentation.Usable() {
 			logMalformedToolPresentation(raw)
@@ -34,6 +44,15 @@ func decodeToolPresentation(raw json.RawMessage) *message.ToolPresentation {
 		// additive variant from an absent presentation.
 		return &message.ToolPresentation{Type: probe.Type}
 	}
+}
+
+func hasRequiredCodeField(raw json.RawMessage) bool {
+	var envelope struct {
+		Code *struct {
+			Value *string `json:"code"`
+		} `json:"code"`
+	}
+	return json.Unmarshal(raw, &envelope) == nil && envelope.Code != nil && envelope.Code.Value != nil
 }
 
 func toolResultPresentation(raw json.RawMessage) *message.ToolPresentation {

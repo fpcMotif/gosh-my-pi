@@ -6,7 +6,7 @@ import { ActiveRetryFallback, type ActiveRetryFallbackContext } from "../src/ses
 import type { RetryFallbackPolicy, RetryFallbackSelector } from "../src/session/retry-fallback-policy";
 
 function makeModel(provider: string, id: string): Model {
-	return fromAny<Model>({
+	return fromAny<Model, object>({
 		provider,
 		id,
 		api: "openai-responses",
@@ -25,17 +25,20 @@ interface FakeContextOverrides {
 	getApiKey?: () => Promise<string | undefined>;
 	revertPolicy?: "never" | "cooldown-expiry";
 	suppressed?: (sel: RetryFallbackSelector) => boolean;
+	assertWritable?: () => void;
 }
 
 function makeContext(opts: FakeContextOverrides = {}): {
 	ctx: ActiveRetryFallbackContext;
 	calls: {
+		appendModelChange: number;
 		setModel: Model[];
 		setThinking: (ThinkingLevel | undefined)[];
 		emits: Array<{ from: string; to: string; role: string }>;
 	};
 } {
 	const calls = {
+		appendModelChange: 0,
 		setModel: [] as Model[],
 		setThinking: [] as (ThinkingLevel | undefined)[],
 		emits: [] as Array<{ from: string; to: string; role: string }>,
@@ -49,14 +52,18 @@ function makeContext(opts: FakeContextOverrides = {}): {
 	};
 	const ctx: ActiveRetryFallbackContext = {
 		sessionId: "test-session",
-		modelRegistry: fromAny<ActiveRetryFallbackContext["modelRegistry"]>({
+		modelRegistry: fromAny<ActiveRetryFallbackContext["modelRegistry"], object>({
 			find: (provider: string, id: string) => makeModel(provider, id),
 			getApiKey: opts.getApiKey ?? (async () => "fake-key"),
 		}),
-		sessionManager: fromAny<ActiveRetryFallbackContext["sessionManager"]>({
-			appendModelChange: () => "msg-id",
+		sessionManager: fromAny<ActiveRetryFallbackContext["sessionManager"], object>({
+			assertWritable: opts.assertWritable ?? (() => {}),
+			appendModelChange: () => {
+				calls.appendModelChange += 1;
+				return "msg-id";
+			},
 		}),
-		settings: fromAny<ActiveRetryFallbackContext["settings"]>({
+		settings: fromAny<ActiveRetryFallbackContext["settings"], object>({
 			getStorage: () => undefined,
 		}),
 		policy: policy as RetryFallbackPolicy,
@@ -131,6 +138,31 @@ describe("ActiveRetryFallback", () => {
 		expect(calls.setModel).toHaveLength(0);
 	});
 
+	test("tryFallback leaves all session state untouched when persistence is latched", async () => {
+		const candidate: RetryFallbackSelector = {
+			raw: "openai/secondary",
+			provider: "openai",
+			id: "secondary",
+			thinkingLevel: undefined,
+		};
+		const persistenceError = new Error("persistence latched");
+		const { ctx, calls } = makeContext({
+			candidates: [candidate],
+			resolveRole: () => "code",
+			assertWritable: () => {
+				throw persistenceError;
+			},
+		});
+		const fallback = new ActiveRetryFallback(ctx);
+
+		await expect(fallback.tryFallback("openai/primary")).rejects.toBe(persistenceError);
+		expect(fallback.role).toBeUndefined();
+		expect(calls.setModel).toEqual([]);
+		expect(calls.setThinking).toEqual([]);
+		expect(calls.appendModelChange).toBe(0);
+		expect(calls.emits).toEqual([]);
+	});
+
 	test("tryFallback returns false when no role resolves", async () => {
 		const { ctx } = makeContext({ resolveRole: () => undefined });
 		const fallback = new ActiveRetryFallback(ctx);
@@ -162,5 +194,37 @@ describe("ActiveRetryFallback", () => {
 		await fallback.maybeRestorePrimary();
 		expect(calls.setModel).toHaveLength(setModelCountAfterApply); // no restore
 		expect(fallback.role).toBe("code"); // stays active
+	});
+
+	test("maybeRestorePrimary leaves the active fallback untouched when persistence is latched", async () => {
+		const candidate: RetryFallbackSelector = {
+			raw: "openai/secondary",
+			provider: "openai",
+			id: "secondary",
+			thinkingLevel: undefined,
+		};
+		let persistenceLatched = false;
+		const persistenceError = new Error("persistence latched");
+		const { ctx, calls } = makeContext({
+			candidates: [candidate],
+			resolveRole: () => "code",
+			assertWritable: () => {
+				if (persistenceLatched) throw persistenceError;
+			},
+		});
+		const fallback = new ActiveRetryFallback(ctx);
+
+		await expect(fallback.tryFallback("openai/primary")).resolves.toBe(true);
+		persistenceLatched = true;
+		const before = {
+			appendModelChange: calls.appendModelChange,
+			setModel: [...calls.setModel],
+			setThinking: [...calls.setThinking],
+			emits: [...calls.emits],
+		};
+
+		await expect(fallback.maybeRestorePrimary()).rejects.toBe(persistenceError);
+		expect(fallback.role).toBe("code");
+		expect(calls).toEqual(before);
 	});
 });
