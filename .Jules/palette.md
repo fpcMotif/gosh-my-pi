@@ -5,3 +5,7 @@
 ## 2024-05-10 - [Global Focus Visible Outline]
 **Learning:** Adding a global `*:focus-visible` outline is an extremely efficient and maintainable way to ensure baseline keyboard accessibility across a web app without having to add utility classes (e.g. `focus-visible:ring-2`) to every interactive component individually.
 **Action:** Always check if a global focus visible rule exists before trying to add utility classes individually to buttons or inputs, unless a specific component requires a custom focus ring style.
+## 2024-07-18 - Add ARIA Labels and Tooltips to Icon-Only Status Indicators
+
+**Learning:** Icon-only status indicators (like checkmarks or cross marks) in tables are inaccessible to screen readers and can be confusing to mouse users if they lack tooltips.
+**Action:** Wrap icon-only status indicators in a semantic element (like a `div` or `span`) containing a `title` (for mouse hover) and `aria-label` along with `role="img"`. Apply `aria-hidden="true"` to the inner SVG or Lucide icon itself to prevent confusing screen reader announcements.
