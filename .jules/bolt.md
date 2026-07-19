@@ -1,3 +1,6 @@
 ## 2024-05-18 - Fast Appended File Reading
 **Learning:** In Bun, when reading appended data from `.jsonl` files, `Bun.file(path).slice(start).bytes()` is significantly faster (~14x) than loading the entire file with `Bun.file(path).bytes()` and using `.subarray()`, because it only loads the necessary bytes into memory. `file.size` can be used to prevent reading out of bounds. However, `ENOENT` must still be caught around the `bytes()` call due to TOCTOU.
 **Action:** Use `.slice(start).bytes()` for extracting data from the end of growing files.
+## 2024-07-19 - React Charting Performance in Lists
+**Learning:** In React components like `ModelsTable`, creating inline `chartData` or `options` objects for `react-chartjs-2` components inside list or table rows causes severe performance degradation, because React re-renders the charts on every parent state change due to the new object references.
+**Action:** Extract chart components wrapping `Line` (e.g., `TrendChart`, `PerformanceChart`), wrap them in `React.memo()`, and strictly memoize their `chartData` and `options` props using `useMemo` to enforce stable object references and prevent unnecessary re-renders when parent states (like expanded row keys) change.
