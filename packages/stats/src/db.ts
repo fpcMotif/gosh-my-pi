@@ -74,6 +74,10 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
+		-- Performance optimization: prevent main thread blocking by avoiding temporary B-TREE usage for GROUP BY
+		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+		-- Performance optimization: prevent full table scans when filtering by stop_reason and ordering by timestamp
+		CREATE INDEX IF NOT EXISTS idx_messages_stop_reason_timestamp ON messages(stop_reason, timestamp);
 
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
