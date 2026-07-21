@@ -75,6 +75,11 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
+			-- Performance optimization: Composite indices to prevent full table scans and temporary B-TREE
+			-- usage during GROUP BY and ORDER BY operations, preventing main thread blocking.
+			CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+			CREATE INDEX IF NOT EXISTS idx_messages_timestamp_model_provider ON messages(timestamp, model, provider);
+
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
 			offset INTEGER NOT NULL,
