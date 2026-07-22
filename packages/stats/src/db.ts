@@ -74,6 +74,11 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
+		-- Bolt: Added composite indices on (model, provider) and (timestamp, model, provider)
+		-- to prevent main thread blocking when SQLite falls back to temporary B-TREEs
+		-- for GROUP BY and ORDER BY operations on time-series and model stats queries.
+		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+		CREATE INDEX IF NOT EXISTS idx_messages_timestamp_model_provider ON messages(timestamp, model, provider);
 
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
