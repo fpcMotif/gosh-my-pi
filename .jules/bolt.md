@@ -1,3 +1,6 @@
 ## 2024-05-18 - Fast Appended File Reading
 **Learning:** In Bun, when reading appended data from `.jsonl` files, `Bun.file(path).slice(start).bytes()` is significantly faster (~14x) than loading the entire file with `Bun.file(path).bytes()` and using `.subarray()`, because it only loads the necessary bytes into memory. `file.size` can be used to prevent reading out of bounds. However, `ENOENT` must still be caught around the `bytes()` call due to TOCTOU.
 **Action:** Use `.slice(start).bytes()` for extracting data from the end of growing files.
+## 2024-05-18 - bun:sqlite Query Performance Optimization
+**Learning:** In `bun:sqlite`, queries that `GROUP BY` multiple columns (e.g., `model, provider`) without a covering composite index result in `USE TEMP B-TREE FOR GROUP BY` in the query plan. This requires a full table scan and blocking sorting on the main thread. A composite index specifically on the grouped columns (like `(model, provider)`) eliminates the temporary B-Tree and halves query time (e.g. from ~8.2s to ~3.9s per 100 queries).
+**Action:** Always create a composite index that covers the grouped fields for `bun:sqlite` aggregation queries to prevent main thread blocking and drastically reduce query duration.
