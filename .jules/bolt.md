@@ -1,3 +1,7 @@
-## 2024-05-18 - Fast Appended File Reading
-**Learning:** In Bun, when reading appended data from `.jsonl` files, `Bun.file(path).slice(start).bytes()` is significantly faster (~14x) than loading the entire file with `Bun.file(path).bytes()` and using `.subarray()`, because it only loads the necessary bytes into memory. `file.size` can be used to prevent reading out of bounds. However, `ENOENT` must still be caught around the `bytes()` call due to TOCTOU.
-**Action:** Use `.slice(start).bytes()` for extracting data from the end of growing files.
+## 2024-07-24 - Database Indexes for Stats Dashboard
+**Learning:** In `packages/stats/src/db.ts`, methods like `getStatsByModel()`, `getModelTimeSeries()`, and `getCostTimeSeries()` execute GROUP BY and aggregations. Missing composite indices causes slow full table scans or temporary B-TREE creation on the main thread, blocking event loop responsiveness.
+**Action:** Always add covering composite indices (e.g. `(model, provider)`) in `bun:sqlite` when combining `GROUP BY` and aggregations to improve read speed and keep the UI responsive.
+
+## 2024-07-24 - Database Indexes for Stats Dashboard
+**Learning:** In `packages/stats/src/db.ts`, methods like `getStatsByModel()`, `getModelTimeSeries()`, and `getCostTimeSeries()` execute GROUP BY and aggregations. Missing composite indices causes slow full table scans or temporary B-TREE creation on the main thread, blocking event loop responsiveness.
+**Action:** Always add covering composite indices (e.g. `(model, provider)`) in `bun:sqlite` when combining `GROUP BY` and aggregations to improve read speed and keep the UI responsive.
