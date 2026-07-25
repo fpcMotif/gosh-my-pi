@@ -71,7 +71,10 @@ export async function initDb(): Promise<Database> {
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
-		CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
+		-- Performance Optimization: Composite index covering both model and provider to prevent temp B-TREE usage when grouping by both fields.
+		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+		-- Performance Optimization: Composite index for time series queries that filter by timestamp and group by model/provider.
+		CREATE INDEX IF NOT EXISTS idx_messages_timestamp_model_provider ON messages(timestamp, model, provider);
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
