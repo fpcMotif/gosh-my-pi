@@ -20,7 +20,7 @@ function costColorClass(positive: boolean | null): string {
 export function CostSummary({ costSeries }: CostSummaryProps) {
 	// Consolidated into a single useMemo (filtering, reducing, and Date.now()) so the
 	// derived state only recomputes when costSeries changes, not on every render.
-	const { current, previous, totalCost, prevTotalCost, avgDaily, topModel, topModelCost, trend } = useMemo(() => {
+	const { totalCost, avgDaily, topModel, topModelCost, trend } = useMemo(() => {
 		const cutoff = Date.now() - SUMMARY_DAYS * 86400000;
 		const prevCutoff = cutoff - SUMMARY_DAYS * 86400000;
 
@@ -49,7 +49,7 @@ export function CostSummary({ costSeries }: CostSummaryProps) {
 
 		const trend = prevTotalCost > 0 ? ((totalCost - prevTotalCost) / prevTotalCost) * 100 : null;
 
-		return { current, previous, totalCost, prevTotalCost, avgDaily, topModel, topModelCost, trend };
+		return { totalCost, avgDaily, topModel, topModelCost, trend };
 	}, [costSeries]);
 
 	const cards = [
