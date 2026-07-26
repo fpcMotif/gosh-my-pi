@@ -6,6 +6,10 @@
 
 - Switched TypeScript lint/format scripts from Biome to oxlint/oxfmt.
 
+### Fixed
+
+- Removed unused cost summary memo fields and gave request detail dialogs an accessible name.
+
 ## [14.5.4] - 2026-04-28
 
 ### Fixed

@@ -30,6 +30,7 @@ export function RequestDetail({ id, onClose }: RequestDetailProps) {
 		<dialog
 			ref={dialogRef}
 			onClose={onClose}
+			aria-label="Request details"
 			className="fixed inset-0 m-0 size-full max-h-none max-w-none bg-transparent p-0 flex justify-end backdrop:bg-[var(--bg-overlay)] backdrop:backdrop-blur-sm"
 		>
 			{details ? (
