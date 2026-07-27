@@ -49,7 +49,7 @@ export function RequestDetail({ id, onClose }: RequestDetailProps) {
 							title="Close (Esc)"
 							className="p-2 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
 						>
-							<X size={20} />
+							<X size={20} aria-hidden="true" />
 						</button>
 					</div>
 

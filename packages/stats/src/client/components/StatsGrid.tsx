@@ -84,6 +84,7 @@ export function StatsGrid({ stats }: StatsGridProps) {
 									size={18}
 									style={{ color: stat.color }}
 									className="transition-transform group-hover:scale-110"
+									aria-hidden="true"
 								/>
 							</div>
 						</div>
