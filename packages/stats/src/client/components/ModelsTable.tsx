@@ -149,7 +149,11 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 											)}
 										</div>
 										<div className="flex justify-center text-[var(--text-muted)]">
-											{isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+											{isExpanded ? (
+												<ChevronUp size={16} aria-hidden="true" />
+											) : (
+												<ChevronDown size={16} aria-hidden="true" />
+											)}
 										</div>
 									</div>
 								</button>
