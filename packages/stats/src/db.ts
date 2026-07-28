@@ -75,6 +75,14 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
+		-- Bolt: Add composite index for getStatsByModel to prevent temporary B-TREE usage
+		-- which blocks the event loop for GROUP BY model, provider
+		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+
+		-- Bolt: Add composite index for getRecentErrors to prevent full table scans
+		-- which block the event loop for WHERE stop_reason = 'error' ORDER BY timestamp DESC
+		CREATE INDEX IF NOT EXISTS idx_messages_stop_reason_timestamp ON messages(stop_reason, timestamp DESC);
+
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
 			offset INTEGER NOT NULL,
