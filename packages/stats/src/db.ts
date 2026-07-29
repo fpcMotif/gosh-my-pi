@@ -75,6 +75,10 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
+		-- ⚡ Bolt: Added composite indices for common group by and sort queries to avoid temporary B-TREEs
+		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+		CREATE INDEX IF NOT EXISTS idx_messages_stop_reason_timestamp ON messages(stop_reason, timestamp);
+
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
 			offset INTEGER NOT NULL,
