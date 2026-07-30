@@ -13,7 +13,7 @@ import {
 	Tooltip,
 } from "chart.js";
 import { format } from "date-fns";
-import { useMemo, useState } from "react";
+import { useMemo, useState, memo } from "react";
 import { Bar, Line } from "react-chartjs-2";
 import type { CostTimeSeriesPoint } from "../types";
 import { useSystemTheme } from "../useSystemTheme";
@@ -86,7 +86,7 @@ function makeBarLabelPlugin(color: string): Plugin<"bar"> {
 	};
 }
 
-export function CostChart({ costSeries }: CostChartProps) {
+export const CostChart = memo(function CostChart({ costSeries }: CostChartProps) {
 	const [byModel, setByModel] = useState(false);
 	const [days, setDays] = useState<RangeDays>(30);
 	const theme = useSystemTheme();
@@ -228,7 +228,7 @@ export function CostChart({ costSeries }: CostChartProps) {
 			<Bar data={barData} options={barOptions} plugins={[barLabelPlugin]} />
 		</ChartWrapper>
 	);
-}
+});
 
 interface ChartWrapperProps {
 	byModel: boolean;
