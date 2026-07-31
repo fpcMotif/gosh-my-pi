@@ -2,6 +2,7 @@ package dialog
 
 import (
 	"image"
+	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/key"
@@ -450,6 +451,86 @@ func TestGmpAuth_ShowURLEmptyURLSkipsBrowser(t *testing.T) {
 	}
 	if cmdAction.Cmd != nil {
 		t.Fatalf("expected nil Cmd for empty URL (skip browser open)")
+	}
+}
+
+// TestGmpAuth_HandleMsgIgnoresUnknown asserts the routing default: any
+// tea.Msg that isn't an auth.* frame or a key press leaves the dialog state
+// untouched and returns no action. The workspace forwards a wide range of
+// program-level messages (resize, focus, etc.) and the dialog must not
+// hijack them.
+func TestGmpAuth_HandleMsgIgnoresUnknown(t *testing.T) {
+	t.Parallel()
+	d := newTestGmpAuth(t)
+	beforeState := d.state
+	action := d.HandleMsg(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if action != nil {
+		t.Fatalf("expected nil action for unknown msg, got %T", action)
+	}
+	if d.state != beforeState {
+		t.Fatalf("state mutated on unknown msg: %v -> %v", beforeState, d.state)
+	}
+}
+
+// TestGmpAuth_ShowURLOpenKeyEmitsConfirm asserts the user-action contract for
+// the show-url state: pressing the OpenURL binding must both (a) re-open the
+// URL in the browser and (b) emit auth.Confirm with the original request id
+// so the backend correlator unblocks. Skipping (b) deadlocks gmp's
+// AuthStorage.login.
+func TestGmpAuth_ShowURLOpenKeyEmitsConfirm(t *testing.T) {
+	t.Parallel()
+	d := newTestGmpAuth(t)
+	d.HandleMsg(auth.ShowLoginURL{ID: "id-x", Provider: "p", URL: "https://example.invalid"})
+
+	action := d.HandleMsg(tea.KeyPressMsg(tea.Key{Code: 'o', Text: "o"}))
+	cmdAction, ok := action.(ActionCmd)
+	if !ok {
+		t.Fatalf("expected ActionCmd from OpenURL key, got %T", action)
+	}
+	if cmdAction.Cmd == nil {
+		t.Fatal("expected non-nil Cmd from OpenURL key press")
+	}
+
+	msgs := drainSequence(t, action)
+	confirm, ok := findMsg[auth.Confirm](msgs)
+	if !ok {
+		t.Fatalf("expected auth.Confirm in batch, got %#v", msgs)
+	}
+	if confirm.ID != "id-x" {
+		t.Fatalf("Confirm.ID = %q, want id-x", confirm.ID)
+	}
+}
+
+// TestGmpAuth_PromptCodePasteForwardsCmd asserts that when the textinput
+// returns a tea.Cmd from its Update (e.g. Paste reading the system
+// clipboard), handleKey surfaces it as ActionCmd instead of swallowing it.
+// Default textinput keymap binds ctrl+v to its Paste cmd.
+func TestGmpAuth_PromptCodePasteForwardsCmd(t *testing.T) {
+	t.Parallel()
+	d := newTestGmpAuth(t)
+	d.HandleMsg(auth.PromptCode{ID: "id-paste", Provider: "p"})
+
+	action := d.HandleMsg(tea.KeyPressMsg(tea.Key{Code: 'v', Mod: tea.ModCtrl}))
+	cmdAction, ok := action.(ActionCmd)
+	if !ok {
+		t.Fatalf("expected ActionCmd from paste, got %T", action)
+	}
+	if cmdAction.Cmd == nil {
+		t.Fatal("expected non-nil Cmd forwarded from textinput on Paste")
+	}
+}
+
+// TestGmpAuth_BodyPromptURLDefaultHint asserts the URL-prompt fallback hint
+// renders when the backend sends PromptManualRedirect with no Instructions.
+// The PromptCode fallback is exercised by TestGmpAuth_BodyAllStates; this
+// covers the URL-state branch of the same fallback.
+func TestGmpAuth_BodyPromptURLDefaultHint(t *testing.T) {
+	t.Parallel()
+	d := newTestGmpAuth(t)
+	d.HandleMsg(auth.PromptManualRedirect{ID: "id", Provider: "p"})
+	body := d.body()
+	if !strings.Contains(body, "Paste the full callback URL from your browser") {
+		t.Fatalf("expected default URL hint in body, got: %s", body)
 	}
 }
 
