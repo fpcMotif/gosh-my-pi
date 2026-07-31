@@ -29,6 +29,9 @@ export function RequestDetail({ id, onClose }: RequestDetailProps) {
 	return (
 		<dialog
 			ref={dialogRef}
+			onClick={e => {
+				if (e.target === dialogRef.current) onClose();
+			}}
 			onClose={onClose}
 			className="fixed inset-0 m-0 size-full max-h-none max-w-none bg-transparent p-0 flex justify-end backdrop:bg-[var(--bg-overlay)] backdrop:backdrop-blur-sm"
 		>
