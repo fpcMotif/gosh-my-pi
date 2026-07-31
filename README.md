@@ -1384,7 +1384,16 @@ For architecture and contribution guidelines, see [packages/coding-agent/DEVELOP
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+This repository is **MIT-licensed except `apps/tui-go/`**, which is **FSL-1.1-MIT** (Functional Source License, Version 1.1, with a 2-year auto-conversion to MIT). The boundary exists because `apps/tui-go/` is a hard fork of [`charmbracelet/crush`](https://github.com/charmbracelet/crush), bridged to the omp RPC backend via the `internal/ompclient` and `internal/workspace/omp_workspace.go` layers.
+
+| Path | License |
+| --- | --- |
+| repo root + everything except `apps/tui-go/` | MIT — see [`LICENSE`](LICENSE) |
+| `apps/tui-go/` (forked Crush + omp bridge) | FSL-1.1-MIT — see [`apps/tui-go/LICENSE.md`](apps/tui-go/LICENSE.md) and [`apps/tui-go/NOTICE`](apps/tui-go/NOTICE) |
+
+Contributions to `apps/tui-go/` are accepted under FSL-1.1-MIT; see [`apps/tui-go/CONTRIBUTING.md`](apps/tui-go/CONTRIBUTING.md). Contributions outside `apps/tui-go/` are accepted under the MIT terms in the repo-root [`LICENSE`](LICENSE).
 
 Copyright (c) 2025 Mario Zechner  
-Copyright (c) 2025-2026 Can Bölük
+Copyright (c) 2025-2026 Can Bölük  
+Copyright (c) 2026 Sebastian Fan / fpcMotif (`apps/tui-go/` modifications)  
+`apps/tui-go/` original code copyright (c) Charmbracelet, Inc.
