@@ -75,6 +75,13 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
+		-- ⚡ Bolt: Performance optimization
+		-- Expected impact:
+		-- 1. idx_messages_model_provider eliminates temporary B-TREE usage for GROUP BY model, provider in getStatsByModel
+		-- 2. idx_messages_stop_reason_timestamp prevents O(N) reverse table scans in getRecentErrors by jumping directly to error rows
+		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+		CREATE INDEX IF NOT EXISTS idx_messages_stop_reason_timestamp ON messages(stop_reason, timestamp);
+
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
 			offset INTEGER NOT NULL,
