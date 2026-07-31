@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import {
 	type Keybinding,
@@ -351,6 +352,23 @@ function loadRawConfig(filePath: string): unknown {
 }
 
 /**
+ * Load raw config from a file asynchronously.
+ * Returns parsed JSON or null if file doesn't exist or is invalid.
+ */
+async function loadRawConfigAsync(filePath: string): Promise<unknown> {
+	try {
+		const content = await fsp.readFile(filePath, "utf-8");
+		return JSON.parse(content);
+	} catch (error) {
+		if (isEnoent(error)) {
+			return null;
+		}
+		logger.warn("Failed to parse keybindings config", { path: filePath, error: String(error) });
+		return null;
+	}
+}
+
+/**
  * Migrate keybindings config file from old format to new.
  * Reads from agentDir/keybindings.json, migrates old names, and writes back.
  */
@@ -366,6 +384,31 @@ function loadKeybindingsConfig(filePath: string, writeBack: boolean): Keybinding
 		const ordered = orderKeybindingsConfig(migratedConfig);
 		try {
 			writeFileSync(filePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf-8");
+			logger.debug("Migrated keybindings config", { path: filePath });
+		} catch (error) {
+			logger.warn("Failed to write migrated keybindings config", { path: filePath, error: String(error) });
+		}
+	}
+
+	return migratedConfig;
+}
+
+/**
+ * Migrate keybindings config file from old format to new asynchronously.
+ * Reads from agentDir/keybindings.json, migrates old names, and writes back.
+ */
+async function loadKeybindingsConfigAsync(filePath: string, writeBack: boolean): Promise<KeybindingsConfig> {
+	const rawConfig = await loadRawConfigAsync(filePath);
+
+	if (rawConfig === null) {
+		return {};
+	}
+
+	const { config: migratedConfig, migrated } = migrateKeybindingNames(rawConfig);
+	if (writeBack && migrated) {
+		const ordered = orderKeybindingsConfig(migratedConfig);
+		try {
+			await fsp.writeFile(filePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf-8");
 			logger.debug("Migrated keybindings config", { path: filePath });
 		} catch (error) {
 			logger.warn("Failed to write migrated keybindings config", { path: filePath, error: String(error) });
@@ -414,9 +457,9 @@ export class KeybindingsManager extends TuiKeybindingsManager {
 	/**
 	 * Reload keybindings from the config file.
 	 */
-	reload(): void {
+	async reload(): Promise<void> {
 		if (this.#configPath === null || this.#configPath === undefined || this.#configPath === "") return;
-		this.setUserBindings(KeybindingsManager.#loadFromFile(this.#configPath));
+		this.setUserBindings(await KeybindingsManager.#loadFromFileAsync(this.#configPath));
 	}
 
 	/**
@@ -439,6 +482,13 @@ export class KeybindingsManager extends TuiKeybindingsManager {
 	 */
 	static #loadFromFile(filePath: string): KeybindingsConfig {
 		return loadKeybindingsConfig(filePath, true);
+	}
+
+	/**
+	 * Load user bindings from a file asynchronously, migrating old names if needed.
+	 */
+	static async #loadFromFileAsync(filePath: string): Promise<KeybindingsConfig> {
+		return await loadKeybindingsConfigAsync(filePath, true);
 	}
 }
 
