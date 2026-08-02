@@ -77,8 +77,8 @@ export async function initDb(): Promise<Database> {
 
 		-- ⚡ Bolt Performance Optimization
 		-- Added composite indices to prevent full table scans and temporary B-TREE usage.
-		-- `stop_reason, timestamp` eliminates main-thread blocking when fetching recent errors.
-		-- `model, provider` optimizes aggregations in getStatsByModel.
+		-- (stop_reason, timestamp) eliminates main-thread blocking when fetching recent errors.
+		-- (model, provider) optimizes aggregations in getStatsByModel.
 		CREATE INDEX IF NOT EXISTS idx_messages_stop_reason_timestamp ON messages(stop_reason, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
 
