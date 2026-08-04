@@ -75,6 +75,13 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
+		-- ⚡ Bolt Performance Optimization:
+		-- Added composite indices to prevent bun:sqlite from blocking the main event loop.
+		-- idx_messages_model_provider eliminates "USE TEMP B-TREE FOR GROUP BY" in getStatsByModel.
+		-- idx_messages_stop_reason_timestamp prevents full index scans in getRecentErrors.
+		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+		CREATE INDEX IF NOT EXISTS idx_messages_stop_reason_timestamp ON messages(stop_reason, timestamp DESC);
+
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
 			offset INTEGER NOT NULL,
