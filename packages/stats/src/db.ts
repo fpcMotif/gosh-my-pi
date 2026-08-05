@@ -72,6 +72,10 @@ export async function initDb(): Promise<Database> {
 
 		CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 		CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
+		-- Composite index to prevent TEMP B-TREE for getStatsByModel
+		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+		-- Composite index to prevent TEMP B-TREE for getModelTimeSeries
+		CREATE INDEX IF NOT EXISTS idx_messages_timestamp_model_provider ON messages(timestamp, model, provider);
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
