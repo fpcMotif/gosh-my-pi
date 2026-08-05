@@ -30,7 +30,7 @@ export function RequestDetail({ id, onClose }: RequestDetailProps) {
 		<dialog
 			ref={dialogRef}
 			onClose={onClose}
-			onClick={(e) => {
+			onClick={e => {
 				if (e.target === dialogRef.current) {
 					onClose();
 				}
