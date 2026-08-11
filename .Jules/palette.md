@@ -5,3 +5,6 @@
 ## 2024-05-10 - [Global Focus Visible Outline]
 **Learning:** Adding a global `*:focus-visible` outline is an extremely efficient and maintainable way to ensure baseline keyboard accessibility across a web app without having to add utility classes (e.g. `focus-visible:ring-2`) to every interactive component individually.
 **Action:** Always check if a global focus visible rule exists before trying to add utility classes individually to buttons or inputs, unless a specific component requires a custom focus ring style.
+## 2024-08-11 - Add ARIA Labels to Tab Navigation
+**Learning:** In single-page applications, tab navigations frequently miss the accessibility links (`aria-controls`, `aria-labelledby`, `role="tabpanel"`) that help screen readers identify the relationship between a tab button and its corresponding content area.
+**Action:** Always verify that `role="tab"` buttons include `id` and `aria-controls` pointing to a `role="tabpanel"` that has a matching `id` and `aria-labelledby`.
