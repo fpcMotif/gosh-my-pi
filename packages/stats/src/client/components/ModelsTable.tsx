@@ -10,10 +10,12 @@ import {
 } from "chart.js";
 import { format } from "date-fns";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import type { ModelPerformancePoint, ModelStats } from "../types";
 import { useSystemTheme } from "../useSystemTheme";
+
+const EMPTY_ARRAY: any[] = [];
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -104,7 +106,7 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 					{sortedModels.map((model, index) => {
 						const key = `${model.model}::${model.provider}`;
 						const performance = performanceSeriesByKey.get(key);
-						const trendData = performance?.data ?? [];
+						const trendData = performance?.data ?? EMPTY_ARRAY;
 						const trendColor = MODEL_COLORS[index % MODEL_COLORS.length];
 						const isExpanded = expandedKey === key;
 						const errorRate = model.errorRate * 100;
@@ -233,7 +235,8 @@ const TREND_CHART_OPTIONS = {
 	},
 };
 
-function TrendChart({
+// ⚡ Bolt: Memoize TrendChart and its chartData to prevent re-renders on row expansion
+const TrendChart = memo(function TrendChart({
 	data,
 	color,
 }: {
@@ -255,9 +258,10 @@ function TrendChart({
 	};
 
 	return <Line data={chartData} options={TREND_CHART_OPTIONS} />;
-}
+});
 
-function PerformanceChart({
+// ⚡ Bolt: Memoize PerformanceChart, chartData, and options to prevent re-renders
+const PerformanceChart = memo(function PerformanceChart({
 	data,
 	color,
 	chartTheme,
@@ -338,7 +342,7 @@ function PerformanceChart({
 	};
 
 	return <Line data={chartData} options={options} />;
-}
+});
 
 function buildModelPerformanceLookup(points: ModelPerformancePoint[], days = 14): Map<string, ModelPerformanceSeries> {
 	const dayMs = 24 * 60 * 60 * 1000;
