@@ -71,7 +71,9 @@ export async function initDb(): Promise<Database> {
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
-		CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
+		-- ⚡ Bolt: Composite index on (model, provider) to eliminate temporary B-Tree usage during 'GROUP BY model, provider' queries (e.g. getStatsByModel)
+		CREATE INDEX IF NOT EXISTS idx_messages_model_provider ON messages(model, provider);
+		DROP INDEX IF EXISTS idx_messages_model; -- Clean up old single-column index
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
