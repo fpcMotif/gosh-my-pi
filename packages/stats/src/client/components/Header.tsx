@@ -33,9 +33,11 @@ export function Header({ activeTab, onTabChange, onSync, syncing }: HeaderProps)
 					{tabs.map(tab => (
 						<button
 							key={tab}
+							id={`tab-${tab}`}
 							type="button"
 							role="tab"
 							aria-selected={activeTab === tab}
+							aria-controls={`panel-${tab}`}
 							onClick={() => onTabChange(tab)}
 							className={`tab-btn capitalize ${activeTab === tab ? "active" : ""}`}
 						>
