@@ -10,7 +10,7 @@ import {
 } from "chart.js";
 import { format } from "date-fns";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import type { ModelPerformancePoint, ModelStats } from "../types";
 import { useSystemTheme } from "../useSystemTheme";
@@ -47,6 +47,8 @@ const CHART_THEMES = {
 		tick: "#475569",
 	},
 } as const;
+
+const EMPTY_DATA: never[] = [];
 
 type ChartTheme = (typeof CHART_THEMES)[keyof typeof CHART_THEMES];
 interface ModelsTableProps {
@@ -104,7 +106,7 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 					{sortedModels.map((model, index) => {
 						const key = `${model.model}::${model.provider}`;
 						const performance = performanceSeriesByKey.get(key);
-						const trendData = performance?.data ?? [];
+						const trendData = performance?.data ?? EMPTY_DATA;
 						const trendColor = MODEL_COLORS[index % MODEL_COLORS.length];
 						const isExpanded = expandedKey === key;
 						const errorRate = model.errorRate * 100;
@@ -233,31 +235,35 @@ const TREND_CHART_OPTIONS = {
 	},
 };
 
-function TrendChart({
+const TrendChart = memo(function TrendChart({
 	data,
 	color,
 }: {
 	data: Array<{ timestamp: number; avgTokensPerSecond: number | null }>;
 	color: string;
 }) {
-	const chartData = {
-		labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
-		datasets: [
-			{
-				data: data.map(d => d.avgTokensPerSecond ?? 0),
-				borderColor: color,
-				backgroundColor: "transparent",
-				tension: 0.4,
-				pointRadius: 0,
-				borderWidth: 2,
-			},
-		],
-	};
+	// ⚡ Bolt: Memoize chartData to prevent unnecessary react-chartjs-2 re-renders
+	const chartData = useMemo(
+		() => ({
+			labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
+			datasets: [
+				{
+					data: data.map(d => d.avgTokensPerSecond ?? 0),
+					borderColor: color,
+					backgroundColor: "transparent",
+					tension: 0.4,
+					pointRadius: 0,
+					borderWidth: 2,
+				},
+			],
+		}),
+		[data, color],
+	);
 
 	return <Line data={chartData} options={TREND_CHART_OPTIONS} />;
-}
+});
 
-function PerformanceChart({
+const PerformanceChart = memo(function PerformanceChart({
 	data,
 	color,
 	chartTheme,
@@ -266,79 +272,87 @@ function PerformanceChart({
 	color: string;
 	chartTheme: ChartTheme;
 }) {
-	const chartData = {
-		labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
-		datasets: [
-			{
-				label: "TTFT",
-				data: data.map(d => d.avgTtftSeconds ?? null),
-				borderColor: "#fbbf24",
-				backgroundColor: "transparent",
-				tension: 0.4,
-				pointRadius: 0,
-				borderWidth: 2,
-				yAxisID: "y" as const,
-			},
-			{
-				label: "Tokens/s",
-				data: data.map(d => d.avgTokensPerSecond ?? null),
-				borderColor: color,
-				backgroundColor: "transparent",
-				tension: 0.4,
-				pointRadius: 0,
-				borderWidth: 2,
-				yAxisID: "y1" as const,
-			},
-		],
-	};
+	// ⚡ Bolt: Memoize chartData to prevent unnecessary react-chartjs-2 re-renders
+	const chartData = useMemo(
+		() => ({
+			labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
+			datasets: [
+				{
+					label: "TTFT",
+					data: data.map(d => d.avgTtftSeconds ?? null),
+					borderColor: "#fbbf24",
+					backgroundColor: "transparent",
+					tension: 0.4,
+					pointRadius: 0,
+					borderWidth: 2,
+					yAxisID: "y" as const,
+				},
+				{
+					label: "Tokens/s",
+					data: data.map(d => d.avgTokensPerSecond ?? null),
+					borderColor: color,
+					backgroundColor: "transparent",
+					tension: 0.4,
+					pointRadius: 0,
+					borderWidth: 2,
+					yAxisID: "y1" as const,
+				},
+			],
+		}),
+		[data, color],
+	);
 
-	const options = {
-		responsive: true,
-		maintainAspectRatio: false,
-		plugins: {
-			legend: {
-				display: true,
-				position: "top" as const,
-				labels: {
-					color: chartTheme.legendLabel,
-					usePointStyle: true,
-					padding: 16,
-					font: { size: 12 },
+	// ⚡ Bolt: Memoize options to prevent unnecessary react-chartjs-2 re-renders
+	const options = useMemo(
+		() => ({
+			responsive: true,
+			maintainAspectRatio: false,
+			plugins: {
+				legend: {
+					display: true,
+					position: "top" as const,
+					labels: {
+						color: chartTheme.legendLabel,
+						usePointStyle: true,
+						padding: 16,
+						font: { size: 12 },
+					},
+				},
+				tooltip: {
+					backgroundColor: chartTheme.tooltipBackground,
+					titleColor: chartTheme.tooltipTitle,
+					bodyColor: chartTheme.tooltipBody,
+					borderColor: chartTheme.tooltipBorder,
+					borderWidth: 1,
+					cornerRadius: 8,
 				},
 			},
-			tooltip: {
-				backgroundColor: chartTheme.tooltipBackground,
-				titleColor: chartTheme.tooltipTitle,
-				bodyColor: chartTheme.tooltipBody,
-				borderColor: chartTheme.tooltipBorder,
-				borderWidth: 1,
-				cornerRadius: 8,
+			scales: {
+				x: {
+					grid: { color: chartTheme.grid },
+					ticks: { color: chartTheme.tick, font: { size: 11 } },
+				},
+				y: {
+					type: "linear" as const,
+					display: true,
+					position: "left" as const,
+					grid: { color: chartTheme.grid },
+					ticks: { color: chartTheme.tick, font: { size: 11 } },
+				},
+				y1: {
+					type: "linear" as const,
+					display: true,
+					position: "right" as const,
+					grid: { drawOnChartArea: false },
+					ticks: { color: chartTheme.tick, font: { size: 11 } },
+				},
 			},
-		},
-		scales: {
-			x: {
-				grid: { color: chartTheme.grid },
-				ticks: { color: chartTheme.tick, font: { size: 11 } },
-			},
-			y: {
-				type: "linear" as const,
-				display: true,
-				position: "left" as const,
-				grid: { color: chartTheme.grid },
-				ticks: { color: chartTheme.tick, font: { size: 11 } },
-			},
-			y1: {
-				type: "linear" as const,
-				display: true,
-				position: "right" as const,
-				grid: { drawOnChartArea: false },
-				ticks: { color: chartTheme.tick, font: { size: 11 } },
-			},
-		},
-	};
+		}),
+		[chartTheme],
+	);
 
 	return <Line data={chartData} options={options} />;
-}
+});
 
 function buildModelPerformanceLookup(points: ModelPerformancePoint[], days = 14): Map<string, ModelPerformanceSeries> {
 	const dayMs = 24 * 60 * 60 * 1000;
