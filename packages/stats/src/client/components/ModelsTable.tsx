@@ -10,7 +10,7 @@ import {
 } from "chart.js";
 import { format } from "date-fns";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import type { ModelPerformancePoint, ModelStats } from "../types";
 import { useSystemTheme } from "../useSystemTheme";
@@ -26,6 +26,8 @@ const MODEL_COLORS = [
 	"#f87171", // red
 	"#60a5fa", // blue
 ];
+
+const EMPTY_ARRAY: never[] = [];
 
 const CHART_THEMES = {
 	dark: {
@@ -104,7 +106,8 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 					{sortedModels.map((model, index) => {
 						const key = `${model.model}::${model.provider}`;
 						const performance = performanceSeriesByKey.get(key);
-						const trendData = performance?.data ?? [];
+						// ⚡ Bolt: Use EMPTY_ARRAY to avoid breaking memoization
+						const trendData = performance?.data ?? EMPTY_ARRAY;
 						const trendColor = MODEL_COLORS[index % MODEL_COLORS.length];
 						const isExpanded = expandedKey === key;
 						const errorRate = model.errorRate * 100;
@@ -233,14 +236,15 @@ const TREND_CHART_OPTIONS = {
 	},
 };
 
-function TrendChart({
+const TrendChart = memo(function TrendChart({
 	data,
 	color,
 }: {
 	data: Array<{ timestamp: number; avgTokensPerSecond: number | null }>;
 	color: string;
 }) {
-	const chartData = {
+	// ⚡ Bolt: Memoize chartData to prevent expensive chart re-renders
+	const chartData = useMemo(() => ({
 		labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
 		datasets: [
 			{
@@ -252,12 +256,12 @@ function TrendChart({
 				borderWidth: 2,
 			},
 		],
-	};
+	}), [data, color]);
 
 	return <Line data={chartData} options={TREND_CHART_OPTIONS} />;
-}
+});
 
-function PerformanceChart({
+const PerformanceChart = memo(function PerformanceChart({
 	data,
 	color,
 	chartTheme,
@@ -266,7 +270,8 @@ function PerformanceChart({
 	color: string;
 	chartTheme: ChartTheme;
 }) {
-	const chartData = {
+	// ⚡ Bolt: Memoize chartData to prevent expensive chart re-renders
+	const chartData = useMemo(() => ({
 		labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
 		datasets: [
 			{
@@ -290,9 +295,10 @@ function PerformanceChart({
 				yAxisID: "y1" as const,
 			},
 		],
-	};
+	}), [data, color]);
 
-	const options = {
+	// ⚡ Bolt: Memoize options to prevent expensive chart re-renders
+	const options = useMemo(() => ({
 		responsive: true,
 		maintainAspectRatio: false,
 		plugins: {
@@ -335,10 +341,10 @@ function PerformanceChart({
 				ticks: { color: chartTheme.tick, font: { size: 11 } },
 			},
 		},
-	};
+	}), [chartTheme]);
 
 	return <Line data={chartData} options={options} />;
-}
+});
 
 function buildModelPerformanceLookup(points: ModelPerformancePoint[], days = 14): Map<string, ModelPerformanceSeries> {
 	const dayMs = 24 * 60 * 60 * 1000;
