@@ -5,3 +5,6 @@
 ## 2024-05-10 - [Global Focus Visible Outline]
 **Learning:** Adding a global `*:focus-visible` outline is an extremely efficient and maintainable way to ensure baseline keyboard accessibility across a web app without having to add utility classes (e.g. `focus-visible:ring-2`) to every interactive component individually.
 **Action:** Always check if a global focus visible rule exists before trying to add utility classes individually to buttons or inputs, unless a specific component requires a custom focus ring style.
+## 2024-08-19 - Backdrop Click Dismissal for Native Dialogs
+**Learning:** Native HTML `<dialog>` elements do not automatically close when clicking their backdrop. This missing interaction can frustrate users who expect to dismiss modals by clicking outside of them.
+**Action:** When using `<dialog>` in React components, always add an `onClick` handler that checks if `e.target === dialogRef.current` and triggers the close function to enable intuitive backdrop dismissals.
