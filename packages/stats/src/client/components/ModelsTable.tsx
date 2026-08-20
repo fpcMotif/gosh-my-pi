@@ -243,19 +243,22 @@ const TrendChart = memo(function TrendChart({
 	color: string;
 }) {
 	// ⚡ Bolt: Memoize chartData to prevent unnecessary re-renders in list
-	const chartData = useMemo(() => ({
-		labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
-		datasets: [
-			{
-				data: data.map(d => d.avgTokensPerSecond ?? 0),
-				borderColor: color,
-				backgroundColor: "transparent",
-				tension: 0.4,
-				pointRadius: 0,
-				borderWidth: 2,
-			},
-		],
-	}), [data, color]);
+	const chartData = useMemo(
+		() => ({
+			labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
+			datasets: [
+				{
+					data: data.map(d => d.avgTokensPerSecond ?? 0),
+					borderColor: color,
+					backgroundColor: "transparent",
+					tension: 0.4,
+					pointRadius: 0,
+					borderWidth: 2,
+				},
+			],
+		}),
+		[data, color],
+	);
 
 	return <Line data={chartData} options={TREND_CHART_OPTIONS} />;
 });
@@ -270,76 +273,82 @@ const PerformanceChart = memo(function PerformanceChart({
 	chartTheme: ChartTheme;
 }) {
 	// ⚡ Bolt: Memoize chartData to prevent unnecessary re-renders in list
-	const chartData = useMemo(() => ({
-		labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
-		datasets: [
-			{
-				label: "TTFT",
-				data: data.map(d => d.avgTtftSeconds ?? null),
-				borderColor: "#fbbf24",
-				backgroundColor: "transparent",
-				tension: 0.4,
-				pointRadius: 0,
-				borderWidth: 2,
-				yAxisID: "y" as const,
-			},
-			{
-				label: "Tokens/s",
-				data: data.map(d => d.avgTokensPerSecond ?? null),
-				borderColor: color,
-				backgroundColor: "transparent",
-				tension: 0.4,
-				pointRadius: 0,
-				borderWidth: 2,
-				yAxisID: "y1" as const,
-			},
-		],
-	}), [data, color]);
+	const chartData = useMemo(
+		() => ({
+			labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
+			datasets: [
+				{
+					label: "TTFT",
+					data: data.map(d => d.avgTtftSeconds ?? null),
+					borderColor: "#fbbf24",
+					backgroundColor: "transparent",
+					tension: 0.4,
+					pointRadius: 0,
+					borderWidth: 2,
+					yAxisID: "y" as const,
+				},
+				{
+					label: "Tokens/s",
+					data: data.map(d => d.avgTokensPerSecond ?? null),
+					borderColor: color,
+					backgroundColor: "transparent",
+					tension: 0.4,
+					pointRadius: 0,
+					borderWidth: 2,
+					yAxisID: "y1" as const,
+				},
+			],
+		}),
+		[data, color],
+	);
 
-	const options = useMemo(() => ({
-		responsive: true,
-		maintainAspectRatio: false,
-		plugins: {
-			legend: {
-				display: true,
-				position: "top" as const,
-				labels: {
-					color: chartTheme.legendLabel,
-					usePointStyle: true,
-					padding: 16,
-					font: { size: 12 },
+	const options = useMemo(
+		() => ({
+			responsive: true,
+			maintainAspectRatio: false,
+			plugins: {
+				legend: {
+					display: true,
+					position: "top" as const,
+					labels: {
+						color: chartTheme.legendLabel,
+						usePointStyle: true,
+						padding: 16,
+						font: { size: 12 },
+					},
+				},
+				tooltip: {
+					backgroundColor: chartTheme.tooltipBackground,
+					titleColor: chartTheme.tooltipTitle,
+					bodyColor: chartTheme.tooltipBody,
+					borderColor: chartTheme.tooltipBorder,
+					borderWidth: 1,
+					cornerRadius: 8,
 				},
 			},
-			tooltip: {
-				backgroundColor: chartTheme.tooltipBackground,
-				titleColor: chartTheme.tooltipTitle,
-				bodyColor: chartTheme.tooltipBody,
-				borderColor: chartTheme.tooltipBorder,
-				borderWidth: 1,
-				cornerRadius: 8,
+			scales: {
+				x: {
+					grid: { color: chartTheme.grid },
+					ticks: { color: chartTheme.tick, font: { size: 11 } },
+				},
+				y: {
+					type: "linear" as const,
+					display: true,
+					position: "left" as const,
+					grid: { color: chartTheme.grid },
+					ticks: { color: chartTheme.tick, font: { size: 11 } },
+				},
+				y1: {
+					type: "linear" as const,
+					display: true,
+					position: "right" as const,
+					grid: { drawOnChartArea: false },
+					ticks: { color: chartTheme.tick, font: { size: 11 } },
+				},
 			},
-		},
-		scales: {
-			x: {
-				grid: { color: chartTheme.grid },
-				ticks: { color: chartTheme.tick, font: { size: 11 } },
-			},
-			y: {
-				type: "linear" as const,
-				display: true,
-				position: "left" as const,
-				grid: { color: chartTheme.grid },
-				ticks: { color: chartTheme.tick, font: { size: 11 } },
-			},
-			y1: {
-				type: "linear" as const,
-				display: true,
-				position: "right" as const,
-				grid: { drawOnChartArea: false },
-				ticks: { color: chartTheme.tick, font: { size: 11 } },
-			},
-		},
-	}), [chartTheme]);
+		}),
+		[chartTheme],
+	);
 
 	return <Line data={chartData} options={options} />;
 });
