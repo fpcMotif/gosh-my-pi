@@ -5,3 +5,7 @@
 ## 2024-05-10 - [Global Focus Visible Outline]
 **Learning:** Adding a global `*:focus-visible` outline is an extremely efficient and maintainable way to ensure baseline keyboard accessibility across a web app without having to add utility classes (e.g. `focus-visible:ring-2`) to every interactive component individually.
 **Action:** Always check if a global focus visible rule exists before trying to add utility classes individually to buttons or inputs, unless a specific component requires a custom focus ring style.
+
+## 2026-08-22 - Native Dialog Backdrop Click
+**Learning:** Native HTML `<dialog>` elements don't automatically close when clicking the backdrop, unlike the Escape key. Users expect modal side-panels to close when clicking outside.
+**Action:** Always attach an `onClick` handler checking `e.target === dialogRef.current` to enable click-outside-to-close for native dialogs.
