@@ -75,6 +75,13 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
+		-- ⚡ Bolt: Partial index for faster error queries
+		-- What: Indexes only rows where stop_reason = 'error' and pre-sorts them by timestamp DESC
+		-- Why: getRecentErrors() was causing full table/index scans
+		-- Impact: Transforms O(N) full scan into O(log(E) + L) fetch (E = errors, L = limit)
+		-- Measurement: EXPLAIN QUERY PLAN shows 'SCAN messages USING INDEX idx_messages_errors'
+		CREATE INDEX IF NOT EXISTS idx_messages_errors ON messages(timestamp DESC) WHERE stop_reason = 'error';
+
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
 			offset INTEGER NOT NULL,
