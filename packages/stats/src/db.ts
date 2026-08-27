@@ -74,6 +74,12 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
+		-- ⚡ Bolt Performance Optimization:
+		-- What: Added a partial index idx_messages_error_timestamp on the messages table for timestamp DESC where stop_reason = 'error'.
+		-- Why: Queries fetching recent errors (like getRecentErrors) filter by stop_reason = 'error' and order by timestamp DESC. The previous setup did a full index scan, slowing down as table size grew.
+		-- Impact: Eliminates a full index scan and sorting, significantly reducing CPU time and disk I/O when fetching errors, reducing query latency from O(N) over all messages to O(limit).
+		-- Measurement: Verified with EXPLAIN QUERY PLAN, changing 'SCAN messages USING INDEX' to 'SCAN messages USING COVERING INDEX idx_messages_error_timestamp'.
+		CREATE INDEX IF NOT EXISTS idx_messages_error_timestamp ON messages(timestamp DESC) WHERE stop_reason = 'error';
 
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
