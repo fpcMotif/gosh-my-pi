@@ -74,7 +74,12 @@ export default function App() {
 				<Header activeTab={activeTab} onTabChange={setActiveTab} onSync={handleSync} syncing={syncing} />
 
 				{activeTab === "overview" && (
-					<div className="space-y-6 animate-fade-in">
+					<div
+						id="panel-overview"
+						role="tabpanel"
+						aria-labelledby="tab-overview"
+						className="space-y-6 animate-fade-in"
+					>
 						<StatsGrid stats={stats.overall} />
 
 						<div className="grid lg:grid-cols-2 gap-6">
@@ -93,7 +98,12 @@ export default function App() {
 				)}
 
 				{activeTab === "requests" && (
-					<div className="h-[calc(100vh-140px)] animate-fade-in">
+					<div
+						id="panel-requests"
+						role="tabpanel"
+						aria-labelledby="tab-requests"
+						className="h-[calc(100vh-140px)] animate-fade-in"
+					>
 						<RequestList
 							title="All Recent Requests"
 							requests={recentRequests}
@@ -103,7 +113,12 @@ export default function App() {
 				)}
 
 				{activeTab === "errors" && (
-					<div className="h-[calc(100vh-140px)] animate-fade-in">
+					<div
+						id="panel-errors"
+						role="tabpanel"
+						aria-labelledby="tab-errors"
+						className="h-[calc(100vh-140px)] animate-fade-in"
+					>
 						<RequestList
 							title="Failed Requests"
 							requests={recentErrors}
@@ -113,14 +128,19 @@ export default function App() {
 				)}
 
 				{activeTab === "models" && (
-					<div className="space-y-6 animate-fade-in">
+					<div
+						id="panel-models"
+						role="tabpanel"
+						aria-labelledby="tab-models"
+						className="space-y-6 animate-fade-in"
+					>
 						<ChartsContainer modelSeries={stats.modelSeries} />
 						<ModelsTable models={stats.byModel} performanceSeries={stats.modelPerformanceSeries} />
 					</div>
 				)}
 
 				{activeTab === "costs" && (
-					<div className="space-y-6 animate-fade-in">
+					<div id="panel-costs" role="tabpanel" aria-labelledby="tab-costs" className="space-y-6 animate-fade-in">
 						<CostSummary costSeries={stats.costSeries} />
 						<CostChart costSeries={stats.costSeries} />
 					</div>
