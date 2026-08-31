@@ -1,3 +1,6 @@
 ## 2024-05-18 - Fast Appended File Reading
 **Learning:** In Bun, when reading appended data from `.jsonl` files, `Bun.file(path).slice(start).bytes()` is significantly faster (~14x) than loading the entire file with `Bun.file(path).bytes()` and using `.subarray()`, because it only loads the necessary bytes into memory. `file.size` can be used to prevent reading out of bounds. However, `ENOENT` must still be caught around the `bytes()` call due to TOCTOU.
 **Action:** Use `.slice(start).bytes()` for extracting data from the end of growing files.
+## 2024-05-17 - SQLite Partial Index for Filtered Ordered Queries
+**Learning:** In SQLite, when a query frequently filters on a specific condition and orders by a column (e.g., `WHERE stop_reason = 'error' ORDER BY timestamp DESC`), adding a partial index that covers the ordered column and filters on the condition (e.g., `ON table(timestamp DESC) WHERE stop_reason = 'error'`) provides massive speedups by allowing a direct index scan instead of a full index scan followed by filtering.
+**Action:** Always check frequently queried access patterns for opportunities to use partial indices, especially when querying for a small subset of records (like errors) in a large table.
