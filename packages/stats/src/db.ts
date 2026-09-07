@@ -71,6 +71,14 @@ export async function initDb(): Promise<Database> {
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
+		/*
+		 * ⚡ Bolt Optimization: Partial index for recent errors
+		 * What: Added a partial covering index on timestamp specifically for error messages.
+		 * Why: The getRecentErrors query filters by stop_reason = 'error' and orders by timestamp DESC. Without this index, it does a full index scan on idx_messages_timestamp.
+		 * Impact: Changes execution plan from full index scan to a fast covering index lookup, significantly improving performance as the messages table grows.
+		 * Measurement: EXPLAIN QUERY PLAN shows 'SCAN messages USING COVERING INDEX idx_messages_errors' instead of 'SCAN messages USING INDEX idx_messages_timestamp'.
+		 */
+		CREATE INDEX IF NOT EXISTS idx_messages_errors ON messages(timestamp DESC) WHERE stop_reason = 'error';
 		CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
