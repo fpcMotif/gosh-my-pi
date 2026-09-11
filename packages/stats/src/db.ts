@@ -75,6 +75,13 @@ export async function initDb(): Promise<Database> {
 		CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_file);
 
+		-- ⚡ Bolt Performance Optimization
+		-- What: Added a partial index for error messages ordered by timestamp descending.
+		-- Why: The getRecentErrors query filters on stop_reason='error' and orders by timestamp DESC. Without a partial index, SQLite must perform a full index scan on the ascending timestamp index and filter each row.
+		-- Impact: Eliminates full index scans for the getRecentErrors query, turning it into an O(1) index lookup + O(limit) scan.
+		-- Measurement: Use EXPLAIN QUERY PLAN SELECT * FROM messages WHERE stop_reason = 'error' ORDER BY timestamp DESC LIMIT 100. It will show "SCAN messages USING INDEX idx_messages_errors".
+		CREATE INDEX IF NOT EXISTS idx_messages_errors ON messages(timestamp DESC) WHERE stop_reason = 'error';
+
 		CREATE TABLE IF NOT EXISTS file_offsets (
 			session_file TEXT PRIMARY KEY,
 			offset INTEGER NOT NULL,
